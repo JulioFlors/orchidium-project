@@ -1,0 +1,105 @@
+// Este es tu archivo de esquema de Prisma,
+// aprende más sobre él en la documentación: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  User
+  Admin
+}
+
+enum ZoneType {
+  Zona_A
+  Zona_B
+  Zona_C
+  Zona_D
+}
+
+enum TableType {
+  Mesa_1
+  Mesa_2
+  Mesa_3
+  Mesa_4
+  Mesa_5
+  Mesa_6
+}
+
+enum GenusType {
+  // Orquídeas
+  Cattleya
+  Dendrobium
+  Dimerandra
+  Enciclea
+  // Rosas del desierto
+  AdeniumObesum
+  // Cactus
+  Mammillaria
+  // Suculentas
+  Haworthia
+}
+
+enum PlantType {
+  Orchid
+  Adenium
+  Cactus
+  Succulent
+}
+
+model Stock {
+  id        String    @id @default(uuid())
+  quantity  Int       @default(0)
+  available Boolean   @default(false)
+  species   Species[]
+}
+
+model Species {
+  id    String    @id @default(uuid())
+  name  String    @unique
+  genus GenusType
+  type  PlantType
+  price Float     @default(0)
+  slug  String    @unique
+
+  stock   Stock  @relation(fields: [stockId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  stockId String
+
+  plant        Plant[]
+  speciesImage SpeciesImage[]
+}
+
+model SpeciesImage {
+  id  String @id @default(uuid())
+  url String @unique
+
+  species   Species @relation(fields: [speciesId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  speciesId String
+}
+
+model Location {
+  id    String    @id @default(uuid())
+  zone  ZoneType
+  table TableType
+  plant Plant[]
+}
+
+model Plant {
+  id          String    @id @default(uuid())
+  pottingDate DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  species   Species @relation(fields: [speciesId], references: [id])
+  speciesId String
+
+  location   Location? @relation(fields: [locationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  locationId String?
+
+  @@index([speciesId])
+}
