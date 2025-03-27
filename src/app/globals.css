@@ -1,7 +1,111 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
-:root {
-  color-scheme: light dark;
-  color: CanvasText;
-  background-color: Canvas;
+@theme {
+  --color-hover: oklch(0.96 0 0 / 1);
+  --color-label: oklch(0.48 0.01 264.50 / 1);
+  --color-primary-404: oklch(0.25 0 0 / 1);
+  --color-primary: oklch(0.22 0.01 264.27 / 1);
+  --color-accessibility: oklch(0.65 0 0 / 1);
+  --color-secondary-404: oklch(0.51 0 0 / 1);
+  --color-secondary: oklch(0.36 0.01 260.72 / 1);
+  --color-serch-box-icon-hover: oklch(0.93 0 0 / 1);
+  --color-serch-box-outline: oklch(0.86 0 247.84 / 1);
+  --color-serch-box: oklch(0.97 0 0 / 1);
+  --tracking-6: -0.06em;
+  --tracking-4: -0.04em;
+  --tracking-2: -0.02em;
+  --tracking-1: -0.01em;
+  --tracking-0: 0;
+}
+
+@layer base {
+  body {
+    @apply bg-white font-normal overflow-y-auto text-secondary text-sm tracking-2;
+  }
+}
+
+@layer utilities {
+  .centro-pokemon {
+    @apply bg-gradient-to-r from-yellow-500 to-orange-600 bg-clip-text font-semibold text-transparent transition-all;
+  }
+
+  .centro-pokemon:hover {
+    @apply border-b-2 border-orange-600;
+  }
+
+  .centro-pokemon:focus {
+    @apply outline-none border-b-2 border-orange-600;
+  }
+
+  .product-name:hover {
+    @apply bg-gradient-to-r from-emerald-700 to-emerald-500 bg-clip-text text-transparent
+  }
+
+  .product-name:focus {
+    @apply bg-gradient-to-r from-emerald-700 to-emerald-500 bg-clip-text text-transparent
+  }
+
+  .search-results {
+    @apply border-none px-3 py-1.5 outline-none;
+  }
+
+  .search-results:hover {
+    @apply bg-hover mx-1 px-2 rounded;
+  }
+
+  .search-results:focus-visible {
+    @apply mx-1 px-2 rounded bg-white hover:bg-hover outline-none ring-accessibility ring-1 ring-offset-0;
+  }
+
+  .focus-sidebar-content:focus {
+    @apply border-none outline-accessibility outline-2 outline-offset-[-2px];
+  }
+
+  .focus-sidebar-img:focus-visible {
+    @apply outline-accessibility outline-2 outline-offset-[-2px] rounded-sm;
+  }
+
+  .focus-serch-box:focus {
+    @apply border-none outline-serch-box-outline outline-1 outline-offset-[-1px];
+  }
+
+  .focus-visible:focus {
+    @apply bg-white outline-none ring-accessibility ring-2 ring-offset-1 rounded;
+  }
+
+  .focus-visible-hover:focus {
+    @apply bg-white hover:bg-hover outline-none ring-accessibility ring-2 ring-offset-1 rounded;
+  }
+
+  .sticky-top-menu {
+    @apply bg-white sticky top-0 z-10;
+  }
+
+  .sticky-category-title {
+    @apply backdrop-blur-lg bg-white/30 sticky top-12.5 z-10;
+  }
+
+  .btn-secondary {
+    @apply bg-white border-primary border-3 delay-100 duration-500 ease-in-out font-medium px-6 py-1 rounded-sm text-primary text-center transition-all;
+  }
+
+  .btn-secondary:hover {
+    @apply bg-primary text-white;
+  }
+
+  .btn-secondary:focus-visible {
+    @apply outline-none border-accessibility;
+  }
+
+  .btn-link {
+    @apply px-4 py-1 rounded text-secondary transition-all;
+  }
+
+  .btn-link:hover {
+    @apply bg-hover text-primary;
+  }
+
+  .nav-link {
+    @apply font-semibold hover:text-primary px-4 py-1 relative rounded text-secondary transition-colors;
+  }
 }

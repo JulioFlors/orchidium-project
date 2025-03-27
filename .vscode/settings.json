@@ -5,5 +5,19 @@
   "editor.codeActionsOnSave": {
     "source.fixAll.eslint": "always"
   },
-  "markdown.validate.enabled": true
+  "markdown.validate.enabled": true,
+  "CodeGPT.apiKey": "CodeGPT Plus",
+  "workbench.iconTheme": "material-icon-theme",
+	"material-icon-theme.activeIconPack": "react",
+	"material-icon-theme.folders.theme": "specific",
+	"material-icon-theme.folders.associations": {
+    "postgres": "Database",
+    "migrations": "Prisma",
+    "store": "Store",
+		"(shop)": "Cart",
+		"product": "Seeders",
+		"products": "Seeders",
+		"login": "Secure",
+		"new-account": "Secure",
+  }
 }

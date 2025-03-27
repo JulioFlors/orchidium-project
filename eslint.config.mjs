@@ -117,6 +117,7 @@ export default [
             arrowParens: 'always',
             endOfLine: 'auto',
             plugins: ['prettier-plugin-tailwindcss'],
+            emptyFunctions: 'preserve',
           },
         ],
       },
