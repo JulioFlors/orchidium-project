@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 @theme {
+  --breakpoint-lg-small: 75rem;
   --color-hover: oklch(0.96 0 0 / 1);
   --color-label: oklch(0.48 0.01 264.50 / 1);
   --color-primary-404: oklch(0.25 0 0 / 1);
@@ -22,9 +23,18 @@
   body {
     @apply bg-white font-normal overflow-y-auto text-secondary text-sm tracking-2;
   }
+
+  input::placeholder {
+    @apply text-secondary/75 font-semibold;
+  }
 }
 
 @layer utilities {
+
+  .aceleracion-hardware {
+    will-change: transform;
+  }
+
   .centro-pokemon {
     @apply bg-gradient-to-r from-yellow-500 to-orange-600 bg-clip-text font-semibold text-transparent transition-all;
   }

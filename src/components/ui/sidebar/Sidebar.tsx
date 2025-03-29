@@ -1,79 +1,18 @@
 'use client'
 
-import type { Category, Subcategory } from './types'
-
-import { useState, useRef, useEffect } from 'react'
-import clsx from 'clsx'
+import { useRef, useEffect } from 'react'
 import { IoCloseOutline, IoChevronBackOutline } from 'react-icons/io5'
 import { motion, AnimatePresence } from 'motion/react'
 
-import { SidebarMainContent } from './SidebarMainContent'
-import { SidebarSubcategoryContent } from './SidebarSubcategoryContent'
-import { filterSearchResults, focusFirstElement, handleAccessibility } from './SidebarUtils'
+import { MainContent } from './MainContent'
+import { SubcategoryContent } from './SubcategoryContent'
+import { filterSearchResults, focusFirstElement, handleAccessibility } from './Utils'
 
+import { Category } from '@/interfaces'
 import { useUIStore } from '@/store'
+import { initialData } from '@/seed/seed'
 
-// Datos de ejemplo para las categorías
-const categories: Category[] = [
-  {
-    id: 'plantas',
-    title: 'Plantas',
-    subcategories: [
-      {
-        id: 'orquideas',
-        title: 'Orquídeas',
-        image: '/plants/orchids.jpg',
-        url: '/category/orquideas',
-      },
-      {
-        id: 'rosas-del-desierto',
-        title: 'Rosas del Desierto',
-        image: '/plants/Adenium-Obesum.jpg',
-        url: '/category/rosas-del-desierto',
-      },
-      {
-        id: 'cactus',
-        title: 'Cactus',
-        image: '/plants/cactus.jpg',
-        url: '/category/cactus',
-      },
-      {
-        id: 'suculentas',
-        title: 'Suculentas',
-        image: '/plants/suculentas.jpg',
-        url: '/category/suculentas',
-      },
-    ],
-  },
-  {
-    id: 'accesorios',
-    title: 'Accesorios',
-    subcategories: [
-      {
-        id: 'macetas',
-        title: 'Macetas',
-        image: '/placeholder.svg?height=200&width=200',
-        url: '/category/macetas',
-      },
-      {
-        id: 'herramientas',
-        title: 'Herramientas',
-        image: '/placeholder.svg?height=200&width=200',
-        url: '/category/herramientas',
-      },
-    ],
-  },
-  {
-    id: 'contacto',
-    title: 'Contacto',
-    url: '/about/contact',
-  },
-  {
-    id: 'login',
-    title: 'Iniciar sesión',
-    url: '/auth/login',
-  },
-]
+const categories: Category[] = initialData.categories
 
 const motionProps = {
   initial: { x: '80%', opacity: 0 },
@@ -89,8 +28,8 @@ const motionProps = {
     x: '80%',
     opacity: 0,
     transition: {
-      x: { duration: 0.4, ease: 'easeIn' },
-      opacity: { duration: 0.2, ease: 'easeIn', delay: 0.1 },
+      x: { duration: 0.6, ease: 'easeIn' },
+      opacity: { duration: 0.4, ease: 'easeIn', delay: 0.1 },
     },
   },
 }
@@ -101,15 +40,15 @@ export function Sidebar() {
   const isSideMenuOpen = useUIStore((state) => state.isSideMenuOpen)
   const searchTerm = useUIStore((state) => state.searchTerm)
   const setActiveCategory = useUIStore((state) => state.setActiveCategory)
+  const searchResults = useUIStore((state) => state.searchResults)
+  const setSearchResults = useUIStore((state) => state.setSearchResults)
 
   const contentRef = useRef<HTMLDivElement | null>(null)
   const navRef = useRef<HTMLElement | null>(null)
 
-  const [searchResults, setSearchResults] = useState<(Subcategory | Category)[]>([])
-
   useEffect(() => {
     setSearchResults(filterSearchResults(categories, searchTerm))
-  }, [searchTerm])
+  }, [searchTerm, setSearchResults])
 
   useEffect(() => {
     return handleAccessibility(isSideMenuOpen, navRef, setActiveCategory)
@@ -132,7 +71,7 @@ export function Sidebar() {
           onClick={closeMenu}
         />
       )}
-      {/* Sidemenu */}
+      {/* Navbar - Container */}
       <AnimatePresence>
         {isSideMenuOpen && (
           <motion.nav
@@ -142,15 +81,12 @@ export function Sidebar() {
             aria-hidden={!isSideMenuOpen}
             aria-label="Menú de navegación"
             aria-modal={isSideMenuOpen}
-            className={clsx(
-              'fixed top-0 right-0 z-30 flex h-dvh flex-col bg-white',
-              'max-w-[82.3%] sm:max-w-[60%] md:max-w-[45%] lg:max-w-[35%] xl:max-w-[30%] 2xl:max-w-[450px]',
-            )}
+            className="aceleracion-hardware fixed top-0 right-0 z-30 flex h-dvh w-[414px] max-w-[82.3vw] flex-col bg-white shadow-xl sm:min-w-[414px]"
             exit={motionProps.exit}
             initial={motionProps.initial}
             role="dialog"
           >
-            {/* sideMenuHeader */}
+            {/* Header del Sidebar*/}
             <div
               className="text-secondary sticky top-0 z-10 mt-4 mb-6 flex items-center justify-between px-8"
               id="sideMenuHeader"
@@ -177,16 +113,16 @@ export function Sidebar() {
                 <IoCloseOutline size={24} />
               </button>
             </div>
-            {/* Contenido del mainSidabar */}
+            {/* Contenido Principal del Sidebar */}
             <div
               ref={contentRef}
               className="mx-8 mb-2 flex flex-1 flex-col items-start overflow-x-hidden text-left"
               id="sideMenuContent"
             >
               {activeCategory ? (
-                <SidebarSubcategoryContent categories={categories} categoryId={activeCategory} />
+                <SubcategoryContent categories={categories} categoryId={activeCategory} />
               ) : (
-                <SidebarMainContent categories={categories} searchResults={searchResults} />
+                <MainContent categories={categories} searchResults={searchResults} />
               )}
             </div>
           </motion.nav>

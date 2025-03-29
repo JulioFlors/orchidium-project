@@ -1,3 +1,4 @@
+import { Category } from '../interfaces/product.interface'
 //type RoleType = 'User' | 'Admin'
 type ZoneType = 'Zona_A' | 'Zona_B' | 'Zona_C' | 'Zona_D'
 type TableType = 'Mesa_1' | 'Mesa_2' | 'Mesa_3' | 'Mesa_4' | 'Mesa_5' | 'Mesa_6'
@@ -138,6 +139,7 @@ interface SeedIrrigationTask {
 } */
 
 interface SeedData {
+  categories: Category[]
   genus: SeedGenus[]
   species: SeedSpecies[]
   plants: SeedPlant[]
@@ -151,6 +153,67 @@ interface SeedData {
 }
 
 export const initialData: SeedData = {
+  // Datos de ejemplo para las categorías
+  categories: [
+    {
+      id: 'plantas',
+      title: 'Plantas',
+      subcategories: [
+        {
+          id: 'orquideas',
+          title: 'Orquídeas',
+          image: '/plants/orchids.jpg',
+          url: '/category/orquideas',
+        },
+        {
+          id: 'rosas-del-desierto',
+          title: 'Rosas del Desierto',
+          image: '/plants/Adenium-Obesum.jpg',
+          url: '/category/rosas-del-desierto',
+        },
+        {
+          id: 'cactus',
+          title: 'Cactus',
+          image: '/plants/cactus.jpg',
+          url: '/category/cactus',
+        },
+        {
+          id: 'suculentas',
+          title: 'Suculentas',
+          image: '/plants/suculentas.jpg',
+          url: '/category/suculentas',
+        },
+      ],
+    },
+    {
+      id: 'accesorios',
+      title: 'Accesorios',
+      subcategories: [
+        {
+          id: 'macetas',
+          title: 'Macetas',
+          image: '/placeholder.svg?height=200&width=200',
+          url: '/category/macetas',
+        },
+        {
+          id: 'herramientas',
+          title: 'Herramientas',
+          image: '/placeholder.svg?height=200&width=200',
+          url: '/category/herramientas',
+        },
+      ],
+    },
+    {
+      id: 'contacto',
+      title: 'Contacto',
+      url: '/about/contact',
+    },
+    {
+      id: 'login',
+      title: 'Iniciar sesión',
+      url: '/auth/login',
+    },
+  ],
   genus: [
     { name: 'Cattleya', type: 'Orchid' },
     { name: 'Dendrobium', type: 'Orchid' },

@@ -1,4 +1,4 @@
-import { Category, Subcategory } from './types'
+import { Category, Subcategory } from '@/interfaces'
 
 /**
  * Resalta las coincidencias de búsqueda dentro de un texto dado.

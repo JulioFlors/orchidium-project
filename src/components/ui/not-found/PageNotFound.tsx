@@ -22,7 +22,7 @@ export function PageNotFound() {
       </div>
 
       <div>
-        <Ponyta className="max-h-[20rem] max-w-[20rem] lg:max-h-[24rem] lg:max-w-[24rem] xl:max-h-[28rem] xl:max-w-[28rem]" />
+        <Ponyta className="max-h-[20rem] max-w-[20rem] lg:min-h-[24rem] lg:min-w-[24rem]" />
       </div>
     </div>
   )

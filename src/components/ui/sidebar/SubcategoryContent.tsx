@@ -2,19 +2,15 @@ import React from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 
-import { Category } from './types'
-
+import { Category } from '@/interfaces'
 import { useUIStore } from '@/store'
 
-interface SidebarSubcategoryContentProps {
+interface SubcategoryContentProps {
   categoryId: string
   categories: Category[]
 }
 
-export function SidebarSubcategoryContent({
-  categoryId,
-  categories,
-}: SidebarSubcategoryContentProps) {
+export function SubcategoryContent({ categoryId, categories }: SubcategoryContentProps) {
   const closeMenu = useUIStore((state) => state.closeSideMenu)
 
   const activeCategory = useUIStore((state) => state.activeCategory)
@@ -23,7 +19,7 @@ export function SidebarSubcategoryContent({
   if (!category || !category.subcategories) return null
 
   return (
-    <>
+    <div className="lg-small:hidden relative w-full">
       <div className="mb-5 pb-2 text-2xl font-bold">{category.title}</div>
       <div className="grid w-full grid-cols-1 gap-2.5">
         {category.subcategories.map((subcategory) => (
@@ -58,6 +54,6 @@ export function SidebarSubcategoryContent({
           Ver todo
         </Link>
       </div>
-    </>
+    </div>
   )
 }
