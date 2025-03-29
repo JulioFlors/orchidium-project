@@ -1,7 +1,5 @@
 # Orchidium Project - Sistema de Gestión de Invernaderos para el Cultivo de Orquídeas
 
----
-
 ## Desarrollo
 
 Pasos para levantar la app en desarrollo:
@@ -39,8 +37,6 @@ Pasos para levantar la app en desarrollo:
    ```
 
 ## Base de Conocimientos
-
----
 
 ### Productos Químicos y Biológicos para el Cultivo
 
