@@ -115,6 +115,7 @@ export function Searchbox({ isTopMenu = false, searchResults }: SearchboxProps) 
             }, // Estilos específicos si se usa en el TopMenu
           )}
           placeholder="Buscar"
+          role="searchbox"
           type="text"
           value={searchTerm} // Enlazar el valor del input al estado global searchTerm
           onChange={(e) => setSearchTerm(e.target.value)} // Actualizar el estado global al cambiar el input

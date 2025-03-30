@@ -87,14 +87,6 @@
     @apply bg-white hover:bg-hover outline-none ring-accessibility ring-2 ring-offset-1 rounded;
   }
 
-  .sticky-top-menu {
-    @apply bg-white sticky top-0 z-10;
-  }
-
-  .sticky-category-title {
-    @apply backdrop-blur-lg bg-white/30 sticky top-12.5 z-[9];
-  }
-
   .btn-secondary {
     @apply bg-white border-primary border-3 delay-100 duration-500 ease-in-out font-medium px-6 py-1 rounded-sm text-primary text-center transition-all;
   }
@@ -118,4 +110,35 @@
   .nav-link {
     @apply font-semibold hover:text-primary px-4 py-1 relative rounded text-secondary transition-colors;
   }
+}
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+@-webkit-keyframes fadeIn {
+  0% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+/* "Fade-in" es un término en inglés que describe un efecto visual en el que algo aparece gradualmente,  */
+.fade-in {
+  -webkit-animation-duration: 0.6s;
+  animation-duration: 0.6s;
+  -webkit-animation-fill-mode: both;
+  animation-fill-mode: both;
+
+  -webkit-animation-name: fadeIn;
+  animation-name: fadeIn;
 }

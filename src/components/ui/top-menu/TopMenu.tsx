@@ -94,10 +94,17 @@ export function TopMenu() {
   }
 
   return (
-    <header className="sticky-top-menu">
-      <nav className="flex w-full items-center justify-between px-5 py-1 text-sm font-semibold">
+    <header className="sticky top-0 z-10 bg-white">
+      <div
+        className="flex min-h-14 w-full items-center justify-between px-5 text-sm font-semibold"
+        id="topMenu"
+        role="menu"
+      >
         {/* Letf Menu ( Logo | Tienda ) */}
-        <div className="text-primary flex items-center justify-start">
+        <h1
+          className="text-primary flex min-h-14 flex-0 grow items-center justify-start"
+          id="left-topMenu"
+        >
           <Link className="focus-visible" href="/">
             <PristinoPlant />
           </Link>
@@ -113,14 +120,14 @@ export function TopMenu() {
 
           <Link
             className={clsx(
-              'focus-visible-hover hover:bg-hover hover:text-primary rounded px-0 py-1 transition-all sm:px-2',
+              'focus-visible-hover hover:bg-hover hover:text-primary rounded px-0 transition-all sm:px-2',
               { 'aria-current="page"': pathname === '/' },
             )}
             href="/"
           >
             Tienda
           </Link>
-        </div>
+        </h1>
 
         {/* Main Menu (Categorias)*/}
         <div className="lg-small:block hidden">
@@ -128,7 +135,12 @@ export function TopMenu() {
             ref={indicatorRef}
             className="bg-hover text-primary absolute top-[20%] bottom-0 w-auto rounded transition-all duration-500 ease-in-out"
           />
-          <div ref={menuRef} className="flex w-full items-center justify-center">
+          <nav
+            ref={menuRef}
+            className="flex min-h-14 w-full flex-0 grow items-center justify-center px-12"
+            id="main-topMenu"
+            role="navigation"
+          >
             <Link
               className={clsx('nav-link focus-visible-hover', {
                 'aria-current="page"': pathname === '/category/orquideas',
@@ -169,11 +181,11 @@ export function TopMenu() {
             >
               Suculentas
             </Link>
-          </div>
+          </nav>
         </div>
 
-        {/* Right Menu (SearchBox, Cart, Menu) */}
-        <div className="flex items-center justify-end">
+        {/* Right topMenu (SearchBox, Cart, Menu) */}
+        <div className="flex min-h-14 flex-0 grow items-center justify-end" id="right-topMenu">
           <div className="lg-small:block hidden">
             <div ref={searchContainerRef} className="relative flex items-center">
               <AnimatePresence>
@@ -196,6 +208,7 @@ export function TopMenu() {
                     className="aceleracion-hardware mx-2 outline-none"
                     exit={motionButtonProps.exit}
                     initial={motionButtonProps.initial}
+                    type="button"
                     onClick={handleSearchClick}
                     onFocus={handleSearchClick}
                   >
@@ -234,7 +247,7 @@ export function TopMenu() {
             Menú
           </button>
         </div>
-      </nav>
+      </div>
     </header>
   )
 }

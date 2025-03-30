@@ -4,13 +4,11 @@ interface Props {
 
 export function Subtitle({ subtitle }: Props) {
   return (
-    <nav aria-labelledby="category-title" className="sticky-category-title w-full">
-      <h2
-        className="text-primary tracking-4 mt-10 mb-2 text-xl leading-10.5 font-medium antialiased"
-        id="category-heading"
-      >
-        {subtitle}
-      </h2>
-    </nav>
+    <h2
+      className="text-primary tracking-4 sticky top-14 z-[9] mt-10 mb-2 w-full bg-white/30 text-xl leading-10.5 font-medium antialiased backdrop-blur-xl"
+      id="category-heading"
+    >
+      {subtitle}
+    </h2>
   )
 }

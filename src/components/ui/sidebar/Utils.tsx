@@ -132,20 +132,21 @@ export function handleAccessibility(
 }
 
 /**
- * Enfoca el input de busqueda del componente Searchbox.
+ * Enfoca el primer elemento con role="searchbox" dentro del contenedor proporcionado.
+ * En consecuencia logra enfocar el input de busqueda del componente Searchbox.
  *
  * @param isOpen - Indica si el componente está renderizado.
- * @param containerRef - referencia de algun padre del Searchbox input.
+ * @param containerRef - referencia al elemento padre que contiene el elemento con role="searchbox".
  */
 export function handleFocusSearchInput(
   isOpen: boolean,
   containerRef: React.RefObject<HTMLElement | null>,
 ): void {
   if (isOpen && containerRef.current) {
-    const searchInput = containerRef.current.querySelector<HTMLInputElement>(
-      'input[placeholder="Buscar"]',
-    )
+    const searchboxElement = containerRef.current.querySelector<HTMLElement>('[role="searchbox"]')
 
-    if (searchInput) searchInput.focus()
+    if (searchboxElement) {
+      searchboxElement.focus()
+    }
   }
 }
