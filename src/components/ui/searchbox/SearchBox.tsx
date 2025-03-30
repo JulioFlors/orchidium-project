@@ -15,21 +15,14 @@ interface SearchboxProps {
   searchResults: (Subcategory | Category)[]
 }
 
+/**
+ * initial: El contenedor comienza invisible, con una escala reducida y ligeramente desplazado hacia arriba.
+ * animate: El contenedor se vuelve visible, con su escala y posición normales, con una transición suave.
+ * exit:    El contenedor se vuelve invisible, con una escala reducida y ligeramente desplazado hacia arriba.
+ */
 const motionProps = {
-  /**
-   * Estado inicial de la animación del contenedor de resultados.
-   * El contenedor comienza invisible, con una escala reducida y ligeramente desplazado hacia arriba.
-   */
   initial: { opacity: 0, scale: 0.8, y: -10 },
-  /**
-   * Estado animado del contenedor de resultados al mostrarse.
-   * El contenedor se vuelve visible, con su escala y posición normales, con una transición suave.
-   */
   animate: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } },
-  /**
-   * Estado de la animación del contenedor de resultados al ocultarse.
-   * El contenedor se vuelve invisible, con una escala reducida y ligeramente desplazado hacia arriba.
-   */
   exit: { opacity: 0, scale: 0.8, y: -10, transition: { duration: 0.15, ease: 'easeInOut' } },
 }
 
@@ -111,13 +104,13 @@ export function Searchbox({ isTopMenu = false, searchResults }: SearchboxProps) 
   }, []) // Dependencia vacía para que se ejecute solo al montar el componente
 
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div ref={containerRef} className="relative w-full" tabIndex={-1}>
       {/* Contenedor principal del SearchBox */}
 
       <div
         className={clsx(
           'text-secondary relative mb-2 flex w-full items-center',
-          { 'mb-0': isTopMenu }, // Elimina el margen inferior si se usa en el TopMenu
+          { '!mb-0': isTopMenu }, // Elimina el margen inferior si se usa en el TopMenu
         )}
       >
         {/* Contenedor del input de búsqueda */}

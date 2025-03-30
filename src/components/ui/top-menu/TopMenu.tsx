@@ -10,6 +10,38 @@ import { motion, AnimatePresence } from 'motion/react'
 import { PristinoPlant, Searchbox } from '@/components'
 import { useUIStore } from '@/store'
 
+const motionDivProps = {
+  initial: { width: 0, opacity: 0 },
+  animate: {
+    width: 'auto',
+    opacity: 1,
+    transition: {
+      x: { duration: 0.6, ease: 'easeOut' },
+      opacity: { duration: 0.4, ease: 'easeOut', delay: 0.1 },
+    },
+  },
+  exit: {
+    width: 0,
+    opacity: 0,
+    transition: {
+      x: { duration: 0.6, ease: 'easeInOut' },
+      opacity: { duration: 0.3, ease: 'easeInOut', delay: 0.1 },
+    },
+  },
+}
+
+const motionButtonProps = {
+  initial: { opacity: 0 },
+  animate: {
+    opacity: 1,
+    transition: { duration: 0.6, opacity: { duration: 0.6, ease: 'easeInOut' } },
+  },
+  exit: {
+    opacity: 0,
+    transition: { duration: 0.1, opacity: { duration: 0.1, ease: 'easeOut' } },
+  },
+}
+
 export function TopMenu() {
   const [hoveredLink, setHoveredLink] = useState<HTMLElement | null>(null)
   const [isSearchExpanded, setIsSearchExpanded] = useState(false)
@@ -144,24 +176,15 @@ export function TopMenu() {
         {/* Right Menu (SearchBox, Cart, Menu) */}
         <div className="flex items-center justify-end">
           <div className="lg-small:block hidden">
-            <div ref={searchContainerRef} className="relative">
+            <div ref={searchContainerRef} className="relative flex items-center">
               <AnimatePresence>
                 {isSearchExpanded ? (
                   <motion.div
                     key="search-input"
-                    animate={{
-                      width: 'auto',
-                      opacity: 1,
-                      transition: { duration: 0.3, ease: 'easeInOut' },
-                    }}
-                    className="aceleracion-hardware ml-2"
-                    exit={{
-                      width: 0,
-                      opacity: 0,
-                      transition: { duration: 0.2, ease: 'easeInOut' },
-                    }}
-                    initial={{ width: 0, opacity: 0 }}
-                    tabIndex={0} // Para que el contenedor sea focusable
+                    animate={motionDivProps.animate}
+                    className="aceleracion-hardware"
+                    exit={motionDivProps.exit}
+                    initial={motionDivProps.initial}
                     onBlur={handleFocusOutSearch}
                   >
                     <Searchbox isTopMenu searchResults={searchResults} />
@@ -169,11 +192,11 @@ export function TopMenu() {
                 ) : (
                   <motion.button
                     key="search-icon"
-                    animate={{ opacity: 1, scale: 1, transition: { duration: 0.2 } }}
+                    animate={motionButtonProps.animate}
                     aria-label="Buscar"
-                    className="focus-visible mx-2"
-                    exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.1 } }}
-                    initial={{ opacity: 0, scale: 0.8 }}
+                    className="aceleracion-hardware mx-2 outline-none"
+                    exit={motionButtonProps.exit}
+                    initial={motionButtonProps.initial}
                     onClick={handleSearchClick}
                   >
                     <IoSearchOutline className="h-5 w-5 cursor-pointer" />
