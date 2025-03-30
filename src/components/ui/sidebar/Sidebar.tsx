@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'motion/react'
 
 import { MainContent } from './MainContent'
 import { SubcategoryContent } from './SubcategoryContent'
-import { filterSearchResults, focusFirstElement, handleAccessibility } from './Utils'
+import { filterSearchResults, handleAccessibility } from './Utils'
 
 import { Category } from '@/interfaces'
 import { useUIStore } from '@/store'
@@ -53,10 +53,6 @@ export function Sidebar() {
   useEffect(() => {
     return handleAccessibility(isSideMenuOpen, navRef, setActiveCategory)
   }, [isSideMenuOpen, navRef, setActiveCategory, activeCategory])
-
-  useEffect(() => {
-    focusFirstElement(isSideMenuOpen, navRef)
-  }, [isSideMenuOpen, navRef])
 
   return (
     <div>

@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
 import { motion, AnimatePresence } from 'motion/react'
 
-import { PristinoPlant, Searchbox } from '@/components'
+import { handleFocusSearchInput, PristinoPlant, Searchbox } from '@/components'
 import { useUIStore } from '@/store'
 
 const motionDivProps = {
@@ -49,7 +49,6 @@ export function TopMenu() {
   const indicatorRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const searchContainerRef = useRef<HTMLDivElement | null>(null)
-  const searchInputRef = useRef<HTMLInputElement | null>(null)
 
   const isSideMenuOpen = useUIStore((state) => state.isSideMenuOpen)
   const openMenu = useUIStore((state) => state.openSideMenu)
@@ -76,12 +75,12 @@ export function TopMenu() {
     }
   }, [hoveredLink])
 
+  useEffect(() => {
+    handleFocusSearchInput(isSearchExpanded, searchContainerRef)
+  }, [isSearchExpanded, searchContainerRef])
+
   const handleSearchClick = () => {
     setIsSearchExpanded(true)
-    // Focus en el input cuando se expande
-    setTimeout(() => {
-      searchInputRef.current?.focus()
-    }, 100) // Pequeño delay para asegurar que el input esté montado
   }
 
   const handleFocusOutSearch = (event: React.FocusEvent<HTMLDivElement>) => {
@@ -198,6 +197,7 @@ export function TopMenu() {
                     exit={motionButtonProps.exit}
                     initial={motionButtonProps.initial}
                     onClick={handleSearchClick}
+                    onFocus={handleSearchClick}
                   >
                     <IoSearchOutline className="h-5 w-5 cursor-pointer" />
                   </motion.button>

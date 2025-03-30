@@ -6,7 +6,7 @@ import { IoSearchOutline, IoCloseOutline } from 'react-icons/io5'
 import { motion, AnimatePresence } from 'motion/react'
 import clsx from 'clsx'
 
-import { highlightMatch } from '@/components'
+import { highlightMatch, handleFocusSearchInput } from '@/components'
 import { Category, Subcategory } from '@/interfaces'
 import { useUIStore } from '@/store'
 
@@ -15,11 +15,6 @@ interface SearchboxProps {
   searchResults: (Subcategory | Category)[]
 }
 
-/**
- * initial: El contenedor comienza invisible, con una escala reducida y ligeramente desplazado hacia arriba.
- * animate: El contenedor se vuelve visible, con su escala y posición normales, con una transición suave.
- * exit:    El contenedor se vuelve invisible, con una escala reducida y ligeramente desplazado hacia arriba.
- */
 const motionProps = {
   initial: { opacity: 0, scale: 0.8, y: -10 },
   animate: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } },
@@ -29,25 +24,21 @@ const motionProps = {
 /**
  * Componente de la caja de búsqueda con funcionalidad de sugerencias y animaciones.
  *
- * @param {SearchboxProps} props - Las propiedades del componente Searchbox.
  * @param {boolean} props.isTopMenu - Indica si el componente se usa en el TopMenu (opcional).
  * @param {(Subcategory | Category)[]} props.searchResults - Los resultados de búsqueda a mostrar.
- * @returns {JSX.Element} El componente Searchbox renderizado.
  */
 export function Searchbox({ isTopMenu = false, searchResults }: SearchboxProps) {
-  const searchRef = useRef<HTMLInputElement | null>(null) // Referencia al elemento input de búsqueda
-  const resultsRef = useRef<HTMLDivElement | null>(null) // Referencia al contenedor de los resultados de búsqueda
-  const containerRef = useRef<HTMLDivElement | null>(null) // Referencia al contenedor principal del componente
+  const searchRef = useRef<HTMLInputElement | null>(null)
+  const resultsRef = useRef<HTMLDivElement | null>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
 
-  const closeMenu = useUIStore((state) => state.closeSideMenu) // Función para cerrar el menú lateral desde el store global
-  const searchTerm = useUIStore((state) => state.searchTerm) // Término de búsqueda actual desde el store global
-  const setSearchTerm = useUIStore((state) => state.setSearchTerm) // Función para actualizar el término de búsqueda en el store global
+  const closeMenu = useUIStore((state) => state.closeSideMenu)
+  const searchTerm = useUIStore((state) => state.searchTerm)
+  const setSearchTerm = useUIStore((state) => state.setSearchTerm)
 
-  const [isResultsVisible, setIsResultsVisible] = useState(false) // Estado local para controlar la visibilidad de los resultados de búsqueda
+  const [isResultsVisible, setIsResultsVisible] = useState(false)
 
-  /**
-   * Hook de efecto para ocultar los resultados de búsqueda cuando el foco se pierde del input o del contenedor de resultados.
-   */
+  // Ocultar los resultados de búsqueda cuando el foco se pierde del input o del contenedor de resultados.
   useEffect(() => {
     const handleFocusOut = (event: FocusEvent) => {
       // Verificar si el foco se movió fuera del searchbox y del menú de resultados
@@ -81,9 +72,7 @@ export function Searchbox({ isTopMenu = false, searchResults }: SearchboxProps) 
     }
   }, [setIsResultsVisible]) // Dependencia en setIsResultsVisible para re-ejecutar si cambia la visibilidad
 
-  /**
-   * Hook de efecto para mostrar los resultados de búsqueda cuando el input recibe el foco.
-   */
+  //mostrar los resultados de búsqueda cuando el input recibe el foco.
   useEffect(() => {
     const inputElement = searchRef.current
 
@@ -137,7 +126,10 @@ export function Searchbox({ isTopMenu = false, searchResults }: SearchboxProps) 
             className="hover:bg-serch-box-icon-hover absolute right-2 flex items-center rounded p-1 focus:outline-none"
             tabIndex={-1}
             type="button"
-            onClick={() => setSearchTerm('')} // Limpiar el término de búsqueda al hacer clic
+            onClick={() => {
+              setSearchTerm('') // Limpiar el término de búsqueda al hacer clic
+              handleFocusSearchInput(true, containerRef) // Enfoca el input del searchbox
+            }}
           >
             <IoCloseOutline className="cursor-pointer" size={16} />
             {/* Icono de cierre */}

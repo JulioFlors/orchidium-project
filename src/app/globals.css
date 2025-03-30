@@ -92,7 +92,7 @@
   }
 
   .sticky-category-title {
-    @apply backdrop-blur-lg bg-white/30 sticky top-12.5 z-10;
+    @apply backdrop-blur-lg bg-white/30 sticky top-12.5 z-[9];
   }
 
   .btn-secondary {

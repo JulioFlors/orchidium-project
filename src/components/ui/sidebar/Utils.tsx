@@ -132,28 +132,20 @@ export function handleAccessibility(
 }
 
 /**
- * Enfoca el primer elemento enfocable dentro del sidebar cuando se abre.
+ * Enfoca el input de busqueda del componente Searchbox.
  *
- * @param isSideMenuOpen - Indica si el sidebar está abierto.
- * @param navRef - Una referencia al elemento nav del sidebar.
+ * @param isOpen - Indica si el componente está renderizado.
+ * @param containerRef - referencia de algun padre del Searchbox input.
  */
-export function focusFirstElement(
-  isSideMenuOpen: boolean,
-  navRef: React.RefObject<HTMLElement | null>,
+export function handleFocusSearchInput(
+  isOpen: boolean,
+  containerRef: React.RefObject<HTMLElement | null>,
 ): void {
-  if (isSideMenuOpen && navRef.current) {
-    const searchInput = navRef.current.querySelector<HTMLInputElement>(
+  if (isOpen && containerRef.current) {
+    const searchInput = containerRef.current.querySelector<HTMLInputElement>(
       'input[placeholder="Buscar"]',
     )
 
-    if (searchInput) {
-      searchInput.focus()
-    } else {
-      const firstFocusable = navRef.current.querySelector<HTMLElement>(
-        'a, button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-      )
-
-      if (firstFocusable) firstFocusable.focus()
-    }
+    if (searchInput) searchInput.focus()
   }
 }
