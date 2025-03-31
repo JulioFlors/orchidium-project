@@ -80,11 +80,11 @@
   }
 
   .focus-visible:focus {
-    @apply bg-white outline-none ring-accessibility ring-2 ring-offset-1 rounded;
+    @apply bg-white outline-none ring-accessibility ring-2 ring-offset-2 rounded;
   }
 
   .focus-visible-hover:focus {
-    @apply bg-white hover:bg-hover outline-none ring-accessibility ring-2 ring-offset-1 rounded;
+    @apply bg-white hover:bg-hover outline-none ring-accessibility ring-2 ring-offset-2 rounded;
   }
 
   .btn-secondary {

@@ -120,7 +120,7 @@ export function TopMenu() {
 
           <Link
             className={clsx(
-              'focus-visible-hover hover:bg-hover hover:text-primary rounded px-0 transition-all sm:px-2',
+              'focus-visible-hover hover:bg-hover hover:text-primary rounded px-0 py-1 transition-all sm:px-2',
               { 'aria-current="page"': pathname === '/' },
             )}
             href="/"
