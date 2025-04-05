@@ -9,6 +9,9 @@ import { motion, AnimatePresence } from 'motion/react'
 
 import { handleFocusSearchInput, PristinoPlant, Searchbox } from '@/components'
 import { useUIStore } from '@/store'
+import { initialData } from '@/seed/seed'
+
+const categories = initialData.categories
 
 const motionDivProps = {
   initial: { width: 0, opacity: 0 },
@@ -116,11 +119,11 @@ export function TopMenu() {
             Saltar al contenido principal
           </Link>
 
-          <span className="mx-4">|</span>
+          <span className="mx-4 text-[0.65625rem] leading-5 font-bold">|</span>
 
           <Link
             className={clsx(
-              'focus-visible-hover hover:bg-hover hover:text-primary rounded px-0 py-1 transition-all sm:px-2',
+              'focus-visible-hover hover:bg-hover hover:text-primary rounded px-0 py-1 transition-colors sm:px-4',
               { 'aria-current="page"': pathname === '/' },
             )}
             href="/"
@@ -141,46 +144,21 @@ export function TopMenu() {
             id="main-topMenu"
             role="navigation"
           >
-            <Link
-              className={clsx('nav-link focus-visible-hover', {
-                'aria-current="page"': pathname === '/category/orquideas',
-              })}
-              href="/category/orquideas"
-              onMouseEnter={(e) => setHoveredLink(e.currentTarget)}
-              onMouseLeave={() => setHoveredLink(null)}
-            >
-              Orquídeas
-            </Link>
-            <Link
-              className={clsx('nav-link focus-visible-hover', {
-                'aria-current="page"': pathname === '/category/rosas-del-desierto',
-              })}
-              href="/category/rosas-del-desierto"
-              onMouseEnter={(e) => setHoveredLink(e.currentTarget)}
-              onMouseLeave={() => setHoveredLink(null)}
-            >
-              Rosas del Desierto
-            </Link>
-            <Link
-              className={clsx('nav-link focus-visible-hover', {
-                'aria-current="page"': pathname === '/category/cactus',
-              })}
-              href="/category/cactus"
-              onMouseEnter={(e) => setHoveredLink(e.currentTarget)}
-              onMouseLeave={() => setHoveredLink(null)}
-            >
-              Cactus
-            </Link>
-            <Link
-              className={clsx('nav-link focus-visible-hover', {
-                'aria-current="page"': pathname === '/category/suculentas',
-              })}
-              href="/category/suculentas"
-              onMouseEnter={(e) => setHoveredLink(e.currentTarget)}
-              onMouseLeave={() => setHoveredLink(null)}
-            >
-              Suculentas
-            </Link>
+            {categories
+              .filter((category) => category.subcategories && category.subcategories.length > 0)
+              .map((category) => (
+                <Link
+                  key={category.id}
+                  className={clsx('nav-link focus-visible-hover', {
+                    'aria-current="page"': pathname === `${category.url}`,
+                  })}
+                  href={category.url || '#'}
+                  onMouseEnter={(e) => setHoveredLink(e.currentTarget)}
+                  onMouseLeave={() => setHoveredLink(null)}
+                >
+                  <span>{category.title}</span>
+                </Link>
+              ))}
           </nav>
         </div>
 
@@ -240,7 +218,7 @@ export function TopMenu() {
           <button
             aria-expanded={isSideMenuOpen}
             aria-label="Abrir menú"
-            className="focus-visible-hover text-secondary hover:bg-hover hover:text-primary m-2 cursor-pointer rounded px-0 py-1 transition-all sm:px-2"
+            className="focus-visible-hover text-secondary hover:bg-hover hover:text-primary m-2 cursor-pointer rounded px-0 py-1 transition-colors sm:px-4"
             type="button"
             onClick={() => openMenu()}
           >

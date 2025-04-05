@@ -8,11 +8,10 @@ import { MainContent } from './MainContent'
 import { SubcategoryContent } from './SubcategoryContent'
 import { filterSearchResults, handleAccessibility } from './Utils'
 
-import { Category } from '@/interfaces'
 import { useUIStore } from '@/store'
 import { initialData } from '@/seed/seed'
 
-const categories: Category[] = initialData.categories
+const categories = initialData.categories
 
 const motionProps = {
   initial: { x: '80%', opacity: 0 },

@@ -5,7 +5,7 @@ export interface SpeciesImage {
 }
 
 export interface Genus {
-  id: string
+  //todo: id: string
   name: string
   type: PlantType
 }

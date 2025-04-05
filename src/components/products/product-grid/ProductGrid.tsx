@@ -8,7 +8,7 @@ interface Props {
 
 export function ProductGrid({ products }: Props) {
   return (
-    <div className="mb-10 grid grid-cols-2 gap-6 sm:grid-cols-3 sm:gap-9 xl:gap-12">
+    <div className="mt-10 grid grid-cols-2 gap-x-[4%] gap-y-6 sm:grid-cols-3 2xl:gap-x-[4.5%]">
       {products.map((product) => (
         <ProductGridItem key={product.slug} product={product} />
       ))}

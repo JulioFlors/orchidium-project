@@ -13,11 +13,11 @@ export function ProductGridItem({ product }: Props) {
   const [displayImage, setDisplayImage] = useState(product.images[0])
 
   return (
-    <div className="fade-in flex flex-col overflow-hidden">
+    <div className="fade-in mb-6 flex flex-col overflow-hidden px-1 pt-1">
       <div className="relative aspect-[1/1] w-full">
         <Link
           aria-label={`Ver detalles de ${product.name}`}
-          className="focus-visible relative block h-full w-full"
+          className="focus-product relative block h-full w-full"
           href={`/product/${product.slug}`}
         >
           <Image
@@ -35,13 +35,13 @@ export function ProductGridItem({ product }: Props) {
 
       <div className="flex flex-col pt-2 font-bold antialiased">
         <Link
-          className="product-name text-black transition-all duration-300"
+          className="product-name !tracking-06 text-black transition-all duration-300"
           href={`/product/${product.slug}`}
           tabIndex={-1} // Evita que reciba focus al navegar con Tab
         >
           {product.name}
         </Link>
-        <span className="text-secondary">$ {product.price}</span>
+        <span className="text-secondary font-extrabold">$ {product.price}</span>
       </div>
     </div>
   )

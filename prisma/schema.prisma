@@ -83,30 +83,50 @@ model Stock {
   species   Species[]
 }
 
-// Category -> Representa las opciones asociadas a cada apartado del TopMenu/Sidebar
-// Ejemplo: Plant -> [Orchid, Adenium_Obesum, Cactus, Succulent] 
-model Category {
-  id      String  @id @default(uuid())
-  name    String  @unique
-  Product Genus[]
+// Route/ruta -> Representa las opciones asociadas a cada apartado del TopMenu/Sidebar
+// route: Plant -> category: [Orchid, Adenium_Obesum, Cactus, Succulent] 
+// category: Orchid -> group: [Cattleya, Dendrobium, Dimerandra, Enciclea]
+
+// Group -> Ayudara a mostrar el #contenido de las especies/productos de un Category/PlantType
+// group: [modelo robusto para soportar informacion de genero de especios o tipo de agroqumicos]
+// debe de ser escalable para agregar una categoria que no sea una planta 
+
+model Route {
+  id   String  @id @default(uuid())
+  name String  @unique
+  url  String?
+
+  Category Category[]
 }
 
-// Genus -> Ayudara a mostrar el #contenido de las especies de un Category/PlantType separado por generos
-// Ejemplo: Orchid -> [Cattleya, Dendrobium, Dimerandra, Enciclea]
-// pero... esto no sera escalable cuando quiera agregar una categoria que no sea una planta
-// Como productos de jardineria (macetas), productos fitosanitarios (fertilizantes y fitosanitarios) 
+model Category {
+  id    String  @id @default(uuid())
+  name  String  @unique
+  url   String?
+  image String
+
+  Route   Route  @relation(fields: [routeId], references: [id])
+  routeId String
+
+  Group Group[]
+}
+
+model Group {
+  id   String @id @default(uuid())
+  name String @unique
+
+  category   Category @relation(fields: [categoryId], references: [id])
+  categoryId String
+}
+
 model Genus {
   id   String    @id @default(uuid())
   name String    @unique
   type PlantType
 
-  category   Category @relation(fields: [categoryId], references: [id])
-  categoryId String
-
   species Species[]
 }
 
-// Species -> Representa los Products Items  
 model Species {
   id    String @id @default(uuid())
   name  String @unique

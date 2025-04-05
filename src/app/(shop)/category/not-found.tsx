@@ -1,5 +1,13 @@
 import { PageNotFound } from '@/components'
 
 export default function CategoryNotFoundPage() {
-  return <PageNotFound />
+  return (
+    <>
+      {
+        // eslint-disable-next-line no-console
+        console.log('CategoryNotFoundPage')
+      }
+      <PageNotFound />
+    </>
+  )
 }

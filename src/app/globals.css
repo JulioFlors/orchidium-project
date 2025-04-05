@@ -17,6 +17,10 @@
   --tracking-2: -0.02em;
   --tracking-1: -0.01em;
   --tracking-0: 0;
+  --tracking-01: 0.01em;
+  --tracking-02: 0.02em;
+  --tracking-04: 0.04em;
+  --tracking-06: 0.06em;
 }
 
 @layer base {
@@ -48,11 +52,11 @@
   }
 
   .product-name:hover {
-    @apply bg-gradient-to-r from-emerald-700 to-emerald-500 bg-clip-text text-transparent
+    @apply bg-gradient-to-r from-fuchsia-600 to-pink-600 bg-clip-text text-transparent
   }
 
   .product-name:focus {
-    @apply bg-gradient-to-r from-emerald-700 to-emerald-500 bg-clip-text text-transparent
+    @apply bg-gradient-to-r from-fuchsia-600 to-pink-600 bg-clip-text text-transparent
   }
 
   .search-results {
@@ -77,6 +81,10 @@
 
   .focus-serch-box:focus {
     @apply border-none outline-serch-box-outline outline-1 outline-offset-[-1px];
+  }
+
+  .focus-product:focus-visible {
+    @apply bg-white outline-none ring-accessibility ring-2 ring-offset-2 rounded-xs;
   }
 
   .focus-visible:focus {
