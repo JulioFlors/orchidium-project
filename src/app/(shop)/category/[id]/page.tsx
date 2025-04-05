@@ -12,9 +12,6 @@ interface Props {
   params: {
     id: string
   }
-  /*   searchParams: {
-    page?: string
-  } */
 }
 
 export default async function CategoryPage({ params }: Props) {

@@ -177,25 +177,25 @@ export const initialData: SeedData = {
         {
           id: 'orquideas',
           title: 'Orquídeas',
-          image: '/plants/orchids/orchids.jpg',
+          image: '/plants/orchids/orchids.webp',
           url: '/category/orquideas',
         },
         {
           id: 'rosas-del-desierto',
           title: 'Rosas del Desierto',
-          image: '/plants/adenium_obesum/adenium_obesum.jpg',
+          image: '/plants/adenium_obesum/marbella_0_2000.webp',
           url: '/category/rosas-del-desierto',
         },
         {
           id: 'cactus',
           title: 'Cactus',
-          image: '/plants/cactus/cactus.jpg',
+          image: '/plants/cactus/mammillaria-prolifera-ssp-haitiensis_0_2000.webp',
           url: '/category/cactus',
         },
         {
           id: 'suculentas',
           title: 'Suculentas',
-          image: '/plants/succulents/succulents.jpg',
+          image: '/plants/succulents/xpachyveria-scheideckeri_2_2000.webp',
           url: '/category/suculentas',
         },
       ],
@@ -257,9 +257,9 @@ export const initialData: SeedData = {
       slug: 'cattleya-violacea',
       stock: { quantity: 5, available: true },
       images: [
-        'orchids/cattleya-violacea-1.jpg',
-        'orchids/cattleya-violacea-2.jpg',
-        'orchids/cattleya-violacea-3.jpg',
+        'orchids/cattleya-violacea_0_2000.webp',
+        'orchids/cattleya-violacea_1_2000.webp',
+        'orchids/cattleya-violacea_2_2000.webp',
       ],
     },
     {
@@ -269,8 +269,8 @@ export const initialData: SeedData = {
       slug: 'cattlianthe-mary-elizabeth-bohn',
       stock: { quantity: 4, available: true },
       images: [
-        'orchids/cattlianthe-mary-elizabeth-bohn-1.jpg',
-        'orchids/cattlianthe-mary-elizabeth-bohn-2.jpg',
+        'orchids/cattlianthe-mary-elizabeth-bohn_0_2000.webp',
+        'orchids/cattlianthe-mary-elizabeth-bohn_1_2000.webp',
       ],
     },
     {
@@ -279,7 +279,7 @@ export const initialData: SeedData = {
       price: 30,
       slug: 'cattleya-caudebec-x-cattleya-bactia',
       stock: { quantity: 1, available: false },
-      images: ['orchids/cattleya-caudebec-x-cattleya-bactia-1.jpg'],
+      images: ['orchids/cattleya-caudebec-x-cattleya-bactia_0_2000.webp'],
     },
     {
       name: 'Cattleya Lueddemanniana x Cattleya Gaskelliana',
@@ -287,7 +287,7 @@ export const initialData: SeedData = {
       price: 30,
       slug: 'cattleya-lueddemanniana-x-cattleya-gaskelliana',
       stock: { quantity: 4, available: true },
-      images: ['orchids/cattleya-lueddemanniana-x-cattleya-gaskelliana-1.jpg'],
+      images: ['orchids/cattleya-lueddemanniana-x-cattleya-gaskelliana_0_2000.webp'],
     },
     {
       name: "Rhyncholaeliocattleya George King 'Southern Cross'",
@@ -296,8 +296,8 @@ export const initialData: SeedData = {
       slug: 'rhyncholaeliocattleya-george-king',
       stock: { quantity: 6, available: true },
       images: [
-        'orchids/rhyncholaeliocattleya-george-king-1.jpg',
-        'orchids/rhyncholaeliocattleya-george-king-2.jpg',
+        'orchids/rhyncholaeliocattleya-george-king_0_2000.webp',
+        'orchids/rhyncholaeliocattleya-george-king_1_2000.webp',
       ],
     },
     {
@@ -306,7 +306,7 @@ export const initialData: SeedData = {
       price: 30,
       slug: 'rhyncholaeliocattleya-memoria-anna-balmores',
       stock: { quantity: 6, available: true },
-      images: ['orchids/rhyncholaeliocattleya-memoria-anna-balmores-1.jpg'],
+      images: ['orchids/rhyncholaeliocattleya-memoria-anna-balmores_0_2000.webp'],
     },
     {
       name: 'Cattleya Supersonic',
@@ -314,7 +314,7 @@ export const initialData: SeedData = {
       price: 30,
       slug: 'cattleya-supersonic',
       stock: { quantity: 1, available: false },
-      images: ['orchids/cattleya-supersonic-1.jpg'],
+      images: ['orchids/cattleya-supersonic_0_2000.webp'],
     },
     {
       name: 'Dendrobium Striata',
@@ -322,7 +322,7 @@ export const initialData: SeedData = {
       price: 20,
       slug: 'dendrobium-striata',
       stock: { quantity: 3, available: true },
-      images: ['orchids/dendrobium-striata-1.jpg'],
+      images: ['orchids/dendrobium-striata_0_2000.webp'],
     },
     {
       name: 'Dendrobium Ocean Blue',
@@ -330,7 +330,7 @@ export const initialData: SeedData = {
       price: 25,
       slug: 'dendrobium-ocean-blue',
       stock: { quantity: 8, available: true },
-      images: ['orchids/dendrobium-ocean-blue-1.jpg'],
+      images: ['orchids/dendrobium-ocean-blue_0_2000.webp'],
     },
     {
       name: 'Dendrobium Diamond',
@@ -338,7 +338,7 @@ export const initialData: SeedData = {
       price: 20,
       slug: 'dendrobium-diamond',
       stock: { quantity: 2, available: false },
-      images: ['orchids/dendrobium-diamond-1.jpg'],
+      images: ['orchids/dendrobium-diamond_0_2000.webp'],
     },
     {
       name: 'Dimerandra Stenotepala',
@@ -346,7 +346,7 @@ export const initialData: SeedData = {
       price: 20,
       slug: 'dimerandra-stenotepala',
       stock: { quantity: 1, available: false },
-      images: ['orchids/dimerandra-stenotepala-1.jpg'],
+      images: ['orchids/dimerandra-stenotepala_0_2000.webp'],
     },
     {
       name: 'Enciclea Cordijera',
@@ -354,7 +354,7 @@ export const initialData: SeedData = {
       price: 20,
       slug: 'enciclea-cordijera',
       stock: { quantity: 3, available: true },
-      images: ['orchids/enciclea-cordijera-1.jpg'],
+      images: ['orchids/enciclea-cordijera_0_2000.webp'],
     },
     /* Adenium_Obesum */
     {
@@ -364,9 +364,9 @@ export const initialData: SeedData = {
       slug: 'adenium-obesum-genoa-gna',
       stock: { quantity: 1, available: false },
       images: [
-        'adenium_obesum/genoa-gna.jpg',
-        'adenium_obesum/genoa-gna-alt.jpg',
-        'adenium_obesum/genoa-gna-2.jpg',
+        'adenium_obesum/genoa-gna_0_2000.webp',
+        'adenium_obesum/genoa-gna_1_2000.webp',
+        'adenium_obesum/genoa-gna_2_2000.webp',
       ],
     },
     {
@@ -375,7 +375,7 @@ export const initialData: SeedData = {
       price: 20,
       slug: 'adenium-obesum-marbella',
       stock: { quantity: 1, available: false },
-      images: ['adenium_obesum/marbella.jpg', 'adenium_obesum/marbella-alt.jpg'],
+      images: ['adenium_obesum/marbella_0_2000.webp', 'adenium_obesum/marbella_1_2000.webp'],
     },
     /* Cactus */
     {
@@ -384,7 +384,7 @@ export const initialData: SeedData = {
       price: 3,
       slug: 'euphorbia-ritchiei',
       stock: { quantity: 9, available: true },
-      images: ['cactus/euphorbia-ritchiei-1.jpg', 'cactus/euphorbia-ritchiei-2.jpg'],
+      images: ['cactus/euphorbia-ritchiei_0_2000.webp', 'euphorbia-ritchiei_1_2000.webp'],
     },
     {
       name: 'Mammillaria prolifera ssp. haitiensis',
@@ -393,10 +393,10 @@ export const initialData: SeedData = {
       slug: 'mammillaria-prolifera-ssp-haitiensis',
       stock: { quantity: 3, available: false },
       images: [
-        'cactus/mammillaria-prolifera-ssp-haitiensis-1.jpg',
-        'cactus/mammillaria-prolifera-ssp-haitiensis-2.jpg',
-        'cactus/mammillaria-prolifera-ssp-haitiensis-3.jpg',
-        'cactus/mammillaria-prolifera-ssp-haitiensis-4.jpg',
+        'cactus/mammillaria-prolifera-ssp-haitiensis_0_2000.webp',
+        'cactus/mammillaria-prolifera-ssp-haitiensis_1_2000.webp',
+        'cactus/mammillaria-prolifera-ssp-haitiensis_2_2000.webp',
+        'cactus/mammillaria-prolifera-ssp-haitiensis_3_2000.webp',
       ],
     },
     {
@@ -406,10 +406,10 @@ export const initialData: SeedData = {
       slug: 'mammillaria-vetula-ssp-gracilis',
       stock: { quantity: 3, available: false },
       images: [
-        'cactus/mammillaria-vetula-ssp-gracilis-1.jpg',
-        'cactus/mammillaria-vetula-ssp-gracilis-2.jpg',
-        'cactus/mammillaria-vetula-ssp-gracilis-3.jpg',
-        'cactus/mammillaria-vetula-ssp-gracilis-4.jpg',
+        'cactus/mammillaria-vetula-ssp-gracilis_0_2000.webp',
+        'cactus/mammillaria-vetula-ssp-gracilis_1_2000.webp',
+        'cactus/mammillaria-vetula-ssp-gracilis_2_2000.webp',
+        'cactus/mammillaria-vetula-ssp-gracilis_3_2000.webp',
       ],
     },
     {
@@ -419,8 +419,9 @@ export const initialData: SeedData = {
       slug: 'mammillaria-vetula-ssp-gracilis-cv-roi-baudoin-yonneux',
       stock: { quantity: 2, available: false },
       images: [
-        'cactus/mammillaria-vetula-ssp-gracilis-cv-roi-baudoin-yonneux-1.jpg',
-        'cactus/mammillaria-vetula-ssp-gracilis-cv-roi-baudoin-yonneux-2.jpg',
+        'cactus/mammillaria-vetula-ssp-gracilis-cv-roi-baudoin-yonneux_0_2000.webp',
+        'cactus/mammillaria-vetula-ssp-gracilis-cv-roi-baudoin-yonneux_1_2000.webp',
+        'cactus/mammillaria-vetula-ssp-gracilis-cv-roi-baudoin-yonneux_2_2000.webp',
       ],
     },
     {
@@ -430,11 +431,11 @@ export const initialData: SeedData = {
       slug: 'rebutia-heliosa-teresae',
       stock: { quantity: 4, available: false },
       images: [
-        'cactus/rebutia-heliosa-ssp-teresae-1.jpg',
-        'cactus/rebutia-heliosa-ssp-teresae-2.jpg',
-        'cactus/rebutia-heliosa-ssp-teresae-3.jpg',
-        'cactus/rebutia-heliosa-ssp-teresae-4.jpg',
-        'cactus/rebutia-heliosa-ssp-teresae-5.jpg',
+        'cactus/rebutia-heliosa-ssp-teresae_0_2000.webp',
+        'cactus/rebutia-heliosa-ssp-teresae_1_2000.webp',
+        'cactus/rebutia-heliosa-ssp-teresae_2_2000.webp',
+        'cactus/rebutia-heliosa-ssp-teresae_3_2000.webp',
+        'cactus/rebutia-heliosa-ssp-teresae_4_2000.webp',
       ],
     },
     /* Succulent */
@@ -445,10 +446,10 @@ export const initialData: SeedData = {
       slug: 'crassula-capitella-campfire',
       stock: { quantity: 1, available: false },
       images: [
-        'succulents/crassula-capitella-campfire-1.jpg',
-        'succulents/crassula-capitella-campfire-2.jpg',
-        'succulents/crassula-capitella-campfire-3.jpg',
-        'succulents/crassula-capitella-campfire-4.jpg',
+        'succulents/crassula-capitella-campfire_0_2000.webp',
+        'succulents/crassula-capitella-campfire_1_2000.webp',
+        'succulents/crassula-capitella-campfire_2_2000.webp',
+        'succulents/crassula-capitella-campfire_3_2000.webp',
       ],
     },
     {
@@ -457,7 +458,7 @@ export const initialData: SeedData = {
       price: 5,
       slug: 'crassula-ovata-gollum',
       stock: { quantity: 0, available: false },
-      images: ['succulents/crassula-ovata-gollum.jpg'],
+      images: ['succulents/crassula-ovata-gollum_0_2000.webp'],
     },
     {
       name: 'Graptopetalum paraguayense',
@@ -466,8 +467,8 @@ export const initialData: SeedData = {
       slug: 'graptopetalum-paraguayense',
       stock: { quantity: 3, available: false },
       images: [
-        'succulents/graptopetalum-paraguayense.jpg',
-        'succulents/graptopetalum-paraguayense-alt.jpg',
+        'succulents/graptopetalum-paraguayense_0_2000.webp',
+        'succulents/graptopetalum-paraguayense_1_2000.webp',
       ],
     },
     {
@@ -476,7 +477,10 @@ export const initialData: SeedData = {
       price: 3,
       slug: 'graptoveria-fenix',
       stock: { quantity: 2, available: false },
-      images: ['succulents/graptoveria-fenix.jpg', 'succulents/graptoveria-fenix-alt.jpg'],
+      images: [
+        'succulents/graptoveria-fenix_0_2000.webp',
+        'succulents/graptoveria-fenix_1_2000.webp',
+      ],
     },
     {
       name: 'Haworthiopsis attenuata "Zebrina"',
@@ -484,7 +488,7 @@ export const initialData: SeedData = {
       price: 6,
       slug: 'haworthiopsis-attenuata-zebrina',
       stock: { quantity: 0, available: false },
-      images: ['succulents/haworthiopsis-attenuata-zebrina.jpg'],
+      images: ['succulents/haworthiopsis-attenuata-zebrina_0_2000.webp'],
     },
     {
       name: 'Orostachys boehmeri "Keiko"',
@@ -493,9 +497,9 @@ export const initialData: SeedData = {
       slug: 'orostachys-boehmeri-keiko',
       stock: { quantity: 10, available: true },
       images: [
-        'succulents/orostachys-boehmeri-keiko-1.jpg',
-        'succulents/orostachys-boehmeri-keiko-2.jpg',
-        'succulents/orostachys-boehmeri-keiko-3.jpg',
+        'succulents/orostachys-boehmeri-keiko_0_2000.webp',
+        'succulents/orostachys-boehmeri-keiko_1_2000.webp',
+        'succulents/orostachys-boehmeri-keiko_2_2000.webp',
       ],
     },
     {
@@ -504,7 +508,7 @@ export const initialData: SeedData = {
       price: 4,
       slug: 'senecio-rowleyanus-rosario',
       stock: { quantity: 0, available: false },
-      images: ['succulents/senecio-rowleyanus-rosario.jpg'],
+      images: ['succulents/senecio-rowleyanus-rosario_0_2000.webp'],
     },
     {
       name: 'xPachyveria "Scheideckeri"',
@@ -513,10 +517,10 @@ export const initialData: SeedData = {
       slug: 'xpachyveria-scheideckeri',
       stock: { quantity: 4, available: false },
       images: [
-        'succulents/xpachyveria-scheideckeri-1.jpg',
-        'succulents/xpachyveria-scheideckeri-2.jpg',
-        'succulents/xpachyveria-scheideckeri-3.jpg',
-        'succulents/xpachyveria-scheideckeri-4.jpg',
+        'succulents/xpachyveria-scheideckeri_0_2000.webp',
+        'succulents/xpachyveria-scheideckeri_1_2000.webp',
+        'succulents/xpachyveria-scheideckeri_2_2000.webp',
+        'succulents/xpachyveria-scheideckeri_3_2000.webp',
       ],
     },
   ],

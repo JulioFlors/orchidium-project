@@ -35,6 +35,13 @@ enum PlantType {
   Succulent
 }
 
+enum PotSize {
+  Nro_5
+  Nro_7
+  Nro_10
+  Nro_14
+}
+
 enum TaskStatus {
   Pendiente
   Completada
@@ -91,24 +98,26 @@ model Stock {
 // group: [modelo robusto para soportar informacion de genero de especios o tipo de agroqumicos]
 // debe de ser escalable para agregar una categoria que no sea una planta 
 
+// Modelo para las rutas principales de navegación (Sidebar/TopMenu)
 model Route {
   id   String  @id @default(uuid())
   name String  @unique
-  url  String?
+  url  String
 
-  Category Category[]
+  categories Category[] // Una ruta puede tener varias categorías
 }
 
+// Modelo para las categorías principales (Plantas, Accesorios)
 model Category {
   id    String  @id @default(uuid())
   name  String  @unique
-  url   String?
+  url   String
   image String
 
-  Route   Route  @relation(fields: [routeId], references: [id])
+  route   Route  @relation(fields: [routeId], references: [id])
   routeId String
 
-  Group Group[]
+  groups Group[] // Una categoría tiene varios grupos (Subcategorías)
 }
 
 model Group {
@@ -117,6 +126,9 @@ model Group {
 
   category   Category @relation(fields: [categoryId], references: [id])
   categoryId String
+
+  @@unique([name, categoryId]) // Un nombre de grupo debe ser único dentro de su categoría
+  @@index([categoryId])
 }
 
 model Genus {
@@ -133,36 +145,77 @@ model Species {
   price Int    @default(0)
   slug  String @unique
 
+  description String?
+
   genus   Genus  @relation(fields: [genusId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   genusId String
 
   stock   Stock  @relation(fields: [stockId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   stockId String
 
-  plants Plant[]
-  images SpeciesImage[]
+  plants   Plant[]
+  images   SpeciesImage[]
+  variants ProductVariant[]
+
+  @@index([genusId])
 }
 
+// Modelo para las variantes de producto (Stock por tamaño y precio)
+model ProductVariant {
+  id        String  @id @default(uuid())
+  size      PotSize // Tamaño de la maceta/presentación
+  price     Int // Precio para este tamaño específico
+  quantity  Int     @default(0) // Cantidad en stock para este tamaño
+  available Boolean @default(false) // Calculado o manejado manualmente
+
+  species   Species @relation(fields: [speciesId], references: [id], onDelete: Cascade)
+  speciesId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([speciesId, size]) // No puede haber dos entradas con la misma especie y tamaño
+  @@index([speciesId])
+}
+
+// Modelo para las Imágenes de Especies
 model SpeciesImage {
   id  String @id @default(uuid())
   url String @unique
 
   species   Species @relation(fields: [speciesId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   speciesId String
+
+  @@index([speciesId])
 }
 
+// Modelo para Ubicaciones Físicas
 model Location {
-  id     String    @id @default(uuid())
-  zone   ZoneType
-  table  TableType
-  plants Plant[]
+  id    String    @id @default(uuid())
+  zone  ZoneType
+  table TableType
+
+  plants Plant[] // Plantas ubicadas aquí
+}
+
+// Modelo para registrar eventos de floración
+model FloweringEvent {
+  id        String    @id @default(uuid())
+  startDate DateTime // Fecha de inicio de la floración
+  endDate   DateTime? // Fecha de fin (null si aún está en floración)
+
+  plant   Plant  @relation(fields: [plantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  plantId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([plantId])
 }
 
 model Plant {
   id          String    @id @default(uuid())
   pottingDate DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
 
   species   Species @relation(fields: [speciesId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   speciesId String
@@ -170,7 +223,13 @@ model Plant {
   location   Location? @relation(fields: [locationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   locationId String?
 
+  FloweringEvent FloweringEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([speciesId])
+  @@index([locationId])
 }
 
 model Agrochemical {
