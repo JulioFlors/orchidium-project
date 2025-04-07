@@ -5,13 +5,13 @@ import { IoCloseOutline, IoChevronBackOutline } from 'react-icons/io5'
 import { motion, AnimatePresence } from 'motion/react'
 
 import { MainContent } from './MainContent'
-import { SubcategoryContent } from './SubcategoryContent'
+import { CategoryContent } from './CategoryContent'
 import { filterSearchResults, handleAccessibility } from './Utils'
 
 import { useUIStore } from '@/store'
 import { initialData } from '@/seed/seed'
 
-const categories = initialData.categories
+const routes = initialData.routes
 
 const motionProps = {
   initial: { x: '80%', opacity: 0 },
@@ -34,11 +34,11 @@ const motionProps = {
 }
 
 export function Sidebar() {
-  const activeCategory = useUIStore((state) => state.activeCategory)
+  const activeRoute = useUIStore((state) => state.activeRoute)
   const closeMenu = useUIStore((state) => state.closeSideMenu)
   const isSideMenuOpen = useUIStore((state) => state.isSideMenuOpen)
   const searchTerm = useUIStore((state) => state.searchTerm)
-  const setActiveCategory = useUIStore((state) => state.setActiveCategory)
+  const setActiveRoute = useUIStore((state) => state.setActiveRoute)
   const searchResults = useUIStore((state) => state.searchResults)
   const setSearchResults = useUIStore((state) => state.setSearchResults)
 
@@ -46,12 +46,12 @@ export function Sidebar() {
   const navRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
-    setSearchResults(filterSearchResults(categories, searchTerm))
+    setSearchResults(filterSearchResults(routes, searchTerm))
   }, [searchTerm, setSearchResults])
 
   useEffect(() => {
-    return handleAccessibility(isSideMenuOpen, navRef, setActiveCategory)
-  }, [isSideMenuOpen, navRef, setActiveCategory, activeCategory])
+    return handleAccessibility(isSideMenuOpen, navRef, setActiveRoute)
+  }, [isSideMenuOpen, navRef, setActiveRoute, activeRoute])
 
   return (
     <div>
@@ -86,12 +86,12 @@ export function Sidebar() {
               className="text-secondary sticky top-0 z-10 mt-4 mb-6 flex items-center justify-between px-8"
               id="sideMenuHeader"
             >
-              {activeCategory ? (
+              {activeRoute ? (
                 <button
                   aria-label="Volver al menú"
                   className="focus-visible my-1 flex cursor-pointer items-center font-medium"
                   type="button"
-                  onClick={() => setActiveCategory(null)}
+                  onClick={() => setActiveRoute(null)}
                 >
                   <IoChevronBackOutline size={20} />
                   <span className="mx-1">Volver</span>
@@ -114,10 +114,10 @@ export function Sidebar() {
               className="mx-8 mb-2 flex flex-1 flex-col items-start overflow-x-hidden text-left"
               id="sideMenuContent"
             >
-              {activeCategory ? (
-                <SubcategoryContent categories={categories} categoryId={activeCategory} />
+              {activeRoute ? (
+                <CategoryContent routeId={activeRoute} routes={routes} />
               ) : (
-                <MainContent categories={categories} searchResults={searchResults} />
+                <MainContent routes={routes} searchResults={searchResults} />
               )}
             </div>
           </motion.nav>

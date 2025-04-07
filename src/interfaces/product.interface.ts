@@ -27,16 +27,16 @@ export interface Species {
 
 export type PlantType = 'Orchid' | 'Adenium_Obesum' | 'Cactus' | 'Succulent'
 
+export interface Route {
+  id: string
+  title: string
+  categories?: Category[]
+  url: string
+}
+
 export interface Category {
   id: string
   title: string
-  subcategories?: Subcategory[]
-  url?: string
-}
-
-export interface Subcategory {
-  id: string
-  title: string
-  image: string
+  image?: string
   url: string
 }

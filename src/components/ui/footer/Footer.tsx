@@ -7,7 +7,7 @@ export function Footer() {
     <footer className="w-full py-5 text-xs font-medium">
       <div className="flex flex-wrap justify-center gap-4">
         <Link className="focus-visible py-2" href="/">
-          <span className={`${titleFont.className} font-semibold`}>PristinoPlant </span>
+          <span className={`${titleFont.className} font-bold`}>PristinoPlant </span>
           <span>© {new Date().getFullYear()}</span>
         </Link>
 

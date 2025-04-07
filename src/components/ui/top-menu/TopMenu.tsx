@@ -11,7 +11,7 @@ import { handleFocusSearchInput, PristinoPlant, Searchbox } from '@/components'
 import { useUIStore } from '@/store'
 import { initialData } from '@/seed/seed'
 
-const categories = initialData.categories
+const routes = initialData.routes
 
 const motionDivProps = {
   initial: { width: 0, opacity: 0 },
@@ -144,19 +144,19 @@ export function TopMenu() {
             id="main-topMenu"
             role="navigation"
           >
-            {categories
-              .filter((category) => category.subcategories && category.subcategories.length > 0)
-              .map((category) => (
+            {routes
+              .filter((route) => route.categories && route.categories.length > 0)
+              .map((route) => (
                 <Link
-                  key={category.id}
+                  key={route.id}
                   className={clsx('nav-link focus-visible-hover', {
-                    'aria-current="page"': pathname === `${category.url}`,
+                    'aria-current="page"': pathname === `${route.url}`,
                   })}
-                  href={category.url || '#'}
+                  href={route.url || '#'}
                   onMouseEnter={(e) => setHoveredLink(e.currentTarget)}
                   onMouseLeave={() => setHoveredLink(null)}
                 >
-                  <span>{category.title}</span>
+                  <span>{route.title}</span>
                 </Link>
               ))}
           </nav>

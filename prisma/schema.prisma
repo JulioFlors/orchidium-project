@@ -117,7 +117,7 @@ model Category {
   route   Route  @relation(fields: [routeId], references: [id])
   routeId String
 
-  groups Group[] // Una categoría tiene varios grupos (Subcategorías)
+  groups Group[] // Una categoría tiene varios grupos
 }
 
 model Group {

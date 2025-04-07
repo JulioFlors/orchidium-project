@@ -10,7 +10,7 @@ export default async function HomePage() {
 
       <Subtitle subtitle="Todos los productos" />
 
-      <ProductGrid products={products} />
+      <ProductGrid index={0} products={products} />
     </>
   )
 }

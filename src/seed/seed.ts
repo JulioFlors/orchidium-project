@@ -16,14 +16,14 @@ type TriggerType = 'Diario' | 'Interdiario' | 'Sensores'
 type ActuatorType = 'Aspercion' | 'Nebulizacion' | 'Humedecer_Suelo'
 /* type SensorType = 'Humedad_Relativa' | 'Temperatura' | 'Intensidad_Luminosa' */
 
-export interface SeedCategory {
+export interface SeedRoute {
   id: string
   title: string
-  subcategories?: SeedSubcategory[]
-  url?: string
+  categories?: SeedCategory[]
+  url: string
 }
 
-export interface SeedSubcategory {
+export interface SeedCategory {
   id: string
   title: string
   image: string
@@ -153,7 +153,7 @@ interface SeedIrrigationTask {
 } */
 
 interface SeedData {
-  categories: SeedCategory[]
+  routes: SeedRoute[]
   genus: SeedGenus[]
   species: SeedSpecies[]
   plants: SeedPlant[]
@@ -168,35 +168,35 @@ interface SeedData {
 
 export const initialData: SeedData = {
   // Datos de ejemplo para las categorías
-  categories: [
+  routes: [
     {
-      id: 'plantas',
+      id: 'plants',
       title: 'Plantas',
-      url: '/category/plantas',
-      subcategories: [
+      url: '/category/plants',
+      categories: [
         {
-          id: 'orquideas',
+          id: 'orchids',
           title: 'Orquídeas',
           image: '/plants/orchids/orchids.webp',
-          url: '/category/orquideas',
+          url: '/category/plants/orchids',
         },
         {
-          id: 'rosas-del-desierto',
+          id: 'adenium_obesum',
           title: 'Rosas del Desierto',
           image: '/plants/adenium_obesum/marbella_0_2000.webp',
-          url: '/category/rosas-del-desierto',
+          url: '/category/plants/adenium_obesum',
         },
         {
           id: 'cactus',
           title: 'Cactus',
           image: '/plants/cactus/mammillaria-prolifera-ssp-haitiensis_0_2000.webp',
-          url: '/category/cactus',
+          url: '/category/plants/cactus',
         },
         {
-          id: 'suculentas',
+          id: 'succulents',
           title: 'Suculentas',
-          image: '/plants/succulents/xpachyveria-scheideckeri_2_2000.webp',
-          url: '/category/suculentas',
+          image: '/plants/succulents/pachyveria-scheideckeri_2_2000.webp',
+          url: '/category/plants/succulents',
         },
       ],
     },
@@ -204,18 +204,18 @@ export const initialData: SeedData = {
       id: 'accesorios',
       title: 'Accesorios',
       url: '/category/accesorios',
-      subcategories: [
+      categories: [
         {
           id: 'macetas',
           title: 'Macetas',
           image: '/placeholder.svg?height=200&width=200',
-          url: '/category/macetas',
+          url: '/category/accesorios/macetas',
         },
         {
           id: 'herramientas',
           title: 'Herramientas',
           image: '/placeholder.svg?height=200&width=200',
-          url: '/category/herramientas',
+          url: '/category/accesorios/herramientas',
         },
       ],
     },
@@ -245,8 +245,8 @@ export const initialData: SeedData = {
     { name: 'Graptoveria', type: 'Succulent' },
     { name: 'Haworthiopsis', type: 'Succulent' },
     { name: 'Orostachys', type: 'Succulent' },
+    { name: 'Pachyveria', type: 'Succulent' },
     { name: 'Senecio', type: 'Succulent' },
-    { name: 'xPachyveria', type: 'Succulent' },
   ],
   species: [
     /* Orchid */
@@ -384,7 +384,7 @@ export const initialData: SeedData = {
       price: 3,
       slug: 'euphorbia-ritchiei',
       stock: { quantity: 9, available: true },
-      images: ['cactus/euphorbia-ritchiei_0_2000.webp', 'euphorbia-ritchiei_1_2000.webp'],
+      images: ['cactus/euphorbia-ritchiei_0_2000.webp', 'cactus/euphorbia-ritchiei_1_2000.webp'],
     },
     {
       name: 'Mammillaria prolifera ssp. haitiensis',
@@ -511,16 +511,16 @@ export const initialData: SeedData = {
       images: ['succulents/senecio-rowleyanus-rosario_0_2000.webp'],
     },
     {
-      name: 'xPachyveria "Scheideckeri"',
-      genus: { name: 'xPachyveria' },
+      name: 'Pachyveria "Scheideckeri"',
+      genus: { name: 'Pachyveria' },
       price: 4,
-      slug: 'xpachyveria-scheideckeri',
+      slug: 'pachyveria-scheideckeri',
       stock: { quantity: 4, available: false },
       images: [
-        'succulents/xpachyveria-scheideckeri_0_2000.webp',
-        'succulents/xpachyveria-scheideckeri_1_2000.webp',
-        'succulents/xpachyveria-scheideckeri_2_2000.webp',
-        'succulents/xpachyveria-scheideckeri_3_2000.webp',
+        'succulents/pachyveria-scheideckeri_0_2000.webp',
+        'succulents/pachyveria-scheideckeri_1_2000.webp',
+        'succulents/pachyveria-scheideckeri_2_2000.webp',
+        'succulents/pachyveria-scheideckeri_3_2000.webp',
       ],
     },
   ],

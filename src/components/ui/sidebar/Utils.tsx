@@ -1,4 +1,4 @@
-import { Category, Subcategory } from '@/interfaces'
+import { Category, Route } from '@/interfaces'
 
 /**
  * Resalta las coincidencias de búsqueda dentro de un texto dado.
@@ -35,25 +35,25 @@ export const highlightMatch = (text: string, query: string) => {
 /**
  * Filtra los resultados de búsqueda basados en el término de búsqueda proporcionado.
  *
- * @param categories - El array de categorías y subcategorías a filtrar.
+ * @param routes - El array de rutas y categorías a filtrar.
  * @param searchTerm - El término de búsqueda a utilizar para filtrar.
- * @returns Un array de subcategorías y categorías que coinciden con el término de búsqueda.
+ * @returns Un array de rutas y categorías que coinciden con el término de búsqueda.
  */
-export function filterSearchResults(
-  categories: Category[],
-  searchTerm: string,
-): (Subcategory | Category)[] {
+
+type SearchResult = Category | Route
+
+export function filterSearchResults(routes: Route[], searchTerm: string): SearchResult[] {
   if (searchTerm.trim() === '') {
     return []
   }
 
-  return categories.flatMap((category) => {
-    if (category.subcategories) {
-      return category.subcategories.filter((sub) =>
-        sub.title.toLowerCase().includes(searchTerm.toLowerCase()),
+  return routes.flatMap((route) => {
+    if (route.categories) {
+      return route.categories.filter((cat) =>
+        cat.title.toLowerCase().includes(searchTerm.toLowerCase()),
       )
-    } else if (category.title.toLowerCase().includes(searchTerm.toLowerCase())) {
-      return [category]
+    } else if (route.title.toLowerCase().includes(searchTerm.toLowerCase())) {
+      return [route]
     } else {
       return []
     }
@@ -65,19 +65,19 @@ export function filterSearchResults(
  *
  * @param isSideMenuOpen - Indica si el sidebar está abierto.
  * @param navRef - Una referencia al elemento nav del sidebar.
- * @param setActiveCategory - Una función para establecer la categoría activa.
+ * @param setActiveRoute - Una función para establecer la ruta activa.
  * @returns Una función de limpieza para eliminar el event listener del teclado, o undefined si no es necesario.
  */
 export function handleAccessibility(
   isSideMenuOpen: boolean,
   navRef: React.RefObject<HTMLElement | null>,
-  setActiveCategory: (categoryId: string | null) => void,
+  setActiveRoute: (routeId: string | null) => void,
 ): () => void {
   if (isSideMenuOpen) {
     document.body.style.overflow = 'hidden'
   } else {
     document.body.style.overflow = 'auto'
-    setActiveCategory(null)
+    setActiveRoute(null)
   }
 
   if (navRef.current) {

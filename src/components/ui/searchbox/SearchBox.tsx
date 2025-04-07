@@ -7,12 +7,12 @@ import { motion, AnimatePresence } from 'motion/react'
 import clsx from 'clsx'
 
 import { highlightMatch, handleFocusSearchInput } from '@/components'
-import { Category, Subcategory } from '@/interfaces'
+import { Category, Route } from '@/interfaces'
 import { useUIStore } from '@/store'
 
 interface SearchboxProps {
   isTopMenu?: boolean
-  searchResults: (Subcategory | Category)[]
+  searchResults: (Route | Category)[]
 }
 
 const motionProps = {
@@ -25,7 +25,7 @@ const motionProps = {
  * Componente de la caja de búsqueda con funcionalidad de sugerencias y animaciones.
  *
  * @param {boolean} props.isTopMenu - Indica si el componente se usa en el TopMenu (opcional).
- * @param {(Subcategory | Category)[]} props.searchResults - Los resultados de búsqueda a mostrar.
+ * @param {(Route | Category)[]} props.searchResults - Los resultados de búsqueda a mostrar.
  */
 export function Searchbox({ isTopMenu = false, searchResults }: SearchboxProps) {
   const searchRef = useRef<HTMLInputElement | null>(null)
