@@ -16,20 +16,6 @@ type TriggerType = 'Diario' | 'Interdiario' | 'Sensores'
 type ActuatorType = 'Aspercion' | 'Nebulizacion' | 'Humedecer_Suelo'
 /* type SensorType = 'Humedad_Relativa' | 'Temperatura' | 'Intensidad_Luminosa' */
 
-export interface SeedRoute {
-  id: string
-  title: string
-  categories?: SeedCategory[]
-  url: string
-}
-
-export interface SeedCategory {
-  id: string
-  title: string
-  image: string
-  url: string
-}
-
 interface SeedGenus {
   name: string
   type: PlantType
@@ -153,7 +139,6 @@ interface SeedIrrigationTask {
 } */
 
 interface SeedData {
-  routes: SeedRoute[]
   genus: SeedGenus[]
   species: SeedSpecies[]
   plants: SeedPlant[]
@@ -167,69 +152,6 @@ interface SeedData {
 }
 
 export const initialData: SeedData = {
-  // Datos de ejemplo para las categorías
-  routes: [
-    {
-      id: 'plants',
-      title: 'Plantas',
-      url: '/category/plants',
-      categories: [
-        {
-          id: 'orchids',
-          title: 'Orquídeas',
-          image: '/plants/orchids/orchids.webp',
-          url: '/category/plants/orchids',
-        },
-        {
-          id: 'adenium_obesum',
-          title: 'Rosas del Desierto',
-          image: '/plants/adenium_obesum/marbella_0_2000.webp',
-          url: '/category/plants/adenium_obesum',
-        },
-        {
-          id: 'cactus',
-          title: 'Cactus',
-          image: '/plants/cactus/mammillaria-prolifera-ssp-haitiensis_0_2000.webp',
-          url: '/category/plants/cactus',
-        },
-        {
-          id: 'succulents',
-          title: 'Suculentas',
-          image: '/plants/succulents/pachyveria-scheideckeri_2_2000.webp',
-          url: '/category/plants/succulents',
-        },
-      ],
-    },
-    {
-      id: 'accesorios',
-      title: 'Accesorios',
-      url: '/category/accesorios',
-      categories: [
-        {
-          id: 'macetas',
-          title: 'Macetas',
-          image: '/placeholder.svg?height=200&width=200',
-          url: '/category/accesorios/macetas',
-        },
-        {
-          id: 'herramientas',
-          title: 'Herramientas',
-          image: '/placeholder.svg?height=200&width=200',
-          url: '/category/accesorios/herramientas',
-        },
-      ],
-    },
-    {
-      id: 'contacto',
-      title: 'Contacto',
-      url: '/about/contacto',
-    },
-    {
-      id: 'login',
-      title: 'Iniciar sesión',
-      url: '/auth/login',
-    },
-  ],
   genus: [
     { name: 'Cattleya', type: 'Orchid' },
     { name: 'Dendrobium', type: 'Orchid' },

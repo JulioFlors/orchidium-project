@@ -27,16 +27,14 @@ export interface Species {
 
 export type PlantType = 'Orchid' | 'Adenium_Obesum' | 'Cactus' | 'Succulent'
 
-export interface Route {
-  id: string
-  title: string
-  categories?: Category[]
-  url: string
-}
+export type PotSize = 'Nro 5' | 'Nro 7' | 'Nro 10' | 'Nro 14'
 
-export interface Category {
+export interface CartProduct {
   id: string
+  slug: string
   title: string
-  image?: string
-  url: string
+  price: number
+  quantity: number
+  size: PotSize
+  image: string
 }

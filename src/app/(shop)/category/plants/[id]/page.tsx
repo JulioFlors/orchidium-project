@@ -1,29 +1,29 @@
-import { notFound } from 'next/navigation'
+'use client'
+
+import { notFound, useParams } from 'next/navigation'
 
 import { ProductGrid, Title, Subtitle } from '@/components'
-import { initialData } from '@/seed/seed'
 import { Category, Genus, Route } from '@/interfaces'
+import { staticRoutes } from '@/config'
+import { initialData } from '@/seed/seed'
 
 const seedGenus = initialData.genus
-const SeedRoute = initialData.routes
 const seedSpecies = initialData.species
 
-interface Props {
-  params: {
-    id: string
-  }
-}
-
-export default async function CategoryPage({ params }: Props) {
-  const { id: categoryId } = await params
+export default function CategoryPage() {
+  const categoryId = useParams().id
 
   // Seleccionar la ruta para "plants"
-  const route: Route | undefined = SeedRoute.find((route) => route.id === 'plants')
+  const route: Route | undefined = staticRoutes.find((route) => route.slug === 'plants')
 
   // Comprobar que la categoria existe
-  const category: Category | undefined = route?.categories?.find(
-    (cat) => cat.id.toLowerCase() === categoryId.toLowerCase(),
-  )
+  const category: Category | undefined = route?.categories?.find((cat) => {
+    if (typeof categoryId === 'string') {
+      return cat.slug.toLowerCase() === categoryId.toLowerCase()
+    }
+
+    return false // Si categoryId no es string, la comparación falla
+  })
 
   // Si no existe, mostrar 404
   if (!category) {
@@ -40,13 +40,13 @@ export default async function CategoryPage({ params }: Props) {
 
   // Encontrar los GRUPOS (géneros) que pertenecen a ESTA categoría
   const groupsInCategory: Genus[] = seedGenus.filter(
-    (gen) => gen.type.toLowerCase() === routeWrapper[category.id],
+    (gen) => gen.type.toLowerCase() === routeWrapper[category.slug],
   )
 
   return (
-    <div key={category.id}>
+    <div key={category.slug}>
       {/* Mostrar título de la CATEGORÍA */}
-      <Title className="ml-1" title={category.title} />
+      <Title className="ml-1" title={category.name} />
 
       {/* Iterar sobre cada GRUPO (género) dentro de la Categoría */}
       {groupsInCategory.map((group, index) => {

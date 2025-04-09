@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: 'Tienda virtual de plantas',
 }
 
-export default function ShopLayout({ children }: { children: React.ReactNode }) {
+export default async function ShopLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-dvh flex-col">
       <TopMenu />

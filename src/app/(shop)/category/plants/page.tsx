@@ -1,23 +1,23 @@
 import { notFound } from 'next/navigation'
 
+import { staticRoutes } from '@/config'
 import { ProductGrid, Title, Subtitle } from '@/components'
-import { initialData } from '@/seed/seed'
 import { Genus, Route } from '@/interfaces'
+import { initialData } from '@/seed/seed'
 
 const seedGenus = initialData.genus
-const SeedRoute = initialData.routes
 const seedSpecies = initialData.species
 
-export default async function PlantasCategoryPage() {
+export default function PlantasCategoryPage() {
   // Seleccionar la ruta para "plants"
-  const route: Route | undefined = SeedRoute.find((route) => route.id === 'plants')
+  const route: Route | undefined = staticRoutes.find((route) => route.slug === 'plants')
 
-  // Si no se encuentra la ruta o no tiene categorías, mostrar 404
-  if (!route || !route.categories || route.categories.length === 0) {
+  // Si no existe, mostrar 404
+  if (!route) {
     notFound()
   }
 
-  // Mapeo para relacionar el ID de la categoría con el 'type' del género
+  // Mapeo para relacionar el categoty.slug con el 'type' del género
   const routeWrapper: Record<string, string> = {
     orchids: 'orchid',
     adenium_obesum: 'adenium_obesum',
@@ -27,21 +27,21 @@ export default async function PlantasCategoryPage() {
 
   return (
     <>
-      {route.categories.map((category, catIndex) => {
+      {route.categories?.map((category, catIndex) => {
         // Encontrar los GRUPOS (géneros) que pertenecen a ESTA categoría
         const groupsInCategory: Genus[] = seedGenus.filter(
-          (gen) => gen.type.toLowerCase() === routeWrapper[category.id],
+          (gen) => gen.type.toLowerCase() === routeWrapper[category.slug],
         )
 
-        // Si no hay grupos para esta categoría, no mostrar nada para ella
+        // Si no hay géneros para esta categoría, no mostrar nada para ella
         if (groupsInCategory.length === 0) {
           return null
         }
 
         return (
-          <div key={category.id}>
+          <div key={category.slug}>
             {/* Mostrar título de la CATEGORÍA */}
-            <Title className={`ml-1 ${catIndex > 0 ? '!mt-0' : ''}`} title={category.title} />
+            <Title className={`ml-1 ${catIndex > 0 ? '!mt-0' : ''}`} title={category.name} />
 
             {/* Iterar sobre cada GRUPO (género) dentro de la Categoría */}
             {groupsInCategory.map((group, groupIndex) => {

@@ -4,42 +4,42 @@ import Inter from 'next/font/local'
 export const titleFont = Ubuntu({
   src: [
     {
-      path: '../../public/fonts/ubuntu/Ubuntu-Light.woff2',
+      path: '../../public/fonts/ubuntu/Ubuntu-Light.woff',
       weight: '300',
       style: 'normal',
     },
     {
-      path: '../../public/fonts/ubuntu/Ubuntu-LightItalic.woff2',
+      path: '../../public/fonts/ubuntu/Ubuntu-LightItalic.woff',
       weight: '300',
       style: 'italic',
     },
     {
-      path: '../../public/fonts/ubuntu/Ubuntu-Regular.woff2',
+      path: '../../public/fonts/ubuntu/Ubuntu-Regular.woff',
       weight: '400',
       style: 'normal',
     },
     {
-      path: '../../public/fonts/ubuntu/Ubuntu-Italic.woff2',
+      path: '../../public/fonts/ubuntu/Ubuntu-Italic.woff',
       weight: '400',
       style: 'italic',
     },
     {
-      path: '../../public/fonts/ubuntu/Ubuntu-Medium.woff2',
+      path: '../../public/fonts/ubuntu/Ubuntu-Medium.woff',
       weight: '500',
       style: 'normal',
     },
     {
-      path: '../../public/fonts/ubuntu/Ubuntu-MediumItalic.woff2',
+      path: '../../public/fonts/ubuntu/Ubuntu-MediumItalic.woff',
       weight: '500',
       style: 'italic',
     },
     {
-      path: '../../public/fonts/ubuntu/Ubuntu-Bold.woff2',
+      path: '../../public/fonts/ubuntu/Ubuntu-Bold.woff',
       weight: '700',
       style: 'normal',
     },
     {
-      path: '../../public/fonts/ubuntu/Ubuntu-BoldItalic.woff2',
+      path: '../../public/fonts/ubuntu/Ubuntu-BoldItalic.woff',
       weight: '700',
       style: 'italic',
     },

@@ -12,9 +12,9 @@ export * from './ui/not-found/PageNotFound'
 
 export * from './ui/searchbox/SearchBox'
 
-export * from './ui/sidebar/Utils'
-
 export * from './ui/sidebar/Sidebar'
+
+export * from './ui/sidebar/Utils'
 
 export * from './ui/subtitle/Subtitle'
 

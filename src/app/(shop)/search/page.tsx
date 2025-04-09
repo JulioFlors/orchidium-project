@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 
 import { Species } from '@/interfaces/'
-import { initialData } from '@/seed/seed'
+import { initialData } from '../../../seed/seed'
 
 const allSpeciesData = initialData.species
 

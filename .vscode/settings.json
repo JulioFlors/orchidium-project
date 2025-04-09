@@ -6,7 +6,7 @@
     "source.fixAll.eslint": "always"
   },
   "markdown.validate.enabled": true,
-  "CodeGPT.apiKey": "CodeGPT Plus",
+  "CodeGPT.apiKey": "CodeGPT Plus Beta",
   "workbench.iconTheme": "material-icon-theme",
 	"material-icon-theme.activeIconPack": "react",
 	"material-icon-theme.folders.theme": "specific",

@@ -35,24 +35,24 @@ export const highlightMatch = (text: string, query: string) => {
 /**
  * Filtra los resultados de búsqueda basados en el término de búsqueda proporcionado.
  *
- * @param routes - El array de rutas y categorías a filtrar.
+ * @param staticRoutes - El array de rutas y categorías a filtrar.
  * @param searchTerm - El término de búsqueda a utilizar para filtrar.
  * @returns Un array de rutas y categorías que coinciden con el término de búsqueda.
  */
 
 type SearchResult = Category | Route
 
-export function filterSearchResults(routes: Route[], searchTerm: string): SearchResult[] {
+export function filterSearchResults(staticRoutes: Route[], searchTerm: string): SearchResult[] {
   if (searchTerm.trim() === '') {
     return []
   }
 
-  return routes.flatMap((route) => {
+  return staticRoutes.flatMap((route) => {
     if (route.categories) {
       return route.categories.filter((cat) =>
-        cat.title.toLowerCase().includes(searchTerm.toLowerCase()),
+        cat.name.toLowerCase().includes(searchTerm.toLowerCase()),
       )
-    } else if (route.title.toLowerCase().includes(searchTerm.toLowerCase())) {
+    } else if (route.name.toLowerCase().includes(searchTerm.toLowerCase())) {
       return [route]
     } else {
       return []
@@ -65,19 +65,19 @@ export function filterSearchResults(routes: Route[], searchTerm: string): Search
  *
  * @param isSideMenuOpen - Indica si el sidebar está abierto.
  * @param navRef - Una referencia al elemento nav del sidebar.
- * @param setActiveRoute - Una función para establecer la ruta activa.
+ * @param setSidebarRoute - Una función para establecer la ruta activa.
  * @returns Una función de limpieza para eliminar el event listener del teclado, o undefined si no es necesario.
  */
 export function handleAccessibility(
   isSideMenuOpen: boolean,
   navRef: React.RefObject<HTMLElement | null>,
-  setActiveRoute: (routeId: string | null) => void,
+  setSidebarRoute: (routeId: string | null) => void,
 ): () => void {
   if (isSideMenuOpen) {
     document.body.style.overflow = 'hidden'
   } else {
     document.body.style.overflow = 'auto'
-    setActiveRoute(null)
+    setSidebarRoute(null)
   }
 
   if (navRef.current) {

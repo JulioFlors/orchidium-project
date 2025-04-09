@@ -6,13 +6,12 @@ import { IoSearchOutline, IoCloseOutline } from 'react-icons/io5'
 import { motion, AnimatePresence } from 'motion/react'
 import clsx from 'clsx'
 
-import { highlightMatch, handleFocusSearchInput } from '@/components'
-import { Category, Route } from '@/interfaces'
+import { highlightMatch, handleFocusSearchInput, filterSearchResults } from '@/components'
+import { staticRoutes } from '@/config'
 import { useUIStore } from '@/store'
 
 interface SearchboxProps {
   isTopMenu?: boolean
-  searchResults: (Route | Category)[]
 }
 
 const motionProps = {
@@ -25,9 +24,8 @@ const motionProps = {
  * Componente de la caja de búsqueda con funcionalidad de sugerencias y animaciones.
  *
  * @param {boolean} props.isTopMenu - Indica si el componente se usa en el TopMenu (opcional).
- * @param {(Route | Category)[]} props.searchResults - Los resultados de búsqueda a mostrar.
  */
-export function Searchbox({ isTopMenu = false, searchResults }: SearchboxProps) {
+export function Searchbox({ isTopMenu = false }: SearchboxProps) {
   const searchRef = useRef<HTMLInputElement | null>(null)
   const resultsRef = useRef<HTMLDivElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
@@ -35,8 +33,15 @@ export function Searchbox({ isTopMenu = false, searchResults }: SearchboxProps) 
   const closeMenu = useUIStore((state) => state.closeSideMenu)
   const searchTerm = useUIStore((state) => state.searchTerm)
   const setSearchTerm = useUIStore((state) => state.setSearchTerm)
+  const searchResults = useUIStore((state) => state.searchResults)
+  const setSearchResults = useUIStore((state) => state.setSearchResults)
 
   const [isResultsVisible, setIsResultsVisible] = useState(false)
+
+  // Actualiza los resultados de búsqueda cada vez que el término de búsqueda cambia
+  useEffect(() => {
+    setSearchResults(filterSearchResults(staticRoutes, searchTerm))
+  }, [searchTerm, setSearchResults])
 
   // Ocultar los resultados de búsqueda cuando el foco se pierde del input o del contenedor de resultados.
   useEffect(() => {
@@ -151,7 +156,7 @@ export function Searchbox({ isTopMenu = false, searchResults }: SearchboxProps) 
           >
             {searchResults.map((result) => (
               <Link
-                key={result.id}
+                key={result.slug}
                 className="search-results block"
                 href={result.url || '#'} // Usar la URL del resultado o un enlace vacío si no hay URL
                 onClick={() => {
@@ -160,7 +165,7 @@ export function Searchbox({ isTopMenu = false, searchResults }: SearchboxProps) 
                   closeMenu() // Cerrar el menú lateral (si aplica)
                 }}
               >
-                {highlightMatch(result.title, searchTerm)}
+                {highlightMatch(result.name, searchTerm)}
                 {/* Mostrar el título del resultado resaltando las coincidencias con el término de búsqueda */}
               </Link>
             ))}

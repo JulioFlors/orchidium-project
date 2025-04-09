@@ -18,6 +18,7 @@ export function ProductGridItem({ product, index }: Props) {
       <div className="relative aspect-[1/1] w-full">
         <Link
           aria-label={`Ver detalles de ${product.name}`}
+          as="image"
           className="focus-product relative block h-full w-full"
           href={`/product/${product.slug}`}
         >
@@ -25,11 +26,7 @@ export function ProductGridItem({ product, index }: Props) {
             fill
             alt={product.name}
             className="rounded-xs object-cover"
-            sizes={` 
-              (min-width: 640px) and (max-width: 767px) calc(50vw - 18px - 2%),
-              (min-width: 768px) and (max-width: 1279px) calc(33.33vw - 18px - 1.33%),
-              (min-width: 1280px) calc(33.33vw - 24px - 1.5%)
-            `}
+            sizes="(min - width: 640px) and (max-width: 767px) calc(50vw - 18px - 2%) (min-width: 768px) and (max-width: 1279px) calc(33.33vw - 18px - 1.33%) (min-width: 1280px) calc(33.33vw - 24px - 1.5%) "
             src={`/plants/${displayImage}`}
             onMouseEnter={() =>
               setDisplayImage(product.images[1] ? product.images[1] : product.images[0])

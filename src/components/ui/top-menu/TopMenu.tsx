@@ -8,10 +8,8 @@ import clsx from 'clsx'
 import { motion, AnimatePresence } from 'motion/react'
 
 import { handleFocusSearchInput, PristinoPlant, Searchbox } from '@/components'
+import { staticRoutes } from '@/config'
 import { useUIStore } from '@/store'
-import { initialData } from '@/seed/seed'
-
-const routes = initialData.routes
 
 const motionDivProps = {
   initial: { width: 0, opacity: 0 },
@@ -46,6 +44,8 @@ const motionButtonProps = {
 }
 
 export function TopMenu() {
+  const pathname = usePathname() //un atributo ARIA necesita la ruta actual
+
   const [hoveredLink, setHoveredLink] = useState<HTMLElement | null>(null)
   const [isSearchExpanded, setIsSearchExpanded] = useState(false)
 
@@ -56,9 +56,6 @@ export function TopMenu() {
   const isSideMenuOpen = useUIStore((state) => state.isSideMenuOpen)
   const openMenu = useUIStore((state) => state.openSideMenu)
   const searchTerm = useUIStore((state) => state.searchTerm)
-  const searchResults = useUIStore((state) => state.searchResults)
-
-  const pathname = usePathname() //un atributo ARIA necesita la ruta actual
 
   useEffect(() => {
     if (hoveredLink && indicatorRef.current && menuRef.current) {
@@ -144,11 +141,11 @@ export function TopMenu() {
             id="main-topMenu"
             role="navigation"
           >
-            {routes
+            {staticRoutes
               .filter((route) => route.categories && route.categories.length > 0)
               .map((route) => (
                 <Link
-                  key={route.id}
+                  key={route.slug}
                   className={clsx('nav-link focus-visible-hover', {
                     'aria-current="page"': pathname === `${route.url}`,
                   })}
@@ -156,7 +153,7 @@ export function TopMenu() {
                   onMouseEnter={(e) => setHoveredLink(e.currentTarget)}
                   onMouseLeave={() => setHoveredLink(null)}
                 >
-                  <span>{route.title}</span>
+                  <span>{route.name}</span>
                 </Link>
               ))}
           </nav>
@@ -176,7 +173,7 @@ export function TopMenu() {
                     initial={motionDivProps.initial}
                     onBlur={handleFocusOutSearch}
                   >
-                    <Searchbox isTopMenu searchResults={searchResults} />
+                    <Searchbox isTopMenu />
                   </motion.div>
                 ) : (
                   <motion.button
