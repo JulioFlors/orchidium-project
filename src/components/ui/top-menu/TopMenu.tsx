@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
 import { motion, AnimatePresence } from 'motion/react'
 
-import { handleFocusSearchInput, PristinoPlant, Searchbox } from '@/components'
+import { handleFocusSearchInput, PristinoPlant, SearchBox } from '@/components'
 import { staticRoutes } from '@/config'
 import { useUIStore } from '@/store'
 
@@ -47,15 +47,18 @@ export function TopMenu() {
   const pathname = usePathname() //un atributo ARIA necesita la ruta actual
 
   const [hoveredLink, setHoveredLink] = useState<HTMLElement | null>(null)
-  const [isSearchExpanded, setIsSearchExpanded] = useState(false)
 
   const indicatorRef = useRef<HTMLDivElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const searchContainerRef = useRef<HTMLDivElement | null>(null)
+  const searchBoxRef = useRef<HTMLDivElement | null>(null)
 
-  const isSideMenuOpen = useUIStore((state) => state.isSideMenuOpen)
-  const openMenu = useUIStore((state) => state.openSideMenu)
+  const isSidebarOpen = useUIStore((state) => state.isSidebarOpen)
+  const openMenu = useUIStore((state) => state.openSidebar)
   const searchTerm = useUIStore((state) => state.searchTerm)
+  const isSearchBoxExpanded = useUIStore((state) => state.isSearchBoxExpanded)
+  const openSearchBox = useUIStore((state) => state.openSearchBox)
+  const closeSearchBox = useUIStore((state) => state.closeSearchBox)
 
   useEffect(() => {
     if (hoveredLink && indicatorRef.current && menuRef.current) {
@@ -75,21 +78,25 @@ export function TopMenu() {
     }
   }, [hoveredLink])
 
+  // Efecto para enfocar el input de búsqueda cuando el estado de expansión cambia.
   useEffect(() => {
-    handleFocusSearchInput(isSearchExpanded, searchContainerRef)
-  }, [isSearchExpanded, searchContainerRef])
+    handleFocusSearchInput(isSearchBoxExpanded, searchContainerRef)
+  }, [isSearchBoxExpanded, searchContainerRef])
 
+  // Manejador de evento para el clic en el botón de búsqueda.
   const handleSearchClick = () => {
-    setIsSearchExpanded(true)
+    openSearchBox()
   }
 
+  // Manejador de evento para el evento `onBlur` del contenedor de búsqueda.
+  // Oculta el input de búsqueda si el foco se mueve fuera del contenedor y no hay ningún término de búsqueda activo
   const handleFocusOutSearch = (event: React.FocusEvent<HTMLDivElement>) => {
     if (
       searchContainerRef.current &&
       !searchContainerRef.current.contains(event.relatedTarget as Node) &&
       !searchTerm
     ) {
-      setIsSearchExpanded(false)
+      closeSearchBox()
     }
   }
 
@@ -164,16 +171,17 @@ export function TopMenu() {
           <div className="lg-small:block hidden">
             <div ref={searchContainerRef} className="relative flex items-center">
               <AnimatePresence>
-                {isSearchExpanded ? (
+                {isSearchBoxExpanded ? (
                   <motion.div
                     key="search-input"
+                    ref={searchBoxRef}
                     animate={motionDivProps.animate}
                     className="aceleracion-hardware"
                     exit={motionDivProps.exit}
                     initial={motionDivProps.initial}
                     onBlur={handleFocusOutSearch}
                   >
-                    <Searchbox isTopMenu />
+                    <SearchBox isTopMenu />
                   </motion.div>
                 ) : (
                   <motion.button
@@ -213,7 +221,7 @@ export function TopMenu() {
           </Link>
 
           <button
-            aria-expanded={isSideMenuOpen}
+            aria-expanded={isSidebarOpen}
             aria-label="Abrir menú"
             className="focus-visible-hover text-secondary hover:bg-hover hover:text-primary m-2 cursor-pointer rounded px-0 py-1 transition-colors sm:px-4"
             type="button"

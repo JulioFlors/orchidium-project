@@ -10,7 +10,7 @@ export * from './ui/icons/PristinoPlant'
 
 export * from './ui/not-found/PageNotFound'
 
-export * from './ui/searchbox/SearchBox'
+export * from './ui/search-box/SearchBox'
 
 export * from './ui/sidebar/Sidebar'
 

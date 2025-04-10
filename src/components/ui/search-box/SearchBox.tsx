@@ -10,7 +10,7 @@ import { highlightMatch, handleFocusSearchInput, filterSearchResults } from '@/c
 import { staticRoutes } from '@/config'
 import { useUIStore } from '@/store'
 
-interface SearchboxProps {
+interface SearchBoxProps {
   isTopMenu?: boolean
 }
 
@@ -25,16 +25,17 @@ const motionProps = {
  *
  * @param {boolean} props.isTopMenu - Indica si el componente se usa en el TopMenu (opcional).
  */
-export function Searchbox({ isTopMenu = false }: SearchboxProps) {
+export function SearchBox({ isTopMenu = false }: SearchBoxProps) {
   const searchRef = useRef<HTMLInputElement | null>(null)
   const resultsRef = useRef<HTMLDivElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
-  const closeMenu = useUIStore((state) => state.closeSideMenu)
+  const closeMenu = useUIStore((state) => state.closeSidebar)
   const searchTerm = useUIStore((state) => state.searchTerm)
   const setSearchTerm = useUIStore((state) => state.setSearchTerm)
   const searchResults = useUIStore((state) => state.searchResults)
   const setSearchResults = useUIStore((state) => state.setSearchResults)
+  const closeSearchBox = useUIStore((state) => state.closeSearchBox)
 
   const [isResultsVisible, setIsResultsVisible] = useState(false)
 
@@ -46,7 +47,7 @@ export function Searchbox({ isTopMenu = false }: SearchboxProps) {
   // Ocultar los resultados de búsqueda cuando el foco se pierde del input o del contenedor de resultados.
   useEffect(() => {
     const handleFocusOut = (event: FocusEvent) => {
-      // Verificar si el foco se movió fuera del searchbox y del menú de resultados
+      // Verificar si el foco se movió fuera del searchBox y del menú de resultados
       if (
         searchRef.current &&
         !searchRef.current.contains(event.relatedTarget as Node) &&
@@ -54,6 +55,9 @@ export function Searchbox({ isTopMenu = false }: SearchboxProps) {
         !resultsRef.current.contains(event.relatedTarget as Node)
       ) {
         setIsResultsVisible(false) // Ocultar los resultados
+        if (isTopMenu && !searchTerm) {
+          closeSearchBox()
+        }
       }
     }
 
@@ -75,7 +79,7 @@ export function Searchbox({ isTopMenu = false }: SearchboxProps) {
         container.removeEventListener('focusout', handleFocusOut)
       }
     }
-  }, [setIsResultsVisible]) // Dependencia en setIsResultsVisible para re-ejecutar si cambia la visibilidad
+  }, [setIsResultsVisible, isTopMenu, searchTerm, closeSearchBox]) // Dependencia en closeSearchBox
 
   //mostrar los resultados de búsqueda cuando el input recibe el foco.
   useEffect(() => {
@@ -122,8 +126,8 @@ export function Searchbox({ isTopMenu = false }: SearchboxProps) {
           placeholder="Buscar"
           role="searchbox"
           type="text"
-          value={searchTerm} // Enlazar el valor del input al estado global searchTerm
-          onChange={(e) => setSearchTerm(e.target.value)} // Actualizar el estado global al cambiar el input
+          value={searchTerm} // Enlazar el valor del input al useUIStore searchTerm
+          onChange={(e) => setSearchTerm(e.target.value)} // Actualizar el searchTerm
           onFocus={() => setIsResultsVisible(true)} // Mostrar los resultados al enfocar el input
         />
         {searchTerm && (
@@ -134,7 +138,7 @@ export function Searchbox({ isTopMenu = false }: SearchboxProps) {
             type="button"
             onClick={() => {
               setSearchTerm('') // Limpiar el término de búsqueda al hacer clic
-              handleFocusSearchInput(true, containerRef) // Enfoca el input del searchbox
+              handleFocusSearchInput(true, containerRef) // Enfoca el input del searchBox
             }}
           >
             <IoCloseOutline className="cursor-pointer" size={16} />
@@ -151,6 +155,7 @@ export function Searchbox({ isTopMenu = false }: SearchboxProps) {
             ref={resultsRef}
             animate={motionProps.animate} // Aplicar la animación de entrada
             className="border-serch-box-outline absolute top-[44px] left-0 z-40 w-full rounded border-1 bg-white py-1 text-black shadow-lg"
+            data-testid="search-results-container"
             exit={motionProps.exit} // Aplicar la animación de salida
             initial={motionProps.initial} // Aplicar el estado inicial de la animación
           >
@@ -160,9 +165,12 @@ export function Searchbox({ isTopMenu = false }: SearchboxProps) {
                 className="search-results block"
                 href={result.url || '#'} // Usar la URL del resultado o un enlace vacío si no hay URL
                 onClick={() => {
-                  setSearchTerm('') // Limpiar el término de búsqueda al seleccionar un resultado
+                  setSearchTerm('') //         Limpiar el término de búsqueda al seleccionar un resultado
                   setIsResultsVisible(false) // Ocultar los resultados al seleccionar un resultado
-                  closeMenu() // Cerrar el menú lateral (si aplica)
+                  if (isTopMenu) {
+                    closeSearchBox()
+                  }
+                  closeMenu() //             Cerrar el menú lateral (si aplica)
                 }}
               >
                 {highlightMatch(result.name, searchTerm)}

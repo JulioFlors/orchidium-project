@@ -3,18 +3,18 @@
 import Link from 'next/link'
 import { IoChevronForwardOutline } from 'react-icons/io5'
 
-import { Searchbox } from '@/components'
+import { SearchBox } from '@/components'
 import { staticRoutes } from '@/config'
 import { useUIStore } from '@/store'
 
 export function MainContent() {
-  const closeMenu = useUIStore((state) => state.closeSideMenu)
+  const closeMenu = useUIStore((state) => state.closeSidebar)
   const setSidebarRoute = useUIStore((state) => state.setSidebarRoute)
 
   return (
     <>
       <div className="lg-small:hidden relative w-full">
-        <Searchbox />
+        <SearchBox />
       </div>
 
       <div className="w-full" id="renderMainContent">

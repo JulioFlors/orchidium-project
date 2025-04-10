@@ -8,7 +8,7 @@ import { staticRoutes } from '@/config'
 import { useUIStore } from '@/store'
 
 export function CategoryContent() {
-  const closeMenu = useUIStore((state) => state.closeSideMenu)
+  const closeMenu = useUIStore((state) => state.closeSidebar)
   const sidebarRoute = useUIStore((state) => state.sidebarRoute)
 
   const route = staticRoutes.find((route) => route.slug === sidebarRoute)

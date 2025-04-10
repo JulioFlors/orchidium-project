@@ -39,10 +39,10 @@ export const highlightMatch = (text: string, query: string) => {
  * @param searchTerm - El término de búsqueda a utilizar para filtrar.
  * @returns Un array de rutas y categorías que coinciden con el término de búsqueda.
  */
-
-type SearchResult = Category | Route
-
-export function filterSearchResults(staticRoutes: Route[], searchTerm: string): SearchResult[] {
+export function filterSearchResults(
+  staticRoutes: Route[],
+  searchTerm: string,
+): (Category | Route)[] {
   if (searchTerm.trim() === '') {
     return []
   }
@@ -63,17 +63,17 @@ export function filterSearchResults(staticRoutes: Route[], searchTerm: string): 
 /**
  * Maneja la accesibilidad del sidebar, incluyendo el enfoque del teclado y el bloqueo del scroll del body.
  *
- * @param isSideMenuOpen - Indica si el sidebar está abierto.
+ * @param isSidebarOpen - Indica si el sidebar está abierto.
  * @param navRef - Una referencia al elemento nav del sidebar.
  * @param setSidebarRoute - Una función para establecer la ruta activa.
  * @returns Una función de limpieza para eliminar el event listener del teclado, o undefined si no es necesario.
  */
 export function handleAccessibility(
-  isSideMenuOpen: boolean,
+  isSidebarOpen: boolean,
   navRef: React.RefObject<HTMLElement | null>,
   setSidebarRoute: (routeId: string | null) => void,
 ): () => void {
-  if (isSideMenuOpen) {
+  if (isSidebarOpen) {
     document.body.style.overflow = 'hidden'
   } else {
     document.body.style.overflow = 'auto'
@@ -88,14 +88,14 @@ export function handleAccessibility(
     )
 
     focusableElements.forEach((el: HTMLElement) => {
-      if (isSideMenuOpen && el !== document.activeElement) {
+      if (isSidebarOpen && el !== document.activeElement) {
         el.removeAttribute('tabindex')
       } else {
         el.setAttribute('tabindex', '-1')
       }
     })
 
-    if (isSideMenuOpen) {
+    if (isSidebarOpen) {
       const firstFocusable = focusableElements[0]
       const lastFocusable = focusableElements[focusableElements.length - 1]
 
@@ -133,7 +133,7 @@ export function handleAccessibility(
 
 /**
  * Enfoca el primer elemento con role="searchbox" dentro del contenedor proporcionado.
- * En consecuencia logra enfocar el input de busqueda del componente Searchbox.
+ * En consecuencia logra enfocar el input de busqueda del componente SearchBox.
  *
  * @param isOpen - Indica si el componente está renderizado.
  * @param containerRef - referencia al elemento padre que contiene el elemento con role="searchbox".
@@ -143,10 +143,10 @@ export function handleFocusSearchInput(
   containerRef: React.RefObject<HTMLElement | null>,
 ): void {
   if (isOpen && containerRef.current) {
-    const searchboxElement = containerRef.current.querySelector<HTMLElement>('[role="searchbox"]')
+    const searchBoxElement = containerRef.current.querySelector<HTMLElement>('[role="searchbox"]')
 
-    if (searchboxElement) {
-      searchboxElement.focus()
+    if (searchBoxElement) {
+      searchBoxElement.focus()
     }
   }
 }

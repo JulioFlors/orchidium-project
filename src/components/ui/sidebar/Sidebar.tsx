@@ -32,25 +32,23 @@ const motionProps = {
 
 export function Sidebar() {
   const sidebarRoute = useUIStore((state) => state.sidebarRoute)
-  const closeMenu = useUIStore((state) => state.closeSideMenu)
-  const isSideMenuOpen = useUIStore((state) => state.isSideMenuOpen)
+  const closeMenu = useUIStore((state) => state.closeSidebar)
+  const isSidebarOpen = useUIStore((state) => state.isSidebarOpen)
   const setSidebarRoute = useUIStore((state) => state.setSidebarRoute)
 
   const contentRef = useRef<HTMLDivElement | null>(null)
   const navRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
-    return handleAccessibility(isSideMenuOpen, navRef, setSidebarRoute)
-  }, [isSideMenuOpen, navRef, setSidebarRoute, sidebarRoute])
+    return handleAccessibility(isSidebarOpen, navRef, setSidebarRoute)
+  }, [isSidebarOpen, navRef, setSidebarRoute, sidebarRoute])
 
   return (
     <div>
       {/* Background black */}
-      {isSideMenuOpen && (
-        <div className="fixed top-0 left-0 z-20 h-dvh w-dvw bg-black opacity-30" />
-      )}
+      {isSidebarOpen && <div className="fixed top-0 left-0 z-20 h-dvh w-dvw bg-black opacity-30" />}
       {/* Blur */}
-      {isSideMenuOpen && (
+      {isSidebarOpen && (
         <div
           className="fade-in fixed top-0 left-0 z-20 h-dvh w-dvw backdrop-blur-xs backdrop-filter"
           onClick={closeMenu}
@@ -58,14 +56,14 @@ export function Sidebar() {
       )}
       {/* Navbar - Container */}
       <AnimatePresence>
-        {isSideMenuOpen && (
+        {isSidebarOpen && (
           <motion.nav
             key="sidebar-nav"
             ref={navRef}
             animate={motionProps.animate}
-            aria-hidden={!isSideMenuOpen}
+            aria-hidden={!isSidebarOpen}
             aria-label="Menú de navegación"
-            aria-modal={isSideMenuOpen}
+            aria-modal={isSidebarOpen}
             className="aceleracion-hardware fixed top-0 right-0 z-30 flex h-dvh w-[414px] max-w-[82.3vw] flex-col bg-white shadow-xl sm:min-w-[414px]"
             exit={motionProps.exit}
             initial={motionProps.initial}
@@ -74,7 +72,7 @@ export function Sidebar() {
             {/* Header del Sidebar*/}
             <div
               className="text-secondary sticky top-0 z-10 mt-4 mb-6 flex items-center justify-between px-8"
-              id="sideMenuHeader"
+              id="sidebarHeader"
             >
               {sidebarRoute ? (
                 <button
@@ -102,7 +100,7 @@ export function Sidebar() {
             <div
               ref={contentRef}
               className="mx-8 mb-2 flex flex-1 flex-col items-start overflow-x-hidden text-left"
-              id="sideMenuContent"
+              id="sidebarContent"
             >
               {sidebarRoute ? <CategoryContent /> : <MainContent />}
             </div>
