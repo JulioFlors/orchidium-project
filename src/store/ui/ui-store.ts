@@ -1,13 +1,13 @@
 import { create } from 'zustand'
 
-import { Route, Category } from '@/interfaces'
+import { Species } from '@/interfaces'
 
 interface State {
   isSidebarOpen: boolean
   isSearchBoxExpanded: boolean
   sidebarRoute: string | null
   searchTerm: string
-  searchResults: (Route | Category)[]
+  searchResults: Species[]
 
   openSidebar: () => void
   closeSidebar: () => void
@@ -15,7 +15,7 @@ interface State {
   closeSearchBox: () => void
   setSidebarRoute: (routeId: string | null) => void
   setSearchTerm: (term: string) => void
-  setSearchResults: (results: (Route | Category)[]) => void
+  setSearchResults: (results: Species[]) => void
 }
 
 export const useUIStore = create<State>()((set) => ({
@@ -31,5 +31,5 @@ export const useUIStore = create<State>()((set) => ({
   closeSearchBox: () => set({ isSearchBoxExpanded: false }),
   setSidebarRoute: (routeId: string | null) => set({ sidebarRoute: routeId }),
   setSearchTerm: (term: string) => set({ searchTerm: term }),
-  setSearchResults: (results: (Route | Category)[]) => set({ searchResults: results }),
+  setSearchResults: (results: Species[]) => set({ searchResults: results }),
 }))

@@ -8,7 +8,7 @@ import { staticRoutes } from '@/config'
 import { useUIStore } from '@/store'
 
 export function CategoryContent() {
-  const closeMenu = useUIStore((state) => state.closeSidebar)
+  const closeSidebar = useUIStore((state) => state.closeSidebar)
   const sidebarRoute = useUIStore((state) => state.sidebarRoute)
 
   const route = staticRoutes.find((route) => route.slug === sidebarRoute)
@@ -22,10 +22,9 @@ export function CategoryContent() {
         {route.categories.map((cat) => (
           <Link
             key={cat.slug}
-            as="image"
             className="focus-sidebar-img block"
             href={cat.url}
-            onClick={closeMenu}
+            onClick={closeSidebar}
           >
             <div className="overflow-hidden rounded">
               <div className="relative aspect-video h-42 w-full">
@@ -48,7 +47,7 @@ export function CategoryContent() {
         <Link
           className="btn-secondary focus-btn-secondary block"
           href={`/category/${sidebarRoute}`}
-          onClick={closeMenu}
+          onClick={closeSidebar}
         >
           Ver todo
         </Link>

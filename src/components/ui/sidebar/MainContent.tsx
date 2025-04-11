@@ -8,7 +8,7 @@ import { staticRoutes } from '@/config'
 import { useUIStore } from '@/store'
 
 export function MainContent() {
-  const closeMenu = useUIStore((state) => state.closeSidebar)
+  const closeSidebar = useUIStore((state) => state.closeSidebar)
   const setSidebarRoute = useUIStore((state) => state.setSidebarRoute)
 
   return (
@@ -37,7 +37,7 @@ export function MainContent() {
               <Link
                 className="focus-sidebar-content hover:bg-hover mb-2 flex items-center justify-between rounded p-2 font-medium text-black transition-colors duration-300"
                 href={route.url || '#'}
-                onClick={closeMenu}
+                onClick={closeSidebar}
               >
                 <span>{route.name}</span>
               </Link>

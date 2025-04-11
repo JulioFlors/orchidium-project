@@ -1,12 +1,12 @@
 'use client'
 
 import { useRef, useEffect } from 'react'
-import { IoCloseOutline, IoChevronBackOutline } from 'react-icons/io5'
 import { motion, AnimatePresence } from 'motion/react'
+import { IoCloseOutline, IoChevronBackOutline } from 'react-icons/io5'
 
 import { MainContent } from './MainContent'
 import { CategoryContent } from './CategoryContent'
-import { handleAccessibility } from './Utils'
+import { handleAccessibility } from './Sidebar.utils'
 
 import { useUIStore } from '@/store'
 
@@ -32,7 +32,7 @@ const motionProps = {
 
 export function Sidebar() {
   const sidebarRoute = useUIStore((state) => state.sidebarRoute)
-  const closeMenu = useUIStore((state) => state.closeSidebar)
+  const closeSidebar = useUIStore((state) => state.closeSidebar)
   const isSidebarOpen = useUIStore((state) => state.isSidebarOpen)
   const setSidebarRoute = useUIStore((state) => state.setSidebarRoute)
 
@@ -51,7 +51,7 @@ export function Sidebar() {
       {isSidebarOpen && (
         <div
           className="fade-in fixed top-0 left-0 z-20 h-dvh w-dvw backdrop-blur-xs backdrop-filter"
-          onClick={closeMenu}
+          onClick={closeSidebar}
         />
       )}
       {/* Navbar - Container */}
@@ -91,7 +91,7 @@ export function Sidebar() {
                 aria-label="Cerrar menú"
                 className="focus-visible-hover text-secondary hover:bg-hover cursor-pointer rounded"
                 type="button"
-                onClick={() => closeMenu()}
+                onClick={() => closeSidebar()}
               >
                 <IoCloseOutline size={24} />
               </button>

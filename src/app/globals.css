@@ -52,11 +52,11 @@
   }
 
   .product-name:hover {
-    @apply bg-gradient-to-r from-fuchsia-600 to-pink-600 bg-clip-text text-transparent
+    @apply bg-gradient-to-r from-red-400 to-rose-400 bg-clip-text text-transparent
   }
 
   .product-name:focus {
-    @apply bg-gradient-to-r from-fuchsia-600 to-pink-600 bg-clip-text text-transparent
+    @apply bg-gradient-to-r from-red-400 to-rose-400 bg-clip-text text-transparent
   }
 
   .search-results {

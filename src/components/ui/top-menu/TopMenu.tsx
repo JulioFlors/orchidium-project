@@ -54,7 +54,7 @@ export function TopMenu() {
   const searchBoxRef = useRef<HTMLDivElement | null>(null)
 
   const isSidebarOpen = useUIStore((state) => state.isSidebarOpen)
-  const openMenu = useUIStore((state) => state.openSidebar)
+  const openSidebar = useUIStore((state) => state.openSidebar)
   const searchTerm = useUIStore((state) => state.searchTerm)
   const isSearchBoxExpanded = useUIStore((state) => state.isSearchBoxExpanded)
   const openSearchBox = useUIStore((state) => state.openSearchBox)
@@ -83,10 +83,12 @@ export function TopMenu() {
     handleFocusSearchInput(isSearchBoxExpanded, searchContainerRef)
   }, [isSearchBoxExpanded, searchContainerRef])
 
-  // Manejador de evento para el clic en el botón de búsqueda.
-  const handleSearchClick = () => {
-    openSearchBox()
-  }
+  // Efecto para expandir el SearchBox si hay un searchTerm valido al montar el elemento
+  useEffect(() => {
+    if (searchTerm && !isSidebarOpen && !isSearchBoxExpanded) openSearchBox()
+
+    if (!searchTerm && isSidebarOpen && isSearchBoxExpanded) closeSearchBox()
+  }, [searchTerm, isSearchBoxExpanded, isSidebarOpen, openSearchBox, closeSearchBox])
 
   // Manejador de evento para el evento `onBlur` del contenedor de búsqueda.
   // Oculta el input de búsqueda si el foco se mueve fuera del contenedor y no hay ningún término de búsqueda activo
@@ -192,8 +194,8 @@ export function TopMenu() {
                     exit={motionButtonProps.exit}
                     initial={motionButtonProps.initial}
                     type="button"
-                    onClick={handleSearchClick}
-                    onFocus={handleSearchClick}
+                    onClick={openSearchBox}
+                    onFocus={openSearchBox}
                   >
                     <IoSearchOutline className="h-5 w-5 cursor-pointer" />
                   </motion.button>
@@ -225,7 +227,7 @@ export function TopMenu() {
             aria-label="Abrir menú"
             className="focus-visible-hover text-secondary hover:bg-hover hover:text-primary m-2 cursor-pointer rounded px-0 py-1 transition-colors sm:px-4"
             type="button"
-            onClick={() => openMenu()}
+            onClick={() => openSidebar()}
           >
             Menú
           </button>

@@ -1,14 +1,15 @@
 'use client'
 
 import { useRef, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { IoSearchOutline, IoCloseOutline } from 'react-icons/io5'
 import { motion, AnimatePresence } from 'motion/react'
 import clsx from 'clsx'
 
 import { highlightMatch, handleFocusSearchInput, filterSearchResults } from '@/components'
-import { staticRoutes } from '@/config'
 import { useUIStore } from '@/store'
+import { initialData } from '@/seed/seed'
 
 interface SearchBoxProps {
   isTopMenu?: boolean
@@ -21,33 +22,46 @@ const motionProps = {
 }
 
 /**
- * Componente de la caja de búsqueda con funcionalidad de sugerencias y animaciones.
+ * Componente de la caja de búsqueda con funcionalidad de sugerencias de especies que coincidan
+ * Si presionas Enter, serás redirigido a /search?searchTerm=searchTerm
+ * Si haces clic en una sugerencia del popup, irás a la página de detalle de esa especie
  *
  * @param {boolean} props.isTopMenu - Indica si el componente se usa en el TopMenu (opcional).
  */
 export function SearchBox({ isTopMenu = false }: SearchBoxProps) {
+  const router = useRouter()
+
+  // Referencias a elementos del DOM
   const searchRef = useRef<HTMLInputElement | null>(null)
   const resultsRef = useRef<HTMLDivElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
-  const closeMenu = useUIStore((state) => state.closeSidebar)
+  // Estados globales de Zustand
+  const closeSidebar = useUIStore((state) => state.closeSidebar)
+  const openSearchBox = useUIStore((state) => state.openSearchBox)
+  const closeSearchBox = useUIStore((state) => state.closeSearchBox)
   const searchTerm = useUIStore((state) => state.searchTerm)
   const setSearchTerm = useUIStore((state) => state.setSearchTerm)
   const searchResults = useUIStore((state) => state.searchResults)
   const setSearchResults = useUIStore((state) => state.setSearchResults)
-  const closeSearchBox = useUIStore((state) => state.closeSearchBox)
 
+  // Estado local para visibilidad de resultados
   const [isResultsVisible, setIsResultsVisible] = useState(false)
 
-  // Actualiza los resultados de búsqueda cada vez que el término de búsqueda cambia
-  useEffect(() => {
-    setSearchResults(filterSearchResults(staticRoutes, searchTerm))
-  }, [searchTerm, setSearchResults])
+  // todo Datos temporales de especies (reemplazar con fetch/server action)
+  const speciesData = initialData.species
 
-  // Ocultar los resultados de búsqueda cuando el foco se pierde del input o del contenedor de resultados.
+  // --- Actualiza los resultados de búsqueda (only species, min 2 chars, max 5 results) ---
+  useEffect(() => {
+    const isLimited = true
+
+    setSearchResults(filterSearchResults(searchTerm, speciesData, isLimited))
+  }, [searchTerm, setSearchResults, speciesData])
+
+  // --- Manejo de visibilidad de resultados de búsqueda (focus/blur) ---
   useEffect(() => {
     const handleFocusOut = (event: FocusEvent) => {
-      // Verificar si el foco se movió fuera del searchBox y del menú de resultados
+      // Verificar si el foco se movió fuera del input del SearchBox y del contenedor de los resultados
       if (
         searchRef.current &&
         !searchRef.current.contains(event.relatedTarget as Node) &&
@@ -55,13 +69,10 @@ export function SearchBox({ isTopMenu = false }: SearchBoxProps) {
         !resultsRef.current.contains(event.relatedTarget as Node)
       ) {
         setIsResultsVisible(false) // Ocultar los resultados
-        if (isTopMenu && !searchTerm) {
-          closeSearchBox()
-        }
       }
     }
 
-    // Verifica si el contenedor del componente se ha renderizado correctamente en el DOM.
+    // Verifica si el contenedor del componente se ha renderizado correctamente en el DOM
     const container = containerRef.current
 
     // Agregar listener al evento 'focusout' del contenedor principal
@@ -79,7 +90,7 @@ export function SearchBox({ isTopMenu = false }: SearchBoxProps) {
         container.removeEventListener('focusout', handleFocusOut)
       }
     }
-  }, [setIsResultsVisible, isTopMenu, searchTerm, closeSearchBox]) // Dependencia en closeSearchBox
+  }, [setIsResultsVisible, isTopMenu, searchTerm, openSearchBox, closeSearchBox])
 
   //mostrar los resultados de búsqueda cuando el input recibe el foco.
   useEffect(() => {
@@ -99,7 +110,28 @@ export function SearchBox({ isTopMenu = false }: SearchBoxProps) {
         inputElement.removeEventListener('focus', handleFocus)
       }
     }
-  }, []) // Dependencia vacía para que se ejecute solo al montar el componente
+  }, [])
+
+  // --- Manejo de Tecla Enter ---
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    // Comprobar si la tecla presionada es Enter
+    if (event.key === 'Enter') {
+      const trimmedSearchTerm = searchTerm.trim()
+
+      // Comprobar si el término de búsqueda tiene 3 o más caracteres
+      if (trimmedSearchTerm.length >= 3) {
+        event.preventDefault() // Prevenir cualquier acción por defecto (como envío de formulario)
+
+        // Navegar a la página de búsqueda con el término como query param
+        router.push(`/search?searchTerm=${encodeURIComponent(trimmedSearchTerm)}`)
+
+        setSearchTerm('') //          Limpiar el término de búsqueda
+        setIsResultsVisible(false) // Ocultar lista de sugerencias
+        //                            Cerrar el area de trabajo correspondiente
+        void (isTopMenu ? closeSearchBox() : closeSidebar())
+      }
+    }
+  }
 
   return (
     <div ref={containerRef} className="relative w-full" tabIndex={-1}>
@@ -129,6 +161,7 @@ export function SearchBox({ isTopMenu = false }: SearchBoxProps) {
           value={searchTerm} // Enlazar el valor del input al useUIStore searchTerm
           onChange={(e) => setSearchTerm(e.target.value)} // Actualizar el searchTerm
           onFocus={() => setIsResultsVisible(true)} // Mostrar los resultados al enfocar el input
+          onKeyDown={handleKeyDown}
         />
         {searchTerm && (
           <button
@@ -161,16 +194,14 @@ export function SearchBox({ isTopMenu = false }: SearchBoxProps) {
           >
             {searchResults.map((result) => (
               <Link
-                key={result.slug}
+                key={`${result.slug}`}
                 className="search-results block"
-                href={result.url || '#'} // Usar la URL del resultado o un enlace vacío si no hay URL
+                href={`/product/${result.slug}`}
                 onClick={() => {
-                  setSearchTerm('') //         Limpiar el término de búsqueda al seleccionar un resultado
+                  setSearchTerm('') //          Limpiar el término de búsqueda al seleccionar un resultado
                   setIsResultsVisible(false) // Ocultar los resultados al seleccionar un resultado
-                  if (isTopMenu) {
-                    closeSearchBox()
-                  }
-                  closeMenu() //             Cerrar el menú lateral (si aplica)
+                  //                            Cerrar el area de trabajo correspondiente
+                  void (isTopMenu ? closeSearchBox() : closeSidebar())
                 }}
               >
                 {highlightMatch(result.name, searchTerm)}
