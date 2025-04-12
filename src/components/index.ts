@@ -2,9 +2,11 @@ export * from './products/product-grid/ProductGrid'
 
 export * from './products/product-grid/ProductGridItem'
 
-export * from './ui/footer/Footer'
+export * from './products/product-grid/ProductGridItemSkeleton'
 
-export * from './ui/icons/Ponyta'
+export * from './products/product-grid/ProductGridSkeleton'
+
+export * from './ui/footer/Footer'
 
 export * from './ui/icons/PristinoPlant'
 
