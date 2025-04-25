@@ -27,3 +27,5 @@ export * from './ui/subtitle/Subtitle'
 export * from './ui/title/Title'
 
 export * from './ui/top-menu/TopMenu'
+
+export * from './ui/top-menu/TopMenu.utils'

@@ -33,6 +33,7 @@ export function ProductGridItem({ product, index }: Props) {
               className="rounded-xs object-cover"
               sizes="(min - width: 640px) and (max-width: 767px) calc(50vw - 18px - 2%) (min-width: 768px) and (max-width: 1279px) calc(33.33vw - 18px - 1.33%) (min-width: 1280px) calc(33.33vw - 24px - 1.5%) "
               src={`/plants/${displayImage}`}
+              title={product.name}
               onMouseEnter={() =>
                 setDisplayImage(product.images[1] ? product.images[1] : product.images[0])
               }
@@ -63,7 +64,7 @@ export function ProductGridItem({ product, index }: Props) {
           id={`${product.slug}__main-details`}
         >
           <Link
-            className="product-name !tracking-06 text-black transition-all duration-300"
+            className="product-name !tracking-02 line-clamp-3 break-words text-black transition-all duration-300"
             href={`/product/${product.slug}`}
             id={`${product.slug}__link`}
             tabIndex={-1} // Evita que reciba focus al navegar con Tab

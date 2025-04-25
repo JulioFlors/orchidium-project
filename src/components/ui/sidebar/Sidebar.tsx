@@ -6,29 +6,9 @@ import { IoCloseOutline, IoChevronBackOutline } from 'react-icons/io5'
 
 import { MainContent } from './MainContent'
 import { CategoryContent } from './CategoryContent'
-import { handleAccessibility } from './Sidebar.utils'
+import { handleAccessibility, motionProps } from './Sidebar.utils'
 
 import { useUIStore } from '@/store'
-
-const motionProps = {
-  initial: { x: '80%', opacity: 0 },
-  animate: {
-    x: 0,
-    opacity: 1,
-    transition: {
-      x: { duration: 0.5, ease: 'easeOut' },
-      opacity: { duration: 0.3, ease: 'easeOut', delay: 0.1 },
-    },
-  },
-  exit: {
-    x: '80%',
-    opacity: 0,
-    transition: {
-      x: { duration: 0.6, ease: 'easeIn' },
-      opacity: { duration: 0.4, ease: 'easeIn', delay: 0.1 },
-    },
-  },
-}
 
 export function Sidebar() {
   const sidebarRoute = useUIStore((state) => state.sidebarRoute)

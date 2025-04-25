@@ -1,97 +1,116 @@
 'use client'
 
-import Link from 'next/link'
-import { IoSearchOutline, IoCartOutline } from 'react-icons/io5'
-import { useState, useRef, useEffect } from 'react'
-import { usePathname } from 'next/navigation'
 import clsx from 'clsx'
+import Link from 'next/link'
+import Image from 'next/image'
+import { usePathname } from 'next/navigation'
+import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
+import { IoSearchOutline, IoCartOutline } from 'react-icons/io5'
 
-import { handleFocusSearchInput, PristinoPlant, SearchBox } from '@/components'
 import { staticRoutes } from '@/config'
 import { useUIStore } from '@/store'
-
-const motionDivProps = {
-  initial: { width: 0, opacity: 0 },
-  animate: {
-    width: 'auto',
-    opacity: 1,
-    transition: {
-      x: { duration: 0.6, ease: 'easeOut' },
-      opacity: { duration: 0.4, ease: 'easeOut', delay: 0.1 },
-    },
-  },
-  exit: {
-    width: 0,
-    opacity: 0,
-    transition: {
-      x: { duration: 0.6, ease: 'easeInOut' },
-      opacity: { duration: 0.3, ease: 'easeInOut', delay: 0.1 },
-    },
-  },
-}
-
-const motionButtonProps = {
-  initial: { opacity: 0 },
-  animate: {
-    opacity: 1,
-    transition: { duration: 0.6, opacity: { duration: 0.6, ease: 'easeInOut' } },
-  },
-  exit: {
-    opacity: 0,
-    transition: { duration: 0.1, opacity: { duration: 0.1, ease: 'easeOut' } },
-  },
-}
+import { Route } from '@/interfaces'
+import {
+  handleFocusSearchInput,
+  PristinoPlant,
+  SearchBox,
+  motionIconSearch,
+  motionSearchBox,
+  motionSubMenuVariants,
+} from '@/components'
 
 export function TopMenu() {
-  const pathname = usePathname() //un atributo ARIA necesita la ruta actual
+  // aria-current="page" necesita evaluar la ruta actual
+  const pathname = usePathname()
 
-  const [hoveredLink, setHoveredLink] = useState<HTMLElement | null>(null)
-
-  const indicatorRef = useRef<HTMLDivElement>(null)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const searchContainerRef = useRef<HTMLDivElement | null>(null)
-  const searchBoxRef = useRef<HTMLDivElement | null>(null)
-
+  // ----- Estados globales -----
+  const closeSearchBox = useUIStore((state) => state.closeSearchBox)
+  const isSearchBoxExpanded = useUIStore((state) => state.isSearchBoxExpanded)
   const isSidebarOpen = useUIStore((state) => state.isSidebarOpen)
+  const openSearchBox = useUIStore((state) => state.openSearchBox)
   const openSidebar = useUIStore((state) => state.openSidebar)
   const searchTerm = useUIStore((state) => state.searchTerm)
-  const isSearchBoxExpanded = useUIStore((state) => state.isSearchBoxExpanded)
-  const openSearchBox = useUIStore((state) => state.openSearchBox)
-  const closeSearchBox = useUIStore((state) => state.closeSearchBox)
 
-  useEffect(() => {
-    if (hoveredLink && indicatorRef.current && menuRef.current) {
-      const rect = hoveredLink.getBoundingClientRect()
-      const menuRect = menuRef.current.getBoundingClientRect()
+  // ----- Estados locales -----
+  const [activeSubMenuRoute, setActiveSubMenuRoute] = useState<Route | null>(null)
+  const [hoveredLink, setHoveredLink] = useState<HTMLElement | null>(null)
+  const [isSubMenuOpen, setIsSubMenuOpen] = useState(false)
+  const [subMenuTargetAnimation, setSubMenuTargetAnimation] = useState<'enter' | 'switch'>('enter')
 
-      // Obtener la altura del primer enlace
-      const firstLink = menuRef.current.querySelector('.nav-link')
-      const linkHeight = firstLink ? (firstLink as HTMLElement).offsetHeight : 0
+  // ----- Refs -----
+  const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const hoveredRef = useRef<HTMLDivElement>(null)
+  const mainMenuRef = useRef<HTMLDivElement>(null)
+  const searchContainerRef = useRef<HTMLDivElement | null>(null)
 
-      indicatorRef.current.style.width = `${rect.width}px`
-      indicatorRef.current.style.transform = `translateX(${rect.left - menuRect.left}px)`
-      indicatorRef.current.style.height = `${linkHeight + 4}px` // Establecer la altura + 4 POR EL PADDING
-      indicatorRef.current.style.opacity = '1'
-    } else if (indicatorRef.current) {
-      indicatorRef.current.style.opacity = '0'
+  // ----- Funciones Auxiliares -----
+
+  // ---- Limpia la ref del timeout anterior ----
+  const clearCloseTimeout = () => {
+    if (closeTimeoutRef.current) {
+      clearTimeout(closeTimeoutRef.current)
+      closeTimeoutRef.current = null
     }
-  }, [hoveredLink])
+  }
 
-  // Efecto para enfocar el input de búsqueda cuando el estado de expansión cambia.
-  useEffect(() => {
-    handleFocusSearchInput(isSearchBoxExpanded, searchContainerRef)
-  }, [isSearchBoxExpanded, searchContainerRef])
+  // ---- Gestiona el cierre del subMenu -----
+  const startCloseTimeout = () => {
+    clearCloseTimeout() // Limpia cualquier timeout anterior antes de iniciar uno nuevo
 
-  // Efecto para expandir el SearchBox si hay un searchTerm valido al montar el elemento
-  useEffect(() => {
-    if (searchTerm && !isSidebarOpen && !isSearchBoxExpanded) openSearchBox()
+    closeTimeoutRef.current = setTimeout(() => {
+      setIsSubMenuOpen(false)
+      setActiveSubMenuRoute(null)
+      setHoveredLink(null)
+    }, 10)
+  }
 
-    if (!searchTerm && isSidebarOpen && isSearchBoxExpanded) closeSearchBox()
-  }, [searchTerm, isSearchBoxExpanded, isSidebarOpen, openSearchBox, closeSearchBox])
+  // ---- Al hacer hover en algun Link del mainMenu... -----
+  const handleMainMenuLinkMouseEnter = (
+    event: React.MouseEvent<HTMLAnchorElement>,
+    route: Route,
+  ) => {
+    clearCloseTimeout()
 
-  // Manejador de evento para el evento `onBlur` del contenedor de búsqueda.
-  // Oculta el input de búsqueda si el foco se mueve fuera del contenedor y no hay ningún término de búsqueda activo
+    // Establece la animación objetivo BASADA en el estado actual
+    setSubMenuTargetAnimation(isSubMenuOpen ? 'switch' : 'enter')
+
+    setActiveSubMenuRoute(route) // Actualiza la ruta activa
+    setIsSubMenuOpen(true) // Si ya era true, no causa re-render por sí mismo, pero es necesario.
+    setHoveredLink(event.currentTarget) // establece el HoveredLink
+  }
+
+  // ---- Al entrar al mainMenu, cancela cierre pendiente del subMenu -----
+  const handleMainMenuContainerMouseEnter = () => {
+    clearCloseTimeout() // Cancela cierre si el cursor se mueve entre links pero dentro del contenedor
+  }
+
+  // ---- Al salir del mainMenu, inicia el timeout para cerrar el subMenu -----
+  const handleMainMenuContainerMouseLeave = () => {
+    startCloseTimeout()
+  }
+
+  // ---- Al entrar al subMenu, cancela el cierre pendiente -----
+  const handleSubMenuContainerMouseEnter = () => {
+    // Cancela el cierre si se mueve del main menu al submenu
+    clearCloseTimeout()
+
+    // re-establecer el hoveredLink si se perdió
+    if (!hoveredLink && activeSubMenuRoute && mainMenuRef.current) {
+      const link = mainMenuRef.current.querySelector<HTMLAnchorElement>(
+        `a[href="${activeSubMenuRoute.url}"]`,
+      )
+
+      if (link) setHoveredLink(link)
+    }
+  }
+
+  // ---- Al salir del subMenu, inicia el timeout para cerrar -----
+  const handleSubMenuContainerMouseLeave = () => {
+    startCloseTimeout()
+  }
+
+  // ---- Oculta el SearchBox si el foco se mueve fuera del contenedor y no hay ningún término de búsqueda activo -----
   const handleFocusOutSearch = (event: React.FocusEvent<HTMLDivElement>) => {
     if (
       searchContainerRef.current &&
@@ -102,15 +121,57 @@ export function TopMenu() {
     }
   }
 
+  // ----- useEffects -----
+
+  // ---- Actualiza la posición y el tamaño del hoveredRef -----
+  useEffect(() => {
+    if (hoveredLink && hoveredRef.current && mainMenuRef.current) {
+      const rect = hoveredLink.getBoundingClientRect()
+      const menuRect = mainMenuRef.current.getBoundingClientRect()
+
+      // Obtener la altura del primer enlace
+      const firstLink = mainMenuRef.current.querySelector('.nav-link')
+      const linkHeight = firstLink ? (firstLink as HTMLElement).offsetHeight : 0
+
+      hoveredRef.current.style.width = `${rect.width}px`
+      hoveredRef.current.style.transform = `translateX(${rect.left - menuRect.left}px)`
+      hoveredRef.current.style.height = `${linkHeight + 4}px` // Establecer la altura + 4 POR EL PADDING
+      hoveredRef.current.style.opacity = '1'
+    } else if (hoveredRef.current) {
+      hoveredRef.current.style.opacity = '0'
+    }
+  }, [hoveredLink])
+
+  // ----- Enfoca el SearchBox cuando se abre/expande -----
+  useEffect(() => {
+    handleFocusSearchInput(isSearchBoxExpanded, searchContainerRef)
+  }, [isSearchBoxExpanded, searchContainerRef])
+
+  // ----- Expande el SearchBox si hay un searchTerm valido al montar el componete -----
+  useEffect(() => {
+    if (searchTerm && !isSidebarOpen && !isSearchBoxExpanded) openSearchBox()
+    if (!searchTerm && isSidebarOpen && isSearchBoxExpanded) closeSearchBox()
+  }, [searchTerm, isSearchBoxExpanded, isSidebarOpen, openSearchBox, closeSearchBox])
+
+  // ----- Limpia el timeout antes de que el componente TopMenu se desmonte -----
+  useEffect(() => {
+    return () => {
+      clearCloseTimeout()
+    }
+  }, [])
+
   return (
     <header className="sticky top-0 z-10 bg-white">
+      {/* Contenedor principal del TopMenu */}
       <div
-        className="flex min-h-14 w-full items-center justify-between px-5 text-sm font-semibold"
+        aria-label="Container topMenu"
+        className="relative flex min-h-14 w-full items-center justify-between px-5 text-sm font-semibold"
         id="topMenu"
         role="menu"
       >
         {/* Letf Menu ( Logo | Tienda ) */}
         <h1
+          aria-label="Container left-topMenu"
           className="text-primary flex min-h-14 flex-0 grow items-center justify-start"
           id="left-topMenu"
         >
@@ -134,18 +195,29 @@ export function TopMenu() {
             )}
             href="/"
           >
+            {/* TODO: href="/tienda" */}
             Tienda
           </Link>
         </h1>
 
-        {/* Main Menu (Categorias)*/}
-        <div className="lg-small:block hidden">
+        {/* Ocultar Container main-topMenu en pantallas pequeñas donde se usa el Sidebar */}
+        <div
+          aria-label="Container main-topMenu"
+          className="lg-small:block lg-small:relative hidden"
+          onMouseEnter={handleMainMenuContainerMouseEnter}
+          onMouseLeave={handleMainMenuContainerMouseLeave}
+        >
+          {/* Hover personalizado para la animacion de la Navegacion del main-topMenu */}
           <div
-            ref={indicatorRef}
-            className="bg-hover text-primary absolute top-[20%] bottom-0 w-auto rounded transition-all duration-500 ease-in-out"
+            ref={hoveredRef}
+            aria-hidden="true"
+            className="bg-hover text-primary pointer-events-none absolute top-[20%] bottom-0 w-auto rounded opacity-0 transition-all duration-500 ease-in-out"
           />
+
+          {/* Navegación */}
           <nav
-            ref={menuRef}
+            ref={mainMenuRef}
+            aria-label="Navegación Principal"
             className="flex min-h-14 w-full flex-0 grow items-center justify-center px-12"
             id="main-topMenu"
             role="navigation"
@@ -155,12 +227,13 @@ export function TopMenu() {
               .map((route) => (
                 <Link
                   key={route.slug}
-                  className={clsx('nav-link focus-visible-hover', {
+                  aria-expanded={isSubMenuOpen && activeSubMenuRoute?.slug === route.slug}
+                  aria-haspopup="menu"
+                  className={clsx('nav-link focus-visible-hover relative px-4 py-1', {
                     'aria-current="page"': pathname === `${route.url}`,
                   })}
-                  href={route.url || '#'}
-                  onMouseEnter={(e) => setHoveredLink(e.currentTarget)}
-                  onMouseLeave={() => setHoveredLink(null)}
+                  href={route.url}
+                  onMouseEnter={(e) => handleMainMenuLinkMouseEnter(e, route)}
                 >
                   <span>{route.name}</span>
                 </Link>
@@ -169,18 +242,22 @@ export function TopMenu() {
         </div>
 
         {/* Right topMenu (SearchBox, Cart, Menu) */}
-        <div className="flex min-h-14 flex-0 grow items-center justify-end" id="right-topMenu">
+        <div
+          aria-label="Container right-topMenu"
+          className="flex min-h-14 flex-0 grow items-center justify-end"
+          id="right-topMenu"
+        >
+          {/* SearchBox - Ocultar en pantallas pequeñas */}
           <div className="lg-small:block hidden">
             <div ref={searchContainerRef} className="relative flex items-center">
               <AnimatePresence>
                 {isSearchBoxExpanded ? (
                   <motion.div
                     key="search-input"
-                    ref={searchBoxRef}
-                    animate={motionDivProps.animate}
-                    className="aceleracion-hardware"
-                    exit={motionDivProps.exit}
-                    initial={motionDivProps.initial}
+                    animate={motionSearchBox.animate}
+                    className="aceleracion-hardware z-10"
+                    exit={motionSearchBox.exit}
+                    initial={motionSearchBox.initial}
                     onBlur={handleFocusOutSearch}
                   >
                     <SearchBox isTopMenu />
@@ -188,11 +265,11 @@ export function TopMenu() {
                 ) : (
                   <motion.button
                     key="search-icon"
-                    animate={motionButtonProps.animate}
+                    animate={motionIconSearch.animate}
                     aria-label="Buscar"
                     className="aceleracion-hardware mx-2 outline-none"
-                    exit={motionButtonProps.exit}
-                    initial={motionButtonProps.initial}
+                    exit={motionIconSearch.exit}
+                    initial={motionIconSearch.initial}
                     type="button"
                     onClick={openSearchBox}
                     onFocus={openSearchBox}
@@ -204,8 +281,9 @@ export function TopMenu() {
             </div>
           </div>
 
+          {/* Cart */}
           <Link
-            aria-haspopup="true"
+            aria-haspopup="false"
             aria-label="Carrito de compras"
             className="focus-visible mx-2"
             href="/cart"
@@ -216,23 +294,87 @@ export function TopMenu() {
                 aria-live="polite"
                 className="absolute -top-2 -right-2 rounded-full bg-emerald-500 px-1 text-xs font-bold text-white"
               >
-                3
+                3 {/* todo: Reemplazar con la cuenta real del carrito */}
               </span>
               <IoCartOutline className="h-5 w-5" />
             </div>
           </Link>
 
+          {/* Menu Button */}
           <button
             aria-expanded={isSidebarOpen}
             aria-label="Abrir menú"
             className="focus-visible-hover text-secondary hover:bg-hover hover:text-primary m-2 cursor-pointer rounded px-0 py-1 transition-colors sm:px-4"
             type="button"
-            onClick={() => openSidebar()}
+            onClick={openSidebar}
           >
             Menú
           </button>
         </div>
       </div>
+
+      {/* SubMenu Container */}
+      <AnimatePresence>
+        {isSubMenuOpen && activeSubMenuRoute?.categories && (
+          <motion.div
+            key={activeSubMenuRoute.slug}
+            animate={subMenuTargetAnimation}
+            className="aceleracion-hardware lg-small:block absolute top-full right-0 left-0 hidden w-full bg-white"
+            exit="exit"
+            initial="initial"
+            variants={motionSubMenuVariants}
+            onMouseEnter={handleSubMenuContainerMouseEnter}
+            onMouseLeave={handleSubMenuContainerMouseLeave}
+          >
+            {/* Contenedor interno */}
+            <div className="mx-auto flex w-full justify-between px-25 py-15">
+              {/* Columna Izquierda: Categorías */}
+              <div className="flex flex-col space-y-3 pr-8">
+                {activeSubMenuRoute.categories.map((category) => (
+                  <div key={category.slug}>
+                    <Link
+                      className="focus-visible text-primary font-semibold hover:text-emerald-600"
+                      href={category.url}
+                      onClick={() => setIsSubMenuOpen(false)}
+                    >
+                      {category.name}
+                    </Link>
+                    {/* Lógica para grupos si aplica */}
+                  </div>
+                ))}
+              </div>
+
+              {/* Columna Derecha: Item Destacado */}
+              {activeSubMenuRoute.featuredItem && (
+                <div className="w-1/3 flex-shrink-0">
+                  {activeSubMenuRoute.featuredItem.image && (
+                    <div className="overflow-hidden rounded-xs">
+                      <div className="relative aspect-video h-full w-full">
+                        <Image
+                          fill
+                          priority
+                          alt={activeSubMenuRoute.featuredItem.name}
+                          className="object-cover"
+                          sizes="(max-width: 414px)"
+                          src={activeSubMenuRoute.featuredItem.image}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <Link
+                    className="focus-visible text-primary mt-3 block text-center font-semibold"
+                    href={activeSubMenuRoute.featuredItem.url}
+                    onClick={() => setIsSubMenuOpen(false)}
+                  >
+                    {activeSubMenuRoute.featuredItem.name}
+                  </Link>
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </header>
   )
 }

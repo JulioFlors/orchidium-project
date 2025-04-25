@@ -9,7 +9,15 @@ export interface Route {
   name: string
   slug: string
   url: string
+  featuredItem?: FeaturedItem
   categories?: Category[]
+}
+
+// item destacado
+export interface FeaturedItem {
+  name: string
+  image: string
+  url: string
 }
 
 export interface Category {

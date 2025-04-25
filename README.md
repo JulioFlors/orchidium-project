@@ -1,4 +1,6 @@
-# Orchidium Project - Sistema de Gestión de Invernaderos para el Cultivo de Orquídeas
+# Orchidium Project
+
+ Sistema de Gestión de Invernaderos para el Cultivo de Orquídeas
 
 ## Desarrollo
 
@@ -188,52 +190,52 @@ Pasos para levantar la app en desarrollo:
 
 ### Programa de Fertilización
 
-#### Desarrollo Solucat
+* #### Desarrollo Solucat
 
-* Solucat 25-5-5
-* Triple 20-20-20
-* Triple 20-20-20
-* Solucat 10-52-10
+  * Solucat 25-5-5
+  * Triple 20-20-20
+  * Triple 20-20-20
+  * Solucat 10-52-10
 
-#### Desarrollo Nitrifort
+* #### Desarrollo Nitrifort
 
-* Nitrifort M935
-* Triple 20-20-20
-* Triple 20-20-20
-* Solucat 10-52-10
+  * Nitrifort M935
+  * Triple 20-20-20
+  * Triple 20-20-20
+  * Solucat 10-52-10
 
-#### Desarrollo Bio-Fert 72
+* #### Desarrollo Bio-Fert 72
 
-* Bio-Fert 72
-* Triple 20-20-20
-* Triple 20-20-20
-* Solucat 10-52-10
+  * Bio-Fert 72
+  * Triple 20-20-20
+  * Triple 20-20-20
+  * Solucat 10-52-10
 
-#### Programa Razormin
+* #### Programa Razormin
 
-Bioestimulante y enraizante. Favorece la absorción de nutrientes. Aplicar cada 21 dias.
+  Bioestimulante y enraizante. Favorece la absorción de nutrientes. Aplicar cada 21 dias.
 
-* Periodo: Se aplica cada 21 dias.
-* productType: Desarrollo.
+  * **Periodo**: Se aplica cada 21 dias.
+  * **productType**: Desarrollo.
 
-#### Calcio + Boro
+* #### Calcio + Boro
 
-Aumenta la turgencia de las plantas, el desarrollo de las flores y la calidad de las flores.
+  Aumenta la turgencia de las plantas, el desarrollo de las flores y la calidad de las flores.
 
-* Periodo: Se aplica cada semana.
-* productType: Floración.
+  * **Periodo**: Se aplica cada semana.
+  * **productType**: Floración.
 
-#### Melaza
+* #### Melaza
 
-* Periodo: Se aplica cada semana (se mezcla con otros fertilizantes)
-* productType: Desarrollo.
+  * **Periodo**: Se aplica cada semana (se mezcla con otros fertilizantes)
+  * **productType**: Desarrollo.
 
-#### Osmocote Plus
+* #### Osmocote Plus
 
-Fertilizante de liberación controlada. Formulacion 15-9-12
+  Fertilizante de liberación lenta. Formulacion 15-9-12
 
-* Periodo: Se aplica cada 4 meses.
-* productType: Desarrollo.
+  * **Preparación:** Se aplica cada 4 meses
+  * **productType:** Desarrollo
 
 ---
 

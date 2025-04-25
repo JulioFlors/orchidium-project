@@ -5,6 +5,11 @@ export const staticRoutes: Route[] = [
     name: 'Plantas',
     slug: 'plants',
     url: '/category/plants',
+    featuredItem: {
+      name: 'Dendrobium Striata',
+      image: '/plants/orchids/orchids.webp',
+      url: '/product/dendrobium-striata',
+    },
     categories: [
       {
         name: 'Orquídeas',
@@ -29,6 +34,102 @@ export const staticRoutes: Route[] = [
         slug: 'succulents',
         url: '/category/plants/succulents',
         image: '/plants/succulents/pachyveria-scheideckeri_2_2000.webp',
+      },
+    ],
+  },
+  {
+    name: 'Orchid',
+    slug: 'orchid',
+    url: '/category/plantsg',
+    featuredItem: {
+      name: 'Dendrobium Striata',
+      image: '/plants/orchids/rhyncholaeliocattleya-george-king_0_2000.webp',
+      url: '/product/dendrobium-striata',
+    },
+    categories: [
+      {
+        name: 'Cattleya',
+        slug: 'orchids',
+        url: '/category/plants/orchids',
+        image: '/plants/orchids/orchids.webp',
+      },
+      {
+        name: 'Dendrobium',
+        slug: 'adenium_obesum',
+        url: '/category/plants/adenium_obesum',
+        image: '/plants/adenium_obesum/marbella_0_2000.webp',
+      },
+      {
+        name: 'Dimeranta',
+        slug: 'cactus',
+        url: '/category/plants/cactus',
+        image: '/plants/cactus/mammillaria-prolifera-ssp-haitiensis_0_2000.webp',
+      },
+    ],
+  },
+  {
+    name: 'Adenium Obesum',
+    slug: 'Adenium_Obesum',
+    url: '/category/plantsq',
+    featuredItem: {
+      name: 'Dendrobium Striata',
+      image: '/plants/adenium_obesum/marbella_0_2000.webp',
+      url: '/product/dendrobium-striata',
+    },
+    categories: [
+      {
+        name: 'Simple Petals',
+        slug: 'orchids',
+        url: '/category/plants/orchids',
+        image: '/plants/orchids/orchids.webp',
+      },
+      {
+        name: 'Multi Petals',
+        slug: 'adenium_obesum',
+        url: '/category/plants/adenium_obesum',
+        image: '/plants/adenium_obesum/marbella_0_2000.webp',
+      },
+    ],
+  },
+  {
+    name: 'Cactus',
+    slug: 'cactus',
+    url: '/category/plantss',
+    featuredItem: {
+      name: 'Dendrobium Striata',
+      image: '/plants/cactus/mammillaria-vetula-ssp-gracilis_0_2000.webp',
+      url: '/product/dendrobium-striata',
+    },
+    categories: [
+      {
+        name: 'Mammillaria',
+        slug: 'orchids',
+        url: '/category/plants/orchids',
+        image: '/plants/orchids/orchids.webp',
+      },
+    ],
+  },
+  {
+    name: 'Suculentas',
+    slug: 'suculentas',
+    url: '/category/plantss',
+    featuredItem: {
+      name: 'Dendrobium Striata',
+      image: '/plants/succulents/haworthiopsis-attenuata-zebrina_0_2000.webp',
+      url: '/product/dendrobium-striata',
+    },
+    categories: [
+      {
+        name: 'Haworthiopsis',
+        slug: 'adenium_obesum',
+        url: '/category/plants/adenium_obesum',
+        image: '/plants/adenium_obesum/marbella_0_2000.webp',
+      },
+      {
+        name: 'Sedum',
+        slug: 'cactus',
+        url: '/category/plants/cactus',
+        image: '/plants/cactus/mammillaria-prolifera-ssp-haitiensis_0_2000.webp',
       },
     ],
   },
