@@ -17,7 +17,7 @@ import {
   SearchBox,
   motionIconSearch,
   motionSearchBox,
-  motionSubMenuVariants,
+  motionSubMenu,
 } from '@/components'
 
 export function TopMenu() {
@@ -36,13 +36,13 @@ export function TopMenu() {
   const [activeSubMenuRoute, setActiveSubMenuRoute] = useState<Route | null>(null)
   const [hoveredLink, setHoveredLink] = useState<HTMLElement | null>(null)
   const [isSubMenuOpen, setIsSubMenuOpen] = useState(false)
-  const [subMenuTargetAnimation, setSubMenuTargetAnimation] = useState<'enter' | 'switch'>('enter')
 
   // ----- Refs -----
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const hoveredRef = useRef<HTMLDivElement>(null)
   const mainMenuRef = useRef<HTMLDivElement>(null)
   const searchContainerRef = useRef<HTMLDivElement | null>(null)
+  const wasSubMenuOpenRef = useRef(false)
 
   // ----- Funciones Auxiliares -----
 
@@ -62,7 +62,8 @@ export function TopMenu() {
       setIsSubMenuOpen(false)
       setActiveSubMenuRoute(null)
       setHoveredLink(null)
-    }, 10)
+      wasSubMenuOpenRef.current = false
+    }, 50) // Un pequeño delay para permitir mover el cursor entre links
   }
 
   // ---- Al hacer hover en algun Link del mainMenu... -----
@@ -72,12 +73,15 @@ export function TopMenu() {
   ) => {
     clearCloseTimeout()
 
-    // Establece la animación objetivo BASADA en el estado actual
-    setSubMenuTargetAnimation(isSubMenuOpen ? 'switch' : 'enter')
+    // Antes de actualizar el estado, registramos si el submenú estaba abierto
+    wasSubMenuOpenRef.current = isSubMenuOpen
 
-    setActiveSubMenuRoute(route) // Actualiza la ruta activa
-    setIsSubMenuOpen(true) // Si ya era true, no causa re-render por sí mismo, pero es necesario.
-    setHoveredLink(event.currentTarget) // establece el HoveredLink
+    setHoveredLink(event.currentTarget) // establece el HoveredLink fuera del Timeout
+
+    closeTimeoutRef.current = setTimeout(() => {
+      setIsSubMenuOpen(true) // Si ya era true, no causa re-render por sí mismo, pero es necesario.
+      setActiveSubMenuRoute(route) // Actualiza la ruta activa
+    }, 100) // Un pequeño delay para permitir mover el cursor entre links sin abrir el subMenu "sin querer"
   }
 
   // ---- Al entrar al mainMenu, cancela cierre pendiente del subMenu -----
@@ -314,15 +318,15 @@ export function TopMenu() {
       </div>
 
       {/* SubMenu Container */}
-      <AnimatePresence>
+      <AnimatePresence custom={wasSubMenuOpenRef.current}>
         {isSubMenuOpen && activeSubMenuRoute?.categories && (
           <motion.div
             key={activeSubMenuRoute.slug}
-            animate={subMenuTargetAnimation}
+            animate="animate"
             className="aceleracion-hardware lg-small:block absolute top-full right-0 left-0 hidden w-full bg-white"
             exit="exit"
             initial="initial"
-            variants={motionSubMenuVariants}
+            variants={motionSubMenu}
             onMouseEnter={handleSubMenuContainerMouseEnter}
             onMouseLeave={handleSubMenuContainerMouseLeave}
           >

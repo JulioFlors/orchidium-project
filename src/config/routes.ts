@@ -37,7 +37,7 @@ export const staticRoutes: Route[] = [
       },
     ],
   },
-  {
+  /*  {
     name: 'Orchid',
     slug: 'orchid',
     url: '/category/plantsg',
@@ -49,19 +49,19 @@ export const staticRoutes: Route[] = [
     categories: [
       {
         name: 'Cattleya',
-        slug: 'orchids',
+        slug: 'Cattleya',
         url: '/category/plants/orchids',
         image: '/plants/orchids/orchids.webp',
       },
       {
         name: 'Dendrobium',
-        slug: 'adenium_obesum',
+        slug: 'Dendrobium',
         url: '/category/plants/adenium_obesum',
         image: '/plants/adenium_obesum/marbella_0_2000.webp',
       },
       {
         name: 'Dimeranta',
-        slug: 'cactus',
+        slug: 'Dimeranta',
         url: '/category/plants/cactus',
         image: '/plants/cactus/mammillaria-prolifera-ssp-haitiensis_0_2000.webp',
       },
@@ -79,13 +79,13 @@ export const staticRoutes: Route[] = [
     categories: [
       {
         name: 'Simple Petals',
-        slug: 'orchids',
+        slug: 'Simple_Petals',
         url: '/category/plants/orchids',
         image: '/plants/orchids/orchids.webp',
       },
       {
         name: 'Multi Petals',
-        slug: 'adenium_obesum',
+        slug: 'Multi_Petals',
         url: '/category/plants/adenium_obesum',
         image: '/plants/adenium_obesum/marbella_0_2000.webp',
       },
@@ -103,7 +103,7 @@ export const staticRoutes: Route[] = [
     categories: [
       {
         name: 'Mammillaria',
-        slug: 'orchids',
+        slug: 'Mammillaria',
         url: '/category/plants/orchids',
         image: '/plants/orchids/orchids.webp',
       },
@@ -121,19 +121,19 @@ export const staticRoutes: Route[] = [
     categories: [
       {
         name: 'Haworthiopsis',
-        slug: 'adenium_obesum',
+        slug: 'Haworthiopsis',
         url: '/category/plants/adenium_obesum',
         image: '/plants/adenium_obesum/marbella_0_2000.webp',
       },
       {
         name: 'Sedum',
-        slug: 'cactus',
+        slug: 'Sedum',
         url: '/category/plants/cactus',
         image: '/plants/cactus/mammillaria-prolifera-ssp-haitiensis_0_2000.webp',
       },
     ],
-  },
-  {
+  }, */
+  /*   {
     name: 'Accesorios',
     slug: 'accesorios',
     url: '/category/accesorios',
@@ -151,7 +151,7 @@ export const staticRoutes: Route[] = [
         image: '/placeholder.svg?height=200&width=200',
       },
     ],
-  },
+  }, */
   {
     name: 'Contacto',
     slug: 'contacto',

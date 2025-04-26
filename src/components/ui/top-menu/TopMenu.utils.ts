@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 // Animación para el SearchBox
 export const motionSearchBox = {
   initial: { width: 0, opacity: 0 },
@@ -32,36 +33,39 @@ export const motionIconSearch = {
   },
 }
 
-// variants para controlar diferentes tipos de animación del submenú
-export const motionSubMenuVariants = {
+// Animaciones del submenú
+export const motionSubMenu = {
   initial: {
     opacity: 0,
     scaleY: 0,
     transformOrigin: 'top', // Asegura que escale desde/hacia el borde superior
   },
-  enter: {
-    opacity: 1,
-    scaleY: 1,
-    transformOrigin: 'top',
-    transition: {
-      opacity: { duration: 0.2, ease: 'easeOut' },
-      scaleY: { duration: 0.4, ease: 'easeOut' }, // La escala puede tomar un poco más
-    },
+  animate: (wasOpen: boolean) => {
+
+    return {
+      opacity: 1,
+      scaleY: 1,
+      transformOrigin: 'top',
+      transition: wasOpen
+        ? {
+          opacity: { duration: 0.2, ease: 'easeOut' },
+          scaleY: { duration: 0.4, ease: 'easeOut' },
+        }
+        : { duration: 0 },
+    }
   },
-  exit: {
-    opacity: 0,
-    scaleY: 0,
-    transformOrigin: 'top',
-    transition: {
-      opacity: { duration: 0.6, ease: 'easeOut' }, // La opacidad permite que termine de colapsar
-      scaleY: { duration: 0.4, ease: 'easeOut' },
-    },
-  },
-  switch: {
-    // Para cambios rápidos sin animación visible
-    opacity: 1,
-    scaleY: 1,
-    transformOrigin: 'top',
-    transition: { duration: 0 },
+  exit: (wasOpen: boolean) => {
+
+    return {
+      opacity: 0,
+      scaleY: 0,
+      transformOrigin: 'top',
+      transition: wasOpen
+        ? { duration: 0 }
+        : {
+          opacity: { duration: 0.6, ease: 'easeOut' },
+          scaleY: { duration: 0.4, ease: 'easeOut' },
+        },
+    }
   },
 }
