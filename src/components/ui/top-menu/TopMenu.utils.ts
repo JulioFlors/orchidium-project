@@ -1,4 +1,7 @@
 /* eslint-disable prettier/prettier */
+
+import { RefObject } from 'react'
+
 // Animación para el SearchBox
 export const motionSearchBox = {
   initial: { width: 0, opacity: 0 },
@@ -40,27 +43,27 @@ export const motionSubMenu = {
     scaleY: 0,
     transformOrigin: 'top', // Asegura que escale desde/hacia el borde superior
   },
-  animate: (wasOpen: boolean) => {
+  animate: (isSwitch: boolean) => {
 
     return {
       opacity: 1,
       scaleY: 1,
       transformOrigin: 'top',
-      transition: wasOpen
-        ? {
+      transition: isSwitch
+        ? { duration: 0 }
+        : {
           opacity: { duration: 0.2, ease: 'easeOut' },
           scaleY: { duration: 0.4, ease: 'easeOut' },
-        }
-        : { duration: 0 },
+        },
     }
   },
-  exit: (wasOpen: boolean) => {
+  exit: (isSwitch: boolean) => {
 
     return {
       opacity: 0,
       scaleY: 0,
       transformOrigin: 'top',
-      transition: wasOpen
+      transition: isSwitch
         ? { duration: 0 }
         : {
           opacity: { duration: 0.6, ease: 'easeOut' },

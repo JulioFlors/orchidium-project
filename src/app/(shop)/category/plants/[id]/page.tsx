@@ -30,7 +30,7 @@ export default function CategoryPage() {
     notFound()
   }
 
-  // Mapea los IDs de categoría (usados en rutas) a los tipos de planta (usados en la propiedad 'plantType' de los géneros).
+  // Mapea el slug de categoría (usados en rutas) a los tipos de planta (usados en la propiedad 'plantType' de los géneros).
   const routeWrapper: Record<string, string> = {
     orchids: 'orchid',
     adenium_obesum: 'adenium_obesum',
@@ -61,7 +61,7 @@ export default function CategoryPage() {
         }
 
         return (
-          <div key={group.name}>
+          <div key={group.name} id={group.name}>
             {/* Mostrar título del GRUPO */}
             <Subtitle className="ml-1 !w-[calc(100%-8px)] px-0" subtitle={group.name} />
 

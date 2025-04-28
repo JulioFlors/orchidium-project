@@ -9,16 +9,26 @@ import { motion, AnimatePresence } from 'motion/react'
 import { IoSearchOutline, IoCartOutline } from 'react-icons/io5'
 
 import { staticRoutes } from '@/config'
+import { Route, Genus } from '@/interfaces'
+import { initialData } from '@/seed/seed'
 import { useUIStore } from '@/store'
-import { Route } from '@/interfaces'
 import {
   handleFocusSearchInput,
-  PristinoPlant,
-  SearchBox,
   motionIconSearch,
   motionSearchBox,
   motionSubMenu,
+  PristinoPlant,
+  SearchBox,
 } from '@/components'
+
+// Mapeo de slugs de categoría a tipos de plantas (usados en la propiedad 'plantType' de los géneros).
+// Esto se usa para filtrar los géneros que pertenecen a una categoría específica.
+const categoryWrapper: Record<string, string> = {
+  orchids: 'orchid',
+  adenium_obesum: 'adenium_obesum',
+  cactus: 'cactus',
+  succulents: 'succulent',
+}
 
 export function TopMenu() {
   // aria-current="page" necesita evaluar la ruta actual
@@ -63,7 +73,7 @@ export function TopMenu() {
       setActiveSubMenuRoute(null)
       setHoveredLink(null)
       wasSubMenuOpenRef.current = false
-    }, 50) // Un pequeño delay para permitir mover el cursor entre links
+    }, 50) // Un pequeño delay antes de cerrar el submenú
   }
 
   // ---- Al hacer hover en algun Link del mainMenu... -----
@@ -86,7 +96,7 @@ export function TopMenu() {
 
   // ---- Al entrar al mainMenu, cancela cierre pendiente del subMenu -----
   const handleMainMenuContainerMouseEnter = () => {
-    clearCloseTimeout() // Cancela cierre si el cursor se mueve entre links pero dentro del contenedor
+    clearCloseTimeout()
   }
 
   // ---- Al salir del mainMenu, inicia el timeout para cerrar el subMenu -----
@@ -318,12 +328,13 @@ export function TopMenu() {
       </div>
 
       {/* SubMenu Container */}
-      <AnimatePresence custom={wasSubMenuOpenRef.current}>
+      <AnimatePresence>
         {isSubMenuOpen && activeSubMenuRoute?.categories && (
           <motion.div
             key={activeSubMenuRoute.slug}
             animate="animate"
             className="aceleracion-hardware lg-small:block absolute top-full right-0 left-0 hidden w-full bg-white"
+            custom={wasSubMenuOpenRef.current}
             exit="exit"
             initial="initial"
             variants={motionSubMenu}
@@ -331,47 +342,82 @@ export function TopMenu() {
             onMouseLeave={handleSubMenuContainerMouseLeave}
           >
             {/* Contenedor interno */}
-            <div className="mx-auto flex w-full justify-between px-25 py-15">
-              {/* Columna Izquierda: Categorías */}
-              <div className="flex flex-col space-y-3 pr-8">
-                {activeSubMenuRoute.categories.map((category) => (
-                  <div key={category.slug}>
-                    <Link
-                      className="focus-visible text-primary font-semibold hover:text-emerald-600"
-                      href={category.url}
-                      onClick={() => setIsSubMenuOpen(false)}
-                    >
-                      {category.name}
-                    </Link>
-                    {/* Lógica para grupos si aplica */}
-                  </div>
-                ))}
+            <div className="mx-auto flex w-full justify-between px-20 py-15">
+              {/* Columna Izquierda: Categorías y Géneros */}
+              <div className="-mx-4 flex flex-1">
+                {activeSubMenuRoute.categories.map((category) => {
+                  // Encontrar los GRUPOS (géneros) que pertenecen a ESTA categoría
+                  const groupsInCategory: Genus[] = initialData.genus.filter(
+                    (gen) => gen.type.toLowerCase() === categoryWrapper[category.slug],
+                  )
+
+                  return (
+                    <div key={category.slug} className="w-1/4.5 px-4">
+                      {/* Ajusta el ancho (w-1/4 para 4 columnas) y padding */}
+
+                      {/* Título de la CATEGORÍA (Link a la página de categoría) */}
+                      <p className="text-primary tracking-02 mb-2 text-base font-semibold">
+                        <Link
+                          href={category.url}
+                          tabIndex={-1}
+                          onClick={() => setIsSubMenuOpen(false)}
+                        >
+                          {category.name}
+                        </Link>
+                      </p>
+
+                      {/* Barra separadora */}
+                      <div className="mb-5 h-1 w-full bg-gray-300" />
+
+                      {/* Lista de GRUPOS (géneros) */}
+                      <ul className="max-h-61 space-y-2 overflow-hidden">
+                        {groupsInCategory.map((group) => (
+                          <li key={group.name}>
+                            {/* Link al GRUPO (género) dentro de la página de categoría */}
+                            {/* La URL apunta a la página de categoría con un hash para el scroll */}
+                            <Link
+                              className="text-secondary tracking-02 hover:text-primary leading-6 font-medium transition-colors duration-500"
+                              href={`${category.url}#${group.name}`}
+                              tabIndex={-1}
+                              onClick={() => setIsSubMenuOpen(false)}
+                            >
+                              {group.name}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )
+                })}
               </div>
 
               {/* Columna Derecha: Item Destacado */}
               {activeSubMenuRoute.featuredItem && (
                 <div className="w-1/3 flex-shrink-0">
-                  {activeSubMenuRoute.featuredItem.image && (
-                    <div className="overflow-hidden rounded-xs">
-                      <div className="relative aspect-video h-full w-full">
-                        <Image
-                          fill
-                          priority
-                          alt={activeSubMenuRoute.featuredItem.name}
-                          className="object-cover"
-                          sizes="(max-width: 414px)"
-                          src={activeSubMenuRoute.featuredItem.image}
-                        />
-                      </div>
-                    </div>
-                  )}
-
                   <Link
-                    className="focus-visible text-primary mt-3 block text-center font-semibold"
                     href={activeSubMenuRoute.featuredItem.url}
+                    tabIndex={-1}
                     onClick={() => setIsSubMenuOpen(false)}
                   >
-                    {activeSubMenuRoute.featuredItem.name}
+                    {activeSubMenuRoute.featuredItem.image && (
+                      <div className="h-[90%] overflow-hidden rounded-xs">
+                        <div className="relative aspect-video h-full w-full">
+                          <Image
+                            fill
+                            priority
+                            alt={activeSubMenuRoute.featuredItem.name}
+                            className="object-cover"
+                            sizes="(max-width: 768px) 100vw, 33vw"
+                            src={activeSubMenuRoute.featuredItem.image}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Título del Item Destacado */}
+                    <p className="tracking-4 text-primary mt-3 block text-center text-xl font-semibold antialiased">
+                      {activeSubMenuRoute.featuredItem.name}
+                    </p>
                   </Link>
                 </div>
               )}
