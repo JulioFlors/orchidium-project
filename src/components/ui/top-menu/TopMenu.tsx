@@ -380,7 +380,7 @@ export function TopMenu() {
                             {/* La URL apunta a la página de categoría con un hash para el scroll */}
                             <Link
                               className="tracking-02 leading-6 font-medium transition-colors duration-500 hover:text-black"
-                              href={`${category.url}#${group.name}`}
+                              href={`${category.url}#${group.name.toLowerCase()}`}
                               tabIndex={-1}
                               onClick={() => setIsSubMenuOpen(false)}
                             >

@@ -44,7 +44,7 @@ export default function CategoryPage() {
   )
 
   return (
-    <div key={category.slug}>
+    <div key={category.slug} className="scroll-mt-30" id="#main-content">
       {/* Mostrar título de la CATEGORÍA */}
       <Title className="ml-1" title={category.name} />
 
@@ -61,7 +61,7 @@ export default function CategoryPage() {
         }
 
         return (
-          <div key={group.name} id={group.name}>
+          <div key={group.name} className="scroll-mt-15" id={group.name.toLowerCase()}>
             {/* Mostrar título del GRUPO */}
             <Subtitle className="ml-1 !w-[calc(100%-8px)] px-0" subtitle={group.name} />
 
