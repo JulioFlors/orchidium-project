@@ -5,7 +5,7 @@ import type { Species } from '@/interfaces/'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 
-import { initialData } from '@/seed/seed'
+import { initialData } from '@/seed'
 import { filterSearchResults, ProductGrid } from '@/components'
 
 // charts mínimo para filtrar la búsqueda

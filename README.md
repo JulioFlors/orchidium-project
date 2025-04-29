@@ -1,6 +1,6 @@
 # Orchidium Project
 
- Sistema de Gestión de Invernaderos para el Cultivo de Orquídeas
+Sistema de Gestión de Invernaderos para el Cultivo de Orquídeas
 
 ## Desarrollo
 

@@ -9,7 +9,7 @@ import clsx from 'clsx'
 
 import { highlightMatch, handleFocusSearchInput, filterSearchResults } from '@/components'
 import { useUIStore } from '@/store'
-import { initialData } from '@/seed/seed'
+import { initialData } from '@/seed'
 
 interface SearchBoxProps {
   isTopMenu?: boolean

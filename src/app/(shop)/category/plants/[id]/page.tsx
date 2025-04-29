@@ -5,7 +5,7 @@ import { notFound, useParams } from 'next/navigation'
 import { ProductGrid, Title, Subtitle } from '@/components'
 import { Category, Genus, Route } from '@/interfaces'
 import { staticRoutes } from '@/config'
-import { initialData } from '@/seed/seed'
+import { initialData } from '@/seed'
 
 const seedGenus = initialData.genus
 const seedSpecies = initialData.species

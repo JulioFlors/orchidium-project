@@ -1,5 +1,5 @@
 import { ProductGrid, Title, Subtitle } from '@/components'
-import { initialData } from '@/seed/seed'
+import { initialData } from '@/seed'
 
 const products = initialData.species
 

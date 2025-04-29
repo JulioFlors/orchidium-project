@@ -1,7 +1,5 @@
 /* eslint-disable prettier/prettier */
 
-import { RefObject } from 'react'
-
 // Animación para el SearchBox
 export const motionSearchBox = {
   initial: { width: 0, opacity: 0 },

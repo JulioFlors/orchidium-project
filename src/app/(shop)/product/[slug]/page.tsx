@@ -1,15 +1,30 @@
 import { notFound } from 'next/navigation'
 
-import { initialData } from '@/seed/seed'
+import { initialData } from '@/seed'
 
-interface Props {
-  params: {
-    slug: string
+type Params = Promise<{ slug: string }>
+
+export async function generateMetadata(props: { params: Params }) {
+  const params = await props.params
+  const slug = params.slug
+
+  const product = initialData.species.find((species) => species.slug === slug)
+
+  if (!product) {
+    return {
+      title: '404 - Not Found',
+    }
+  }
+
+  return {
+    title: product.name,
+    description: product.genus.name,
   }
 }
 
-export default async function ProductPage({ params }: Props) {
-  const { slug } = params
+export default async function ProductBySlugPage(props: { params: Params }) {
+  const params = await props.params
+  const slug = params.slug
   const product = initialData.species.find((species) => species.slug === slug)
 
   if (!product) notFound()

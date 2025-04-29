@@ -10,7 +10,7 @@ import { IoSearchOutline, IoCartOutline } from 'react-icons/io5'
 
 import { staticRoutes } from '@/config'
 import { Route, Genus } from '@/interfaces'
-import { initialData } from '@/seed/seed'
+import { initialData } from '@/seed'
 import { useUIStore } from '@/store'
 import {
   handleFocusSearchInput,
@@ -318,7 +318,7 @@ export function TopMenu() {
           <button
             aria-expanded={isSidebarOpen}
             aria-label="Abrir menú"
-            className="focus-visible-hover text-secondary hover:bg-hover hover:text-primary m-2 cursor-pointer rounded px-0 py-1 transition-colors sm:px-4"
+            className="focus-visible-hover hover:bg-hover hover:text-primary m-2 cursor-pointer rounded px-0 py-1 transition-colors sm:px-4"
             type="button"
             onClick={openSidebar}
           >
@@ -352,11 +352,14 @@ export function TopMenu() {
                   )
 
                   return (
-                    <div key={category.slug} className="w-1/4.5 px-4">
+                    <div
+                      key={category.slug}
+                      className={`w-1/${activeSubMenuRoute.categories?.length} px-4`}
+                    >
                       {/* Ajusta el ancho (w-1/4 para 4 columnas) y padding */}
 
                       {/* Título de la CATEGORÍA (Link a la página de categoría) */}
-                      <p className="text-primary tracking-02 mb-2 text-base font-semibold">
+                      <p className="tracking-02 mb-2 text-base font-semibold text-black">
                         <Link
                           href={category.url}
                           tabIndex={-1}
@@ -367,7 +370,7 @@ export function TopMenu() {
                       </p>
 
                       {/* Barra separadora */}
-                      <div className="mb-5 h-1 w-full bg-gray-300" />
+                      <div className="mb-5 h-1 w-full bg-neutral-300" />
 
                       {/* Lista de GRUPOS (géneros) */}
                       <ul className="max-h-61 space-y-2 overflow-hidden">
@@ -376,7 +379,7 @@ export function TopMenu() {
                             {/* Link al GRUPO (género) dentro de la página de categoría */}
                             {/* La URL apunta a la página de categoría con un hash para el scroll */}
                             <Link
-                              className="text-secondary tracking-02 hover:text-primary leading-6 font-medium transition-colors duration-500"
+                              className="tracking-02 leading-6 font-medium transition-colors duration-500 hover:text-black"
                               href={`${category.url}#${group.name}`}
                               tabIndex={-1}
                               onClick={() => setIsSubMenuOpen(false)}
@@ -393,7 +396,7 @@ export function TopMenu() {
 
               {/* Columna Derecha: Item Destacado */}
               {activeSubMenuRoute.featuredItem && (
-                <div className="w-1/3 flex-shrink-0">
+                <div className="ml-8 w-1/3 flex-shrink-0">
                   <Link
                     href={activeSubMenuRoute.featuredItem.url}
                     tabIndex={-1}
@@ -415,7 +418,7 @@ export function TopMenu() {
                     )}
 
                     {/* Título del Item Destacado */}
-                    <p className="tracking-4 text-primary mt-3 block text-center text-xl font-semibold antialiased">
+                    <p className="tracking-4 mt-3 block text-center text-xl font-semibold antialiased">
                       {activeSubMenuRoute.featuredItem.name}
                     </p>
                   </Link>

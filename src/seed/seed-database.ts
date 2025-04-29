@@ -1,9 +1,8 @@
 /* eslint-disable no-console */
-import { ZoneType, TableType, ActuatorType, TaskStatus } from '@prisma/client'
 
-import prisma from '../lib/prisma'
-
-import { initialData, SeedFertilizationCycle, SeedPhytosanitaryCycle } from './seed'
+import prisma from '@/lib/prisma'
+import { ZoneType, TableType, ActuatorType, TaskStatus } from '@/prisma/client'
+import { initialData, SeedFertilizationCycle, SeedPhytosanitaryCycle } from '@/seed'
 
 interface ProductCycleConnect {
   sequence: number

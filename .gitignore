@@ -3,6 +3,9 @@
 .env
 /postgres/
 
+# generador del cliente de Prisma
+/prisma/client
+
 # dependencies
 /node_modules
 /.pnp
