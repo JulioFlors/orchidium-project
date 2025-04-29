@@ -25,7 +25,7 @@ export interface Species {
   images: string[]
 }
 
-export type PlantType = 'Orchid' | 'Adenium_Obesum' | 'Cactus' | 'Succulent'
+export type PlantType = 'Orchid' | 'Adenium_Obesum' | 'Cactus' | 'Succulent' | 'Bromeliad'
 
 export type PotSize = 'Nro 5' | 'Nro 7' | 'Nro 10' | 'Nro 14'
 

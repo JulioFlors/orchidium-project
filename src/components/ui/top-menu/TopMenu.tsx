@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { IoSearchOutline, IoCartOutline } from 'react-icons/io5'
 
 import { staticRoutes } from '@/config'
-import { Route, Genus } from '@/interfaces'
+import { Route } from '@/interfaces'
 import { initialData } from '@/seed'
 import { useUIStore } from '@/store'
 import {
@@ -28,6 +28,7 @@ const categoryWrapper: Record<string, string> = {
   adenium_obesum: 'adenium_obesum',
   cactus: 'cactus',
   succulents: 'succulent',
+  bromeliads: 'bromeliad',
 }
 
 export function TopMenu() {
@@ -347,19 +348,28 @@ export function TopMenu() {
               <div className="-mx-4 flex flex-1">
                 {activeSubMenuRoute.categories.map((category) => {
                   // Encontrar los GRUPOS (géneros) que pertenecen a ESTA categoría
-                  const groupsInCategory: Genus[] = initialData.genus.filter(
+                  const groupsInCategory = initialData.genus.filter(
                     (gen) => gen.type.toLowerCase() === categoryWrapper[category.slug],
                   )
+
+                  // Verificar si hay ALGUN grupo con especies en esta categoría
+                  const categoryHasGenusWithSpecies = groupsInCategory.some((group) =>
+                    initialData.species.some(
+                      (sp) => sp.genus.name.toLowerCase() === group.name.toLowerCase(),
+                    ),
+                  )
+
+                  if (!categoryHasGenusWithSpecies) return null
 
                   return (
                     <div
                       key={category.slug}
-                      className={`w-1/${activeSubMenuRoute.categories?.length} px-4`}
+                      className={`${activeSubMenuRoute.categories?.length ? `w-1/${activeSubMenuRoute.categories?.length}` : `w-full`} px-4`}
                     >
                       {/* Ajusta el ancho (w-1/4 para 4 columnas) y padding */}
 
                       {/* Título de la CATEGORÍA (Link a la página de categoría) */}
-                      <p className="tracking-02 mb-2 text-base font-semibold text-black">
+                      <p className="tracking-02 mb-2 w-full text-base font-semibold text-black">
                         <Link
                           href={category.url}
                           tabIndex={-1}
@@ -373,22 +383,32 @@ export function TopMenu() {
                       <div className="mb-5 h-1 w-full bg-neutral-300" />
 
                       {/* Lista de GRUPOS (géneros) */}
-                      <ul className="max-h-61 space-y-2 overflow-hidden">
-                        {groupsInCategory.map((group) => (
-                          <li key={group.name}>
-                            {/* Link al GRUPO (género) dentro de la página de categoría */}
-                            {/* La URL apunta a la página de categoría con un hash para el scroll */}
-                            <Link
-                              className="tracking-02 leading-6 font-medium transition-colors duration-500 hover:text-black"
-                              href={`${category.url}#${group.name.toLowerCase()}`}
-                              tabIndex={-1}
-                              onClick={() => setIsSubMenuOpen(false)}
-                            >
-                              {group.name}
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
+                      {/* Renderiza la lista UL solo si la categoría tiene géneros con especies */}
+                      {categoryHasGenusWithSpecies && (
+                        <ul className="max-h-61 w-full space-y-2 overflow-hidden">
+                          {groupsInCategory.map((group) => {
+                            // Verificar si ESTE grupo específico tiene especies asociadas
+                            const groupHasSpecies = initialData.species.some(
+                              (sp) => sp.genus.name.toLowerCase() === group.name.toLowerCase(),
+                            )
+
+                            return groupHasSpecies ? (
+                              <li key={group.name}>
+                                {/* Link al GRUPO (género) dentro de la página de categoría */}
+                                {/* La URL apunta a la página de categoría con un hash para el scroll */}
+                                <Link
+                                  className="tracking-02 leading-6 font-medium transition-colors duration-500 hover:text-black"
+                                  href={`${category.url}#${group.name.toLowerCase()}`}
+                                  tabIndex={-1}
+                                  onClick={() => setIsSubMenuOpen(false)}
+                                >
+                                  {group.name}
+                                </Link>
+                              </li>
+                            ) : null
+                          })}
+                        </ul>
+                      )}
                     </div>
                   )
                 })}

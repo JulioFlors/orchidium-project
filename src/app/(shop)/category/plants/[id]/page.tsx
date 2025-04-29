@@ -36,6 +36,7 @@ export default function CategoryPage() {
     adenium_obesum: 'adenium_obesum',
     cactus: 'cactus',
     succulents: 'succulent',
+    bromeliads: 'bromeliad',
   }
 
   // Encontrar los GRUPOS (géneros) que pertenecen a ESTA categoría

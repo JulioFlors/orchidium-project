@@ -23,6 +23,7 @@ export default function PlantasCategoryPage() {
     adenium_obesum: 'adenium_obesum',
     cactus: 'cactus',
     succulents: 'succulent',
+    bromeliads: 'bromeliad',
   }
 
   return (

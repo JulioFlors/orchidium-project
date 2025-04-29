@@ -1,7 +1,7 @@
 //type RoleType = 'User' | 'Admin'
 type ZoneType = 'Zona_A' | 'Zona_B' | 'Zona_C' | 'Zona_D'
 type TableType = 'Mesa_1' | 'Mesa_2' | 'Mesa_3' | 'Mesa_4' | 'Mesa_5' | 'Mesa_6'
-type PlantType = 'Orchid' | 'Adenium_Obesum' | 'Cactus' | 'Succulent'
+type PlantType = 'Orchid' | 'Adenium_Obesum' | 'Cactus' | 'Succulent' | 'Bromeliad'
 
 type TaskStatus = 'Pendiente' | 'Completada' | 'Cancelada' | 'Reprogramada'
 type AgrochemicalType = 'Fertilizante' | 'Fitosanitario'
@@ -169,8 +169,22 @@ export const initialData: SeedData = {
     { name: 'Orostachys', type: 'Succulent' },
     { name: 'Pachyveria', type: 'Succulent' },
     { name: 'Senecio', type: 'Succulent' },
+    { name: 'Cryptanthus', type: 'Bromeliad' },
+    { name: 'Dyckia', type: 'Bromeliad' },
   ],
   species: [
+    /* Bromeliad */
+    {
+      name: 'Dyckia brevifolia',
+      genus: { name: 'Dyckia' },
+      price: 25,
+      slug: 'dyckia-brevifolia',
+      stock: { quantity: 1, available: false },
+      images: [
+        'bromeliads/dyckia-brevifolia_0_2000.webp',
+        'bromeliads/dyckia-brevifolia_1_2000.webp',
+      ],
+    },
     /* Orchid */
     {
       name: 'Cattleya Violacea',
@@ -394,7 +408,7 @@ export const initialData: SeedData = {
       ],
     },
     {
-      name: 'Graptoveria Fénix',
+      name: 'Graptoveria fénix',
       genus: { name: 'Graptoveria' },
       price: 3,
       slug: 'graptoveria-fenix',
