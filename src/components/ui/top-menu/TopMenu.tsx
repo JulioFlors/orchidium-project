@@ -176,14 +176,9 @@ export function TopMenu() {
   }, [])
 
   return (
-    <header className="sticky top-0 z-10 bg-white">
-      {/* Contenedor principal del TopMenu */}
-      <div
-        aria-label="Container topMenu"
-        className="relative flex min-h-14 w-full items-center justify-between px-5 text-sm font-semibold"
-        id="topMenu"
-        role="menu"
-      >
+    <header aria-label="Cabecera principal" className="sticky top-0 z-10 bg-white">
+      {/* Contenedor interno para el flex layout */}
+      <div className="relative flex min-h-14 w-full items-center justify-between px-5 text-sm font-semibold">
         {/* Letf Menu ( Logo | Tienda ) */}
         <h1
           aria-label="Container left-topMenu"
@@ -235,7 +230,6 @@ export function TopMenu() {
             aria-label="Navegación Principal"
             className="flex min-h-14 w-full flex-0 grow items-center justify-center px-12"
             id="main-topMenu"
-            role="navigation"
           >
             {staticRoutes
               .filter((route) => route.categories && route.categories.length > 0)
@@ -243,7 +237,6 @@ export function TopMenu() {
                 <Link
                   key={route.slug}
                   aria-expanded={isSubMenuOpen && activeSubMenuRoute?.slug === route.slug}
-                  aria-haspopup="menu"
                   className={clsx('nav-link focus-visible-hover relative px-4 py-1', {
                     'aria-current="page"': pathname === `${route.url}`,
                   })}
@@ -297,12 +290,7 @@ export function TopMenu() {
           </div>
 
           {/* Cart */}
-          <Link
-            aria-haspopup="false"
-            aria-label="Carrito de compras"
-            className="focus-visible mx-2"
-            href="/cart"
-          >
+          <Link aria-label="Carrito de compras" className="focus-visible mx-2" href="/cart">
             <div className="relative">
               <span
                 aria-atomic="true"
@@ -362,12 +350,7 @@ export function TopMenu() {
                   if (!categoryHasGenusWithSpecies) return null
 
                   return (
-                    <div
-                      key={category.slug}
-                      className={`${activeSubMenuRoute.categories?.length ? `w-1/${activeSubMenuRoute.categories?.length}` : `w-full`} px-4`}
-                    >
-                      {/* Ajusta el ancho (w-1/4 para 4 columnas) y padding */}
-
+                    <div key={category.slug} className="flex-1 px-4">
                       {/* Título de la CATEGORÍA (Link a la página de categoría) */}
                       <p className="tracking-02 mb-2 w-full text-base font-semibold text-black">
                         <Link
@@ -415,35 +398,58 @@ export function TopMenu() {
               </div>
 
               {/* Columna Derecha: Item Destacado */}
-              {activeSubMenuRoute.featuredItem && (
-                <div className="ml-8 w-1/3 flex-shrink-0">
-                  <Link
-                    href={activeSubMenuRoute.featuredItem.url}
-                    tabIndex={-1}
-                    onClick={() => setIsSubMenuOpen(false)}
-                  >
-                    {activeSubMenuRoute.featuredItem.image && (
-                      <div className="h-[90%] overflow-hidden rounded-xs">
-                        <div className="relative aspect-video h-full w-full">
-                          <Image
-                            fill
-                            priority
-                            alt={activeSubMenuRoute.featuredItem.name}
-                            className="object-cover"
-                            sizes="(max-width: 768px) 100vw, 33vw"
-                            src={activeSubMenuRoute.featuredItem.image}
-                          />
-                        </div>
-                      </div>
-                    )}
+              {activeSubMenuRoute.featuredItem &&
+                (() => {
+                  const numCategories = activeSubMenuRoute.categories?.length || 0
+                  let marginLeftPercent = 0
 
-                    {/* Título del Item Destacado */}
-                    <p className="tracking-4 mt-3 block text-center text-xl font-semibold antialiased">
-                      {activeSubMenuRoute.featuredItem.name}
-                    </p>
-                  </Link>
-                </div>
-              )}
+                  if (numCategories === 1) {
+                    marginLeftPercent = 53
+                  } else if (numCategories === 2) {
+                    marginLeftPercent = 40
+                  } else if (numCategories === 3) {
+                    marginLeftPercent = 30
+                  } else if (numCategories === 4) {
+                    marginLeftPercent = 15
+                  } else if (numCategories >= 5) {
+                    marginLeftPercent = 2
+                  }
+
+                  return (
+                    <div
+                      className="w-1/3 flex-shrink-0"
+                      style={{
+                        marginLeft: `${marginLeftPercent}%`,
+                      }}
+                    >
+                      <Link
+                        href={activeSubMenuRoute.featuredItem.url}
+                        tabIndex={-1}
+                        onClick={() => setIsSubMenuOpen(false)}
+                      >
+                        {activeSubMenuRoute.featuredItem.image && (
+                          <div className="h-[90%] overflow-hidden rounded-xs">
+                            <div className="relative aspect-video h-full w-full">
+                              <Image
+                                fill
+                                priority
+                                alt={activeSubMenuRoute.featuredItem.name}
+                                className="object-cover"
+                                sizes="(max-width: 768px) 100vw, 33vw"
+                                src={activeSubMenuRoute.featuredItem.image}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Título del Item Destacado */}
+                        <p className="tracking-4 mt-3 block text-center text-xl font-semibold antialiased">
+                          {activeSubMenuRoute.featuredItem.name}
+                        </p>
+                      </Link>
+                    </div>
+                  )
+                })()}
             </div>
           </motion.div>
         )}

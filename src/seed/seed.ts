@@ -174,7 +174,7 @@ export const initialData: SeedData = {
   ],
   species: [
     /* Bromeliad */
-    {
+    /* {
       name: 'Dyckia brevifolia',
       genus: { name: 'Dyckia' },
       price: 25,
@@ -184,7 +184,7 @@ export const initialData: SeedData = {
         'bromeliads/dyckia-brevifolia_0_2000.webp',
         'bromeliads/dyckia-brevifolia_1_2000.webp',
       ],
-    },
+    }, */
     /* Orchid */
     {
       name: 'Cattleya Violacea',

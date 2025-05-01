@@ -35,12 +35,12 @@ export const staticRoutes: Route[] = [
         url: '/category/plants/succulents',
         image: '/plants/succulents/pachyveria-scheideckeri_2_2000.webp',
       },
-      {
+      /* {
         name: 'Bromelias',
         slug: 'bromeliads',
         url: '/category/plants/bromeliads',
         image: '/plants/bromeliads/pachyveria-scheideckeri_2_2000.webp',
-      },
+      }, */
     ],
   },
   /*  {

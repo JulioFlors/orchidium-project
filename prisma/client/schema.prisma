@@ -1,0 +1,311 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "./client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  User
+  Admin
+}
+
+enum ZoneType {
+  Zona_A
+  Zona_B
+  Zona_C
+  Zona_D
+}
+
+enum TableType {
+  Mesa_1
+  Mesa_2
+  Mesa_3
+  Mesa_4
+  Mesa_5
+  Mesa_6
+}
+
+enum PlantType {
+  Adenium_Obesum
+  Bromeliad
+  Cactus
+  Orchid
+  Succulent
+}
+
+enum PotSize {
+  Nro_5
+  Nro_7
+  Nro_10
+  Nro_14
+}
+
+enum TaskStatus {
+  Pendiente
+  Completada
+  Cancelada
+  Reprogramada
+}
+
+enum AgrochemicalType {
+  Fertilizante
+  Fitosanitario
+}
+
+enum AgrochemicalPorpose {
+  //Fertilizantes
+  Desarrollo
+  Mantenimiento
+  Floracion
+  //Fitosanitarios
+  Fungicida
+  Insecticida
+  Acaricida
+}
+
+enum TriggerType {
+  Diario
+  Interdiario
+  Sensores
+}
+
+enum ActuatorType {
+  Aspercion
+  Nebulizacion
+  Humedecer_Suelo
+}
+
+enum SensorType {
+  Humedad_Relativa
+  Temperatura
+  Intensidad_Luminosa
+}
+
+model Stock {
+  id        String    @id @default(uuid())
+  quantity  Int       @default(0)
+  available Boolean   @default(false)
+  species   Species[]
+}
+
+model Genus {
+  id   String    @id @default(uuid())
+  name String    @unique
+  type PlantType
+
+  species Species[]
+}
+
+model Species {
+  id    String @id @default(uuid())
+  name  String @unique
+  price Int    @default(0)
+  slug  String @unique
+
+  description String?
+
+  genus   Genus  @relation(fields: [genusId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  genusId String
+
+  stock   Stock  @relation(fields: [stockId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  stockId String
+
+  plants Plant[]
+  images SpeciesImage[]
+  //  variants ProductVariant[]
+
+  @@index([genusId])
+}
+
+// Modelo para las variantes de producto (Stock por tamaño y precio)
+/**
+ * model ProductVariant {
+ * id        String  @id @default(uuid())
+ * size      PotSize // Tamaño de la maceta/presentación
+ * price     Int // Precio para este tamaño específico
+ * quantity  Int     @default(0) // Cantidad en stock para este tamaño
+ * available Boolean @default(false) // Calculado o manejado manualmente
+ * species   Species @relation(fields: [speciesId], references: [id], onDelete: Cascade)
+ * speciesId String
+ * createdAt DateTime @default(now())
+ * updatedAt DateTime @updatedAt
+ * @@unique([speciesId, size]) // No puede haber dos entradas con la misma especie y tamaño
+ * @@index([speciesId])
+ * }
+ */
+
+// Modelo para las Imágenes de Especies
+model SpeciesImage {
+  id  String @id @default(uuid())
+  url String @unique
+
+  species   Species @relation(fields: [speciesId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  speciesId String
+
+  @@index([speciesId])
+}
+
+// Modelo para Ubicaciones Físicas
+model Location {
+  id    String    @id @default(uuid())
+  zone  ZoneType
+  table TableType
+
+  plants Plant[] // Plantas ubicadas aquí
+}
+
+// Modelo para registrar eventos de floración
+/**
+ * model FloweringEvent {
+ * id        String    @id @default(uuid())
+ * startDate DateTime // Fecha de inicio de la floración
+ * endDate   DateTime? // Fecha de fin (null si aún está en floración)
+ * plant   Plant  @relation(fields: [plantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+ * plantId String
+ * createdAt DateTime @default(now())
+ * updatedAt DateTime @updatedAt
+ * @@index([plantId])
+ * }
+ */
+
+model Plant {
+  id          String    @id @default(uuid())
+  pottingDate DateTime?
+
+  species   Species @relation(fields: [speciesId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  speciesId String
+
+  location   Location? @relation(fields: [locationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  locationId String?
+
+  //  FloweringEvent FloweringEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([speciesId])
+  @@index([locationId])
+}
+
+model Agrochemical {
+  id          String              @id @default(uuid())
+  name        String              @unique
+  description String
+  type        AgrochemicalType
+  porpose     AgrochemicalPorpose
+  preparation String
+
+  fertilizationCycles FertilizationCycle[]
+  fertilizationTasks  FertilizationTask[]
+  phytosanitaryCycles PhytosanitaryCycle[]
+  phytosanitaryTasks  PhytosanitaryTask[]
+}
+
+model FertilizationProgram {
+  id              String @id @default(uuid())
+  name            String @unique
+  weeklyFrequency Int
+
+  productsCycle FertilizationCycle[]
+}
+
+model FertilizationCycle {
+  id       String @id @default(uuid())
+  sequence Int
+
+  agrochemical   Agrochemical @relation(fields: [agrochemicalId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  agrochemicalId String
+
+  program   FertilizationProgram @relation(fields: [programId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  programId String
+
+  tasks FertilizationTask[]
+}
+
+model FertilizationTask {
+  id            String     @id @default(uuid())
+  scheduledDate DateTime
+  executionDate DateTime?
+  zones         ZoneType[]
+  note          String?
+  status        TaskStatus @default(Pendiente)
+
+  agrochemical   Agrochemical @relation(fields: [agrochemicalId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  agrochemicalId String
+
+  productsCycle   FertilizationCycle? @relation(fields: [productsCycleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  productsCycleId String?
+}
+
+model PhytosanitaryProgram {
+  id               String @id @default(uuid())
+  name             String @unique
+  monthlyFrequency Int
+
+  productsCycle PhytosanitaryCycle[]
+}
+
+model PhytosanitaryCycle {
+  id       String @id @default(uuid())
+  sequence Int
+
+  agrochemical   Agrochemical @relation(fields: [agrochemicalId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  agrochemicalId String
+
+  program   PhytosanitaryProgram @relation(fields: [programId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  programId String
+
+  tasks PhytosanitaryTask[]
+}
+
+model PhytosanitaryTask {
+  id            String     @id @default(uuid())
+  scheduledDate DateTime
+  executionDate DateTime?
+  zones         ZoneType[]
+  note          String?
+  status        TaskStatus @default(Pendiente)
+
+  agrochemical   Agrochemical @relation(fields: [agrochemicalId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  agrochemicalId String
+
+  productsCycle   PhytosanitaryCycle? @relation(fields: [productsCycleId], references: [id])
+  productsCycleId String?
+}
+
+model IrrigationProgram {
+  id        String       @id @default(uuid())
+  name      String       @unique
+  trigger   TriggerType  @default(Interdiario)
+  actuator  ActuatorType @default(Aspercion)
+  startTime String       @default("05:00")
+  duration  Int          @default(20)
+  zones     ZoneType[]   @default([Zona_A, Zona_B])
+
+  tasks IrrigationTask[]
+}
+
+model IrrigationTask {
+  id            String       @id @default(uuid())
+  scheduledDate DateTime
+  executionDate DateTime?
+  actuator      ActuatorType
+  duration      Int
+  zones         ZoneType[]
+  status        TaskStatus   @default(Pendiente)
+
+  program   IrrigationProgram? @relation(fields: [programId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  programId String?
+}
+
+model SensorReading {
+  id         String     @id @default(uuid())
+  zone       ZoneType
+  sensorType SensorType
+  value      Float
+  timestamp  DateTime   @default(now())
+}
