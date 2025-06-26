@@ -176,39 +176,43 @@ export function TopMenu() {
   }, [])
 
   return (
-    <header aria-label="Cabecera principal" className="fixed top-0 z-10 w-full bg-white">
-      {/*---- Contenedor interno para el flex layout ----*/}
-      <div className="relative flex min-h-14 w-full items-center justify-between text-sm font-semibold">
-        {/*---- Left Menu ( Logo | Tienda ) ----*/}
-        <div className="left-menu-container">
-          <div className="left-menu-wrapper">
-            <Link className="focus-link" href="/">
-              <PristinoPlant />
-            </Link>
+    <header aria-label="Cabecera principal" className="sticky top-0 right-0 left-0 z-10 bg-white">
+      {/* Contenedor interno para el flex layout */}
+      <div className="relative flex min-h-14 w-full flex-nowrap items-center justify-between text-sm font-semibold">
+        {/* Letf Menu ( Logo | Tienda ) */}
+        <h1
+          aria-label="Container left-topMenu"
+          className="text-primary flex min-h-14 flex-1 items-center justify-start pl-5"
+          id="left-topMenu"
+        >
+          <Link className="focus-link" href="/">
+            <PristinoPlant />
+          </Link>
 
-            <Link
-              className="focus-link sr-only top-2 left-5 !w-[13rem] text-center focus:not-sr-only focus:absolute focus:z-20 focus:p-2"
-              href="#main-content"
-            >
-              Saltar al contenido principal
-            </Link>
+          <Link
+            className="focus-link sr-only top-2 left-5 !w-[13rem] text-center focus:not-sr-only focus:absolute focus:z-20 focus:p-2"
+            href="#main-content"
+          >
+            Saltar al contenido principal
+          </Link>
 
-            <span className="pipe">|</span>
+          <span className="mx-4 text-[0.65625rem] leading-5 font-bold">|</span>
 
-            <Link
-              className={clsx('focus-link-hover page-shop', {
-                'aria-current="page"': pathname === '/',
-              })}
-              href="/"
-            >
-              {/* TODO: href="/tienda" */}
-              Tienda
-            </Link>
-          </div>
-        </div>
+          <Link
+            className={clsx(
+              'focus-link-hover hover:bg-hover hover:text-primary rounded px-0 py-1 transition-colors sm:px-4',
+              { 'aria-current="page"': pathname === '/' },
+            )}
+            href="/"
+          >
+            {/* TODO: href="/tienda" */}
+            Tienda
+          </Link>
+        </h1>
 
-        {/*---- Ocultar main-menu-container en pantallas pequeñas donde se usa el Sidebar ----*/}
+        {/* Ocultar Container main-topMenu en pantallas pequeñas donde se usa el Sidebar */}
         <div
+          aria-label="Container main-topMenu"
           className="tds-xl:block tds-xl:relative hidden"
           onMouseEnter={handleMainMenuContainerMouseEnter}
           onMouseLeave={handleMainMenuContainerMouseLeave}
@@ -245,68 +249,74 @@ export function TopMenu() {
           </nav>
         </div>
 
-        {/*---- Right Menu Container (SearchBox, Cart, Menu) ----*/}
-        <div className="right-menu-container">
-          <div className="right-menu-wrapper">
-            {/* SearchBox - Ocultar en pantallas pequeñas */}
-            <div className="tds-xl:block hidden">
-              <div ref={searchContainerRef} className="relative flex items-center">
-                <AnimatePresence>
-                  {isSearchBoxExpanded ? (
-                    <motion.div
-                      key="search-input"
-                      animate={motionSearchBox.animate}
-                      className="aceleracion-hardware z-10"
-                      exit={motionSearchBox.exit}
-                      initial={motionSearchBox.initial}
-                      onBlur={handleFocusOutSearch}
-                    >
-                      <SearchBox isTopMenu />
-                    </motion.div>
-                  ) : (
-                    <motion.button
-                      key="search-icon"
-                      animate={motionIconSearch.animate}
-                      aria-label="Buscar"
-                      className="aceleracion-hardware mx-[6px] outline-none"
-                      exit={motionIconSearch.exit}
-                      initial={motionIconSearch.initial}
-                      type="button"
-                      onClick={openSearchBox}
-                      onFocus={openSearchBox}
-                    >
-                      <IoSearchOutline className="h-[21px] w-[21px] cursor-pointer" />
-                    </motion.button>
-                  )}
-                </AnimatePresence>
-              </div>
+        {/* Right topMenu (SearchBox, Cart, Menu) */}
+        <div
+          aria-label="Container right-topMenu"
+          className="right-menu-container flex min-h-14 flex-1 items-center justify-end pr-4"
+          id="right-topMenu"
+        >
+          {/* SearchBox - Ocultar en pantallas pequeñas */}
+          <div className="tds-xl:block hidden">
+            <div ref={searchContainerRef} className="relative flex items-center">
+              <AnimatePresence>
+                {isSearchBoxExpanded ? (
+                  <motion.div
+                    key="search-input"
+                    animate={motionSearchBox.animate}
+                    className="aceleracion-hardware z-10"
+                    exit={motionSearchBox.exit}
+                    initial={motionSearchBox.initial}
+                    onBlur={handleFocusOutSearch}
+                  >
+                    <SearchBox isTopMenu />
+                  </motion.div>
+                ) : (
+                  <motion.button
+                    key="search-icon"
+                    animate={motionIconSearch.animate}
+                    aria-label="Buscar"
+                    className="aceleracion-hardware mx-[6px] outline-none"
+                    exit={motionIconSearch.exit}
+                    initial={motionIconSearch.initial}
+                    type="button"
+                    onClick={openSearchBox}
+                    onFocus={openSearchBox}
+                  >
+                    <IoSearchOutline className="h-[21px] w-[21px] cursor-pointer" />
+                  </motion.button>
+                )}
+              </AnimatePresence>
             </div>
-
-            {/* Cart */}
-            <Link aria-label="Carrito de compras" className="cart-link focus-link" href="/cart">
-              <div className="relative">
-                <span
-                  aria-atomic="true"
-                  aria-live="polite"
-                  className="absolute -top-2 -right-2 rounded-full bg-emerald-500 px-1 text-xs font-bold text-white"
-                >
-                  {/* todo: Reemplazar con la cuenta real del carrito */}
-                </span>
-                <IoCartOutline className="icon-cart" />
-              </div>
-            </Link>
-
-            {/* Menu Button */}
-            <button
-              aria-expanded={isSidebarOpen}
-              aria-label="Abrir menú"
-              className="menu-button"
-              type="button"
-              onClick={openSidebar}
-            >
-              Menú
-            </button>
           </div>
+
+          {/* Cart */}
+          <Link
+            aria-label="Carrito de compras"
+            className="focus-link cart-link tds-xl:mx-2 mx-[15px]"
+            href="/cart"
+          >
+            <div className="relative">
+              <span
+                aria-atomic="true"
+                aria-live="polite"
+                className="absolute -top-2 -right-2 rounded-full bg-emerald-500 px-1 text-xs font-bold text-white"
+              >
+                {/* todo: Reemplazar con la cuenta real del carrito */}
+              </span>
+              <IoCartOutline className="h-6 w-6 text-black" />
+            </div>
+          </Link>
+
+          {/* Menu Button */}
+          <button
+            aria-expanded={isSidebarOpen}
+            aria-label="Abrir menú"
+            className="focus-link-hover hover:bg-hover hover:text-primary cursor-pointer rounded px-0 py-1 transition-colors sm:px-4"
+            type="button"
+            onClick={openSidebar}
+          >
+            Menú
+          </button>
         </div>
       </div>
 

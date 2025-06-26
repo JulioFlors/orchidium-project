@@ -2,8 +2,12 @@
 
 import type { Species } from '@/interfaces/'
 
+import { text } from 'stream/consumers'
+
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { px } from 'motion/react'
+import { h2, line } from 'motion/react-client'
 
 import { initialData } from '@/seed'
 import { filterSearchResults, ProductGrid } from '@/components'
@@ -35,15 +39,15 @@ export default function SearchPageClient() {
   }, [searchTerm, speciesData])
 
   return (
-    <div className="mt-9">
+    <div className="mt-23">
       {/* --- Título de la página de resultados --- */}
       <h1
         aria-labelledby="category-heading"
-        className="tracking-2 text-primary mb-2 pt-8 text-[1.625rem] leading-9 font-extralight antialiased"
+        className="tracking-4 text-primary tds-sm:leading-9 tds-sm:text-[26px] tds-sm:tracking-2 mb-2 pt-8 text-[23.5px] leading-7 font-extralight antialiased"
         id=" category-heading"
       >
         Resultados de{' '}
-        <span className="font-medium">
+        <span className="font-medium text-balance hyphens-auto">
           {searchTerm.length >= MIN_SEARCH_TERM_LENGTH ? searchTerm : ''}
         </span>
         {/* Mostrar el término de búsqueda en el título solo si es válido */}

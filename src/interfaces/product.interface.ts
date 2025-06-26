@@ -13,6 +13,7 @@ export interface Genus {
 export interface Species {
   //todo: id: string
   name: string
+  description?: string
   genus: {
     name: string
   }
@@ -30,11 +31,11 @@ export type PlantType = 'Orchid' | 'Adenium_Obesum' | 'Cactus' | 'Succulent' | '
 export type PotSize = 'Nro 5' | 'Nro 7' | 'Nro 10' | 'Nro 14'
 
 export interface CartProduct {
-  id: string
+  //id: string
   slug: string
-  title: string
+  name: string
   price: number
   quantity: number
-  size: PotSize
+  //size: PotSize
   image: string
 }

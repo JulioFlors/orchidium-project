@@ -13,7 +13,7 @@ export function MainContent() {
 
   return (
     <>
-      <div className="lg-small:hidden relative w-full">
+      <div className="tds-xl:hidden relative w-full">
         <SearchBox />
       </div>
 
@@ -21,21 +21,21 @@ export function MainContent() {
         {staticRoutes.map((route) => (
           <div key={route.slug} className="mb-2">
             {route.categories && route.categories.length > 0 ? (
-              <div className="lg-small:hidden relative">
+              <div className="tds-xl:hidden relative">
                 <button
-                  className="focus-sidebar-content group hover:bg-hover mb-2 flex w-full items-center justify-between rounded px-3 py-2 font-medium text-black transition-colors duration-300"
+                  className="focus-sidebar-content group w-full px-3 py-2"
                   type="button"
                   onClick={() => setSidebarRoute(route.slug)}
                 >
                   <span>{route.name}</span>
-                  <span className="text-secondary group-hover:text-primary transition-colors duration-300">
+                  <span className="text-secondary group-hover:text-primary transition-colors duration-200">
                     <IoChevronForwardOutline size={16} />
                   </span>
                 </button>
               </div>
             ) : (
               <Link
-                className="focus-sidebar-content hover:bg-hover mb-2 flex items-center justify-between rounded p-2 font-medium text-black transition-colors duration-300"
+                className="focus-sidebar-content p-2"
                 href={route.url || '#'}
                 onClick={closeSidebar}
               >

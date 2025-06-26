@@ -14,7 +14,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
 
       <Sidebar />
 
-      <main className="flex-grow px-6 sm:px-9 xl:px-12">{children}</main>
+      <main className="mx-6 grow sm:mx-9 xl:mx-12">{children}</main>
 
       <Footer />
     </div>

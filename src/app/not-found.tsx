@@ -4,7 +4,7 @@ import { PageNotFound } from '@/components'
 import { Footer, Sidebar, TopMenu } from '@/components'
 
 export const metadata: Metadata = {
-  title: 'PristinoPlant | 404',
+  title: 'Page Not Found',
   description: 'No pudimos encontrar la planta en nuestro vivero | 404',
 }
 

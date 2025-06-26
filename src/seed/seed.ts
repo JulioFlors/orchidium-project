@@ -23,14 +23,15 @@ interface SeedGenus {
 
 interface SeedSpecies {
   name: string
+  description?: string
   genus: {
     name: string // el nombre del genero sera relacionado por UUID en seed-database.ts
   }
   price: number
   slug: string
   stock: {
-    quantity: number
     available: boolean
+    quantity: number
   }
   images: string[]
 }
@@ -235,6 +236,8 @@ export const initialData: SeedData = {
         'orchids/rhyncholaeliocattleya-george-king_0_2000.webp',
         'orchids/rhyncholaeliocattleya-george-king_1_2000.webp',
       ],
+      description:
+        "Esta Rhyncholaeliocattleya George King 'Southern Cross' es un híbrido clásico muy apreciado por sus grandes y vistosas flores de color salmón a rosa melocotón. Presenta un labio amplio y distintivo con flecos (fruncido), a menudo con tonos amarillentos en la garganta. Las flores son dulcemente perfumadas y suelen aparecer una o dos veces al año. Es una planta de crecimiento vigoroso, ideal para añadir un toque de color y fragancia.",
     },
     {
       name: "Rhyncholaeliocattleya Memoria 'Anna Balmores'",

@@ -57,7 +57,7 @@ export function Sidebar() {
               {sidebarRoute ? (
                 <button
                   aria-label="Volver al menú"
-                  className="focus-visible my-1 flex cursor-pointer items-center font-medium"
+                  className="focus-link my-1 flex cursor-pointer items-center font-medium"
                   type="button"
                   onClick={() => setSidebarRoute(null)}
                 >
@@ -69,7 +69,7 @@ export function Sidebar() {
               )}
               <button
                 aria-label="Cerrar menú"
-                className="focus-visible-hover text-secondary hover:bg-hover cursor-pointer rounded"
+                className="focus-link-hover text-secondary hover:bg-hover cursor-pointer rounded"
                 type="button"
                 onClick={() => closeSidebar()}
               >

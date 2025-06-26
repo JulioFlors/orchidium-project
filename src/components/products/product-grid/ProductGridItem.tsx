@@ -2,9 +2,9 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useState } from 'react'
-import clsx from 'clsx'
 
 import { Species } from '@/interfaces/'
+import { StockLabel } from '@/components'
 
 interface Props {
   product: Species
@@ -31,7 +31,7 @@ export function ProductGridItem({ product, index }: Props) {
               fill
               alt={product.name}
               className="rounded-xs object-cover"
-              sizes="(min - width: 640px) and (max-width: 767px) calc(50vw - 18px - 2%) (min-width: 768px) and (max-width: 1279px) calc(33.33vw - 18px - 1.33%) (min-width: 1280px) calc(33.33vw - 24px - 1.5%) "
+              sizes="(min - width: 2000px)"
               src={`/plants/${displayImage}`}
               title={product.name}
               onMouseEnter={() =>
@@ -43,18 +43,7 @@ export function ProductGridItem({ product, index }: Props) {
           </Link>
 
           {/* Etiqueta de Agotado */}
-          {!product.stock.available && (
-            <span
-              aria-hidden="true"
-              className={clsx(
-                'bg-label absolute top-0 left-0 z-[5] min-h-[25px] min-w-[50px] cursor-default px-0.5 py-1.5 text-center text-[9px] leading-tight font-bold whitespace-nowrap text-white select-none',
-                'sm:min-h-[30px] sm:min-w-[80px] sm:px-[2px] sm:py-[8px] sm:text-[11px]',
-                'xl:min-h-[35px] xl:min-w-[75px] xl:px-[5px] xl:py-[10px] xl:text-sm',
-              )}
-            >
-              Agotado
-            </span>
-          )}
+          {!product.stock.available && <StockLabel />}
         </div>
       </div>
 
@@ -64,7 +53,7 @@ export function ProductGridItem({ product, index }: Props) {
           id={`${product.slug}__main-details`}
         >
           <Link
-            className="product-name !tracking-02 line-clamp-3 break-words text-black transition-all duration-300"
+            className="product-name !-tracking-2 text-balance hyphens-auto text-black transition-all duration-300"
             href={`/product/${product.slug}`}
             id={`${product.slug}__link`}
             tabIndex={-1} // Evita que reciba focus al navegar con Tab
@@ -72,7 +61,7 @@ export function ProductGridItem({ product, index }: Props) {
             {product.name}
           </Link>
 
-          <span className="text-secondary !tracking-02 font-extrabold">$ {product.price}</span>
+          <span className="text-secondary !-tracking-2 font-extrabold">$ {product.price}</span>
         </div>
         <div />
       </div>
