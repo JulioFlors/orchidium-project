@@ -2,12 +2,8 @@
 
 import type { Species } from '@/interfaces/'
 
-import { text } from 'stream/consumers'
-
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { px } from 'motion/react'
-import { h2, line } from 'motion/react-client'
 
 import { initialData } from '@/seed'
 import { filterSearchResults, ProductGrid } from '@/components'
