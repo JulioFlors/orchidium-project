@@ -1,18 +1,18 @@
 'use client'
 
-import type { CartProduct, Species } from '@/interfaces'
+import type { Species } from '@/interfaces'
 
 import { useState } from 'react'
 
 import { StockNotificationWhatsapp, QuantitySelector } from '@/components'
-import { useCartStore } from '@/store'
+/* import { useCartStore } from '@/store' */
 
 interface Props {
   product: Species
 }
 
 export function AddToCart({ product }: Props) {
-  const addProductToCart = useCartStore((state) => state.addProductTocart)
+  /*   const addProductToCart = useCartStore((state) => state.addProductTocart) */
   const isProductAvailable = product.stock?.available ?? false
 
   /*   const [size, setSize] = useState<Size | undefined>() */
@@ -24,7 +24,7 @@ export function AddToCart({ product }: Props) {
 
     // if (!size) return
 
-    const cartProduct: CartProduct = {
+    /*     const cartProduct: CartProduct = {
       // id: product.id,
       slug: product.slug,
       name: product.name,
@@ -34,7 +34,7 @@ export function AddToCart({ product }: Props) {
       image: product.images[0],
     }
 
-    addProductToCart(cartProduct)
+    addProductToCart(cartProduct) */
     setPosted(false)
     setQuantity(1)
     // setSize(undefined)

@@ -1,6 +1,6 @@
-export * from './cart/OrderSummary'
+/* export * from './cart/OrderSummary'
 
-export * from './cart/ProductsInCart'
+export * from './cart/ProductsInCart' */
 
 export * from './product/product-image/ProductImage'
 
