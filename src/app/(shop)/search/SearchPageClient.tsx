@@ -35,7 +35,7 @@ export default function SearchPageClient() {
   }, [searchTerm, speciesData])
 
   return (
-    <div className="mt-23">
+    <div className="mt-9">
       {/* --- Título de la página de resultados --- */}
       <h1
         aria-labelledby="category-heading"

@@ -15,7 +15,7 @@ export default function SearchPage() {
 // Se muestra mientras el componente cliente se carga o espera datos
 function SearchPageFallback() {
   return (
-    <div className="mt-23">
+    <div className="mt-9">
       {/* --- Skeleton para el Título --- */}
       <h1
         aria-labelledby="category-heading-skeleton"
