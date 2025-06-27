@@ -53,7 +53,7 @@ export function ProductGridItem({ product, index }: Props) {
           id={`${product.slug}__main-details`}
         >
           <Link
-            className="product-name !-tracking-2 text-balance hyphens-auto text-black transition-all duration-300"
+            className="product-name tracking-2 text-balance text-black transition-all duration-300"
             href={`/product/${product.slug}`}
             id={`${product.slug}__link`}
             tabIndex={-1} // Evita que reciba focus al navegar con Tab
