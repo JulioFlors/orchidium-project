@@ -1,4 +1,4 @@
-import type { CartProduct } from '@/interfaces'
+/* import type { CartProduct } from '@/interfaces'
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
@@ -107,7 +107,8 @@ export const useCartStore = create<State>()(
     }),
 
     {
-      name: 'shopping-cart',
+      name: 'cart-store',
     },
   ),
 )
+ */

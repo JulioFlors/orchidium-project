@@ -1,26 +1,36 @@
 @import "tailwindcss";
 
 @theme {
-  --breakpoint-lg-small: 75rem;
+  --breakpoint-tds-xs: 26.9375rem;
+  --breakpoint-tds-sm: 37.5rem;
+  --breakpoint-tds-lg: 60.0625rem;
+  --breakpoint-tds-xl: 75rem;
+  /* 37.5rem; 600px */
+  /* 60rem; 960px */
+  /* 60.0625rem; 961px*/
+  /* 75rem; 1200px */
+
+  --color-accessibility: oklch(0.65 0 0 / 1);
+  --color-blue-hover: #3457b1;
+  --color-blue-tesla: #3e6ae1;
   --color-hover: oklch(0.96 0 0 / 1);
   --color-label: oklch(0.48 0.01 264.50 / 1);
   --color-primary-404: oklch(0.25 0 0 / 1);
   --color-primary: oklch(0.22 0.01 264.27 / 1);
-  --color-accessibility: oklch(0.65 0 0 / 1);
   --color-secondary-404: oklch(0.51 0 0 / 1);
   --color-secondary: oklch(0.36 0.01 260.72 / 1);
-  --color-serch-box-icon-hover: oklch(0.93 0 0 / 1);
-  --color-serch-box-outline: oklch(0.86 0 247.84 / 1);
-  --color-serch-box: oklch(0.97 0 0 / 1);
-  --tracking-6: -0.06em;
-  --tracking-4: -0.04em;
-  --tracking-2: -0.02em;
+  --color-search-box-icon-hover: oklch(0.93 0 0 / 1);
+  --color-search-box-outline: oklch(0.86 0 247.84 / 1);
+  --color-search-box: oklch(0.97 0 0 / 1);
+
+  --shadow-tesla: 0 8px 16px 0 rgba(0, 0, 0, 0.16);
+  --shadow-top-highlight: 0 -2px 13px oklch(0.92 0 0 / 1);
+
+  --tracking-0: 0em;
   --tracking-1: -0.01em;
-  --tracking-0: 0;
-  --tracking-01: 0.01em;
-  --tracking-02: 0.02em;
-  --tracking-04: 0.04em;
-  --tracking-06: 0.06em;
+  --tracking-2: -0.02em;
+  --tracking-4: -0.04em;
+  --tracking-6: -0.06em;
 }
 
 @layer base {
@@ -28,12 +38,26 @@
     @apply bg-white font-normal overflow-y-auto text-secondary text-sm tracking-2;
   }
 
+  p {
+    max-width: 75ch;
+  }
+
+  /*   p {
+    margin-block: 1lh;
+    // @apply my-[1lh];
+    // @apply my-auto;
+  } */
+
   input::placeholder {
     @apply text-secondary/75 font-semibold;
   }
 }
 
 @layer utilities {
+
+  .hyphens-auto {
+    hyphens: 'auto';
+  }
 
   .aceleracion-hardware {
     will-change: transform;
@@ -71,40 +95,77 @@
     @apply mx-1 px-2 rounded bg-white hover:bg-hover outline-none ring-accessibility ring-1 ring-offset-0;
   }
 
+  .focus-sidebar-content {
+    @apply hover:bg-hover mb-2 flex items-center justify-between rounded font-medium text-black;
+    @apply shadow-[inset_0_0_0_2px_transparent] duration-200 ease-in-out outline-none transition-all;
+  }
+
   .focus-sidebar-content:focus {
-    @apply border-none outline-accessibility outline-2 outline-offset-[-2px];
+    @apply shadow-[inset_0_0_0_2px_var(--color-accessibility)];
   }
 
   .focus-sidebar-img:focus-visible {
     @apply outline-accessibility outline-2 outline-offset-[-2px] rounded-sm;
   }
 
-  .focus-serch-box:focus {
-    @apply border-none outline-serch-box-outline outline-1 outline-offset-[-1px];
+  .focus-search-box:focus {
+    @apply border-none outline-search-box-outline outline-1 outline-offset-[-1px];
+  }
+
+  .focus-input {
+    @apply bg-search-box w-full rounded px-3 py-2 leading-6 font-medium ease-in-out transition-all;
+  }
+
+  .focus-input:focus {
+    @apply outline-none border-none ring-search-box-outline ring-1;
   }
 
   .focus-product:focus-visible {
     @apply bg-white outline-none ring-accessibility ring-2 ring-offset-2 rounded-xs;
   }
 
-  .focus-visible:focus {
+  .focus-link:focus {
     @apply bg-white outline-none ring-accessibility ring-2 ring-offset-2 rounded;
   }
 
-  .focus-visible-hover:focus {
+  .focus-link-hover:focus {
     @apply bg-white hover:bg-hover outline-none ring-accessibility ring-2 ring-offset-2 rounded;
   }
 
+  .focus-dashed:focus {
+    @apply outline outline-accessibility outline-dashed outline-offset-2 rounded;
+  }
+
+  .list-box {
+    @apply flex cursor-pointer items-center justify-between font-medium !rounded-[0.5px];
+  }
+
+  .btn-primary {
+    @apply bg-blue-tesla border-3 border-blue-tesla font-semibold leading-[26.5px] outline-none px-6 py-1 rounded-sm text-center text-white;
+    @apply shadow-[inset_0_0_0_2px_transparent] duration-200 ease-in-out transition-colors;
+  }
+
+  .btn-primary:hover {
+    @apply bg-blue-hover border-blue-hover;
+  }
+
+  .btn-primary:focus {
+    @apply shadow-[inset_0_0_0_2px_white];
+  }
+
   .btn-secondary {
-    @apply bg-white border-primary border-3 delay-100 duration-500 ease-in-out font-medium px-6 py-1 rounded-sm text-primary text-center transition-all;
+    @apply bg-white border-3 border-primary font-semibold leading-[26.5px] outline-none px-6 py-1 rounded-sm text-center text-primary;
+    @apply shadow-[inset_0_0_0_2px_transparent] duration-200 ease-in-out transition-colors;
+    @apply transition-shadow;
   }
 
   .btn-secondary:hover {
     @apply bg-primary text-white;
   }
 
-  .btn-secondary:focus-visible {
-    @apply outline-none border-accessibility;
+  .btn-secondary:focus {
+    @apply bg-primary text-white;
+    @apply shadow-[inset_0_0_0_2px_white];
   }
 
   .btn-link {
@@ -117,6 +178,165 @@
 
   .nav-link {
     @apply font-semibold hover:text-primary px-4 py-1 relative rounded text-secondary transition-colors;
+  }
+}
+
+/*---- Formularios ----*/
+@layer components {
+  .form-input {
+    @apply bg-search-box -tracking-2 mt-2 min-h-10 w-full rounded px-3 text-[15px] leading-6 font-semibold;
+    /* focus-search-box:focus */
+    @apply focus:border-none focus:outline-search-box-outline focus:outline-1 focus:outline-offset-[-1px];
+  }
+}
+
+/*---- Underlines ----*/
+@layer components {
+  .underline-link {
+    @apply bg-gradient-to-r from-blue-tesla to-blue-hover bg-clip-text font-semibold outline-none text-transparent transition-all duration-200 ease-in-out;
+  }
+
+  .underline-link:focus,
+  .underline-link:hover {
+    @apply border-b-2 border-blue-tesla;
+  }
+
+  .underline-secondary {
+    @apply text-secondary font-normal outline-none rounded-xs inline-block relative;
+    @apply transition-colors duration-200 ease-in-out;
+  }
+
+  .underline-secondary::after {
+    content: '';
+    @apply absolute left-[1%] top-[92%] w-[98%] h-px;
+    @apply bg-secondary rounded;
+    @apply transition-all duration-200 ease-in-out;
+  }
+
+  .underline-secondary:hover {
+    @apply text-black;
+  }
+
+  .underline-secondary:hover::after {
+    @apply bg-black h-[2px];
+  }
+
+  .underline-secondary:focus-visible {
+    @apply bg-white ring-2 ring-offset-1 ring-offset-white ring-accessibility;
+  }
+}
+
+/*---- Left Menu Container | Logo | Tienda | ----*/
+@layer components {
+  .left-menu-container {
+    container-type: inline-size;
+    container-name: left-menu;
+    min-width: 125px;
+    @apply flex flex-1;
+  }
+
+  .left-menu-wrapper {
+    @apply flex min-h-14 flex-1 items-center justify-start pl-5 text-primary;
+  }
+
+  .pipe {
+    @apply mx-4 text-[0.65625rem] leading-5 font-bold;
+  }
+
+  .page-shop {
+    @apply hover:bg-hover rounded px-0 py-1 transition-colors sm:px-4 cursor-pointer;
+  }
+
+  @container left-menu (width <=160px) {
+    .left-menu-wrapper {
+      @apply pl-2 z-10;
+    }
+
+    .pipe {
+      @apply mx-2;
+    }
+
+
+    .page-shop {
+      @apply text-xs;
+    }
+  }
+}
+
+/*---- Right Menu Container | Cart | Menu | ----*/
+@layer components {
+  .right-menu-container {
+    container-type: inline-size;
+    container-name: right-menu;
+    min-width: 125px;
+    @apply flex flex-1;
+  }
+
+  .right-menu-wrapper {
+    @apply flex min-h-14 w-full flex-1 items-center justify-end pr-4;
+  }
+
+  .cart-link {
+    @apply tds-xl:mx-2 mx-[15px];
+  }
+
+  .icon-cart {
+    @apply h-6 w-6 text-black;
+  }
+
+  .menu-button:focus {
+    @apply bg-white hover:bg-hover outline-none ring-accessibility ring-2 ring-offset-2 rounded;
+  }
+
+  .menu-button {
+    @apply hover:bg-hover hover:text-primary cursor-pointer rounded px-0 py-1 transition-colors sm:px-4;
+  }
+
+  @container right-menu (width <=160px) {
+    .cart-link {
+      @apply mx-2;
+    }
+
+    .icon-cart {
+      @apply h-4 w-4;
+    }
+
+    .right-menu-wrapper {
+      @apply pr-2;
+    }
+
+    .menu-button {
+      @apply text-xs;
+    }
+  }
+}
+
+@layer components {
+  .cart-header {
+    @apply -tracking-0 text-primary font-semibold antialiased transition-all duration-300 ease-in-out;
+    @apply text-[22px] leading-7 pt-7 pb-6;
+    @apply border-b-1 border-neutral-200;
+    @apply sm:leading-9;
+    @apply tds-lg:border-none tds-lg:text-[26px] tds-lg:pb-2;
+  }
+
+  .lineitem__price {
+    @apply flex w-full flex-1 flex-col items-end justify-start;
+    @apply tds-sm:pt-6 pt-0 pl-2 min-w-[88px] max-w-[93px];
+    @apply tds-xs:pl-6;
+    @apply tds-sm:w-1/4 tds-sm:flex-none tds-sm:min-w-[112px];
+  }
+
+  .order-summary {
+    @apply tds-lg:bg-white tds-lg:h-fit tds-lg:max-w-[432px] tds-lg:ml-auto tds-lg:p-8 tds-lg:rounded tds-lg:border-none tds-lg:shadow-tesla tds-lg:mt-0;
+    @apply border-secondary border-t pt-8 mt-8;
+  }
+
+  .checkout-button {
+    @apply bg-white shadow-top-highlight fixed bottom-0 left-0 w-full h-auto z-5;
+    @apply flex flex-col justify-center m-0 p-4 rounded-t-xs;
+    @apply transition-colors duration-300 ease-in-out;
+    @apply tds-lg:contents;
   }
 }
 

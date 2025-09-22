@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation'
 import { staticRoutes } from '@/config'
 import { ProductGrid, Title, Subtitle } from '@/components'
 import { Genus, Route } from '@/interfaces'
-import { initialData } from '@/seed/seed'
+import { initialData } from '@/seed'
 
 const seedGenus = initialData.genus
 const seedSpecies = initialData.species
@@ -23,6 +23,7 @@ export default function PlantasCategoryPage() {
     adenium_obesum: 'adenium_obesum',
     cactus: 'cactus',
     succulents: 'succulent',
+    bromeliads: 'bromeliad',
   }
 
   return (
@@ -39,7 +40,11 @@ export default function PlantasCategoryPage() {
         }
 
         return (
-          <div key={category.slug}>
+          <div
+            key={category.slug}
+            className="scroll-mt-30"
+            id={`${catIndex === 0 ? '#main-content' : ``}`}
+          >
             {/* Mostrar título de la CATEGORÍA */}
             <Title className={`ml-1 ${catIndex > 0 ? '!mt-0' : ''}`} title={category.name} />
 
@@ -56,7 +61,7 @@ export default function PlantasCategoryPage() {
               }
 
               return (
-                <div key={group.name}>
+                <div key={group.name} className="scroll-mt-15" id={group.name.toLowerCase()}>
                   {/* Mostrar título del GRUPO */}
                   <Subtitle className="ml-1 !w-[calc(100%-8px)] px-0" subtitle={group.name} />
 

@@ -22,7 +22,7 @@ function SearchPageFallback() {
         className="mb-2 animate-pulse pt-8"
         id="category-heading-skeleton"
       >
-        <div className="h-9 w-3/4 rounded bg-gray-200" />
+        <div className="h-9 w-3/4 rounded bg-neutral-200" />
       </h1>
 
       {/* --- Usar el Skeleton del Grid --- */}

@@ -1,0 +1,21 @@
+# Usa la imagen base de Node.js que tu proyecto Next.js necesite (ej. 18)
+FROM node:18-alpine
+
+# Establece el directorio de trabajo
+WORKDIR /app
+
+# Copia los archivos de dependencias
+COPY package*.json ./
+
+# Instala TODAS las dependencias (incluyendo devDependencies para ts-node y prisma)
+RUN npm install
+
+# Copia todo el código del proyecto (prisma, src, etc.)
+COPY . .
+
+# Genera el cliente de Prisma dentro del contenedor
+RUN npx prisma generate
+
+# Comando para iniciar el servicio de ingesta
+# Usa el decorador -r para asegurar que los alias de ruta funcionen
+CMD ["ts-node", "-r", "tsconfig-paths/register", "src/lib/mqtt-service.ts"]

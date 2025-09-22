@@ -5,7 +5,7 @@ import { notFound, useParams } from 'next/navigation'
 import { ProductGrid, Title, Subtitle } from '@/components'
 import { Category, Genus, Route } from '@/interfaces'
 import { staticRoutes } from '@/config'
-import { initialData } from '@/seed/seed'
+import { initialData } from '@/seed'
 
 const seedGenus = initialData.genus
 const seedSpecies = initialData.species
@@ -30,12 +30,13 @@ export default function CategoryPage() {
     notFound()
   }
 
-  // Mapea los IDs de categoría (usados en rutas) a los tipos de planta (usados en la propiedad 'plantType' de los géneros).
+  // Mapea el slug de categoría (usados en rutas) a los tipos de planta (usados en la propiedad 'plantType' de los géneros).
   const routeWrapper: Record<string, string> = {
     orchids: 'orchid',
     adenium_obesum: 'adenium_obesum',
     cactus: 'cactus',
     succulents: 'succulent',
+    bromeliads: 'bromeliad',
   }
 
   // Encontrar los GRUPOS (géneros) que pertenecen a ESTA categoría
@@ -44,7 +45,7 @@ export default function CategoryPage() {
   )
 
   return (
-    <div key={category.slug}>
+    <div key={category.slug} className="scroll-mt-30" id="#main-content">
       {/* Mostrar título de la CATEGORÍA */}
       <Title className="ml-1" title={category.name} />
 
@@ -61,7 +62,7 @@ export default function CategoryPage() {
         }
 
         return (
-          <div key={group.name}>
+          <div key={group.name} className="scroll-mt-15" id={group.name.toLowerCase()}>
             {/* Mostrar título del GRUPO */}
             <Subtitle className="ml-1 !w-[calc(100%-8px)] px-0" subtitle={group.name} />
 

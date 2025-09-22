@@ -9,7 +9,7 @@ import clsx from 'clsx'
 
 import { highlightMatch, handleFocusSearchInput, filterSearchResults } from '@/components'
 import { useUIStore } from '@/store'
-import { initialData } from '@/seed/seed'
+import { initialData } from '@/seed'
 
 interface SearchBoxProps {
   isTopMenu?: boolean
@@ -149,9 +149,9 @@ export function SearchBox({ isTopMenu = false }: SearchBoxProps) {
         <input
           ref={searchRef}
           className={clsx(
-            'focus-serch-box bg-serch-box w-full rounded px-8 py-2 leading-6 font-medium',
+            'focus-search-box bg-search-box w-full rounded px-8 py-2 leading-6 font-medium',
             {
-              'outline-serch-box border-none bg-white outline-1 outline-offset-[-1px] transition-all duration-300 ease-in-out':
+              'outline-search-box border-none bg-white outline-1 outline-offset-[-1px] transition-all duration-300 ease-in-out':
                 isTopMenu,
             }, // Estilos específicos si se usa en el TopMenu
           )}
@@ -166,7 +166,7 @@ export function SearchBox({ isTopMenu = false }: SearchBoxProps) {
         {searchTerm && (
           <button
             aria-label="Borrar búsqueda"
-            className="hover:bg-serch-box-icon-hover absolute right-2 flex items-center rounded p-1 focus:outline-none"
+            className="hover:bg-search-box-icon-hover absolute right-2 flex items-center rounded p-1 focus:outline-none"
             tabIndex={-1}
             type="button"
             onClick={() => {
@@ -187,7 +187,7 @@ export function SearchBox({ isTopMenu = false }: SearchBoxProps) {
             key="search-results"
             ref={resultsRef}
             animate={motionProps.animate} // Aplicar la animación de entrada
-            className="border-serch-box-outline absolute top-[44px] left-0 z-40 w-full rounded border-1 bg-white py-1 text-black shadow-lg"
+            className="border-search-box-outline absolute top-[44px] left-0 !z-50 w-full rounded border-1 bg-white py-1 text-black shadow-lg"
             data-testid="search-results-container"
             exit={motionProps.exit} // Aplicar la animación de salida
             initial={motionProps.initial} // Aplicar el estado inicial de la animación

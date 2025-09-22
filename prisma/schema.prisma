@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "./client"
 }
 
 datasource db {
@@ -29,9 +30,10 @@ enum TableType {
 }
 
 enum PlantType {
-  Orchid
   Adenium_Obesum
+  Bromeliad
   Cactus
+  Orchid
   Succulent
 }
 
@@ -57,12 +59,13 @@ enum AgrochemicalType {
 enum AgrochemicalPorpose {
   //Fertilizantes
   Desarrollo
-  Mantenimiento
   Floracion
+  Mantenimiento
   //Fitosanitarios
+  Acaricida
+  Bactericida
   Fungicida
   Insecticida
-  Acaricida
 }
 
 enum TriggerType {
@@ -77,10 +80,19 @@ enum ActuatorType {
   Humedecer_Suelo
 }
 
-enum SensorType {
-  Humedad_Relativa
-  Temperatura
-  Intensidad_Luminosa
+enum Metric {
+  Humidity
+  Light_intensity
+  Pressure
+  Rain_intensity_percent
+  Temperature
+}
+
+enum EventType {
+  Irrigation_State
+  Rain_State
+  Rain_Duration
+  Device_Status
 }
 
 model Stock {
@@ -127,7 +139,7 @@ model Species {
  * price     Int // Precio para este tamaño específico
  * quantity  Int     @default(0) // Cantidad en stock para este tamaño
  * available Boolean @default(false) // Calculado o manejado manualmente
- * species   Species @relation(fields: [speciesId], references: [id], onDelete: Cascade)
+ * species   Species @relation(fields: [speciesId], references: [id], onDelete: Cascade, onUpdate: Cascade)
  * speciesId String
  * createdAt DateTime @default(now())
  * updatedAt DateTime @updatedAt
@@ -301,9 +313,19 @@ model IrrigationTask {
 }
 
 model SensorReading {
-  id         String     @id @default(uuid())
-  zone       ZoneType
-  sensorType SensorType
-  value      Float
-  timestamp  DateTime   @default(now())
+  id        String   @id @default(uuid())
+  timestamp DateTime @default(now())
+  zone      ZoneType
+  metric    Metric
+  value     Float
+  topic     String
+}
+
+model EventLog {
+  id        String    @id @default(uuid())
+  timestamp DateTime  @default(now())
+  zone      ZoneType
+  eventType EventType
+  value     String
+  topic     String
 }

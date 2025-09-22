@@ -1,7 +1,7 @@
 //type RoleType = 'User' | 'Admin'
 type ZoneType = 'Zona_A' | 'Zona_B' | 'Zona_C' | 'Zona_D'
 type TableType = 'Mesa_1' | 'Mesa_2' | 'Mesa_3' | 'Mesa_4' | 'Mesa_5' | 'Mesa_6'
-type PlantType = 'Orchid' | 'Adenium_Obesum' | 'Cactus' | 'Succulent'
+type PlantType = 'Orchid' | 'Adenium_Obesum' | 'Cactus' | 'Succulent' | 'Bromeliad'
 
 type TaskStatus = 'Pendiente' | 'Completada' | 'Cancelada' | 'Reprogramada'
 type AgrochemicalType = 'Fertilizante' | 'Fitosanitario'
@@ -23,14 +23,15 @@ interface SeedGenus {
 
 interface SeedSpecies {
   name: string
+  description?: string
   genus: {
     name: string // el nombre del genero sera relacionado por UUID en seed-database.ts
   }
   price: number
   slug: string
   stock: {
-    quantity: number
     available: boolean
+    quantity: number
   }
   images: string[]
 }
@@ -169,8 +170,22 @@ export const initialData: SeedData = {
     { name: 'Orostachys', type: 'Succulent' },
     { name: 'Pachyveria', type: 'Succulent' },
     { name: 'Senecio', type: 'Succulent' },
+    { name: 'Cryptanthus', type: 'Bromeliad' },
+    { name: 'Dyckia', type: 'Bromeliad' },
   ],
   species: [
+    /* Bromeliad */
+    /* {
+      name: 'Dyckia brevifolia',
+      genus: { name: 'Dyckia' },
+      price: 25,
+      slug: 'dyckia-brevifolia',
+      stock: { quantity: 1, available: false },
+      images: [
+        'bromeliads/dyckia-brevifolia_0_2000.webp',
+        'bromeliads/dyckia-brevifolia_1_2000.webp',
+      ],
+    }, */
     /* Orchid */
     {
       name: 'Cattleya Violacea',
@@ -221,6 +236,8 @@ export const initialData: SeedData = {
         'orchids/rhyncholaeliocattleya-george-king_0_2000.webp',
         'orchids/rhyncholaeliocattleya-george-king_1_2000.webp',
       ],
+      description:
+        "Esta Rhyncholaeliocattleya George King 'Southern Cross' es un híbrido clásico muy apreciado por sus grandes y vistosas flores de color salmón a rosa melocotón. Presenta un labio amplio y distintivo con flecos (fruncido), a menudo con tonos amarillentos en la garganta. Las flores son dulcemente perfumadas y suelen aparecer una o dos veces al año. Es una planta de crecimiento vigoroso, ideal para añadir un toque de color y fragancia.",
     },
     {
       name: "Rhyncholaeliocattleya Memoria 'Anna Balmores'",
@@ -394,7 +411,7 @@ export const initialData: SeedData = {
       ],
     },
     {
-      name: 'Graptoveria Fénix',
+      name: 'Graptoveria fénix',
       genus: { name: 'Graptoveria' },
       price: 3,
       slug: 'graptoveria-fenix',

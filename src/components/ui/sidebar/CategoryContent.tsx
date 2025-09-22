@@ -16,7 +16,7 @@ export function CategoryContent() {
   if (!route || !route.categories || route.categories.length === 0) return null
 
   return (
-    <div className="lg-small:hidden relative w-full">
+    <div className="tds-xl:hidden relative w-full">
       <div className="mb-5 pb-2 text-2xl font-bold">{route.name}</div>
       <div className="grid w-full grid-cols-1 gap-2.5">
         {route.categories.map((cat) => (

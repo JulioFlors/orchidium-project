@@ -5,7 +5,7 @@ import type { Species } from '@/interfaces/'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 
-import { initialData } from '@/seed/seed'
+import { initialData } from '@/seed'
 import { filterSearchResults, ProductGrid } from '@/components'
 
 // charts mínimo para filtrar la búsqueda
@@ -39,11 +39,11 @@ export default function SearchPageClient() {
       {/* --- Título de la página de resultados --- */}
       <h1
         aria-labelledby="category-heading"
-        className="tracking-2 text-primary mb-2 pt-8 text-[1.625rem] leading-9 font-extralight antialiased"
+        className="tracking-4 text-primary tds-sm:leading-9 tds-sm:text-[26px] tds-sm:tracking-2 mb-2 pt-8 text-[23.5px] leading-7 font-extralight antialiased"
         id=" category-heading"
       >
         Resultados de{' '}
-        <span className="font-medium">
+        <span className="font-medium text-balance hyphens-auto">
           {searchTerm.length >= MIN_SEARCH_TERM_LENGTH ? searchTerm : ''}
         </span>
         {/* Mostrar el término de búsqueda en el título solo si es válido */}
