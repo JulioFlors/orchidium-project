@@ -26,9 +26,22 @@ export default function CartPage() {
   // Todo -> Usando la data del seed por ahora
   const itemsInCart = productsInCart.length
 
+  // ---- Formatear el precio con coma decimal y símbolo de moneda ---- //
+  const formatPrice = (price: number) => {
+    const formattedNumber = new Intl.NumberFormat('es-VE', {
+      style: 'decimal',
+      useGrouping: true,
+      maximumFractionDigits: 2,
+      minimumFractionDigits: 2,
+    }).format(price)
+
+    // Añade manualmente el símbolo '$' al principio
+    return `$${formattedNumber}`
+  }
+
   // ---- Renderizado del carrito con items ---- //
   return (
-    <div className="-mx-6 sm:-mx-9 xl:-mx-12">
+    <div className="tds-sm:-mx-9 tds-xl:-mx-12 -mx-6">
       <div className="tds-lg:max-w-[1200px] tds-sm:px-9 tds-xl:px-12 mx-auto flex w-full max-w-[600px] px-6">
         <div className="flex w-full flex-col">
           {/* ---- Titulo de la pagina ---- */}
@@ -132,7 +145,7 @@ export default function CartPage() {
                         {/* ---- lineitem__price ---- // */}
                         <div className="lineitem__price">
                           <p className="-tracking-2 max-w-[75ch] font-semibold">
-                            ${product.price.toFixed(2)}
+                            {formatPrice(product.price)}
                           </p>
                         </div>
                       </div>
@@ -161,10 +174,10 @@ export default function CartPage() {
 
                     <div className="tracking-4 text-primary tds-sm:text-xl tds-sm:leading-7 flex items-center justify-between py-2 text-[17px] leading-5 font-semibold transition-all duration-300 ease-in-out">
                       <h2>Subtotal</h2>
-                      <h2 translate="no">$10.00</h2>
+                      <h2 translate="no">{formatPrice(10)}</h2>
                     </div>
 
-                    <div className="text-tds-grey-30 text-sm">Tipo de cambio BCV</div>
+                    <div className="text-tds-grey-30 text-sm">Tasa referencial del BCV</div>
                   </div>
 
                   {/* ---- Checkout ---- */}

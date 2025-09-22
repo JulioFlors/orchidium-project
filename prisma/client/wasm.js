@@ -240,10 +240,20 @@ exports.Prisma.IrrigationTaskScalarFieldEnum = {
 
 exports.Prisma.SensorReadingScalarFieldEnum = {
   id: 'id',
+  timestamp: 'timestamp',
   zone: 'zone',
-  sensorType: 'sensorType',
+  metric: 'metric',
   value: 'value',
-  timestamp: 'timestamp'
+  topic: 'topic'
+};
+
+exports.Prisma.EventLogScalarFieldEnum = {
+  id: 'id',
+  timestamp: 'timestamp',
+  zone: 'zone',
+  eventType: 'eventType',
+  value: 'value',
+  topic: 'topic'
 };
 
 exports.Prisma.SortOrder = {
@@ -291,11 +301,12 @@ exports.AgrochemicalType = exports.$Enums.AgrochemicalType = {
 
 exports.AgrochemicalPorpose = exports.$Enums.AgrochemicalPorpose = {
   Desarrollo: 'Desarrollo',
-  Mantenimiento: 'Mantenimiento',
   Floracion: 'Floracion',
+  Mantenimiento: 'Mantenimiento',
+  Acaricida: 'Acaricida',
+  Bactericida: 'Bactericida',
   Fungicida: 'Fungicida',
-  Insecticida: 'Insecticida',
-  Acaricida: 'Acaricida'
+  Insecticida: 'Insecticida'
 };
 
 exports.TaskStatus = exports.$Enums.TaskStatus = {
@@ -317,10 +328,19 @@ exports.ActuatorType = exports.$Enums.ActuatorType = {
   Humedecer_Suelo: 'Humedecer_Suelo'
 };
 
-exports.SensorType = exports.$Enums.SensorType = {
-  Humedad_Relativa: 'Humedad_Relativa',
-  Temperatura: 'Temperatura',
-  Intensidad_Luminosa: 'Intensidad_Luminosa'
+exports.Metric = exports.$Enums.Metric = {
+  Humidity: 'Humidity',
+  Light_intensity: 'Light_intensity',
+  Pressure: 'Pressure',
+  Rain_intensity_percent: 'Rain_intensity_percent',
+  Temperature: 'Temperature'
+};
+
+exports.EventType = exports.$Enums.EventType = {
+  Irrigation_State: 'Irrigation_State',
+  Rain_State: 'Rain_State',
+  Rain_Duration: 'Rain_Duration',
+  Device_Status: 'Device_Status'
 };
 
 exports.Prisma.ModelName = {
@@ -339,7 +359,8 @@ exports.Prisma.ModelName = {
   PhytosanitaryTask: 'PhytosanitaryTask',
   IrrigationProgram: 'IrrigationProgram',
   IrrigationTask: 'IrrigationTask',
-  SensorReading: 'SensorReading'
+  SensorReading: 'SensorReading',
+  EventLog: 'EventLog'
 };
 
 /**

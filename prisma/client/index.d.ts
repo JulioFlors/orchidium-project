@@ -93,6 +93,11 @@ export type IrrigationTask = $Result.DefaultSelection<Prisma.$IrrigationTaskPayl
  * 
  */
 export type SensorReading = $Result.DefaultSelection<Prisma.$SensorReadingPayload>
+/**
+ * Model EventLog
+ * 
+ */
+export type EventLog = $Result.DefaultSelection<Prisma.$EventLogPayload>
 
 /**
  * Enums
@@ -169,11 +174,12 @@ export type AgrochemicalType = (typeof AgrochemicalType)[keyof typeof Agrochemic
 
 export const AgrochemicalPorpose: {
   Desarrollo: 'Desarrollo',
-  Mantenimiento: 'Mantenimiento',
   Floracion: 'Floracion',
+  Mantenimiento: 'Mantenimiento',
+  Acaricida: 'Acaricida',
+  Bactericida: 'Bactericida',
   Fungicida: 'Fungicida',
-  Insecticida: 'Insecticida',
-  Acaricida: 'Acaricida'
+  Insecticida: 'Insecticida'
 };
 
 export type AgrochemicalPorpose = (typeof AgrochemicalPorpose)[keyof typeof AgrochemicalPorpose]
@@ -197,13 +203,25 @@ export const ActuatorType: {
 export type ActuatorType = (typeof ActuatorType)[keyof typeof ActuatorType]
 
 
-export const SensorType: {
-  Humedad_Relativa: 'Humedad_Relativa',
-  Temperatura: 'Temperatura',
-  Intensidad_Luminosa: 'Intensidad_Luminosa'
+export const Metric: {
+  Humidity: 'Humidity',
+  Light_intensity: 'Light_intensity',
+  Pressure: 'Pressure',
+  Rain_intensity_percent: 'Rain_intensity_percent',
+  Temperature: 'Temperature'
 };
 
-export type SensorType = (typeof SensorType)[keyof typeof SensorType]
+export type Metric = (typeof Metric)[keyof typeof Metric]
+
+
+export const EventType: {
+  Irrigation_State: 'Irrigation_State',
+  Rain_State: 'Rain_State',
+  Rain_Duration: 'Rain_Duration',
+  Device_Status: 'Device_Status'
+};
+
+export type EventType = (typeof EventType)[keyof typeof EventType]
 
 }
 
@@ -247,9 +265,13 @@ export type ActuatorType = $Enums.ActuatorType
 
 export const ActuatorType: typeof $Enums.ActuatorType
 
-export type SensorType = $Enums.SensorType
+export type Metric = $Enums.Metric
 
-export const SensorType: typeof $Enums.SensorType
+export const Metric: typeof $Enums.Metric
+
+export type EventType = $Enums.EventType
+
+export const EventType: typeof $Enums.EventType
 
 /**
  * ##  Prisma Client ʲˢ
@@ -535,6 +557,16 @@ export class PrismaClient<
     * ```
     */
   get sensorReading(): Prisma.SensorReadingDelegate<ExtArgs, ClientOptions>;
+
+  /**
+   * `prisma.eventLog`: Exposes CRUD operations for the **EventLog** model.
+    * Example usage:
+    * ```ts
+    * // Fetch zero or more EventLogs
+    * const eventLogs = await prisma.eventLog.findMany()
+    * ```
+    */
+  get eventLog(): Prisma.EventLogDelegate<ExtArgs, ClientOptions>;
 }
 
 export namespace Prisma {
@@ -990,7 +1022,8 @@ export namespace Prisma {
     PhytosanitaryTask: 'PhytosanitaryTask',
     IrrigationProgram: 'IrrigationProgram',
     IrrigationTask: 'IrrigationTask',
-    SensorReading: 'SensorReading'
+    SensorReading: 'SensorReading',
+    EventLog: 'EventLog'
   };
 
   export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -1009,7 +1042,7 @@ export namespace Prisma {
       omit: GlobalOmitOptions
     }
     meta: {
-      modelProps: "stock" | "genus" | "species" | "speciesImage" | "location" | "plant" | "agrochemical" | "fertilizationProgram" | "fertilizationCycle" | "fertilizationTask" | "phytosanitaryProgram" | "phytosanitaryCycle" | "phytosanitaryTask" | "irrigationProgram" | "irrigationTask" | "sensorReading"
+      modelProps: "stock" | "genus" | "species" | "speciesImage" | "location" | "plant" | "agrochemical" | "fertilizationProgram" | "fertilizationCycle" | "fertilizationTask" | "phytosanitaryProgram" | "phytosanitaryCycle" | "phytosanitaryTask" | "irrigationProgram" | "irrigationTask" | "sensorReading" | "eventLog"
       txIsolationLevel: Prisma.TransactionIsolationLevel
     }
     model: {
@@ -2197,6 +2230,80 @@ export namespace Prisma {
           }
         }
       }
+      EventLog: {
+        payload: Prisma.$EventLogPayload<ExtArgs>
+        fields: Prisma.EventLogFieldRefs
+        operations: {
+          findUnique: {
+            args: Prisma.EventLogFindUniqueArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$EventLogPayload> | null
+          }
+          findUniqueOrThrow: {
+            args: Prisma.EventLogFindUniqueOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$EventLogPayload>
+          }
+          findFirst: {
+            args: Prisma.EventLogFindFirstArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$EventLogPayload> | null
+          }
+          findFirstOrThrow: {
+            args: Prisma.EventLogFindFirstOrThrowArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$EventLogPayload>
+          }
+          findMany: {
+            args: Prisma.EventLogFindManyArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$EventLogPayload>[]
+          }
+          create: {
+            args: Prisma.EventLogCreateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$EventLogPayload>
+          }
+          createMany: {
+            args: Prisma.EventLogCreateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          createManyAndReturn: {
+            args: Prisma.EventLogCreateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$EventLogPayload>[]
+          }
+          delete: {
+            args: Prisma.EventLogDeleteArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$EventLogPayload>
+          }
+          update: {
+            args: Prisma.EventLogUpdateArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$EventLogPayload>
+          }
+          deleteMany: {
+            args: Prisma.EventLogDeleteManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateMany: {
+            args: Prisma.EventLogUpdateManyArgs<ExtArgs>
+            result: BatchPayload
+          }
+          updateManyAndReturn: {
+            args: Prisma.EventLogUpdateManyAndReturnArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$EventLogPayload>[]
+          }
+          upsert: {
+            args: Prisma.EventLogUpsertArgs<ExtArgs>
+            result: $Utils.PayloadToResult<Prisma.$EventLogPayload>
+          }
+          aggregate: {
+            args: Prisma.EventLogAggregateArgs<ExtArgs>
+            result: $Utils.Optional<AggregateEventLog>
+          }
+          groupBy: {
+            args: Prisma.EventLogGroupByArgs<ExtArgs>
+            result: $Utils.Optional<EventLogGroupByOutputType>[]
+          }
+          count: {
+            args: Prisma.EventLogCountArgs<ExtArgs>
+            result: $Utils.Optional<EventLogCountAggregateOutputType> | number
+          }
+        }
+      }
     }
   } & {
     other: {
@@ -2297,6 +2404,7 @@ export namespace Prisma {
     irrigationProgram?: IrrigationProgramOmit
     irrigationTask?: IrrigationTaskOmit
     sensorReading?: SensorReadingOmit
+    eventLog?: EventLogOmit
   }
 
   /* Types for Logging */
@@ -19307,26 +19415,29 @@ export namespace Prisma {
 
   export type SensorReadingMinAggregateOutputType = {
     id: string | null
-    zone: $Enums.ZoneType | null
-    sensorType: $Enums.SensorType | null
-    value: number | null
     timestamp: Date | null
+    zone: $Enums.ZoneType | null
+    metric: $Enums.Metric | null
+    value: number | null
+    topic: string | null
   }
 
   export type SensorReadingMaxAggregateOutputType = {
     id: string | null
-    zone: $Enums.ZoneType | null
-    sensorType: $Enums.SensorType | null
-    value: number | null
     timestamp: Date | null
+    zone: $Enums.ZoneType | null
+    metric: $Enums.Metric | null
+    value: number | null
+    topic: string | null
   }
 
   export type SensorReadingCountAggregateOutputType = {
     id: number
-    zone: number
-    sensorType: number
-    value: number
     timestamp: number
+    zone: number
+    metric: number
+    value: number
+    topic: number
     _all: number
   }
 
@@ -19341,26 +19452,29 @@ export namespace Prisma {
 
   export type SensorReadingMinAggregateInputType = {
     id?: true
-    zone?: true
-    sensorType?: true
-    value?: true
     timestamp?: true
+    zone?: true
+    metric?: true
+    value?: true
+    topic?: true
   }
 
   export type SensorReadingMaxAggregateInputType = {
     id?: true
-    zone?: true
-    sensorType?: true
-    value?: true
     timestamp?: true
+    zone?: true
+    metric?: true
+    value?: true
+    topic?: true
   }
 
   export type SensorReadingCountAggregateInputType = {
     id?: true
-    zone?: true
-    sensorType?: true
-    value?: true
     timestamp?: true
+    zone?: true
+    metric?: true
+    value?: true
+    topic?: true
     _all?: true
   }
 
@@ -19452,10 +19566,11 @@ export namespace Prisma {
 
   export type SensorReadingGroupByOutputType = {
     id: string
-    zone: $Enums.ZoneType
-    sensorType: $Enums.SensorType
-    value: number
     timestamp: Date
+    zone: $Enums.ZoneType
+    metric: $Enums.Metric
+    value: number
+    topic: string
     _count: SensorReadingCountAggregateOutputType | null
     _avg: SensorReadingAvgAggregateOutputType | null
     _sum: SensorReadingSumAggregateOutputType | null
@@ -19479,47 +19594,52 @@ export namespace Prisma {
 
   export type SensorReadingSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
-    zone?: boolean
-    sensorType?: boolean
-    value?: boolean
     timestamp?: boolean
+    zone?: boolean
+    metric?: boolean
+    value?: boolean
+    topic?: boolean
   }, ExtArgs["result"]["sensorReading"]>
 
   export type SensorReadingSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
-    zone?: boolean
-    sensorType?: boolean
-    value?: boolean
     timestamp?: boolean
+    zone?: boolean
+    metric?: boolean
+    value?: boolean
+    topic?: boolean
   }, ExtArgs["result"]["sensorReading"]>
 
   export type SensorReadingSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
-    zone?: boolean
-    sensorType?: boolean
-    value?: boolean
     timestamp?: boolean
+    zone?: boolean
+    metric?: boolean
+    value?: boolean
+    topic?: boolean
   }, ExtArgs["result"]["sensorReading"]>
 
   export type SensorReadingSelectScalar = {
     id?: boolean
-    zone?: boolean
-    sensorType?: boolean
-    value?: boolean
     timestamp?: boolean
+    zone?: boolean
+    metric?: boolean
+    value?: boolean
+    topic?: boolean
   }
 
-  export type SensorReadingOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "zone" | "sensorType" | "value" | "timestamp", ExtArgs["result"]["sensorReading"]>
+  export type SensorReadingOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "timestamp" | "zone" | "metric" | "value" | "topic", ExtArgs["result"]["sensorReading"]>
 
   export type $SensorReadingPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     name: "SensorReading"
     objects: {}
     scalars: $Extensions.GetPayloadResult<{
       id: string
-      zone: $Enums.ZoneType
-      sensorType: $Enums.SensorType
-      value: number
       timestamp: Date
+      zone: $Enums.ZoneType
+      metric: $Enums.Metric
+      value: number
+      topic: string
     }, ExtArgs["result"]["sensorReading"]>
     composites: {}
   }
@@ -19944,10 +20064,11 @@ export namespace Prisma {
    */
   interface SensorReadingFieldRefs {
     readonly id: FieldRef<"SensorReading", 'String'>
-    readonly zone: FieldRef<"SensorReading", 'ZoneType'>
-    readonly sensorType: FieldRef<"SensorReading", 'SensorType'>
-    readonly value: FieldRef<"SensorReading", 'Float'>
     readonly timestamp: FieldRef<"SensorReading", 'DateTime'>
+    readonly zone: FieldRef<"SensorReading", 'ZoneType'>
+    readonly metric: FieldRef<"SensorReading", 'Metric'>
+    readonly value: FieldRef<"SensorReading", 'Float'>
+    readonly topic: FieldRef<"SensorReading", 'String'>
   }
     
 
@@ -20315,6 +20436,1014 @@ export namespace Prisma {
 
 
   /**
+   * Model EventLog
+   */
+
+  export type AggregateEventLog = {
+    _count: EventLogCountAggregateOutputType | null
+    _min: EventLogMinAggregateOutputType | null
+    _max: EventLogMaxAggregateOutputType | null
+  }
+
+  export type EventLogMinAggregateOutputType = {
+    id: string | null
+    timestamp: Date | null
+    zone: $Enums.ZoneType | null
+    eventType: $Enums.EventType | null
+    value: string | null
+    topic: string | null
+  }
+
+  export type EventLogMaxAggregateOutputType = {
+    id: string | null
+    timestamp: Date | null
+    zone: $Enums.ZoneType | null
+    eventType: $Enums.EventType | null
+    value: string | null
+    topic: string | null
+  }
+
+  export type EventLogCountAggregateOutputType = {
+    id: number
+    timestamp: number
+    zone: number
+    eventType: number
+    value: number
+    topic: number
+    _all: number
+  }
+
+
+  export type EventLogMinAggregateInputType = {
+    id?: true
+    timestamp?: true
+    zone?: true
+    eventType?: true
+    value?: true
+    topic?: true
+  }
+
+  export type EventLogMaxAggregateInputType = {
+    id?: true
+    timestamp?: true
+    zone?: true
+    eventType?: true
+    value?: true
+    topic?: true
+  }
+
+  export type EventLogCountAggregateInputType = {
+    id?: true
+    timestamp?: true
+    zone?: true
+    eventType?: true
+    value?: true
+    topic?: true
+    _all?: true
+  }
+
+  export type EventLogAggregateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which EventLog to aggregate.
+     */
+    where?: EventLogWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of EventLogs to fetch.
+     */
+    orderBy?: EventLogOrderByWithRelationInput | EventLogOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the start position
+     */
+    cursor?: EventLogWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` EventLogs from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` EventLogs.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Count returned EventLogs
+    **/
+    _count?: true | EventLogCountAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the minimum value
+    **/
+    _min?: EventLogMinAggregateInputType
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/aggregations Aggregation Docs}
+     * 
+     * Select which fields to find the maximum value
+    **/
+    _max?: EventLogMaxAggregateInputType
+  }
+
+  export type GetEventLogAggregateType<T extends EventLogAggregateArgs> = {
+        [P in keyof T & keyof AggregateEventLog]: P extends '_count' | 'count'
+      ? T[P] extends true
+        ? number
+        : GetScalarType<T[P], AggregateEventLog[P]>
+      : GetScalarType<T[P], AggregateEventLog[P]>
+  }
+
+
+
+
+  export type EventLogGroupByArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    where?: EventLogWhereInput
+    orderBy?: EventLogOrderByWithAggregationInput | EventLogOrderByWithAggregationInput[]
+    by: EventLogScalarFieldEnum[] | EventLogScalarFieldEnum
+    having?: EventLogScalarWhereWithAggregatesInput
+    take?: number
+    skip?: number
+    _count?: EventLogCountAggregateInputType | true
+    _min?: EventLogMinAggregateInputType
+    _max?: EventLogMaxAggregateInputType
+  }
+
+  export type EventLogGroupByOutputType = {
+    id: string
+    timestamp: Date
+    zone: $Enums.ZoneType
+    eventType: $Enums.EventType
+    value: string
+    topic: string
+    _count: EventLogCountAggregateOutputType | null
+    _min: EventLogMinAggregateOutputType | null
+    _max: EventLogMaxAggregateOutputType | null
+  }
+
+  type GetEventLogGroupByPayload<T extends EventLogGroupByArgs> = Prisma.PrismaPromise<
+    Array<
+      PickEnumerable<EventLogGroupByOutputType, T['by']> &
+        {
+          [P in ((keyof T) & (keyof EventLogGroupByOutputType))]: P extends '_count'
+            ? T[P] extends boolean
+              ? number
+              : GetScalarType<T[P], EventLogGroupByOutputType[P]>
+            : GetScalarType<T[P], EventLogGroupByOutputType[P]>
+        }
+      >
+    >
+
+
+  export type EventLogSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    timestamp?: boolean
+    zone?: boolean
+    eventType?: boolean
+    value?: boolean
+    topic?: boolean
+  }, ExtArgs["result"]["eventLog"]>
+
+  export type EventLogSelectCreateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    timestamp?: boolean
+    zone?: boolean
+    eventType?: boolean
+    value?: boolean
+    topic?: boolean
+  }, ExtArgs["result"]["eventLog"]>
+
+  export type EventLogSelectUpdateManyAndReturn<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
+    id?: boolean
+    timestamp?: boolean
+    zone?: boolean
+    eventType?: boolean
+    value?: boolean
+    topic?: boolean
+  }, ExtArgs["result"]["eventLog"]>
+
+  export type EventLogSelectScalar = {
+    id?: boolean
+    timestamp?: boolean
+    zone?: boolean
+    eventType?: boolean
+    value?: boolean
+    topic?: boolean
+  }
+
+  export type EventLogOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "timestamp" | "zone" | "eventType" | "value" | "topic", ExtArgs["result"]["eventLog"]>
+
+  export type $EventLogPayload<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    name: "EventLog"
+    objects: {}
+    scalars: $Extensions.GetPayloadResult<{
+      id: string
+      timestamp: Date
+      zone: $Enums.ZoneType
+      eventType: $Enums.EventType
+      value: string
+      topic: string
+    }, ExtArgs["result"]["eventLog"]>
+    composites: {}
+  }
+
+  type EventLogGetPayload<S extends boolean | null | undefined | EventLogDefaultArgs> = $Result.GetResult<Prisma.$EventLogPayload, S>
+
+  type EventLogCountArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> =
+    Omit<EventLogFindManyArgs, 'select' | 'include' | 'distinct' | 'omit'> & {
+      select?: EventLogCountAggregateInputType | true
+    }
+
+  export interface EventLogDelegate<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> {
+    [K: symbol]: { types: Prisma.TypeMap<ExtArgs>['model']['EventLog'], meta: { name: 'EventLog' } }
+    /**
+     * Find zero or one EventLog that matches the filter.
+     * @param {EventLogFindUniqueArgs} args - Arguments to find a EventLog
+     * @example
+     * // Get one EventLog
+     * const eventLog = await prisma.eventLog.findUnique({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUnique<T extends EventLogFindUniqueArgs>(args: SelectSubset<T, EventLogFindUniqueArgs<ExtArgs>>): Prisma__EventLogClient<$Result.GetResult<Prisma.$EventLogPayload<ExtArgs>, T, "findUnique", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find one EventLog that matches the filter or throw an error with `error.code='P2025'`
+     * if no matches were found.
+     * @param {EventLogFindUniqueOrThrowArgs} args - Arguments to find a EventLog
+     * @example
+     * // Get one EventLog
+     * const eventLog = await prisma.eventLog.findUniqueOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findUniqueOrThrow<T extends EventLogFindUniqueOrThrowArgs>(args: SelectSubset<T, EventLogFindUniqueOrThrowArgs<ExtArgs>>): Prisma__EventLogClient<$Result.GetResult<Prisma.$EventLogPayload<ExtArgs>, T, "findUniqueOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first EventLog that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {EventLogFindFirstArgs} args - Arguments to find a EventLog
+     * @example
+     * // Get one EventLog
+     * const eventLog = await prisma.eventLog.findFirst({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirst<T extends EventLogFindFirstArgs>(args?: SelectSubset<T, EventLogFindFirstArgs<ExtArgs>>): Prisma__EventLogClient<$Result.GetResult<Prisma.$EventLogPayload<ExtArgs>, T, "findFirst", GlobalOmitOptions> | null, null, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find the first EventLog that matches the filter or
+     * throw `PrismaKnownClientError` with `P2025` code if no matches were found.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {EventLogFindFirstOrThrowArgs} args - Arguments to find a EventLog
+     * @example
+     * // Get one EventLog
+     * const eventLog = await prisma.eventLog.findFirstOrThrow({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     */
+    findFirstOrThrow<T extends EventLogFindFirstOrThrowArgs>(args?: SelectSubset<T, EventLogFindFirstOrThrowArgs<ExtArgs>>): Prisma__EventLogClient<$Result.GetResult<Prisma.$EventLogPayload<ExtArgs>, T, "findFirstOrThrow", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Find zero or more EventLogs that matches the filter.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {EventLogFindManyArgs} args - Arguments to filter and select certain fields only.
+     * @example
+     * // Get all EventLogs
+     * const eventLogs = await prisma.eventLog.findMany()
+     * 
+     * // Get first 10 EventLogs
+     * const eventLogs = await prisma.eventLog.findMany({ take: 10 })
+     * 
+     * // Only select the `id`
+     * const eventLogWithIdOnly = await prisma.eventLog.findMany({ select: { id: true } })
+     * 
+     */
+    findMany<T extends EventLogFindManyArgs>(args?: SelectSubset<T, EventLogFindManyArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$EventLogPayload<ExtArgs>, T, "findMany", GlobalOmitOptions>>
+
+    /**
+     * Create a EventLog.
+     * @param {EventLogCreateArgs} args - Arguments to create a EventLog.
+     * @example
+     * // Create one EventLog
+     * const EventLog = await prisma.eventLog.create({
+     *   data: {
+     *     // ... data to create a EventLog
+     *   }
+     * })
+     * 
+     */
+    create<T extends EventLogCreateArgs>(args: SelectSubset<T, EventLogCreateArgs<ExtArgs>>): Prisma__EventLogClient<$Result.GetResult<Prisma.$EventLogPayload<ExtArgs>, T, "create", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Create many EventLogs.
+     * @param {EventLogCreateManyArgs} args - Arguments to create many EventLogs.
+     * @example
+     * // Create many EventLogs
+     * const eventLog = await prisma.eventLog.createMany({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     *     
+     */
+    createMany<T extends EventLogCreateManyArgs>(args?: SelectSubset<T, EventLogCreateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Create many EventLogs and returns the data saved in the database.
+     * @param {EventLogCreateManyAndReturnArgs} args - Arguments to create many EventLogs.
+     * @example
+     * // Create many EventLogs
+     * const eventLog = await prisma.eventLog.createManyAndReturn({
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Create many EventLogs and only return the `id`
+     * const eventLogWithIdOnly = await prisma.eventLog.createManyAndReturn({
+     *   select: { id: true },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    createManyAndReturn<T extends EventLogCreateManyAndReturnArgs>(args?: SelectSubset<T, EventLogCreateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$EventLogPayload<ExtArgs>, T, "createManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Delete a EventLog.
+     * @param {EventLogDeleteArgs} args - Arguments to delete one EventLog.
+     * @example
+     * // Delete one EventLog
+     * const EventLog = await prisma.eventLog.delete({
+     *   where: {
+     *     // ... filter to delete one EventLog
+     *   }
+     * })
+     * 
+     */
+    delete<T extends EventLogDeleteArgs>(args: SelectSubset<T, EventLogDeleteArgs<ExtArgs>>): Prisma__EventLogClient<$Result.GetResult<Prisma.$EventLogPayload<ExtArgs>, T, "delete", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Update one EventLog.
+     * @param {EventLogUpdateArgs} args - Arguments to update one EventLog.
+     * @example
+     * // Update one EventLog
+     * const eventLog = await prisma.eventLog.update({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    update<T extends EventLogUpdateArgs>(args: SelectSubset<T, EventLogUpdateArgs<ExtArgs>>): Prisma__EventLogClient<$Result.GetResult<Prisma.$EventLogPayload<ExtArgs>, T, "update", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+    /**
+     * Delete zero or more EventLogs.
+     * @param {EventLogDeleteManyArgs} args - Arguments to filter EventLogs to delete.
+     * @example
+     * // Delete a few EventLogs
+     * const { count } = await prisma.eventLog.deleteMany({
+     *   where: {
+     *     // ... provide filter here
+     *   }
+     * })
+     * 
+     */
+    deleteMany<T extends EventLogDeleteManyArgs>(args?: SelectSubset<T, EventLogDeleteManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more EventLogs.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {EventLogUpdateManyArgs} args - Arguments to update one or more rows.
+     * @example
+     * // Update many EventLogs
+     * const eventLog = await prisma.eventLog.updateMany({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: {
+     *     // ... provide data here
+     *   }
+     * })
+     * 
+     */
+    updateMany<T extends EventLogUpdateManyArgs>(args: SelectSubset<T, EventLogUpdateManyArgs<ExtArgs>>): Prisma.PrismaPromise<BatchPayload>
+
+    /**
+     * Update zero or more EventLogs and returns the data updated in the database.
+     * @param {EventLogUpdateManyAndReturnArgs} args - Arguments to update many EventLogs.
+     * @example
+     * // Update many EventLogs
+     * const eventLog = await prisma.eventLog.updateManyAndReturn({
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * 
+     * // Update zero or more EventLogs and only return the `id`
+     * const eventLogWithIdOnly = await prisma.eventLog.updateManyAndReturn({
+     *   select: { id: true },
+     *   where: {
+     *     // ... provide filter here
+     *   },
+     *   data: [
+     *     // ... provide data here
+     *   ]
+     * })
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * 
+     */
+    updateManyAndReturn<T extends EventLogUpdateManyAndReturnArgs>(args: SelectSubset<T, EventLogUpdateManyAndReturnArgs<ExtArgs>>): Prisma.PrismaPromise<$Result.GetResult<Prisma.$EventLogPayload<ExtArgs>, T, "updateManyAndReturn", GlobalOmitOptions>>
+
+    /**
+     * Create or update one EventLog.
+     * @param {EventLogUpsertArgs} args - Arguments to update or create a EventLog.
+     * @example
+     * // Update or create a EventLog
+     * const eventLog = await prisma.eventLog.upsert({
+     *   create: {
+     *     // ... data to create a EventLog
+     *   },
+     *   update: {
+     *     // ... in case it already exists, update
+     *   },
+     *   where: {
+     *     // ... the filter for the EventLog we want to update
+     *   }
+     * })
+     */
+    upsert<T extends EventLogUpsertArgs>(args: SelectSubset<T, EventLogUpsertArgs<ExtArgs>>): Prisma__EventLogClient<$Result.GetResult<Prisma.$EventLogPayload<ExtArgs>, T, "upsert", GlobalOmitOptions>, never, ExtArgs, GlobalOmitOptions>
+
+
+    /**
+     * Count the number of EventLogs.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {EventLogCountArgs} args - Arguments to filter EventLogs to count.
+     * @example
+     * // Count the number of EventLogs
+     * const count = await prisma.eventLog.count({
+     *   where: {
+     *     // ... the filter for the EventLogs we want to count
+     *   }
+     * })
+    **/
+    count<T extends EventLogCountArgs>(
+      args?: Subset<T, EventLogCountArgs>,
+    ): Prisma.PrismaPromise<
+      T extends $Utils.Record<'select', any>
+        ? T['select'] extends true
+          ? number
+          : GetScalarType<T['select'], EventLogCountAggregateOutputType>
+        : number
+    >
+
+    /**
+     * Allows you to perform aggregations operations on a EventLog.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {EventLogAggregateArgs} args - Select which aggregations you would like to apply and on what fields.
+     * @example
+     * // Ordered by age ascending
+     * // Where email contains prisma.io
+     * // Limited to the 10 users
+     * const aggregations = await prisma.user.aggregate({
+     *   _avg: {
+     *     age: true,
+     *   },
+     *   where: {
+     *     email: {
+     *       contains: "prisma.io",
+     *     },
+     *   },
+     *   orderBy: {
+     *     age: "asc",
+     *   },
+     *   take: 10,
+     * })
+    **/
+    aggregate<T extends EventLogAggregateArgs>(args: Subset<T, EventLogAggregateArgs>): Prisma.PrismaPromise<GetEventLogAggregateType<T>>
+
+    /**
+     * Group by EventLog.
+     * Note, that providing `undefined` is treated as the value not being there.
+     * Read more here: https://pris.ly/d/null-undefined
+     * @param {EventLogGroupByArgs} args - Group by arguments.
+     * @example
+     * // Group by city, order by createdAt, get count
+     * const result = await prisma.user.groupBy({
+     *   by: ['city', 'createdAt'],
+     *   orderBy: {
+     *     createdAt: true
+     *   },
+     *   _count: {
+     *     _all: true
+     *   },
+     * })
+     * 
+    **/
+    groupBy<
+      T extends EventLogGroupByArgs,
+      HasSelectOrTake extends Or<
+        Extends<'skip', Keys<T>>,
+        Extends<'take', Keys<T>>
+      >,
+      OrderByArg extends True extends HasSelectOrTake
+        ? { orderBy: EventLogGroupByArgs['orderBy'] }
+        : { orderBy?: EventLogGroupByArgs['orderBy'] },
+      OrderFields extends ExcludeUnderscoreKeys<Keys<MaybeTupleToUnion<T['orderBy']>>>,
+      ByFields extends MaybeTupleToUnion<T['by']>,
+      ByValid extends Has<ByFields, OrderFields>,
+      HavingFields extends GetHavingFields<T['having']>,
+      HavingValid extends Has<ByFields, HavingFields>,
+      ByEmpty extends T['by'] extends never[] ? True : False,
+      InputErrors extends ByEmpty extends True
+      ? `Error: "by" must not be empty.`
+      : HavingValid extends False
+      ? {
+          [P in HavingFields]: P extends ByFields
+            ? never
+            : P extends string
+            ? `Error: Field "${P}" used in "having" needs to be provided in "by".`
+            : [
+                Error,
+                'Field ',
+                P,
+                ` in "having" needs to be provided in "by"`,
+              ]
+        }[HavingFields]
+      : 'take' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "take", you also need to provide "orderBy"'
+      : 'skip' extends Keys<T>
+      ? 'orderBy' extends Keys<T>
+        ? ByValid extends True
+          ? {}
+          : {
+              [P in OrderFields]: P extends ByFields
+                ? never
+                : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+            }[OrderFields]
+        : 'Error: If you provide "skip", you also need to provide "orderBy"'
+      : ByValid extends True
+      ? {}
+      : {
+          [P in OrderFields]: P extends ByFields
+            ? never
+            : `Error: Field "${P}" in "orderBy" needs to be provided in "by"`
+        }[OrderFields]
+    >(args: SubsetIntersection<T, EventLogGroupByArgs, OrderByArg> & InputErrors): {} extends InputErrors ? GetEventLogGroupByPayload<T> : Prisma.PrismaPromise<InputErrors>
+  /**
+   * Fields of the EventLog model
+   */
+  readonly fields: EventLogFieldRefs;
+  }
+
+  /**
+   * The delegate class that acts as a "Promise-like" for EventLog.
+   * Why is this prefixed with `Prisma__`?
+   * Because we want to prevent naming conflicts as mentioned in
+   * https://github.com/prisma/prisma-client-js/issues/707
+   */
+  export interface Prisma__EventLogClient<T, Null = never, ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs, GlobalOmitOptions = {}> extends Prisma.PrismaPromise<T> {
+    readonly [Symbol.toStringTag]: "PrismaPromise"
+    /**
+     * Attaches callbacks for the resolution and/or rejection of the Promise.
+     * @param onfulfilled The callback to execute when the Promise is resolved.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of which ever callback is executed.
+     */
+    then<TResult1 = T, TResult2 = never>(onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null, onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null): $Utils.JsPromise<TResult1 | TResult2>
+    /**
+     * Attaches a callback for only the rejection of the Promise.
+     * @param onrejected The callback to execute when the Promise is rejected.
+     * @returns A Promise for the completion of the callback.
+     */
+    catch<TResult = never>(onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null): $Utils.JsPromise<T | TResult>
+    /**
+     * Attaches a callback that is invoked when the Promise is settled (fulfilled or rejected). The
+     * resolved value cannot be modified from the callback.
+     * @param onfinally The callback to execute when the Promise is settled (fulfilled or rejected).
+     * @returns A Promise for the completion of the callback.
+     */
+    finally(onfinally?: (() => void) | undefined | null): $Utils.JsPromise<T>
+  }
+
+
+
+
+  /**
+   * Fields of the EventLog model
+   */
+  interface EventLogFieldRefs {
+    readonly id: FieldRef<"EventLog", 'String'>
+    readonly timestamp: FieldRef<"EventLog", 'DateTime'>
+    readonly zone: FieldRef<"EventLog", 'ZoneType'>
+    readonly eventType: FieldRef<"EventLog", 'EventType'>
+    readonly value: FieldRef<"EventLog", 'String'>
+    readonly topic: FieldRef<"EventLog", 'String'>
+  }
+    
+
+  // Custom InputTypes
+  /**
+   * EventLog findUnique
+   */
+  export type EventLogFindUniqueArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the EventLog
+     */
+    select?: EventLogSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the EventLog
+     */
+    omit?: EventLogOmit<ExtArgs> | null
+    /**
+     * Filter, which EventLog to fetch.
+     */
+    where: EventLogWhereUniqueInput
+  }
+
+  /**
+   * EventLog findUniqueOrThrow
+   */
+  export type EventLogFindUniqueOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the EventLog
+     */
+    select?: EventLogSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the EventLog
+     */
+    omit?: EventLogOmit<ExtArgs> | null
+    /**
+     * Filter, which EventLog to fetch.
+     */
+    where: EventLogWhereUniqueInput
+  }
+
+  /**
+   * EventLog findFirst
+   */
+  export type EventLogFindFirstArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the EventLog
+     */
+    select?: EventLogSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the EventLog
+     */
+    omit?: EventLogOmit<ExtArgs> | null
+    /**
+     * Filter, which EventLog to fetch.
+     */
+    where?: EventLogWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of EventLogs to fetch.
+     */
+    orderBy?: EventLogOrderByWithRelationInput | EventLogOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for EventLogs.
+     */
+    cursor?: EventLogWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` EventLogs from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` EventLogs.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of EventLogs.
+     */
+    distinct?: EventLogScalarFieldEnum | EventLogScalarFieldEnum[]
+  }
+
+  /**
+   * EventLog findFirstOrThrow
+   */
+  export type EventLogFindFirstOrThrowArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the EventLog
+     */
+    select?: EventLogSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the EventLog
+     */
+    omit?: EventLogOmit<ExtArgs> | null
+    /**
+     * Filter, which EventLog to fetch.
+     */
+    where?: EventLogWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of EventLogs to fetch.
+     */
+    orderBy?: EventLogOrderByWithRelationInput | EventLogOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for searching for EventLogs.
+     */
+    cursor?: EventLogWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` EventLogs from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` EventLogs.
+     */
+    skip?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/distinct Distinct Docs}
+     * 
+     * Filter by unique combinations of EventLogs.
+     */
+    distinct?: EventLogScalarFieldEnum | EventLogScalarFieldEnum[]
+  }
+
+  /**
+   * EventLog findMany
+   */
+  export type EventLogFindManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the EventLog
+     */
+    select?: EventLogSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the EventLog
+     */
+    omit?: EventLogOmit<ExtArgs> | null
+    /**
+     * Filter, which EventLogs to fetch.
+     */
+    where?: EventLogWhereInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/sorting Sorting Docs}
+     * 
+     * Determine the order of EventLogs to fetch.
+     */
+    orderBy?: EventLogOrderByWithRelationInput | EventLogOrderByWithRelationInput[]
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination#cursor-based-pagination Cursor Docs}
+     * 
+     * Sets the position for listing EventLogs.
+     */
+    cursor?: EventLogWhereUniqueInput
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Take `±n` EventLogs from the position of the cursor.
+     */
+    take?: number
+    /**
+     * {@link https://www.prisma.io/docs/concepts/components/prisma-client/pagination Pagination Docs}
+     * 
+     * Skip the first `n` EventLogs.
+     */
+    skip?: number
+    distinct?: EventLogScalarFieldEnum | EventLogScalarFieldEnum[]
+  }
+
+  /**
+   * EventLog create
+   */
+  export type EventLogCreateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the EventLog
+     */
+    select?: EventLogSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the EventLog
+     */
+    omit?: EventLogOmit<ExtArgs> | null
+    /**
+     * The data needed to create a EventLog.
+     */
+    data: XOR<EventLogCreateInput, EventLogUncheckedCreateInput>
+  }
+
+  /**
+   * EventLog createMany
+   */
+  export type EventLogCreateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to create many EventLogs.
+     */
+    data: EventLogCreateManyInput | EventLogCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * EventLog createManyAndReturn
+   */
+  export type EventLogCreateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the EventLog
+     */
+    select?: EventLogSelectCreateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the EventLog
+     */
+    omit?: EventLogOmit<ExtArgs> | null
+    /**
+     * The data used to create many EventLogs.
+     */
+    data: EventLogCreateManyInput | EventLogCreateManyInput[]
+    skipDuplicates?: boolean
+  }
+
+  /**
+   * EventLog update
+   */
+  export type EventLogUpdateArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the EventLog
+     */
+    select?: EventLogSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the EventLog
+     */
+    omit?: EventLogOmit<ExtArgs> | null
+    /**
+     * The data needed to update a EventLog.
+     */
+    data: XOR<EventLogUpdateInput, EventLogUncheckedUpdateInput>
+    /**
+     * Choose, which EventLog to update.
+     */
+    where: EventLogWhereUniqueInput
+  }
+
+  /**
+   * EventLog updateMany
+   */
+  export type EventLogUpdateManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * The data used to update EventLogs.
+     */
+    data: XOR<EventLogUpdateManyMutationInput, EventLogUncheckedUpdateManyInput>
+    /**
+     * Filter which EventLogs to update
+     */
+    where?: EventLogWhereInput
+    /**
+     * Limit how many EventLogs to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * EventLog updateManyAndReturn
+   */
+  export type EventLogUpdateManyAndReturnArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the EventLog
+     */
+    select?: EventLogSelectUpdateManyAndReturn<ExtArgs> | null
+    /**
+     * Omit specific fields from the EventLog
+     */
+    omit?: EventLogOmit<ExtArgs> | null
+    /**
+     * The data used to update EventLogs.
+     */
+    data: XOR<EventLogUpdateManyMutationInput, EventLogUncheckedUpdateManyInput>
+    /**
+     * Filter which EventLogs to update
+     */
+    where?: EventLogWhereInput
+    /**
+     * Limit how many EventLogs to update.
+     */
+    limit?: number
+  }
+
+  /**
+   * EventLog upsert
+   */
+  export type EventLogUpsertArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the EventLog
+     */
+    select?: EventLogSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the EventLog
+     */
+    omit?: EventLogOmit<ExtArgs> | null
+    /**
+     * The filter to search for the EventLog to update in case it exists.
+     */
+    where: EventLogWhereUniqueInput
+    /**
+     * In case the EventLog found by the `where` argument doesn't exist, create a new EventLog with this data.
+     */
+    create: XOR<EventLogCreateInput, EventLogUncheckedCreateInput>
+    /**
+     * In case the EventLog was found with the provided `where` argument, update it with this data.
+     */
+    update: XOR<EventLogUpdateInput, EventLogUncheckedUpdateInput>
+  }
+
+  /**
+   * EventLog delete
+   */
+  export type EventLogDeleteArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the EventLog
+     */
+    select?: EventLogSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the EventLog
+     */
+    omit?: EventLogOmit<ExtArgs> | null
+    /**
+     * Filter which EventLog to delete.
+     */
+    where: EventLogWhereUniqueInput
+  }
+
+  /**
+   * EventLog deleteMany
+   */
+  export type EventLogDeleteManyArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Filter which EventLogs to delete
+     */
+    where?: EventLogWhereInput
+    /**
+     * Limit how many EventLogs to delete.
+     */
+    limit?: number
+  }
+
+  /**
+   * EventLog without action
+   */
+  export type EventLogDefaultArgs<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
+    /**
+     * Select specific fields to fetch from the EventLog
+     */
+    select?: EventLogSelect<ExtArgs> | null
+    /**
+     * Omit specific fields from the EventLog
+     */
+    omit?: EventLogOmit<ExtArgs> | null
+  }
+
+
+  /**
    * Enums
    */
 
@@ -20496,13 +21625,26 @@ export namespace Prisma {
 
   export const SensorReadingScalarFieldEnum: {
     id: 'id',
+    timestamp: 'timestamp',
     zone: 'zone',
-    sensorType: 'sensorType',
+    metric: 'metric',
     value: 'value',
-    timestamp: 'timestamp'
+    topic: 'topic'
   };
 
   export type SensorReadingScalarFieldEnum = (typeof SensorReadingScalarFieldEnum)[keyof typeof SensorReadingScalarFieldEnum]
+
+
+  export const EventLogScalarFieldEnum: {
+    id: 'id',
+    timestamp: 'timestamp',
+    zone: 'zone',
+    eventType: 'eventType',
+    value: 'value',
+    topic: 'topic'
+  };
+
+  export type EventLogScalarFieldEnum = (typeof EventLogScalarFieldEnum)[keyof typeof EventLogScalarFieldEnum]
 
 
   export const SortOrder: {
@@ -20696,16 +21838,16 @@ export namespace Prisma {
 
 
   /**
-   * Reference to a field of type 'SensorType'
+   * Reference to a field of type 'Metric'
    */
-  export type EnumSensorTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'SensorType'>
+  export type EnumMetricFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Metric'>
     
 
 
   /**
-   * Reference to a field of type 'SensorType[]'
+   * Reference to a field of type 'Metric[]'
    */
-  export type ListEnumSensorTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'SensorType[]'>
+  export type ListEnumMetricFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Metric[]'>
     
 
 
@@ -20720,6 +21862,20 @@ export namespace Prisma {
    * Reference to a field of type 'Float[]'
    */
   export type ListFloatFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'Float[]'>
+    
+
+
+  /**
+   * Reference to a field of type 'EventType'
+   */
+  export type EnumEventTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'EventType'>
+    
+
+
+  /**
+   * Reference to a field of type 'EventType[]'
+   */
+  export type ListEnumEventTypeFieldRefInput<$PrismaModel> = FieldRefInputType<$PrismaModel, 'EventType[]'>
     
   /**
    * Deep Input Types
@@ -21616,18 +22772,20 @@ export namespace Prisma {
     OR?: SensorReadingWhereInput[]
     NOT?: SensorReadingWhereInput | SensorReadingWhereInput[]
     id?: StringFilter<"SensorReading"> | string
-    zone?: EnumZoneTypeFilter<"SensorReading"> | $Enums.ZoneType
-    sensorType?: EnumSensorTypeFilter<"SensorReading"> | $Enums.SensorType
-    value?: FloatFilter<"SensorReading"> | number
     timestamp?: DateTimeFilter<"SensorReading"> | Date | string
+    zone?: EnumZoneTypeFilter<"SensorReading"> | $Enums.ZoneType
+    metric?: EnumMetricFilter<"SensorReading"> | $Enums.Metric
+    value?: FloatFilter<"SensorReading"> | number
+    topic?: StringFilter<"SensorReading"> | string
   }
 
   export type SensorReadingOrderByWithRelationInput = {
     id?: SortOrder
-    zone?: SortOrder
-    sensorType?: SortOrder
-    value?: SortOrder
     timestamp?: SortOrder
+    zone?: SortOrder
+    metric?: SortOrder
+    value?: SortOrder
+    topic?: SortOrder
   }
 
   export type SensorReadingWhereUniqueInput = Prisma.AtLeast<{
@@ -21635,18 +22793,20 @@ export namespace Prisma {
     AND?: SensorReadingWhereInput | SensorReadingWhereInput[]
     OR?: SensorReadingWhereInput[]
     NOT?: SensorReadingWhereInput | SensorReadingWhereInput[]
-    zone?: EnumZoneTypeFilter<"SensorReading"> | $Enums.ZoneType
-    sensorType?: EnumSensorTypeFilter<"SensorReading"> | $Enums.SensorType
-    value?: FloatFilter<"SensorReading"> | number
     timestamp?: DateTimeFilter<"SensorReading"> | Date | string
+    zone?: EnumZoneTypeFilter<"SensorReading"> | $Enums.ZoneType
+    metric?: EnumMetricFilter<"SensorReading"> | $Enums.Metric
+    value?: FloatFilter<"SensorReading"> | number
+    topic?: StringFilter<"SensorReading"> | string
   }, "id">
 
   export type SensorReadingOrderByWithAggregationInput = {
     id?: SortOrder
-    zone?: SortOrder
-    sensorType?: SortOrder
-    value?: SortOrder
     timestamp?: SortOrder
+    zone?: SortOrder
+    metric?: SortOrder
+    value?: SortOrder
+    topic?: SortOrder
     _count?: SensorReadingCountOrderByAggregateInput
     _avg?: SensorReadingAvgOrderByAggregateInput
     _max?: SensorReadingMaxOrderByAggregateInput
@@ -21659,10 +22819,68 @@ export namespace Prisma {
     OR?: SensorReadingScalarWhereWithAggregatesInput[]
     NOT?: SensorReadingScalarWhereWithAggregatesInput | SensorReadingScalarWhereWithAggregatesInput[]
     id?: StringWithAggregatesFilter<"SensorReading"> | string
-    zone?: EnumZoneTypeWithAggregatesFilter<"SensorReading"> | $Enums.ZoneType
-    sensorType?: EnumSensorTypeWithAggregatesFilter<"SensorReading"> | $Enums.SensorType
-    value?: FloatWithAggregatesFilter<"SensorReading"> | number
     timestamp?: DateTimeWithAggregatesFilter<"SensorReading"> | Date | string
+    zone?: EnumZoneTypeWithAggregatesFilter<"SensorReading"> | $Enums.ZoneType
+    metric?: EnumMetricWithAggregatesFilter<"SensorReading"> | $Enums.Metric
+    value?: FloatWithAggregatesFilter<"SensorReading"> | number
+    topic?: StringWithAggregatesFilter<"SensorReading"> | string
+  }
+
+  export type EventLogWhereInput = {
+    AND?: EventLogWhereInput | EventLogWhereInput[]
+    OR?: EventLogWhereInput[]
+    NOT?: EventLogWhereInput | EventLogWhereInput[]
+    id?: StringFilter<"EventLog"> | string
+    timestamp?: DateTimeFilter<"EventLog"> | Date | string
+    zone?: EnumZoneTypeFilter<"EventLog"> | $Enums.ZoneType
+    eventType?: EnumEventTypeFilter<"EventLog"> | $Enums.EventType
+    value?: StringFilter<"EventLog"> | string
+    topic?: StringFilter<"EventLog"> | string
+  }
+
+  export type EventLogOrderByWithRelationInput = {
+    id?: SortOrder
+    timestamp?: SortOrder
+    zone?: SortOrder
+    eventType?: SortOrder
+    value?: SortOrder
+    topic?: SortOrder
+  }
+
+  export type EventLogWhereUniqueInput = Prisma.AtLeast<{
+    id?: string
+    AND?: EventLogWhereInput | EventLogWhereInput[]
+    OR?: EventLogWhereInput[]
+    NOT?: EventLogWhereInput | EventLogWhereInput[]
+    timestamp?: DateTimeFilter<"EventLog"> | Date | string
+    zone?: EnumZoneTypeFilter<"EventLog"> | $Enums.ZoneType
+    eventType?: EnumEventTypeFilter<"EventLog"> | $Enums.EventType
+    value?: StringFilter<"EventLog"> | string
+    topic?: StringFilter<"EventLog"> | string
+  }, "id">
+
+  export type EventLogOrderByWithAggregationInput = {
+    id?: SortOrder
+    timestamp?: SortOrder
+    zone?: SortOrder
+    eventType?: SortOrder
+    value?: SortOrder
+    topic?: SortOrder
+    _count?: EventLogCountOrderByAggregateInput
+    _max?: EventLogMaxOrderByAggregateInput
+    _min?: EventLogMinOrderByAggregateInput
+  }
+
+  export type EventLogScalarWhereWithAggregatesInput = {
+    AND?: EventLogScalarWhereWithAggregatesInput | EventLogScalarWhereWithAggregatesInput[]
+    OR?: EventLogScalarWhereWithAggregatesInput[]
+    NOT?: EventLogScalarWhereWithAggregatesInput | EventLogScalarWhereWithAggregatesInput[]
+    id?: StringWithAggregatesFilter<"EventLog"> | string
+    timestamp?: DateTimeWithAggregatesFilter<"EventLog"> | Date | string
+    zone?: EnumZoneTypeWithAggregatesFilter<"EventLog"> | $Enums.ZoneType
+    eventType?: EnumEventTypeWithAggregatesFilter<"EventLog"> | $Enums.EventType
+    value?: StringWithAggregatesFilter<"EventLog"> | string
+    topic?: StringWithAggregatesFilter<"EventLog"> | string
   }
 
   export type StockCreateInput = {
@@ -22556,58 +23774,128 @@ export namespace Prisma {
 
   export type SensorReadingCreateInput = {
     id?: string
-    zone: $Enums.ZoneType
-    sensorType: $Enums.SensorType
-    value: number
     timestamp?: Date | string
+    zone: $Enums.ZoneType
+    metric: $Enums.Metric
+    value: number
+    topic: string
   }
 
   export type SensorReadingUncheckedCreateInput = {
     id?: string
-    zone: $Enums.ZoneType
-    sensorType: $Enums.SensorType
-    value: number
     timestamp?: Date | string
+    zone: $Enums.ZoneType
+    metric: $Enums.Metric
+    value: number
+    topic: string
   }
 
   export type SensorReadingUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    zone?: EnumZoneTypeFieldUpdateOperationsInput | $Enums.ZoneType
-    sensorType?: EnumSensorTypeFieldUpdateOperationsInput | $Enums.SensorType
-    value?: FloatFieldUpdateOperationsInput | number
     timestamp?: DateTimeFieldUpdateOperationsInput | Date | string
+    zone?: EnumZoneTypeFieldUpdateOperationsInput | $Enums.ZoneType
+    metric?: EnumMetricFieldUpdateOperationsInput | $Enums.Metric
+    value?: FloatFieldUpdateOperationsInput | number
+    topic?: StringFieldUpdateOperationsInput | string
   }
 
   export type SensorReadingUncheckedUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
-    zone?: EnumZoneTypeFieldUpdateOperationsInput | $Enums.ZoneType
-    sensorType?: EnumSensorTypeFieldUpdateOperationsInput | $Enums.SensorType
-    value?: FloatFieldUpdateOperationsInput | number
     timestamp?: DateTimeFieldUpdateOperationsInput | Date | string
+    zone?: EnumZoneTypeFieldUpdateOperationsInput | $Enums.ZoneType
+    metric?: EnumMetricFieldUpdateOperationsInput | $Enums.Metric
+    value?: FloatFieldUpdateOperationsInput | number
+    topic?: StringFieldUpdateOperationsInput | string
   }
 
   export type SensorReadingCreateManyInput = {
     id?: string
-    zone: $Enums.ZoneType
-    sensorType: $Enums.SensorType
-    value: number
     timestamp?: Date | string
+    zone: $Enums.ZoneType
+    metric: $Enums.Metric
+    value: number
+    topic: string
   }
 
   export type SensorReadingUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
-    zone?: EnumZoneTypeFieldUpdateOperationsInput | $Enums.ZoneType
-    sensorType?: EnumSensorTypeFieldUpdateOperationsInput | $Enums.SensorType
-    value?: FloatFieldUpdateOperationsInput | number
     timestamp?: DateTimeFieldUpdateOperationsInput | Date | string
+    zone?: EnumZoneTypeFieldUpdateOperationsInput | $Enums.ZoneType
+    metric?: EnumMetricFieldUpdateOperationsInput | $Enums.Metric
+    value?: FloatFieldUpdateOperationsInput | number
+    topic?: StringFieldUpdateOperationsInput | string
   }
 
   export type SensorReadingUncheckedUpdateManyInput = {
     id?: StringFieldUpdateOperationsInput | string
-    zone?: EnumZoneTypeFieldUpdateOperationsInput | $Enums.ZoneType
-    sensorType?: EnumSensorTypeFieldUpdateOperationsInput | $Enums.SensorType
-    value?: FloatFieldUpdateOperationsInput | number
     timestamp?: DateTimeFieldUpdateOperationsInput | Date | string
+    zone?: EnumZoneTypeFieldUpdateOperationsInput | $Enums.ZoneType
+    metric?: EnumMetricFieldUpdateOperationsInput | $Enums.Metric
+    value?: FloatFieldUpdateOperationsInput | number
+    topic?: StringFieldUpdateOperationsInput | string
+  }
+
+  export type EventLogCreateInput = {
+    id?: string
+    timestamp?: Date | string
+    zone: $Enums.ZoneType
+    eventType: $Enums.EventType
+    value: string
+    topic: string
+  }
+
+  export type EventLogUncheckedCreateInput = {
+    id?: string
+    timestamp?: Date | string
+    zone: $Enums.ZoneType
+    eventType: $Enums.EventType
+    value: string
+    topic: string
+  }
+
+  export type EventLogUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    timestamp?: DateTimeFieldUpdateOperationsInput | Date | string
+    zone?: EnumZoneTypeFieldUpdateOperationsInput | $Enums.ZoneType
+    eventType?: EnumEventTypeFieldUpdateOperationsInput | $Enums.EventType
+    value?: StringFieldUpdateOperationsInput | string
+    topic?: StringFieldUpdateOperationsInput | string
+  }
+
+  export type EventLogUncheckedUpdateInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    timestamp?: DateTimeFieldUpdateOperationsInput | Date | string
+    zone?: EnumZoneTypeFieldUpdateOperationsInput | $Enums.ZoneType
+    eventType?: EnumEventTypeFieldUpdateOperationsInput | $Enums.EventType
+    value?: StringFieldUpdateOperationsInput | string
+    topic?: StringFieldUpdateOperationsInput | string
+  }
+
+  export type EventLogCreateManyInput = {
+    id?: string
+    timestamp?: Date | string
+    zone: $Enums.ZoneType
+    eventType: $Enums.EventType
+    value: string
+    topic: string
+  }
+
+  export type EventLogUpdateManyMutationInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    timestamp?: DateTimeFieldUpdateOperationsInput | Date | string
+    zone?: EnumZoneTypeFieldUpdateOperationsInput | $Enums.ZoneType
+    eventType?: EnumEventTypeFieldUpdateOperationsInput | $Enums.EventType
+    value?: StringFieldUpdateOperationsInput | string
+    topic?: StringFieldUpdateOperationsInput | string
+  }
+
+  export type EventLogUncheckedUpdateManyInput = {
+    id?: StringFieldUpdateOperationsInput | string
+    timestamp?: DateTimeFieldUpdateOperationsInput | Date | string
+    zone?: EnumZoneTypeFieldUpdateOperationsInput | $Enums.ZoneType
+    eventType?: EnumEventTypeFieldUpdateOperationsInput | $Enums.EventType
+    value?: StringFieldUpdateOperationsInput | string
+    topic?: StringFieldUpdateOperationsInput | string
   }
 
   export type StringFilter<$PrismaModel = never> = {
@@ -23464,11 +24752,11 @@ export namespace Prisma {
     duration?: SortOrder
   }
 
-  export type EnumSensorTypeFilter<$PrismaModel = never> = {
-    equals?: $Enums.SensorType | EnumSensorTypeFieldRefInput<$PrismaModel>
-    in?: $Enums.SensorType[] | ListEnumSensorTypeFieldRefInput<$PrismaModel>
-    notIn?: $Enums.SensorType[] | ListEnumSensorTypeFieldRefInput<$PrismaModel>
-    not?: NestedEnumSensorTypeFilter<$PrismaModel> | $Enums.SensorType
+  export type EnumMetricFilter<$PrismaModel = never> = {
+    equals?: $Enums.Metric | EnumMetricFieldRefInput<$PrismaModel>
+    in?: $Enums.Metric[] | ListEnumMetricFieldRefInput<$PrismaModel>
+    notIn?: $Enums.Metric[] | ListEnumMetricFieldRefInput<$PrismaModel>
+    not?: NestedEnumMetricFilter<$PrismaModel> | $Enums.Metric
   }
 
   export type FloatFilter<$PrismaModel = never> = {
@@ -23484,10 +24772,11 @@ export namespace Prisma {
 
   export type SensorReadingCountOrderByAggregateInput = {
     id?: SortOrder
-    zone?: SortOrder
-    sensorType?: SortOrder
-    value?: SortOrder
     timestamp?: SortOrder
+    zone?: SortOrder
+    metric?: SortOrder
+    value?: SortOrder
+    topic?: SortOrder
   }
 
   export type SensorReadingAvgOrderByAggregateInput = {
@@ -23496,32 +24785,34 @@ export namespace Prisma {
 
   export type SensorReadingMaxOrderByAggregateInput = {
     id?: SortOrder
-    zone?: SortOrder
-    sensorType?: SortOrder
-    value?: SortOrder
     timestamp?: SortOrder
+    zone?: SortOrder
+    metric?: SortOrder
+    value?: SortOrder
+    topic?: SortOrder
   }
 
   export type SensorReadingMinOrderByAggregateInput = {
     id?: SortOrder
-    zone?: SortOrder
-    sensorType?: SortOrder
-    value?: SortOrder
     timestamp?: SortOrder
+    zone?: SortOrder
+    metric?: SortOrder
+    value?: SortOrder
+    topic?: SortOrder
   }
 
   export type SensorReadingSumOrderByAggregateInput = {
     value?: SortOrder
   }
 
-  export type EnumSensorTypeWithAggregatesFilter<$PrismaModel = never> = {
-    equals?: $Enums.SensorType | EnumSensorTypeFieldRefInput<$PrismaModel>
-    in?: $Enums.SensorType[] | ListEnumSensorTypeFieldRefInput<$PrismaModel>
-    notIn?: $Enums.SensorType[] | ListEnumSensorTypeFieldRefInput<$PrismaModel>
-    not?: NestedEnumSensorTypeWithAggregatesFilter<$PrismaModel> | $Enums.SensorType
+  export type EnumMetricWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.Metric | EnumMetricFieldRefInput<$PrismaModel>
+    in?: $Enums.Metric[] | ListEnumMetricFieldRefInput<$PrismaModel>
+    notIn?: $Enums.Metric[] | ListEnumMetricFieldRefInput<$PrismaModel>
+    not?: NestedEnumMetricWithAggregatesFilter<$PrismaModel> | $Enums.Metric
     _count?: NestedIntFilter<$PrismaModel>
-    _min?: NestedEnumSensorTypeFilter<$PrismaModel>
-    _max?: NestedEnumSensorTypeFilter<$PrismaModel>
+    _min?: NestedEnumMetricFilter<$PrismaModel>
+    _max?: NestedEnumMetricFilter<$PrismaModel>
   }
 
   export type FloatWithAggregatesFilter<$PrismaModel = never> = {
@@ -23538,6 +24829,50 @@ export namespace Prisma {
     _sum?: NestedFloatFilter<$PrismaModel>
     _min?: NestedFloatFilter<$PrismaModel>
     _max?: NestedFloatFilter<$PrismaModel>
+  }
+
+  export type EnumEventTypeFilter<$PrismaModel = never> = {
+    equals?: $Enums.EventType | EnumEventTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.EventType[] | ListEnumEventTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.EventType[] | ListEnumEventTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumEventTypeFilter<$PrismaModel> | $Enums.EventType
+  }
+
+  export type EventLogCountOrderByAggregateInput = {
+    id?: SortOrder
+    timestamp?: SortOrder
+    zone?: SortOrder
+    eventType?: SortOrder
+    value?: SortOrder
+    topic?: SortOrder
+  }
+
+  export type EventLogMaxOrderByAggregateInput = {
+    id?: SortOrder
+    timestamp?: SortOrder
+    zone?: SortOrder
+    eventType?: SortOrder
+    value?: SortOrder
+    topic?: SortOrder
+  }
+
+  export type EventLogMinOrderByAggregateInput = {
+    id?: SortOrder
+    timestamp?: SortOrder
+    zone?: SortOrder
+    eventType?: SortOrder
+    value?: SortOrder
+    topic?: SortOrder
+  }
+
+  export type EnumEventTypeWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.EventType | EnumEventTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.EventType[] | ListEnumEventTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.EventType[] | ListEnumEventTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumEventTypeWithAggregatesFilter<$PrismaModel> | $Enums.EventType
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumEventTypeFilter<$PrismaModel>
+    _max?: NestedEnumEventTypeFilter<$PrismaModel>
   }
 
   export type SpeciesCreateNestedManyWithoutStockInput = {
@@ -24428,8 +25763,8 @@ export namespace Prisma {
     update?: XOR<XOR<IrrigationProgramUpdateToOneWithWhereWithoutTasksInput, IrrigationProgramUpdateWithoutTasksInput>, IrrigationProgramUncheckedUpdateWithoutTasksInput>
   }
 
-  export type EnumSensorTypeFieldUpdateOperationsInput = {
-    set?: $Enums.SensorType
+  export type EnumMetricFieldUpdateOperationsInput = {
+    set?: $Enums.Metric
   }
 
   export type FloatFieldUpdateOperationsInput = {
@@ -24438,6 +25773,10 @@ export namespace Prisma {
     decrement?: number
     multiply?: number
     divide?: number
+  }
+
+  export type EnumEventTypeFieldUpdateOperationsInput = {
+    set?: $Enums.EventType
   }
 
   export type NestedStringFilter<$PrismaModel = never> = {
@@ -24750,21 +26089,21 @@ export namespace Prisma {
     _max?: NestedEnumActuatorTypeFilter<$PrismaModel>
   }
 
-  export type NestedEnumSensorTypeFilter<$PrismaModel = never> = {
-    equals?: $Enums.SensorType | EnumSensorTypeFieldRefInput<$PrismaModel>
-    in?: $Enums.SensorType[] | ListEnumSensorTypeFieldRefInput<$PrismaModel>
-    notIn?: $Enums.SensorType[] | ListEnumSensorTypeFieldRefInput<$PrismaModel>
-    not?: NestedEnumSensorTypeFilter<$PrismaModel> | $Enums.SensorType
+  export type NestedEnumMetricFilter<$PrismaModel = never> = {
+    equals?: $Enums.Metric | EnumMetricFieldRefInput<$PrismaModel>
+    in?: $Enums.Metric[] | ListEnumMetricFieldRefInput<$PrismaModel>
+    notIn?: $Enums.Metric[] | ListEnumMetricFieldRefInput<$PrismaModel>
+    not?: NestedEnumMetricFilter<$PrismaModel> | $Enums.Metric
   }
 
-  export type NestedEnumSensorTypeWithAggregatesFilter<$PrismaModel = never> = {
-    equals?: $Enums.SensorType | EnumSensorTypeFieldRefInput<$PrismaModel>
-    in?: $Enums.SensorType[] | ListEnumSensorTypeFieldRefInput<$PrismaModel>
-    notIn?: $Enums.SensorType[] | ListEnumSensorTypeFieldRefInput<$PrismaModel>
-    not?: NestedEnumSensorTypeWithAggregatesFilter<$PrismaModel> | $Enums.SensorType
+  export type NestedEnumMetricWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.Metric | EnumMetricFieldRefInput<$PrismaModel>
+    in?: $Enums.Metric[] | ListEnumMetricFieldRefInput<$PrismaModel>
+    notIn?: $Enums.Metric[] | ListEnumMetricFieldRefInput<$PrismaModel>
+    not?: NestedEnumMetricWithAggregatesFilter<$PrismaModel> | $Enums.Metric
     _count?: NestedIntFilter<$PrismaModel>
-    _min?: NestedEnumSensorTypeFilter<$PrismaModel>
-    _max?: NestedEnumSensorTypeFilter<$PrismaModel>
+    _min?: NestedEnumMetricFilter<$PrismaModel>
+    _max?: NestedEnumMetricFilter<$PrismaModel>
   }
 
   export type NestedFloatWithAggregatesFilter<$PrismaModel = never> = {
@@ -24781,6 +26120,23 @@ export namespace Prisma {
     _sum?: NestedFloatFilter<$PrismaModel>
     _min?: NestedFloatFilter<$PrismaModel>
     _max?: NestedFloatFilter<$PrismaModel>
+  }
+
+  export type NestedEnumEventTypeFilter<$PrismaModel = never> = {
+    equals?: $Enums.EventType | EnumEventTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.EventType[] | ListEnumEventTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.EventType[] | ListEnumEventTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumEventTypeFilter<$PrismaModel> | $Enums.EventType
+  }
+
+  export type NestedEnumEventTypeWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: $Enums.EventType | EnumEventTypeFieldRefInput<$PrismaModel>
+    in?: $Enums.EventType[] | ListEnumEventTypeFieldRefInput<$PrismaModel>
+    notIn?: $Enums.EventType[] | ListEnumEventTypeFieldRefInput<$PrismaModel>
+    not?: NestedEnumEventTypeWithAggregatesFilter<$PrismaModel> | $Enums.EventType
+    _count?: NestedIntFilter<$PrismaModel>
+    _min?: NestedEnumEventTypeFilter<$PrismaModel>
+    _max?: NestedEnumEventTypeFilter<$PrismaModel>
   }
 
   export type SpeciesCreateWithoutStockInput = {

@@ -62,7 +62,7 @@ export function QuantityDropdown({ quantity, onQuantityChanged }: Props) {
         <motion.button
           aria-expanded={isOpen}
           aria-haspopup="listbox"
-          className="focus:outline-accessibility flex cursor-pointer items-center justify-between rounded-[0.5px] font-medium focus:outline focus:outline-offset-2 focus:outline-dashed"
+          className="focus-dashed list-box"
           type="button"
           onClick={() => setIsOpen(!isOpen)}
         >
@@ -85,7 +85,7 @@ export function QuantityDropdown({ quantity, onQuantityChanged }: Props) {
             <motion.ul
               key="quantity-dropdown-panel" // Key es importante para AnimatePresence
               animate="animate" // Animar a este estado cuando entra
-              className="border-serch-box-outline absolute top-7 -left-0.5 z-2 max-h-48 w-max rounded border bg-white py-1 shadow-lg focus:outline-none"
+              className="border-search-box-outline absolute top-7 -left-0.5 z-2 max-h-48 w-max rounded border bg-white py-1 shadow-lg focus:outline-none"
               exit="exit" // Animar a este estado cuando sale
               initial="initial" // Estado inicial de las variantes
               role="listbox"
@@ -97,7 +97,7 @@ export function QuantityDropdown({ quantity, onQuantityChanged }: Props) {
                   aria-selected={quantity === optionValue}
                   className={clsx(
                     'hover:bg-hover flex min-h-8 min-w-18 cursor-pointer items-center justify-between px-5 py-1 text-start leading-6',
-                    quantity === optionValue && 'bg-serch-box-icon-hover font-semibold', // Estilo para opción seleccionada
+                    quantity === optionValue && 'bg-search-box-icon-hover font-semibold', // Estilo para opción seleccionada
                   )}
                   role="option"
                   onClick={() => handleSelection(optionValue)}

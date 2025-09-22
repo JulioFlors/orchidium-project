@@ -7,9 +7,8 @@
   --breakpoint-tds-xl: 75rem;
   /* 37.5rem; 600px */
   /* 60rem; 960px */
-  /* 75rem; 1200px */
-
   /* 60.0625rem; 961px*/
+  /* 75rem; 1200px */
 
   --color-accessibility: oklch(0.65 0 0 / 1);
   --color-blue-hover: #3457b1;
@@ -20,9 +19,9 @@
   --color-primary: oklch(0.22 0.01 264.27 / 1);
   --color-secondary-404: oklch(0.51 0 0 / 1);
   --color-secondary: oklch(0.36 0.01 260.72 / 1);
-  --color-serch-box-icon-hover: oklch(0.93 0 0 / 1);
-  --color-serch-box-outline: oklch(0.86 0 247.84 / 1);
-  --color-serch-box: oklch(0.97 0 0 / 1);
+  --color-search-box-icon-hover: oklch(0.93 0 0 / 1);
+  --color-search-box-outline: oklch(0.86 0 247.84 / 1);
+  --color-search-box: oklch(0.97 0 0 / 1);
 
   --shadow-tesla: 0 8px 16px 0 rgba(0, 0, 0, 0.16);
   --shadow-top-highlight: 0 -2px 13px oklch(0.92 0 0 / 1);
@@ -109,16 +108,16 @@
     @apply outline-accessibility outline-2 outline-offset-[-2px] rounded-sm;
   }
 
-  .focus-serch-box:focus {
-    @apply border-none outline-serch-box-outline outline-1 outline-offset-[-1px];
+  .focus-search-box:focus {
+    @apply border-none outline-search-box-outline outline-1 outline-offset-[-1px];
   }
 
   .focus-input {
-    @apply bg-serch-box w-full rounded px-3 py-2 leading-6 font-medium ease-in-out transition-all;
+    @apply bg-search-box w-full rounded px-3 py-2 leading-6 font-medium ease-in-out transition-all;
   }
 
   .focus-input:focus {
-    @apply outline-none border-none ring-serch-box-outline ring-1;
+    @apply outline-none border-none ring-search-box-outline ring-1;
   }
 
   .focus-product:focus-visible {
@@ -131,6 +130,14 @@
 
   .focus-link-hover:focus {
     @apply bg-white hover:bg-hover outline-none ring-accessibility ring-2 ring-offset-2 rounded;
+  }
+
+  .focus-dashed:focus {
+    @apply outline outline-accessibility outline-dashed outline-offset-2 rounded;
+  }
+
+  .list-box {
+    @apply flex cursor-pointer items-center justify-between font-medium !rounded-[0.5px];
   }
 
   .btn-primary {
@@ -174,6 +181,16 @@
   }
 }
 
+/*---- Formularios ----*/
+@layer components {
+  .form-input {
+    @apply bg-search-box -tracking-2 mt-2 min-h-10 w-full rounded px-3 text-[15px] leading-6 font-semibold;
+    /* focus-search-box:focus */
+    @apply focus:border-none focus:outline-search-box-outline focus:outline-1 focus:outline-offset-[-1px];
+  }
+}
+
+/*---- Underlines ----*/
 @layer components {
   .underline-link {
     @apply bg-gradient-to-r from-blue-tesla to-blue-hover bg-clip-text font-semibold outline-none text-transparent transition-all duration-200 ease-in-out;

@@ -4,9 +4,9 @@ import './globals.css'
 import { textFont } from '@/config/fonts'
 
 export const metadata: Metadata = {
-  title: 'Orchidium Project',
+  title: 'PristinoPlant',
   description:
-    'Sistema de Gestión de Invernaderos Basado en Agricultura Inteligente para el Cultivo de Orquídeas',
+    'Da vida a tus espacios con PristinoPlant. Explora nuestra colección de orquídeas, rosas del desierto, kokedama, cactus y suculentas. Ofrecemos abonos especializados, macetas, agroquímicos y la asesoría experta que tu coleccion necesita.',
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

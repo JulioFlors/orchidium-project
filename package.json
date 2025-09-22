@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "seed": "ts-node -r tsconfig-paths/register src/seed/seed-database.ts"
+    "seed": "ts-node -r tsconfig-paths/register src/seed/seed-database.ts",
+    "mqtt": "ts-node -r tsconfig-paths/register src/services/mqtt-service.ts"
   },
   "dependencies": {
     "@prisma/client": "6.6.0",
@@ -15,6 +16,7 @@
     "clsx": "^2.1.1",
     "dompurify": "^3.2.5",
     "motion": "^12.7.3",
+    "mqtt": "^5.14.1",
     "next": "15.2.0-canary.64",
     "postcss": "^8.5.2",
     "react": "19.0.0",

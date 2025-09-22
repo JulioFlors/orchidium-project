@@ -4,7 +4,6 @@ import { Footer, Sidebar, TopMenu } from '@/components'
 
 export const metadata: Metadata = {
   title: 'PristinoPlant | Tienda',
-  description: 'Tienda virtual de plantas',
 }
 
 export default async function ShopLayout({ children }: { children: React.ReactNode }) {
@@ -14,7 +13,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
 
       <Sidebar />
 
-      <main className="mx-6 mt-14 grow sm:mx-9 xl:mx-12">{children}</main>
+      <main className="tds-sm:mx-9 tds-xl:mx-12 mx-6 mt-14 grow">{children}</main>
 
       <Footer />
     </div>

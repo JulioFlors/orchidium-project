@@ -2,6 +2,38 @@
 
 Sistema de Gestión de Invernaderos para el Cultivo de Orquídeas
 
+## Estructura de Carpetas Propuesta
+
+```bash
+└── ORCHIDIUM_PROJECT/       <-- La carpeta principal del proyecto
+    ├── .env                      <-- Variables de entorno para todo el sistema
+    ├── .gitignore
+    ├── docker-compose.yml        <-- El orquestador de todos los servicios
+    ├── README.md
+    │
+    ├── 📁 database/              <-- Datos persistentes generados por Docker
+    │   └── postgres/
+    │
+    ├── 📁 infrastructure/         <-- Configuración de servicios de Docker
+    │   └── mosquitto/
+    │       └── config/
+    │           └── mosquitto.conf
+    │
+    ├── 📁 firmware/               <-- Código del ESP32
+    │   └── main.py
+    │   └── boot.py
+    │   └── bh1750.py
+    │
+    └── 📁 web_app/                <-- proyecto Next.js
+        ├── .next/
+        ├── prisma/
+        ├── public/
+        ├── src/
+        ├── package.json
+        ├── tsconfig.json
+        └── ...
+```
+
 ## Desarrollo
 
 Pasos para levantar la app en desarrollo:

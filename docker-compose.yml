@@ -1,6 +1,8 @@
+version: '3.8'
 x-compose: true
 
 services:
+  # Base de Datos
   postgres-db:
     image: postgres:17.3
     restart: always
@@ -9,6 +11,31 @@ services:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - ./postgres:/var/lib/postgresql/data
+      # Guarda los datos en la carpeta 'database/postgres'
+      - ./database/postgres:/var/lib/postgresql/data
     ports:
-      - 5432:5432
+      - "5432:5432"
+
+  # Broker MQTT
+  broker-mqtt:
+    image: eclipse-mosquitto
+    restart: always
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      # Carga la configuración desde 'infrastructure/mosquitto/config'
+      - ./infrastructure/mosquitto/config:/mosquitto/config
+
+  # Servicio de Ingesta
+  mqtt-ingest-service:
+   build:
+     context: ./web_app
+     dockerfile: Dockerfile.mqtt-service
+   restart: always
+   environment:
+     - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres-db:5432/${DB_NAME}
+     - MQTT_BROKER_URL=mqtt://broker-mqtt
+   depends_on:
+     - postgres-db
+     - broker-mqtt

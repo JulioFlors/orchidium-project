@@ -40,7 +40,7 @@ export function QuantitySelector({ quantity, onQuantityChanged }: Props) {
       <div className="flex items-center">
         <button
           aria-label="Disminuir cantidad"
-          className="focus-link cursor-pointer rounded p-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+          className="focus-dashed cursor-pointer p-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
           disabled={!canDecrement}
           type="button"
           onClick={() => onValueChanged(-1)}
@@ -53,7 +53,7 @@ export function QuantitySelector({ quantity, onQuantityChanged }: Props) {
         </span>
 
         <button
-          className="focus-link cursor-pointer rounded p-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+          className="focus-dashed cursor-pointer p-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
           disabled={!canIncrement}
           type="button"
           onClick={() => onValueChanged(+1)}
