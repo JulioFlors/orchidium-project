@@ -6,8 +6,8 @@ import { FormField, RadioOption, RadioGroup } from '@/components'
 
 // ---- Opciones válidas para los RadioOption ---- //
 type DeliveryType = 'shipping' | 'pickup'
-type ShippingType = 'delivery' | 'zoom' | 'mrw'
-type PaymentType = 'pago-movil' | 'divisas' | 'bs'
+//type ShippingType = 'delivery' | 'zoom' | 'mrw'
+//type PaymentType = 'pago-movil' | 'divisas' | 'bs'
 
 // ---- Definición de los RadioOption ---- //
 const deliveryOptions: RadioOption<DeliveryType>[] = [
@@ -15,22 +15,22 @@ const deliveryOptions: RadioOption<DeliveryType>[] = [
   { value: 'pickup', label: 'Retiro (Ciudad Guayana)' },
 ]
 
-const shippingOptions: RadioOption<ShippingType>[] = [
+/* const shippingOptions: RadioOption<ShippingType>[] = [
   { value: 'delivery', label: 'Delivery (Ciudad Guayana)' },
   { value: 'zoom', label: 'ZOOM' },
   { value: 'mrw', label: 'MRW' },
-]
+] */
 
-const paymentOptions: RadioOption<PaymentType>[] = [
+/* const paymentOptions: RadioOption<PaymentType>[] = [
   { value: 'pago-movil', label: 'Pago Movil' },
   { value: 'divisas', label: 'Divisas' },
   { value: 'bs', label: 'Bs' },
-]
+] */
 
 export function AddressForm() {
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('shipping')
-  const [shippingType, setShippingType] = useState<ShippingType>('zoom')
-  const [paymentType, setPaymentType] = useState<PaymentType>('pago-movil')
+  //  const [shippingType, setShippingType] = useState<ShippingType>('zoom')
+  //  const [paymentType, setPaymentType] = useState<PaymentType>('pago-movil')
 
   return (
     <div className="flex w-full max-w-[850px] flex-col justify-center text-left">

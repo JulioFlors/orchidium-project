@@ -16,7 +16,16 @@
         "dist/**"
       ],
       "env": [
-        "DATABASE_URL"
+        "DATABASE_URL",
+        "DB_USER",
+        "DB_PASSWORD",
+        "DB_HOST",
+        "DB_PORT",
+        "DB_NAME",
+        "MQTT_HOST",
+        "MQTT_PORT",
+        "MQTT_BROKER_URL",
+        "MQTT_CLIENT_ID"
       ]
     },
     "lint": {

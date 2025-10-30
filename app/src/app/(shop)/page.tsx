@@ -1,7 +1,10 @@
 import { ProductGrid, Title, Subtitle } from '@/components'
 import { initialData } from '@service/seeding'
 
-const products = initialData.species
+const products = initialData.species.map((species) => ({
+  ...species,
+  id: species.slug,
+}));
 
 export default async function HomePage() {
   return (
