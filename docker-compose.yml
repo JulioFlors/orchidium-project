@@ -1,24 +1,32 @@
-version: '3.8'
-x-compose: true
-
 services:
   # Base de Datos
-  postgres-db:
+  postgres:
     image: postgres:17.3
+    container_name: postgres
     restart: always
     environment:
       POSTGRES_USER: ${DB_USER}
-      POSTGRES_DB: ${DB_NAME}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-    volumes:
-      # Guarda los datos en la carpeta 'database/postgres'
-      - ./database/postgres:/var/lib/postgresql/data
+      POSTGRES_DB: ${DB_NAME}
     ports:
       - "5432:5432"
+    volumes:
+      # Volumen para persistencia de datos.
+      - ./packages/database/postgres:/var/lib/postgresql/data
+      # Archivo de configuración de PostgreSQL.
+      - ./infrastructure/postgres/conf/pg_hba.conf:/etc/postgresql/pg_hba.conf
+      # Archivo de configuración para que escuche en todas las direcciones.
+      - ./infrastructure/postgres/conf/postgresql.conf:/etc/postgresql/postgresql.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 60s
+      timeout: 60s
+      retries: 5
 
   # Broker MQTT
-  broker-mqtt:
+  mosquitto-broker:
     image: eclipse-mosquitto
+    container_name: mosquitto-broker
     restart: always
     ports:
       - "1883:1883"
@@ -26,16 +34,28 @@ services:
     volumes:
       # Carga la configuración desde 'infrastructure/mosquitto/config'
       - ./infrastructure/mosquitto/config:/mosquitto/config
+      # Mapeo de la persistencia
+      - ./infrastructure/mosquitto/persistence:/mosquitto/datas
 
-  # Servicio de Ingesta
-  mqtt-ingest-service:
-   build:
-     context: ./web_app
-     dockerfile: Dockerfile.mqtt-service
-   restart: always
-   environment:
-     - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres-db:5432/${DB_NAME}
-     - MQTT_BROKER_URL=mqtt://broker-mqtt
-   depends_on:
-     - postgres-db
-     - broker-mqtt
+  # Servicio de adquisición de datos MQTT
+  mqtt-data-ingest:
+    container_name: mqtt-data-ingest
+    build:
+      # El contexto de construcción debe apuntar a la raíz del monorepo
+      context: . 
+      dockerfile: services/mqtt/Dockerfile
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto-broker:
+        condition: service_started
+    environment:
+      - DB_USER=${DB_USER}
+      - DB_HOST=postgres
+        # El ${DB_HOST} 'postgres' es el nombre del servicio en la red de Docker.
+        # Se usa para la comunicación entre contenedores.
+      - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres:${DB_PORT}/${DB_NAME}?schema=public
+        # El ${MQTT_HOST} 'mosquitto-broker' es el nombre del servicio en la red de Docker.
+      - MQTT_BROKER_URL=mqtt://mosquitto-broker:1883
+      - MQTT_CLIENT_ID=${MQTT_CLIENT_ID}

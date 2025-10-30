@@ -1,65 +1,44 @@
 {
-  "name": "orchidium",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev --turbopack",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "seed": "ts-node -r tsconfig-paths/register src/seed/seed-database.ts",
-    "mqtt": "ts-node -r tsconfig-paths/register src/services/mqtt-service.ts"
-  },
-  "dependencies": {
-    "@prisma/client": "6.6.0",
-    "@tailwindcss/postcss": "4.0.6",
-    "clsx": "^2.1.1",
-    "dompurify": "^3.2.5",
-    "motion": "^12.7.3",
-    "mqtt": "^5.14.1",
-    "next": "15.2.0-canary.64",
-    "postcss": "^8.5.2",
-    "react": "19.0.0",
-    "react-dom": "19.0.0",
-    "react-icons": "^5.5.0",
-    "swiper": "^11.2.6",
-    "tailwindcss": "4.0.17",
-    "zustand": "^5.0.3"
-  },
-  "devDependencies": {
-    "@eslint/compat": "^1.2.6",
-    "@next/eslint-plugin-next": "15.3.0",
-    "@types/node": "^22.13.4",
-    "@types/react": "^19.0.9",
-    "@types/react-dom": "^19.0.3",
-    "@vercel/style-guide": "^6.0.0",
-    "babel-plugin-react-compiler": "19.0.0-beta-21e868a-20250216",
-    "eslint": "^9.20.1",
-    "eslint-config-next": "15.1.7",
-    "eslint-config-prettier": "^10.0.1",
-    "eslint-plugin-import": "^2.31.0",
-    "eslint-plugin-jsx-a11y": "^6.10.2",
-    "eslint-plugin-prettier": "^5.2.3",
-    "eslint-plugin-react": "^7.37.4",
-    "eslint-plugin-react-compiler": "0.0.0-experimental-c8b3f72-20240517",
-    "eslint-plugin-react-hooks": "^5.1.0",
-    "globals": "^15.15.0",
-    "prettier": "^3.5.1",
-    "prettier-plugin-tailwindcss": "^0.6.11",
-    "prisma": "^6.6.0",
-    "ts-node": "^10.9.2",
-    "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.7.3",
-    "typescript-eslint": "^8.24.0"
-  },
-  "packageManager": "pnpm@10.10.0+sha512.d615db246fe70f25dcfea6d8d73dee782ce23e2245e3c4f6f888249fb568149318637dca73c2c5c8ef2a4ca0d5657fb9567188bfab47f566d1ee6ce987815c39",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@prisma/client",
-      "@prisma/engines",
-      "esbuild",
-      "prisma",
-      "sharp"
-    ]
-  }
+	"name": "pristinoplant-monorepo",
+	"version": "0.1.0",
+	"description": "Monorepo del Sistema de Gestión de Invernaderos Inteligente",
+	"private": true,
+	"author": "Julio Flores",
+	"e-mail": "noesjulio@gmail.com",
+	"license": "MIT",
+	"scripts": {
+		"// ---- APLICACIÓN WEB ----": "",
+		"dev": "pnpm --filter app dev",
+		"build": "pnpm --filter app build",
+		"start": "pnpm --filter app start",
+		"lint": "pnpm --filter app lint",
+		"// ---- SERVICIOS ----": "",
+		"dev:ingest": "pnpm --filter @service/mqtt-data-ingest dev",
+		"build:ingest": "pnpm --filter @service/mqtt-data-ingest build",
+		"start:ingest": "pnpm --filter @service/mqtt-data-ingest start",
+		"// ---- BASE DE DATOS ----": "",
+		"db:generate": "pnpm --filter @package/database db:generate",
+		"db:migrate": "pnpm --filter @package/database db:migrate",
+		"db:seed": "pnpm --filter @service/seeding start",
+		"// ---- HERRAMIENTAS DE MONOREPO ----": "",
+		"dev:turbo": "turbo dev",
+		"build:turbo": "turbo build"
+	},
+	"devDependencies": {
+		"prisma": "6.16.1",
+		"turbo": "2.5.6",
+		"typescript": "^5.9.2"
+	},
+	"packageManager": "pnpm@10.20.0+sha512.cf9998222162dd85864d0a8102e7892e7ba4ceadebbf5a31f9c2fce48dfce317a9c53b9f6464d1ef9042cba2e02ae02a9f7c143a2b438cd93c91840f0192b9dd",
+	"pnpm": {
+		"onlyBuiltDependencies": [
+			"@prisma/client",
+			"@prisma/engines",
+			"@tailwindcss/oxide",
+			"esbuild",
+			"prisma",
+			"sharp",
+			"unrs-resolver"
+		]
+	}
 }

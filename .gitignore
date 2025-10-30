@@ -1,41 +1,80 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# ===================================================================
+#
+# --- Cómo funcionan las rutas en este archivo ---
+#
+# 1. Sin barra al principio (ej. 'node_modules'):
+#    Coincide con cualquier archivo o carpeta con ese nombre,
+#    en CUALQUIER subdirectorio. Ideal para ignorar dependencias.
+#
+# 2. Con barra al principio (ej. '/logs'):
+#    Coincide solo con el archivo o carpeta 'logs' que esté
+#    en la RAÍZ del repositorio, no en subdirectorios.
+#
+# 3. Especificando la ruta completa (ej. 'app/.next/'):
+#    Coincide con un archivo o carpeta en una ubicación específica.
+#    Es la forma más precisa de ignorar artefactos de un sub-proyecto.
+#
+# ===================================================================
 
+# ---- Variables de Entorno y Credenciales ----
 .env
-/postgres/
+.env*.local
 
-**/client/
-**/vscode/
+# ---- Dependencias de Gestores de Paquetes ----
+# La doble estrella (**) asegura que se ignoren en cualquier nivel.
+**/node_modules
+**/.pnp
+**/.pnp.js
 
-# dependencies
-/node_modules
-/.pnp
-.pnp.js
+# ---- Datos Persistentes de Docker ----
+# Contiene los archivos de la base de datos local.
+# Son datos, no código, y pueden ser muy grandes.
+**/database/postgres
 
-# testing
-/coverage
+# ---- Artefactos de Build y Caché de la Aplicación Next.js ----
+# Especificamos la ruta para ser precisos.
+# Carpeta principal de caché y build de Next.js (desarrollo y producción)
+/**/.next/
+# Carpeta de salida para exportaciones estáticas (next export)
+/**/out/
+# Carpeta de build genérica (buena práctica incluirla)
+/**/build/
 
-# next.js
-/.next/
-/out/
+# ---- Archivos Generados ----
+# Carpeta de distribución para librerías y paquetes (builds)
+**/dist
+# Cliente de Prisma generado automáticamente.
+**/database/generated
+# Caché de build de TypeScript.
+*.tsbuildinfo
+# Archivo de definición de tipos de Next.js (se autogenera).
+next-env.d.ts
 
-# production
-/build
+# ---- Archivos de IDEs y Editores ----
+# Configuración específica del entorno local del desarrollador.
+.vscode
 
-# misc
-.DS_Store
-*.pem
+# ---- Despliegues y Plataformas ----
+# Carpeta generada por Vercel para despliegues locales.
+.vercel
+# Carpeta generada por turbo para caché de builds.
+.turbo
 
-# debug
+# ---- Logs y Archivos de Depuración ----
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# local env files
-.env*.local
+# ---- Archivos de Sistema Operativo ----
+# Archivos de metadatos de macOS y Windows.
+.DS_Store
+Thumbs.db
 
-# vercel
-.vercel
+# ---- Otros ----
+# Claves privadas, certificados, etc.
+*.pem
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+# ---- Empaquetadores y Bundlers ----
+# Caché de empaquetadores como Webpack, Rollup, etc.
+**/.rollup.cache

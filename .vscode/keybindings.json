@@ -1,0 +1,12 @@
+[
+  {
+    "key": "ctrl+alt+s",
+    "command": "editor.action.sortLinesAscending",
+    "when": "editorTextFocus"
+  },
+  {
+    "key": "ctrl+alt+w",
+    "command": "editor.action.sortLinesDescending",
+    "when": "editorTextFocus"
+  }
+]

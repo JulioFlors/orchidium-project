@@ -1,0 +1,25 @@
+{
+  "name": "@service/mqtt-data-ingest",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/bundle.js",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --outfile=dist/bundle.js --external:@prisma/client",
+    "start": "node dist/bundle.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "dependencies": {
+    "@package/database": "workspace:*",
+    "dotenv": "17.2.2",
+    "mqtt": "5.14.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.5.0",
+    "esbuild": "^0.25.10",
+    "ts-node": "10.9.2",
+    "typescript": "5.9.2"
+  }
+}

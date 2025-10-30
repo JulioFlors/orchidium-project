@@ -1,0 +1,12 @@
+{
+  // Hereda la configuración base del monorepo.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    /* Opciones específicas para este servicio */
+    "composite": true, // Habilita la compilación compuesta para que otros proyectos puedan depender de este.
+    "outDir": "./dist",
+    "rootDir": "./src",
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
+}

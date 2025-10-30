@@ -1,288 +1,175 @@
-# Orchidium Project
+# 🌸 Orchidium Project
 
-Sistema de Gestión de Invernaderos para el Cultivo de Orquídeas
+A continuacion se proporciona un Sistema de Gestión de Invernaderos basado en Agricultura Inteligente para el Cultivo de Orquídeas. Este repositorio contiene todo el código fuente, firmware y configuración de infraestructura necesarios para el proyecto.
 
-## Estructura de Carpetas Propuesta
+## 📋 Descripción General
+
+Este proyecto consiste en un sistema IoT completo diseñado para monitorear y controlar las condiciones ambientales de un invernadero. Utiliza un nodo de hardware basado en ESP32 para la recolección de datos en tiempo real (Edge Computing) y una aplicación web para la visualización, control y análisis de datos históricos.
+
+## 📂 Estructura del Repositorio
+
+Este es un monorepo que contiene varios sub-proyectos y configuraciones:
+
+* **/app/**: Aplicación web principal construida con Next.js. Sirve como el dashboard para la visualización de datos y el control manual del sistema de riego.
+
+* **/firmware/**: Contiene el firmware de MicroPython para los nodos IoT (ESP32). Es responsable de leer los sensores y ejecutar los comandos de los actuadores.
+
+* **/infrastructure/**: Almacena los archivos de configuración para los servicios de soporte, como la configuración del broker Mosquitto.
+
+* **/database/**: Carpeta generada por Docker, en esta se almacenan los datos persistentes de la base de datos PostgreSQL. **Incluir en `.gitignore`**
+
+* `docker-compose.yml`: El archivo principal que orquesta el lanzamiento de todos los servicios de backend (Base de Datos, Broker MQTT, Servicio de Ingesta MQTT).
 
 ```bash
-└── ORCHIDIUM_PROJECT/       <-- La carpeta principal del proyecto
-    ├── .env                      <-- Variables de entorno para todo el sistema
-    ├── .gitignore
-    ├── docker-compose.yml        <-- El orquestador de todos los servicios
-    ├── README.md
+└── pristinoplant/
     │
-    ├── 📁 database/              <-- Datos persistentes generados por Docker
-    │   └── postgres/
+    ├── 📁 .turbo/                <-- Configuración de turborepo
+    │
+    ├── 📁 .vscode/                <-- Configuración de VS Code
+    │   └── settings.json
+    │
+    ├── 📁 app/                    <-- proyecto de Next.js
+    │   ├── .next/
+    │   ├── node_modules/
+    │   ├── public/
+    │   ├── src/
+    │   ├── eslint.config.mjs
+    │   ├── package.json
+    │   ├── tsconfig.json
+    │   └── ...
+    │
+    ├── 📁 firmware/               <-- Código del ESP32
+    │   ├── bh1750.py
+    │   ├── boot.py
+    │   ├── main.py
+    │   └── README.md
     │
     ├── 📁 infrastructure/         <-- Configuración de servicios de Docker
     │   └── mosquitto/
     │       └── config/
     │           └── mosquitto.conf
     │
-    ├── 📁 firmware/               <-- Código del ESP32
-    │   └── main.py
-    │   └── boot.py
-    │   └── bh1750.py
+    ├── 📁 node_modules/           <-- node_modules del monorepo
     │
-    └── 📁 web_app/                <-- proyecto Next.js
-        ├── .next/
-        ├── prisma/
-        ├── public/
-        ├── src/
-        ├── package.json
-        ├── tsconfig.json
-        └── ...
+    ├── 📁 packages/               <-- Paquetes del monorepo
+    │   └── database/
+    │       ├── generated/
+    │       ├── node_modules/
+    │       ├── postgres/
+    │       ├── prisma/
+    │       ├── src/
+    │       │   └── index.ts
+    │       ├── package.json
+    │       └── tsconfig.json
+    │
+    ├── 📁 services/               <-- Servicios de Docker
+    │   ├── mqtt/
+    │   │   ├── dist/
+    │   │   ├── node_modules/
+    │   │   ├── src/
+    │   │   │   └── index.ts
+    │   │   ├── Dockerfile
+    │   │   ├── entrypoint.sh
+    │   │   ├── package.json
+    │   │   └── tsconfig.json
+    │   │
+    │   └── seed/
+    │       ├── node_modules/
+    │       ├── src/
+    │       │   ├── seed-data.ts
+    │       │   └── seed-database.ts
+    │       ├── package.json
+    │       └── tsconfig.json
+    │
+    ├── .dockerignore
+    ├── .env
+    ├── .env.template
+    ├── .gitignore
+    ├── docker-compose.yml
+    ├── package.json
+    ├── pnpm-lock.yaml
+    ├── pnpm-workspace.yaml
+    ├── README.md
+    ├── tsconfig.base.json
+    └── turbo.json
 ```
 
-## Desarrollo
+## 🚀 Guía de Desarrollo Local
 
-Pasos para levantar la app en desarrollo:
+Sigue estos pasos para configurar y ejecutar el entorno de desarrollo completo en tu máquina local.
 
-1. Clonar el repositorio.
-2. Crear una copia del archivo `.env.template` y renombrarlo a `.env`. Modificar las variables de entorno según sea necesario.
-3. Instalar las dependencias del proyecto:
+### Requisitos Previos
 
-   ```bash
-   pnpm install
-   ```
+* [Docker](https://www.docker.com/products/docker-desktop/)
+* [Node.js](https://nodejs.org/) (versión 20.x o superior)
+* [pnpm](https://pnpm.io/installation)
 
-4. Levantar la base de datos utilizando Docker Compose:
+### 1. Configurar las Variables de Entorno
 
-   ```bash
-   docker compose up -d
-   ```
+Dentro de la carpeta `app` crea una copia del archivo `.env.template` y renómbrala a `.env`. Este archivo contendrá las credenciales y configuraciones locales.
 
-5. Correr las migraciones de Primsa:
+```bash
+cp .env.template .env
+```
 
-   ```bash
-   pnpm dlx prisma migrate dev
-   ```
+Abre el archivo `.env` y ajusta las variables si es necesario (aunque los valores por defecto son adecuados para el desarrollo local).
 
-6. Ejecutar seed:
+### 2. Instalar Dependencias
 
-   ```bash
-   pnpm run seed
-   ```
+Desde la carpeta `app` instala las dependencias del proyecto utilizando pnpm.
 
-7. Correr el proyecto:
+```bash
+cd app
+pnpm install
+```
 
-   ```bash
-   pnpm run dev
-   ```
+### 3. Levantar la Infraestructura de Backend
 
-## Base de Conocimientos
+Desde la **raíz del proyecto**, ejecuta el siguiente comando. Esto iniciará los servicios del backend (Base de Datos PostgreSQL, Broker MQTT, Servicio de Ingesta de Datos, etc.) en segundo plano.
 
-### Productos Químicos y Biológicos para el Cultivo
+```bash
+# Desde la raíz del proyecto
+docker-compose up --build -d
+```
 
-#### Fertilizantes
+* `--build`: Es necesario la primera vez para construir la imagen del servicio de ingesta.
 
-* ##### **Osmocote Plus**
+* `-d`: Ejecuta los contenedores en segundo plano (detached mode).
 
-  * **Descripción:** Fertilizante Granular de liberación lenta. Formulación 15-9-12 + microelementos.
-  * **Propósito:** Fertilización
-  * **Tipo:** Desarrollo
-  * **Preparación:** 1/4 cdita (1.25 ml) por planta
-  * **Frecuencia de Aplicación:** Cada 4 meses
+Para ver los logs de los servicios:
 
-* ##### **Solucat 25-5-5**
+```bash
+# Desde la raíz del proyecto
+docker-compose logs -f
+```
 
-  * **Descripción:** Fertilizante NPK cristalino rico en nitrógeno con microelementos, adecuado como complemento al abonado o para aplicar en las fases de crecimiento vegetativo dónde se consume nitrógeno.
-  * **Propósito:** Fertilización
-  * **Tipo:** Desarrollo
-  * **Preparación:** 1 gramo por litro de agua
+### 4. Aplicar las Migraciones de la Base de Datos
 
-* ##### **Nitrifort M935**
+Una vez que la base de datos esté corriendo, aplica el esquema de datos más reciente utilizando Prisma Migrate. Este comando asegurará que las tablas y columnas de tu base de datos coincidan con los modelos definidos en prisma/schema.prisma.
 
-  * **Descripción:** Promueve el crecimiento y desarrollo de hojas verdes, esencial para la fotosíntesis.
-  * **Propósito:** Fertilización
-  * **Tipo:** Desarrollo
-  * **Preparación:** 2 ml/L
+```bash
+# Desde la carpeta app
+pnpm dlx prisma migrate dev -n init
+```
 
-* ##### **Bio-Fert 72**
+### 5. Cargar Datos Iniciales
 
-  * **Descripción:** Vigorizante y estimulador de nuevos brotes vegetativos.
-  * **Propósito:** Fertilización
-  * **Tipo:** Desarrollo
-  * **Preparación:** 1 g/L
+Ejecuta `pnpm run seed` para insertar en la base de datos un conjunto de datos predefinidos, creando un estado inicial consistente para el entorno de desarrollo y asegurando que la aplicación sea funcional desde el primer momento.
 
-* ##### **Razormin**
+```bash
+# Desde la carpeta app
+pnpm run seed
+```
 
-  * **Descripción:** Bioestimulante y enraizante. Favorece la absorción de nutrientes.
-  * **Propósito:** Fertilización
-  * **Tipo:** Desarrollo
-  * **Preparación:** 1 ml/L
-  * **Frecuencia de Aplicación:** Cada 21 días
+### 6. Iniciar la Aplicación Web
 
-* ##### **Melaza**
+Inicia el servidor de desarrollo de Next.js.
 
-  * **Descripción:** Promueve el desarrollo radicular, optimiza la capacidad de intercambio catiónico del sustrato e intensifica la actividad microbiológica del sustrato.
-  * **Propósito:** Fertilización
-  * **Tipo:** Desarrollo
-  * **Preparación:** 1 cda/L
-  * **Frecuencia de Aplicación:** Cada semana (se mezcla con otros fertilizantes)
+```bash
+# Desde la carpeta app
+pnpm run dev
+```
 
-* ##### **Dalgin**
+### 7. Flashear el Firmware
 
-  * **Descripción:** Aporta vitalidad y energía al cultivo, especialmente durante el desarrollo vegetativo, y activa la clorofila y procesos fotosintéticos.
-  * **Propósito:** Fertilización
-  * **Tipo:** Desarrollo
-  * **Preparación:** 1 ml/L
-  * **Frecuencia de Aplicación:** Cada mes
-
-* ##### **Solucat 10-52-10**
-
-  * **Descripción:** El fósforo fortalece las raíces, mejora la floración.
-  * **Propósito:** Fertilización
-  * **Tipo:** Floración
-  * **Preparación:** 1 g/L
-
-* ##### **Triple 20-20-20**
-
-  * **Descripción:** El fósforo fortalece las raíces, mejora la floración.
-  * **Propósito:** Fertilización
-  * **Tipo:** Mantenimiento
-  * **Preparación:** 1 g/L
-
-* ##### **Triple 19-19-19**
-
-  * **Descripción:** El fósforo fortalece las raíces, mejora la floración.
-  * **Propósito:** Fertilización
-  * **Tipo:** Mantenimiento
-  * **Preparación:** 1 g/L
-  
-* ##### **Calcio + Boro**
-
-  * **Descripción:** Aumenta la turgencia de las plantas, el desarrollo de las flores y la calidad de las flores.
-  * **Propósito:** Fertilización
-  * **Tipo:** Floración
-  * **Preparación:** 2 ml/L
-  * **Frecuencia de Aplicación:** Cada semana
-
-#### Insecticidas y Acaricidas
-
-* ##### **Curtail**
-
-  * **Descripción:** Actúa por contacto e ingestión contra un amplio espectro de plagas masticadoras, minadoras y perforadoras, tanto larvas, ninfas y adultos.
-  * **Propósito:** Fumigación
-  * **Tipo:** Insecticida
-  * **Preparación:** 3 ml/L
-
-* ##### **ABAC**
-
-  * **Descripción:** Insecticida por ingestión y por contacto, el insecto queda inmovilizado poco después de ingerir el producto, deja de alimentarse y acaba muriendo, sin destruir la planta.
-  * **Propósito:** Fumigación
-  * **Tipo:** Acaricida
-  * **Preparación:** 3 ml/L
-
-* ##### **Sulphor-NF**
-
-  * **Descripción:** Posee un alto contenido de azufre siendo también un compuesto nitrogenado que favorece el crecimiento y fortalece los cultivos contra condiciones adversas como: stress, plagas y enfermedades por su triple acción (fungicida, acaricida y nutricional).
-  * **Propósito:** Fumigación
-  * **Tipo:** Acaricida
-  * **Preparación:** 3 ml/L
-
-#### Fungicidas
-
-* ##### **Kasumin**
-
-  * **Descripción:** Fungicida – bactericida de origen biológico, con acción sistémico con actividad preventiva y curativa.
-  * **Propósito:** Fumigación
-  * **Tipo:** Fungicida
-  * **Preparación:** 5 ml/L
-
-* ##### **Vitavax-200F**
-
-  * **Descripción:** Se puede aplicar a la semilla para prevenir las enfermedades provocadas por microorganismos que pueden ser transmitidos en las semillas o encontrarse en el suelo, protegiendo las semillas durante su almacenaje, germinación y a las plántulas en sus primeros días de desarrollo.
-  * **Propósito:** Fumigación
-  * **Tipo:** Fungicida
-  * **Preparación:** 10 ml/L
-
-* ##### **Mancozeb**
-
-  * **Descripción:** Presenta un amplio espectro antifúngico frente a hongos endoparásitos causantes de enfermedades foliares.
-  * **Propósito:** Fumigación
-  * **Tipo:** Fungicida
-  * **Preparación:** 5 g/L
-
-* ##### **Bitter 97**
-
-  * **Descripción:** De acción sistémica, preventiva y curativa.
-  * **Propósito:** Fumigación
-  * **Tipo:** Fungicida
-  * **Preparación:** 5 ml/L
-
-* ##### **Agua Oxigenada 3%**
-
-  * **Descripción:** 12h x 7dias.
-  * **Propósito:** Fumigación
-  * **Tipo:** Fungicida
-  * **Preparación:** 50:50
-
----
-
-### Programa de Fertilización
-
-* #### Desarrollo Solucat
-
-  * Solucat 25-5-5
-  * Triple 20-20-20
-  * Triple 20-20-20
-  * Solucat 10-52-10
-
-* #### Desarrollo Nitrifort
-
-  * Nitrifort M935
-  * Triple 20-20-20
-  * Triple 20-20-20
-  * Solucat 10-52-10
-
-* #### Desarrollo Bio-Fert 72
-
-  * Bio-Fert 72
-  * Triple 20-20-20
-  * Triple 20-20-20
-  * Solucat 10-52-10
-
-* #### Programa Razormin
-
-  Bioestimulante y enraizante. Favorece la absorción de nutrientes. Aplicar cada 21 dias.
-
-  * **Periodo**: Se aplica cada 21 dias.
-  * **productType**: Desarrollo.
-
-* #### Calcio + Boro
-
-  Aumenta la turgencia de las plantas, el desarrollo de las flores y la calidad de las flores.
-
-  * **Periodo**: Se aplica cada semana.
-  * **productType**: Floración.
-
-* #### Melaza
-
-  * **Periodo**: Se aplica cada semana (se mezcla con otros fertilizantes)
-  * **productType**: Desarrollo.
-
-* #### Osmocote Plus
-
-  Fertilizante de liberación lenta. Formulacion 15-9-12
-
-  * **Preparación:** Se aplica cada 4 meses
-  * **productType:** Desarrollo
-
----
-
-### Planificación del Control Fitosanitario
-
-Los productos fitosanitarios se aplican en ciclos de 7 dias por 3 semanas.
-
-* Fungicida: cada 2 meses. Proyecion en un año con 6 aplicacion (Kasumin, Sulphor-NF, Kasumin, Mancozeb, Sulphor-NF, Bitter 97 )
-* Acaricida: cada 3 meses. ABAC
-* Insecticida: cada 4 meses. Curtail
-
----
-
-### Planificacion de Irrigación
-
-* Riego interdiario
-* Hora programada 5:00 am
-* Toma de decisiones basada en Datos (sensores)
+Consulta el `README.md` dentro de la carpeta `/firmware` para obtener instrucciones detalladas sobre cómo flashear y configurar los dispositivos ESP32.
