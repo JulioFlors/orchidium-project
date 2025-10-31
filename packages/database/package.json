@@ -15,7 +15,9 @@
     "dotenv-cli": "^10.0.0",
     "prisma": "^6.16.1"
   },
-  "exports": {
-    ".": "./src/index.ts"
-  }
+  "main": "./src/index.ts",
+  "files": [
+    "src",
+    "generated"
+  ]
 }
