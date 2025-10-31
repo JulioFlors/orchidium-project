@@ -17,11 +17,8 @@ export function AddToCart({ product }: Props) {
 
   /*   const [size, setSize] = useState<Size | undefined>() */
   const [quantity, setQuantity] = useState<number>(1)
-  const [posted, setPosted] = useState(false)
 
   const addToCart = () => {
-    setPosted(true)
-
     // if (!size) return
 
     /*     const cartProduct: CartProduct = {
@@ -35,7 +32,6 @@ export function AddToCart({ product }: Props) {
     }
 
     addProductToCart(cartProduct) */
-    setPosted(false)
     setQuantity(1)
     // setSize(undefined)
   }

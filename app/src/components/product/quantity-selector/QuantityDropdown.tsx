@@ -49,8 +49,8 @@ export function QuantityDropdown({ quantity, onQuantityChanged }: Props) {
   // Similar a lo que viste en la documentación de Motion/Framer Motion
   const dropdownPanelVariants = {
     initial: { opacity: 0, scale: 0.95, y: -10 }, // Comienza invisible y ligeramente escalado/desplazado
-    animate: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } }, // Anima a visible y tamaño normal
-    exit: { opacity: 0, scale: 0.95, y: -10, transition: { duration: 0.15, ease: 'easeIn' } }, // Anima al salir
+    animate: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' as any } }, // Anima a visible y tamaño normal
+    exit: { opacity: 0, scale: 0.95, y: -10, transition: { duration: 0.15, ease: 'easeIn' as any } }, // Anima al salir
   }
 
   return (

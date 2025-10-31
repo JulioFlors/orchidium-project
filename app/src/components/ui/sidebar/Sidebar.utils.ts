@@ -75,16 +75,16 @@ export const motionProps = {
     x: 0,
     opacity: 1,
     transition: {
-      x: { duration: 0.5, ease: 'easeOut' },
-      opacity: { duration: 0.3, ease: 'easeOut', delay: 0.1 },
+      x: { duration: 0.5, ease: 'easeOut' as any },
+      opacity: { duration: 0.3, ease: 'easeOut' as any, delay: 0.1 },
     },
   },
   exit: {
     x: '80%',
     opacity: 0,
     transition: {
-      x: { duration: 0.6, ease: 'easeIn' },
-      opacity: { duration: 0.4, ease: 'easeIn', delay: 0.1 },
+      x: { duration: 0.6, ease: 'easeIn' as any },
+      opacity: { duration: 0.4, ease: 'easeIn' as any, delay: 0.1 },
     },
   },
 }

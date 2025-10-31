@@ -33,11 +33,11 @@ const categoryWrapper: Record<string, string> = {
 }
 
 interface Props {
-  suggestions: SearchSuggestion[]
-  plantsNavData: PlantsNavData[]
+  suggestions?: SearchSuggestion[]
+  plantsNavData?: PlantsNavData[]
 }
 
-export function TopMenu({ suggestions, plantsNavData }: Props) {
+export function TopMenu({ suggestions = [], plantsNavData = [] }: Props) {
   // aria-current="page" necesita evaluar la ruta actual
   const pathname = usePathname()
 

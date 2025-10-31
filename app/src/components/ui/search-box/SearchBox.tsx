@@ -79,7 +79,7 @@ const motionProps = {
 
 interface SearchBoxProps {
   isTopMenu?: boolean
-  suggestions: SearchSuggestion[]
+  suggestions?: SearchSuggestion[]
 }
 
 /**
@@ -100,7 +100,7 @@ interface SearchBoxProps {
  * - Al hacer clic en una sugerencia, navega a la página de detalle del producto `/product/[slug]`.
  * - Utiliza el store de Zustand (`useUIStore`) para gestionar el término de búsqueda global.
  */
-export function SearchBox({ isTopMenu = false, suggestions }: SearchBoxProps) {
+export function SearchBox({ isTopMenu = false, suggestions = [] }: SearchBoxProps) {
   const router = useRouter()
 
   // Referencias a elementos del DOM

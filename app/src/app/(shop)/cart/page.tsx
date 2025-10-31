@@ -78,9 +78,9 @@ export default function CartPage() {
             </div>
           ) : (
             // ---- Carrito ---- //
-            <div className="tds-lg:grid-cols-2 tds-sm:-mt-6 tds-sm:mb-6 -mt-0 mb-0 -ml-6 grid grid-cols-1">
+            <div className="tds-lg:grid-cols-2 tds-sm:-mt-6 tds-sm:mb-6 mt-0 mb-0 -ml-6 grid grid-cols-1">
               {/* ---- tds-flex-item  ---- */}
-              <div className="tds-sm:pt-6 flex w-full min-w-[112px] flex-1 flex-col pt-0 pl-6">
+              <div className="tds-sm:pt-6 flex w-full min-w-28 flex-1 flex-col pt-0 pl-6">
                 {/* ---- Tag Continúa comprando  ---- */}
                 {/* El self-start evitará que el Link se estire a todo lo ancho debido a su padre flex-col */}
                 {/* <div className="tds-lg:mb-0 mt-6 mb-8 flex flex-col">
@@ -101,17 +101,17 @@ export default function CartPage() {
                   // ---- lineitem__container-wrapper ---- //
                   <div key={product.slug} className="tds-sm:mt-0 tds-lg:max-w-[546px] mt-6">
                     {/* ---- lineitem__container tds-flex tds-flex-gutters ---- // */}
-                    <div className="tds-lg:mt-6 relative -mt-0 flex flex-1">
+                    <div className="tds-lg:mt-6 relative mt-0 flex flex-1">
                       {/* ---- lineitem__main-info ---- // */}
                       <div className="flex w-full flex-row flex-nowrap">
-                        <div className="tds-sm:pt-6 max-h-[114px] max-w-[90px] flex-shrink-0 pt-0">
+                        <div className="tds-sm:pt-6 max-h-[114px] max-w-[90px] shrink-0 pt-0">
                           <Link
                             aria-label={`Ver detalles de ${product.name}`}
                             href={`/product/${product.slug}`}
                           >
                             <Image
                               alt={product.name}
-                              className="tds-lg:h-[90px] tds-lg:w-[90px] tds-lg:min-w-[90px] tds-lg:mb-0 mb-[5px] aspect-square h-[80px] w-[80px] min-w-[80px] rounded-xs object-cover"
+                              className="tds-lg:h-[90px] tds-lg:w-[90px] tds-lg:min-w-[90px] tds-lg:mb-0 mb-[5px] aspect-square h-20 w-20 min-w-20 rounded-xs object-cover"
                               height={80}
                               src={`/plants/${product.images[0]}`}
                               width={80}
