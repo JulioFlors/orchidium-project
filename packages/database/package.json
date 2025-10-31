@@ -17,7 +17,6 @@
   },
   "main": "./src/index.ts",
   "files": [
-    "src",
-    "generated"
+    "src"
   ]
 }

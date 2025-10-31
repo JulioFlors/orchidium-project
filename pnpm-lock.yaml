@@ -20,6 +20,9 @@ importers:
 
   app:
     dependencies:
+      '@package/database':
+        specifier: workspace:*
+        version: link:../packages/database
       '@tailwindcss/postcss':
         specifier: 4.1.16
         version: 4.1.16
