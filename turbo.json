@@ -44,6 +44,9 @@
       "inputs": [
         "packages/database/prisma/schema.prisma"
       ],
+      "outputs": [
+        "packages/database/src/generated/**"
+      ],
       "cache": false
     },
     "db:migrate": {
