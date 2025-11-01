@@ -45,7 +45,7 @@
         "packages/database/prisma/schema.prisma"
       ],
       "outputs": [
-        "packages/database/src/generated/**"
+        "packages/database/generated/**"
       ],
       "cache": false
     },

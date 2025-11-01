@@ -149,7 +149,7 @@ Una vez que la base de datos esté corriendo, aplica el esquema de datos más re
 
 ```bash
 # Desde la carpeta app
-pnpm dlx prisma migrate dev -n init
+pnpm prisma migrate deploy
 ```
 
 ### 5. Cargar Datos Iniciales
