@@ -13,7 +13,6 @@
   ],
   "exclude": [
     "dist",
-    "generated",
     "node_modules"
   ]
 }

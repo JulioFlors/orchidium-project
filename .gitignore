@@ -44,7 +44,7 @@
 # Carpeta de distribución para librerías y paquetes (builds)
 **/dist
 # Cliente de Prisma generado automáticamente.
-**/database/generated
+**/generated
 # Caché de build de TypeScript.
 *.tsbuildinfo
 # Archivo de definición de tipos de Next.js (se autogenera).
