@@ -25,7 +25,19 @@
         "MQTT_HOST",
         "MQTT_PORT",
         "MQTT_BROKER_URL",
-        "MQTT_CLIENT_ID"
+        "MQTT_CLIENT_ID",
+        "DB_POSTGRES_URL",
+        "DB_POSTGRES_PRISMA_URL",
+        "DB_DATABASE_URL_UNPOOLED",
+        "DB_POSTGRES_URL_NON_POOLING",
+        "DB_PGHOST",
+        "DB_POSTGRES_USER",
+        "DB_STACK_SECRET_SERVER_KEY",
+        "DB_DATABASE_URL",
+        "DB_POSTGRES_PASSWORD",
+        "DB_POSTGRES_DATABASE",
+        "DB_PGPASSWORD",
+        "DB_PGDATABASE"
       ]
     },
     "lint": {

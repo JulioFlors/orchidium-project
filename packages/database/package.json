@@ -8,7 +8,7 @@
     "db:deploy": "dotenv -e ../../.env -- prisma migrate deploy"
   },
   "dependencies": {
-    "@prisma/client": "^6.18.0"
+    "@prisma/client": "6.18.0"
   },
   "main": "./src/index.ts",
   "files": [
