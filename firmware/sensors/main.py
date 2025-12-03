@@ -1,11 +1,13 @@
 # -----------------------------------------------------------------------------
 # Sensors: Environmental Monitoring Firmware.
 # Descripción: Firmware dedicado al Monitoreo de las condiciones ambientales del Invernadero.
-# Versión: v0.8.0 - (Re)conexión Asíncrona WiFi/MQTT con umqtt.simple2
-# Fecha: 28-10-2025
+# Versión: v0.3.3 - Implementación de Detección Zombie, Publicación JSON Atómica, Actualización de Firmware con OTA y Apagado Controlado v2
+# Fecha: 02-12-2025
 # -----------------------------------------------------------------------------
 
-# [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib.
+# [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib. 
+# Esto es necesario para que se importe la librería umqtt.simple2 en lugar 
+# de la librería umqtt.simple que viene integrada en el firmware de MicroPython.
 import sys
 sys.path.reverse()
 
@@ -14,13 +16,23 @@ import gc # type: ignore
 import network # type: ignore
 import uasyncio as asyncio # type: ignore
 import ubinascii # type: ignore
+import ujson # type: ignore
 
 from bh1750 import BH1750 # type: ignore
-from machine import ADC, I2C, Pin # type: ignore
+from machine import ADC, I2C, Pin, reset # type: ignore
+from ota import OTAUpdater # type: ignore
 from time import time
 from umqtt import errno as umqtt_errno # type: ignore
 from umqtt.simple2 import MQTTClient, MQTTException # type: ignore
 from utime import ticks_ms, ticks_diff # type: ignore
+
+# ---- IMPORTACIÓN SEGURA ---- CONFIGURACIÓN WIFI ---- #
+try:
+    from secrets import WIFI_CONFIG
+except ImportError:
+    print("Error: No se encontró secrets.py")
+    # Evitamos que el código crashee, aunque no conectará
+    WIFI_CONFIG = {"SSID": "", "PASS": ""} 
 
 # ---------------------------- CONFIGURACIÓN GLOBAL ---------------------------
 
@@ -28,21 +40,9 @@ from utime import ticks_ms, ticks_diff # type: ignore
 # Desactivar en Producción. Desactiva logs de desarrollo.
 DEBUG = True
 
-# ---- CLASE DE COLORES ANSI ----
-class Colors:
-    RESET = '\x1b[0m'
-    BOLD = '\x1b[1m'
-    RED = '\x1b[91m'
-    GREEN = '\x1b[92m'
-    YELLOW = '\x1b[93m'
-    BLUE = '\x1b[94m'
-    MAGENTA = '\x1b[95m'
-    WHITE = '\x1b[97m'
-
-# ---- CONFIGURACIÓN WIFI ----
-WIFI_CONFIG = {
-    "SSID": "Private Network ",
-    "PASS": "Dev.2022"
+# ---- CONFIGURACIÓN OTA ----
+OTA_CONFIG = {
+    "URL": "https://raw.githubusercontent.com/JulioFlors/orchidium-project/refs/heads/Dev/firmware/sensors/"
 }
 
 # ---- CONFIGURACIÓN MQTT ----
@@ -60,7 +60,7 @@ MQTT_CONFIG = {
     # Intervalo para publicar datos de los sensores principales.
     "PUBLISH_INTERVAL": 300, # 5 minutos
     # Intervalo para monitorear el sensor de lluvia y actualizar su estado. 
-    "RAIN_MONITOR_INTERVAL": 10,
+    "RAIN_MONITOR_INTERVAL": 60,
     # tiempo máximo que (connect, check_msg, ping) esperará antes de fallar y lanzar una excepción.
     "SOCKET_TIMEOUT": 60,
     # tiempo máximo que el cliente esperará para que se complete un intercambio completo de mensajes MQTT(QoS) 1
@@ -68,21 +68,34 @@ MQTT_CONFIG = {
 }
 
 # ---- Tópicos MQTT ----
-BASE_TOPIC = b"PristinoPlant/Zona_A"
+BASE_TOPIC = b"PristinoPlant/Environmental_Monitoring/Zona_A"
+
 # Tópico de estado de este dispositivo
 MQTT_TOPIC_STATUS = BASE_TOPIC + b"/status"
-# Tópico donde se publican los Sensores Ambientales
-MQTT_TOPIC_TEMP = BASE_TOPIC + b"/environment/temperature"
-MQTT_TOPIC_HUM = BASE_TOPIC + b"/environment/humidity"
-MQTT_TOPIC_LUX = BASE_TOPIC + b"/environment/light_intensity"
-# Tópico donde se publican los Eventos de lluvia
+
+# Tópico para el paquete de datos ambientales (JSON)
+MQTT_TOPIC_ENV_DATA = BASE_TOPIC + b"/readings"
+
+# Tópico para el ESTADO de la lluvia
 MQTT_TOPIC_RAIN_STATE = BASE_TOPIC + b"/rain/state"
-MQTT_TOPIC_RAIN_DURATION = BASE_TOPIC + b"/rain/duration_seconds"
-MQTT_TOPIC_RAIN_INTENSITY = BASE_TOPIC + b"/rain/intensity_percent"
+
+# Tópico para el EVENTO de lluvia (JSON con duración/intensidad)
+MQTT_TOPIC_RAIN_EVENT = BASE_TOPIC + b"/rain/event"
 
 # ---- PARÁMETROS LWT (Last Will and Testament) ----
 LWT_TOPIC = MQTT_TOPIC_STATUS
 LWT_MESSAGE = b"offline"
+
+# ---- CLASE DE COLORES ANSI ----
+class Colors:
+    RESET = '\x1b[0m'
+    BOLD = '\x1b[1m'
+    RED = '\x1b[91m'
+    GREEN = '\x1b[92m'
+    YELLOW = '\x1b[93m'
+    BLUE = '\x1b[94m'
+    MAGENTA = '\x1b[95m'
+    WHITE = '\x1b[97m'
 
 # ---------------------------- LÓGICA DEL FIRMWARE  ---------------------------
 
@@ -109,19 +122,11 @@ def log(*args, **kwargs):
     if DEBUG:
         print(*args, **kwargs)
 
-# ---- FUNCIÓN AUXILIAR: CALLBACK MQTT ----
-def sub_callback(topic, msg, retained, dup):
-    """**Callback SÍNCRONO que se ejecuta al recibir mensajes desde el Broker**"""
-
-    log(f"\n{Colors.BLUE}>  Mensaje Recibido (retained: {retained}, dup: {dup}){Colors.RESET}")
-    log(f"{Colors.WHITE}   Tópico: {topic.decode('utf-8')}{Colors.RESET}")
-    log(f"{Colors.WHITE}   Mensaje: \n{msg.decode('utf-8')}{Colors.RESET}")
-
 # ---- FUNCIÓN AUXILIAR: CALLBACK DE ESTADO ----
 def sub_status_callback(pid, status):
     """Callback que informa el estado de entrega de los mensajes QoS 1."""
 
-    if DEBUG: return
+    if not DEBUG: return
 
     if status == umqtt_errno.SDELIVERED:
         log(f"\n{Colors.GREEN}>  Mensaje con PID:{pid} {Colors.GREEN}entregado con éxito.{Colors.RESET}")
@@ -129,6 +134,14 @@ def sub_status_callback(pid, status):
         log(f"\n{Colors.YELLOW}>  Timeout para el mensaje con PID:{pid}. El broker no confirmó.{Colors.RESET}")
     elif status == umqtt_errno.SUNKNOWNPID:
         log(f"\n{Colors.RED}>  PID:{pid} desconocido. El broker respondió con un PID inesperado.{Colors.RESET}")
+
+# ---- FUNCIÓN AUXILIAR: CALLBACK MQTT ----
+def sub_callback(topic, msg, retained, dup):
+    """**Callback SÍNCRONO que se ejecuta al recibir mensajes desde el Broker**"""
+
+    log(f"\n{Colors.BLUE}>  Mensaje Recibido (retained: {retained}, dup: {dup}){Colors.RESET}")
+    log(f"{Colors.WHITE}   Tópico: {topic.decode('utf-8')}{Colors.RESET}")
+    log(f"{Colors.WHITE}   Mensaje: \n{msg.decode('utf-8')}{Colors.RESET}")
 
 # ---- FUNCIÓN AUXILIAR: Desconecta/Invalida Cliente MQTT ----
 def force_disconnect_mqtt():
@@ -144,6 +157,37 @@ def force_disconnect_mqtt():
                 except OSError: pass
             client = None
             log(f"{Colors.GREEN}>  {Colors.RESET}{Colors.WHITE}Cliente  {Colors.RESET}{Colors.GREEN}Desconectado{Colors.RESET}")
+
+# ---- FUNCIÓN AUXILIAR: Gestión de desconexión (Graceful Shutdown - Sensors) ----
+def shutdown():
+    """
+    **Apagado Controlado (Sensores)**
+    * Publica `offline` explícitamente en el tópico de estado.
+    * Desconecta MQTT y WiFi.
+    """
+    global client, wlan
+
+    # Publicamos en MQTT (Solo si hay conexión)
+    if client and hasattr(client, 'sock') and client.sock and wlan and wlan.isconnected():
+        try:
+            # Publicamos el LWT explícitamente para que el broker lo retenga.
+            # El LWT para el cliente MQTT solo se envía si el cliente se desconecta inesperadamente. 
+            # Si nos desconectamos limpiamente,
+            # el broker no lo envía automáticamente.
+            client.publish(MQTT_TOPIC_STATUS, b"offline", retain=True, qos=1)
+        except (MQTTException, OSError) as e:
+            log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}Error en publicación offline: {Colors.RESET}{Colors.RED}{e}{Colors.RESET}")
+
+    # Invalidamos el cliente MQTT forzando una reconexión completa.
+    force_disconnect_mqtt()
+
+    # Desconectamos el WiFi.
+    if wlan and wlan.isconnected():
+        try:
+            wlan.disconnect()
+            log(f"{Colors.GREEN}>  {Colors.RESET}{Colors.WHITE}WiFi     {Colors.RESET}{Colors.GREEN}Desconectado{Colors.RESET}\n")
+        except Exception:
+            pass # Ignoramos errores de hardware al apagar
 
 # ---- CORUTINA: Gestión de Conexión WiFi ----
 async def wifi_coro():
@@ -242,7 +286,7 @@ async def mqtt_connector_task(client_id):
                 client.set_last_will(LWT_TOPIC, LWT_MESSAGE, retain=True, qos=1)
                 
                 # Configura el callback para mensajes entrantes
-                #client.set_callback(sub_callback)
+                # client.set_callback(sub_callback)
 
                 # Configura el callback de estado
                 client.set_callback_status(sub_status_callback)
@@ -256,37 +300,53 @@ async def mqtt_connector_task(client_id):
                 # Publica que el ESP32 esta ONLINE
                 client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=1)
 
+                log(f"\n{Colors.GREEN}>  {Colors.RESET}{Colors.WHITE}Publicado: ESP32{Colors.RESET}{Colors.GREEN} ➜ {Colors.RESET}{Colors.WHITE}ONLINE{Colors.RESET}", end="\n")
+
             except (MQTTException, OSError) as e:
                 log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}Fallo en conexión MQTT: {Colors.RESET}{Colors.RED}{e}{Colors.RESET}")
 
                 # Invalidamos el cliente MQTT forzando una reconexión completa.
                 force_disconnect_mqtt()
+                await asyncio.sleep(10)
                 continue
 
         if client:
             # Gestionamos la Conexión Activa
             try:
                 # revisamos si hay mensajes entrantes
+                # Procesa PINGRESP y actualiza client.last_cpacket
                 client.check_msg()
 
-                # Comprobamos la salud de la conexión
+                # Comprobamos si debemos enviar un ping
                 if ticks_diff(ticks_ms(), client.last_ping) > (MQTT_CONFIG['PING_INTERVAL'] * 1000):
                     client.ping()
                     # Señal de vida
                     log(f"{Colors.GREEN}.{Colors.RESET}", end="")
 
+                # Comprobamos si ha pasado demasiado tiempo desde que OÍMOS al broker
+
+                # Damos un margen de 1.5x el KEEPALIVE
+                keepalive_margin_ms = MQTT_CONFIG['KEEPALIVE'] * 1000 * 1.5
+
+                if ticks_diff(ticks_ms(), client.last_cpacket) > keepalive_margin_ms:
+                    log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}Conexión{Colors.RED} ZOMBIE {Colors.RESET}{Colors.WHITE}detectada.{Colors.RESET}")
+
+                    # Lanzamos una excepción a propósito para ser capturados
+                    raise OSError("Se ha excedido el TIMEOUT del broker MQTT, disconnecting")
+
             except (MQTTException, OSError) as e:
-                log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}Error en operación MQTT: {Colors.RESET}{Colors.RED}{e}{Colors.RESET}")
+                log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}Error en operación MQTT: {Colors.RESET}{Colors.RED}{e}{Colors.RESET}\n")
 
                 # Invalidamos el cliente MQTT forzando una reconexión completa.
                 force_disconnect_mqtt()
                 continue
 
+
 # ---- CORUTINA: Gestión de la publicacion de sensores ----
 async def sensor_publish_task():
     """
-    * **Lee todos los sensores**
-    * **Publica los datos en los tópicos correspondientes**
+    * **Lee todos los sensores** de forma aislada.
+    * **Agrupa los datos en un unico paquete JSON**
     * **Se ejecuta cada PUBLISH_INTERVAL segundos**
     """
     global client
@@ -297,40 +357,74 @@ async def sensor_publish_task():
 
         # Si el cliente no existe O el WiFi no está conectado, NO intentamos publicar.
         if client is None or not (wlan and wlan.isconnected()):
-            log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}Publicación omitida: Cliente/WiFi no disponible.{Colors.RESET}")
+            log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}Publicación omitida: Cliente/WiFi no disponible.{Colors.RESET}")
             continue 
 
-        try:
-            # ---- Lectura de Sensores ----#
-            dht_sensor.measure()
-            temp_val = dht_sensor.temperature()
-            hum_val = dht_sensor.humidity()
-            lux_val = light_sensor.luminance(BH1750.CONT_HIRES_1)
+        # ---- Lectura de Sensores ----#
+        # Reestablecemos en cada iteracion
+        temp, hum, lux = None, None, None
 
-            # Comprobar si la lectura del dht_sensor es válida antes de redondear
-            if temp_val and hum_val:
-                temp = str(round(temp_val, 1))
-                hum = str(round(hum_val, 1))
+        try:
+            # Leemos el sensor, guardamos su valor (o None si falla)
+            dht_sensor.measure()
+            temp_sensor = dht_sensor.temperature()
+            hum_sensor = dht_sensor.humidity()
+
+            # Validar que la lectura sea un número (no solo 'True')
+            if (isinstance(temp_sensor, (int, float)) and isinstance(hum_sensor, (int, float))):
+                temp = round(temp_sensor, 1)
+                hum  = round(hum_sensor,  1)
 
                 log(f"\n{Colors.GREEN}>  {Colors.RESET}{Colors.WHITE}Temp: {Colors.RESET}{Colors.MAGENTA}{temp}°C{Colors.RESET}  {Colors.WHITE}Hum: {Colors.RESET}{Colors.BLUE}{hum}%{Colors.RESET}", end="  ")
-
-                client.publish(MQTT_TOPIC_TEMP, temp.encode('utf-8'), qos=1)
-
-                client.publish(MQTT_TOPIC_HUM, hum.encode('utf-8'), qos=1)
             else:
-                log(f"{Colors.RED}>  {Colors.RESET}{Colors.WHITE}No se pudo obtener los datos del DHT22{Colors.RESET}")
+                raise ValueError("Lectura invalida o nula del DHT22")
 
-            if lux_val is not None:
-                lux = str(round(lux_val, 1))
+        except Exception as e:
+            log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}ERROR de lectura del sensor DHT22: {Colors.RED}{e}{Colors.RESET}")
+
+
+        try:
+            # Leemos el sensor, guardamos su valor (o None si falla)
+            lux_sensor = light_sensor.luminance(BH1750.CONT_HIRES_1)
+
+            # Validar que la lectura sea un número (no solo 'True')
+            if isinstance(lux_sensor, (int, float)):
+                lux = round(lux_sensor, 1)
 
                 log(f"{Colors.WHITE}Lux: {Colors.RESET}{Colors.YELLOW}{lux}{Colors.RESET}")
-
-                client.publish(MQTT_TOPIC_LUX, lux.encode('utf-8'), qos=1)
             else:
-                log(f"{Colors.RED}>  {Colors.RESET}{Colors.WHITE}No se pudo obtener los datos del BH1750{Colors.RESET}")
+                raise ValueError("Lectura invalida o nula del BH1750")
 
+        except Exception as e:
+            log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}ERROR de lectura del sensor BH1750: {Colors.RED}{e}{Colors.RESET}")
+
+        # ---- Construccion del JSON ----#
+        data_payload = {}
+        # Incluimos en un diccionario los valores que NO son None
+        if temp is not None:
+            data_payload['temperature'] = temp
+        if hum is not None:
+            data_payload['humidity'] = hum
+        if lux is not None:
+            data_payload['light_intensity'] = lux
+
+        if not data_payload:
+            log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}Publicación omitida: {Colors.RESET}{Colors.RED}Todos los sensores fallaron.{Colors.RESET}")
+            continue
+
+        # ---- Publicación Atómica de los datos ----#
+        try:
+            # Convertimos el diccionario a un string JSON
+            json_string = ujson.dumps(data_payload)
+
+            # Publicamos el paquete JSON (qos=0, no bloqueante)
+            client.publish(MQTT_TOPIC_ENV_DATA, json_string.encode('utf-8'), retain=False, qos=0)
+
+            log(f"\n{Colors.GREEN}>  {Colors.RESET}{Colors.WHITE}Paquete de sensores publicado: {Colors.MAGENTA}{json_string}{Colors.RESET}")
+
+        # Este bloque captura unicamente errores de RED/MQTT
         except (MQTTException, OSError) as e:
-            log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}ERROR durante la publicación: {Colors.RED}{e}{Colors.RESET}")
+            log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}ERROR durante la publicación MQTT: {Colors.RED}{e}{Colors.RESET}")
 
             # Invalidamos el cliente MQTT forzando una reconexión completa.
             force_disconnect_mqtt()
@@ -345,9 +439,10 @@ async def rain_monitor_task():
     *  Monitorea el estado de la lluvia usando la salida analógica (A0).
     *  Utiliza umbrales con histéresis para detectar inicio y fin de un evento de lluvia.
     *  Calcula y publica la duración y la intensidad del evento.
+    * La histéresis es un fenómeno en el que el estado de un sistema depende de su historia pasada, y no solo de las fuerzas que lo afectan en el momento presente.Se manifiesta como un retraso entre una causa y su efecto.
     """
     global client
-    
+
     # Umbrales de estado (basados en mi calibración)
     RAIN_START_THRESHOLD = 2350
     RAIN_STOP_THRESHOLD = 2700
@@ -356,6 +451,7 @@ async def rain_monitor_task():
     ADC_INTENSITY_MIN = 1700
     ADC_INTENSITY_MAX = 2700
     
+    # ESTADOS
     current_rain_state = 'Dry'
     rain_start_time = 0
     total_intensity_reading = 0
@@ -374,17 +470,21 @@ async def rain_monitor_task():
 
         await asyncio.sleep(MQTT_CONFIG["RAIN_MONITOR_INTERVAL"])
 
+        # ---- Lectura del sensor de lluvia ----
         try:
             rain_analog_value = rain_sensor_analog.read()
+        except Exception as e:
+            log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}ERROR de lectura del sensor de Lluvia: {Colors.RED}{e}{Colors.RESET}")
+            continue
 
-            rain_intensity_percent = map_adc_to_intensity(
-                rain_analog_value, 
-                ADC_INTENSITY_MIN, 
-                ADC_INTENSITY_MAX
-            )
+        rain_intensity_percent = map_adc_to_intensity(
+            rain_analog_value, 
+            ADC_INTENSITY_MIN, 
+            ADC_INTENSITY_MAX
+        )
 
-            # ---- Lógica de la Máquina de Estados con Histéresis ----
-
+        # ---- Lógica de publicación y Máquina de Estados ----
+        try:
             # EVENTO 1: Lluvia Detectada
             if rain_analog_value < RAIN_START_THRESHOLD and current_rain_state == 'Dry':
                 current_rain_state = 'Raining'
@@ -393,10 +493,11 @@ async def rain_monitor_task():
 
                 # Si el cliente no existe O el WiFi no está conectado, NO intentamos publicar.
                 if client is None or not (wlan and wlan.isconnected()):
-                    log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}Publicación omitida: Cliente/WiFi no disponible.{Colors.RESET}")
-                    continue 
+                    log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}Publicación de{Colors.BLUE} LLUVIA {Colors.RESET}{Colors.WHITE}omitida:{Colors.RESET}{Colors.RED} Cliente/WiFi no disponible.{Colors.RESET}")
+                    continue
                 else:
-                    client.publish(MQTT_TOPIC_RAIN_STATE, b"Raining", retain=True, qos=1)
+                    # Si la publicacion se pierde, la lógica de 'Dry' lo corregirá.
+                    client.publish(MQTT_TOPIC_RAIN_STATE, b"Raining", retain=True, qos=0)
 
                 log(f"\n{Colors.GREEN}>  Message{Colors.RESET}")
                 log(f"{Colors.WHITE}   Event: Rain Monitor{Colors.RESET}")
@@ -420,18 +521,28 @@ async def rain_monitor_task():
 
                     # Si el cliente no existe O el WiFi no está conectado, NO intentamos publicar.
                     if client is None or not (wlan and wlan.isconnected()):
-                        log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}Publicación omitida: Cliente/WiFi no disponible.{Colors.RESET}")
-                        continue 
+                        log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}Publicación de{Colors.BLUE} LLUVIA {Colors.RESET}{Colors.WHITE}omitida:{Colors.RESET}{Colors.RED} Cliente/WiFi no disponible.{Colors.RESET}")
+                        continue
                     else:
-                        client.publish(MQTT_TOPIC_RAIN_STATE, b"Dry", retain=True, qos=1)
-                        client.publish(MQTT_TOPIC_RAIN_DURATION, str(duration_sec).encode('utf-8'), retain=True, qos=1)
-                        client.publish(MQTT_TOPIC_RAIN_INTENSITY, str(avg_intensity).encode('utf-8'), retain=True, qos=1)
+                        # Publicamos el cambio de ESTADO
+                        client.publish(MQTT_TOPIC_RAIN_STATE, b"Dry", retain=True, qos=0)
+
+                        # Creamos el paquete JSON
+                        rain_event_payload = {
+                            "duration_seconds": duration_sec,
+                            "average_intensity_percent": avg_intensity
+                        }
+                        
+                        # Convertimos el diccionario a un string JSON
+                        json_string = ujson.dumps(rain_event_payload)
+
+                        # publicamos el paquete JSON
+                        client.publish(MQTT_TOPIC_RAIN_EVENT, json_string.encode('utf-8'), retain=False, qos=0)
 
                     log(f"\n{Colors.GREEN}>  Message{Colors.RESET}")
                     log(f"{Colors.WHITE}   Event: Rain Monitor{Colors.RESET}")
                     log(f"{Colors.WHITE}   State: {Colors.RESET}{Colors.YELLOW}{current_rain_state}{Colors.RESET}")
-                    log(f"{Colors.WHITE}   Time:  {Colors.RESET}{Colors.MAGENTA}{duration_sec}s{Colors.RESET}")
-                    log(f"{Colors.WHITE}   Avg:   {Colors.RESET}{Colors.BLUE}{avg_intensity}%{Colors.RESET}")
+                    log(f"{Colors.WHITE}   Event JSON: {Colors.MAGENTA}{json_string}{Colors.RESET}")
 
         except (MQTTException, OSError) as e:
             log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}ERROR durante el monitoreo de lluvia: {Colors.RED}{e}{Colors.RESET}")
@@ -442,8 +553,41 @@ async def rain_monitor_task():
         except Exception as e:
             log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}ERROR CRITICO en rain_monitor_task() : {Colors.RED}{e}{Colors.RESET}")
 
+# ---- CORUTINA: Latido del Sistema (Heartbeat) ----
+async def heartbeat_task():
+    """
+    #### Latido del Sistema (Heartbeat)
+    Publica periódicamente el estado `online` para confirmar conectividad.
+    """
+    global client
+    HEARTBEAT_INTERVAL = 300 # 5 minutos
+
+    while True:
+        await asyncio.sleep(HEARTBEAT_INTERVAL)
+
+        if client and wlan and wlan.isconnected():
+            try:
+                # Reafirmamos que estamos vivos
+                client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=0)
+
+                log(f"\n{Colors.WHITE}>  {Colors.RESET}{Colors.MAGENTA}Heartbeat{Colors.RESET}{Colors.WHITE} Enviado{Colors.RESET}")
+            except Exception as e:
+                log(f"\n{Colors.WHITE}>  {Colors.RESET}{Colors.MAGENTA}Heartbeat{Colors.RESET}{Colors.WHITE} omitido: Cliente/WiFi no disponible {Colors.RESET}{Colors.RED}<{e}>{Colors.RESET}")
+
 # ---- CORUTINA: Programa Principal ----
 async def main():
+
+    # ---- Actualización de Credenciales ----
+    try:
+        import update_creds #type: ignore
+        update_creds.apply_update()
+        import os
+        # Borramos el archivo del ESP32 para limpieza
+        os.remove('update_creds.py')
+        log(f"{Colors.GREEN}>  {Colors.RESET}{Colors.WHITE}Actualizacion de Credenciales Exitosa{Colors.RESET}")
+        reset() # Reiniciamos para conectar con la nueva red
+    except ImportError:
+        pass # No hay actualización de credenciales pendiente
 
     # ---- Identificación unica del ESP32 ----
     # Obtenemos la MAC del dispositivo
@@ -451,15 +595,33 @@ async def main():
     # Construye el client_id único
     client_id = f"ESP32-Environmental-Monitor-{mac_address}"
 
-    # ---- Tareas Asíncronas ----
-    # Reconexión WiFi (Prioridad de red)
+    # ---- (Re)conexión WiFi (Prioridad de red) ----
     asyncio.create_task(wifi_coro())
+
+    while wlan is None or not wlan.isconnected():
+        await asyncio.sleep(1)
+
+    # Cedemos el control un momento más 
+    # Esto permite que wifi_coro ejecute su print("Conexión Establecida")
+    # antes de que la OTA bloquee la CPU.
+    await asyncio.sleep(1)
+
+    # ---- OTA Updater ----
+    try:
+        ota = OTAUpdater(OTA_CONFIG['URL'], log_func=log)
+        ota.check_for_updates()
+    except Exception as e:
+        log(f"{Colors.RED}>  {Colors.RESET}{Colors.WHITE}ERROR CRÍTICO EN ota.check_for_updates(): {Colors.RESET}{Colors.RED}{e}{Colors.RESET}")
+
+    # ---- Tareas Asíncronas ----
     # Reconexión MQTT (Depende de WiFi)
     asyncio.create_task(mqtt_connector_task(client_id))
     # Gestión de la publicacion de sensores
     asyncio.create_task(sensor_publish_task())
     # Gestión del monitoreo de lluvia
     asyncio.create_task(rain_monitor_task())
+    # Gestion de la señal de vida del firmware
+    asyncio.create_task(heartbeat_task())
     
     # ---- Bucle de Supervisión y Recolección de Basura ----
     while True:
@@ -468,21 +630,6 @@ async def main():
 
         # El event loop cede control a todas las tareas asíncronas.
         await asyncio.sleep(30)
-
-# ---- FUNCIÓN AUXILIAR: Gestión de desconexión ----
-def shutdown():
-    """
-    * **Desconectar cliente MQTT**
-    * **Desconectar red Wifi**
-    """
-
-    # Invalidamos el cliente MQTT forzando una reconexión completa.
-    force_disconnect_mqtt()
-
-    # Desconectar WiFi.
-    if wlan and wlan.isconnected():
-        wlan.disconnect()
-        log(f"{Colors.GREEN}>  {Colors.RESET}{Colors.WHITE}WiFi     {Colors.RESET}{Colors.GREEN}Desconectado{Colors.RESET}\n")
 
 # ---- Punto de Entrada ----
 try:

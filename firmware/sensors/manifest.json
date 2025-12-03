@@ -1,0 +1,10 @@
+{
+  "name": "Sensors",
+  "description": "Environmental Monitoring Firmware",
+  "notes_release": "Implementación de Detección Zombie, Publicación JSON Atómica, Actualización de Firmware con OTA, Apagado Controlado v2 y Actualización de Credenciales",
+  "version": "0.3.3",
+  "date": "02-12-2025",
+  "files": [
+    "main.py"
+  ]
+}
