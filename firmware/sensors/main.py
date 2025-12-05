@@ -1,9 +1,9 @@
 # -----------------------------------------------------------------------------
 # Sensors: Environmental Monitoring Firmware.
 # Descripción: Firmware dedicado al Monitoreo de las condiciones ambientales del Invernadero.
-# Versión: v0.3.3 - Implementación de Detección Zombie, Publicación JSON Atómica, Actualización de Firmware con OTA y Apagado Controlado v2
-# Fecha: 02-12-2025
-# -----------------------------------------------------------------------------
+# Versión: v0.3.0 - Implementación de Detección Zombie, Publicación JSON Atómica, Actualización de Firmware con OTA, Apagado Controlado v2 + Boot.py + Lazy Imports
+# Fecha: 04-12-2025
+# ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib. 
 # Esto es necesario para que se importe la librería umqtt.simple2 en lugar 
@@ -11,41 +11,17 @@
 import sys
 sys.path.reverse()
 
-import dht # type: ignore
-import gc # type: ignore
 import network # type: ignore
 import uasyncio as asyncio # type: ignore
-import ubinascii # type: ignore
-import ujson # type: ignore
 
-from bh1750 import BH1750 # type: ignore
-from machine import ADC, I2C, Pin, reset # type: ignore
-from ota import OTAUpdater # type: ignore
-from time import time
-from umqtt import errno as umqtt_errno # type: ignore
 from umqtt.simple2 import MQTTClient, MQTTException # type: ignore
 from utime import ticks_ms, ticks_diff # type: ignore
 
-# ---- IMPORTACIÓN SEGURA ---- CONFIGURACIÓN WIFI ---- #
-try:
-    from secrets import WIFI_CONFIG
-except ImportError:
-    print("Error: No se encontró secrets.py")
-    # Evitamos que el código crashee, aunque no conectará
-    WIFI_CONFIG = {"SSID": "", "PASS": ""} 
-
-# ---------------------------- CONFIGURACIÓN GLOBAL ---------------------------
-
-# ---- MODO DEBUG ----
+# ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
 DEBUG = True
 
-# ---- CONFIGURACIÓN OTA ----
-OTA_CONFIG = {
-    "URL": "https://raw.githubusercontent.com/JulioFlors/orchidium-project/refs/heads/Dev/firmware/sensors/"
-}
-
-# ---- CONFIGURACIÓN MQTT ----
+# ---- Configuración MQTT ----
 MQTT_CONFIG = {
     "SERVER": "192.168.1.5",
     "PORT": 1883,
@@ -86,10 +62,9 @@ MQTT_TOPIC_RAIN_EVENT = BASE_TOPIC + b"/rain/event"
 LWT_TOPIC = MQTT_TOPIC_STATUS
 LWT_MESSAGE = b"offline"
 
-# ---- CLASE DE COLORES ANSI ----
+# ---- Colors for logs ----
 class Colors:
     RESET = '\x1b[0m'
-    BOLD = '\x1b[1m'
     RED = '\x1b[91m'
     GREEN = '\x1b[92m'
     YELLOW = '\x1b[93m'
@@ -99,33 +74,62 @@ class Colors:
 
 # ---------------------------- LÓGICA DEL FIRMWARE  ---------------------------
 
-# ---- INICIALIZACIÓN DE HARDWARE ----
+# ---- Hardware Global ----
 # Sensor de Temp/Humedad
-dht_sensor = dht.DHT22(Pin(4))
-
+dht_sensor = None
 # Sensor de Luz I2C
-i2c = I2C(0, scl=Pin(22), sda=Pin(21))
-light_sensor = BH1750(bus=i2c, addr=0x23)
-
+light_sensor = None
 # Sensor de Lluvia (Salida Analógica)
-rain_sensor_analog = ADC(Pin(35))
-# Configura el rango de 0-3.3V
-rain_sensor_analog.atten(ADC.ATTN_11DB)
+rain_sensor_analog = None
 
-# ---- VARIABLES GLOBALES DE ESTADO ----
+# ---- Variables Globales de Estado ----
 wlan   = None # Conexión WiFi
 client = None # Cliente  MQTT
 
-# ---- FUNCIÓN AUXILIAR: Logs de Desarrollo ----
+# ---- Función Auxiliar: Logs de Desarrollo ----
 def log(*args, **kwargs):
     """**Imprime solo si el modo DEBUG está activado.**"""
     if DEBUG:
         print(*args, **kwargs)
 
+# ---- Importación Segura del WIFI ---- #
+try:
+    from secrets import WIFI_CONFIG
+except ImportError:
+    log(f"\n\n{Colors.RED}>  {Colors.RESET}Error: {Colors.WHITE}No se encontró lib/secrets{Colors.RESET}")
+    # Evitamos que el código crashee, aunque no conectará
+    WIFI_CONFIG = {"SSID": "", "PASS": ""}
+
+# ---- FUNCIÓN AUXILIAR: Inicializar Hardware ----
+def setup_sensors():
+    import dht # type: ignore
+    from bh1750 import BH1750 # type: ignore
+    from machine import ADC, I2C, Pin, reset # type: ignore
+
+    global dht_sensor, light_sensor, rain_sensor_analog
+
+    try:
+        # Sensor de Temp/Humedad
+        dht_sensor = dht.DHT22(Pin(4))
+
+        # Sensor de Luz I2C
+        i2c = I2C(0, scl=Pin(22), sda=Pin(21))
+        light_sensor = BH1750(bus=i2c, addr=0x23)
+
+        # Sensor de Lluvia (Salida Analógica)
+        rain_sensor_analog = ADC(Pin(35))
+        # Configura el rango de 0-3.3V
+        rain_sensor_analog.atten(ADC.ATTN_11DB)
+
+    except Exception as e:
+        log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}ERROR en setup_sensors() : {Colors.RED}{e}{Colors.RESET}")
+
 # ---- FUNCIÓN AUXILIAR: CALLBACK DE ESTADO ----
 def sub_status_callback(pid, status):
     """Callback que informa el estado de entrega de los mensajes QoS 1."""
-
+    # Lazy Imports - Importación tardía (Optimización de memoria RAM)
+    from umqtt import errno as umqtt_errno # type: ignore
+    
     if not DEBUG: return
 
     if status == umqtt_errno.SDELIVERED:
@@ -175,8 +179,7 @@ def shutdown():
             # Si nos desconectamos limpiamente,
             # el broker no lo envía automáticamente.
             client.publish(MQTT_TOPIC_STATUS, b"offline", retain=True, qos=1)
-        except (MQTTException, OSError) as e:
-            log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}Error en publicación offline: {Colors.RESET}{Colors.RED}{e}{Colors.RESET}")
+        except: pass
 
     # Invalidamos el cliente MQTT forzando una reconexión completa.
     force_disconnect_mqtt()
@@ -192,6 +195,9 @@ def shutdown():
 # ---- CORUTINA: Gestión de Conexión WiFi ----
 async def wifi_coro():
     """**Gestiona la (re)conexión asíncrona del WiFi**"""
+    # Lazy Imports - Importación tardía (Optimización de memoria RAM)
+    import time
+
     global wlan
 
     # Inicialización del objeto WLAN
@@ -349,8 +355,12 @@ async def sensor_publish_task():
     * **Agrupa los datos en un unico paquete JSON**
     * **Se ejecuta cada PUBLISH_INTERVAL segundos**
     """
-    global client
 
+    # Lazy Imports - Importación tardía (Optimización de memoria RAM)
+    import ujson  #type: ignore
+    from bh1750 import BH1750 #type: ignore
+
+    global client, dht_sensor, light_sensor
     while True:
         # Espera el intervalo de publicación
         await asyncio.sleep(MQTT_CONFIG["PUBLISH_INTERVAL"])
@@ -430,7 +440,7 @@ async def sensor_publish_task():
             force_disconnect_mqtt()
 
         except Exception as e:
-            log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}ERROR CRITICO en sensor_publish_task(): {Colors.RED}{e}{Colors.RESET}")
+            log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}ERROR en sensor_publish_task(): {Colors.RED}{e}{Colors.RESET}")
 
 # ---- CORUTINA: Gestión del sensor de lluvia ----
 async def rain_monitor_task():
@@ -441,6 +451,10 @@ async def rain_monitor_task():
     *  Calcula y publica la duración y la intensidad del evento.
     * La histéresis es un fenómeno en el que el estado de un sistema depende de su historia pasada, y no solo de las fuerzas que lo afectan en el momento presente.Se manifiesta como un retraso entre una causa y su efecto.
     """
+    # Lazy Imports - Importación tardía (Optimización de memoria RAM)
+    import ujson #type: ignore
+    import time #type: ignore
+
     global client
 
     # Umbrales de estado (basados en mi calibración)
@@ -551,13 +565,13 @@ async def rain_monitor_task():
             force_disconnect_mqtt()
 
         except Exception as e:
-            log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}ERROR CRITICO en rain_monitor_task() : {Colors.RED}{e}{Colors.RESET}")
+            log(f"\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}ERROR en rain_monitor_task() : {Colors.RED}{e}{Colors.RESET}")
 
 # ---- CORUTINA: Latido del Sistema (Heartbeat) ----
 async def heartbeat_task():
     """
     #### Latido del Sistema (Heartbeat)
-    Publica periódicamente el estado `online` para confirmar conectividad.
+    Publica cada `HEARTBEAT_INTERVAL` el estado `online` para confirmar conectividad.
     """
     global client
     HEARTBEAT_INTERVAL = 300 # 5 minutos
@@ -576,18 +590,9 @@ async def heartbeat_task():
 
 # ---- CORUTINA: Programa Principal ----
 async def main():
-
-    # ---- Actualización de Credenciales ----
-    try:
-        import update_creds #type: ignore
-        update_creds.apply_update()
-        import os
-        # Borramos el archivo del ESP32 para limpieza
-        os.remove('update_creds.py')
-        log(f"{Colors.GREEN}>  {Colors.RESET}{Colors.WHITE}Actualizacion de Credenciales Exitosa{Colors.RESET}")
-        reset() # Reiniciamos para conectar con la nueva red
-    except ImportError:
-        pass # No hay actualización de credenciales pendiente
+    # Lazy Imports - Importación tardía (Optimización de memoria RAM)
+    import ubinascii # type: ignore
+    import gc # type: ignore
 
     # ---- Identificación unica del ESP32 ----
     # Obtenemos la MAC del dispositivo
@@ -595,25 +600,12 @@ async def main():
     # Construye el client_id único
     client_id = f"ESP32-Environmental-Monitor-{mac_address}"
 
-    # ---- (Re)conexión WiFi (Prioridad de red) ----
-    asyncio.create_task(wifi_coro())
-
-    while wlan is None or not wlan.isconnected():
-        await asyncio.sleep(1)
-
-    # Cedemos el control un momento más 
-    # Esto permite que wifi_coro ejecute su print("Conexión Establecida")
-    # antes de que la OTA bloquee la CPU.
-    await asyncio.sleep(1)
-
-    # ---- OTA Updater ----
-    try:
-        ota = OTAUpdater(OTA_CONFIG['URL'], log_func=log)
-        ota.check_for_updates()
-    except Exception as e:
-        log(f"{Colors.RED}>  {Colors.RESET}{Colors.WHITE}ERROR CRÍTICO EN ota.check_for_updates(): {Colors.RESET}{Colors.RED}{e}{Colors.RESET}")
+    # ---- Inicialización del Hardware ----
+    setup_sensors()
 
     # ---- Tareas Asíncronas ----
+    # (Re)conexión WiFi (Prioridad de red)
+    asyncio.create_task(wifi_coro())
     # Reconexión MQTT (Depende de WiFi)
     asyncio.create_task(mqtt_connector_task(client_id))
     # Gestión de la publicacion de sensores
@@ -632,12 +624,14 @@ async def main():
         await asyncio.sleep(30)
 
 # ---- Punto de Entrada ----
-try:
-    asyncio.run(main())
-except KeyboardInterrupt:
-    log(f"\n\n{Colors.GREEN}>  {Colors.RESET}{Colors.WHITE}Programa {Colors.RESET}{Colors.GREEN}Detenido{Colors.RESET}")
-except Exception as e:
-        log(f"\n\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}Error fatal no capturado: {Colors.RESET}{Colors.RED}{e}{Colors.RESET}\n\n")
-finally:
-    # Desconexión limpia 
-    shutdown()
+if __name__ == '__main__': 
+    try:
+        # Iniciar Programa (Asíncrono)
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        log(f"\n\n{Colors.GREEN}>  {Colors.RESET}{Colors.WHITE}Programa {Colors.RESET}{Colors.GREEN}Detenido{Colors.RESET}")
+    except Exception as e:
+            log(f"\n\n{Colors.RED}>  {Colors.RESET}{Colors.WHITE}Error fatal no capturado: {Colors.RESET}{Colors.RED}{e}{Colors.RESET}\n\n")
+    finally:
+        # Desconexión limpia 
+        shutdown()
