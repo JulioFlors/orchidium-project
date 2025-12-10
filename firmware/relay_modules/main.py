@@ -3,7 +3,7 @@
 # Descripción: Firmware dedicado para el control de las electroválvulas y la bomba.
 # Versión: v0.4.0 - Implementación de Detección Zombie + Start Delay + Actualización de Firmware con OTA + Apagado Controlado v2 + Boot.py + Lazy Imports + new Topic/cmd + Lógica for reboot the device + Interpretación de Errores MQTT v2
 # Fecha: 06-12-2025
-# -----------------------------------------------------------------------------
+# ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib. 
 # Esto es necesario para que al importar la librería umqtt.simple2 se sobreescriba 
