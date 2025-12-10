@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 
 import Link from 'next/link'
 
-import { AddressForm } from '../ui/AddressForm'
+import { AddressForm } from './ui/AddressForm'
 
 export const metadata: Metadata = {
   title: 'PristinoPlant | Facturación y envío',

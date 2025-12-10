@@ -2,7 +2,7 @@
 
 import type { PlantType } from '@/interfaces'
 
-import { prisma } from '@package/database'
+import prisma from '@package/database'
 
 export const getSpeciesByType = async (plantType: PlantType) => {
   try {

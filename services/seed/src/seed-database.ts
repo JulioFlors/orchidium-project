@@ -2,22 +2,26 @@
 
 import { initialData, SeedFertilizationCycle, SeedPhytosanitaryCycle } from './seed-data'
 
-import { prisma, ZoneType, TableType, ActuatorType, TaskStatus } from '@package/database'
+import { prisma, ZoneType, TableType } from '@package/database'
 
+// ---- Interfaz auxiliar ----
 interface ProductCycleConnect {
   sequence: number
   agrochemical: { connect: { name: string } }
 }
 
-// validar y crear productsCycle con Agrochemicals existentes
+/** 
+ * **Crea productsCycle con Agrochemicals existentes**
+ * * programa NO válido `return null`
+*/
 const createValidatedProductsCycle = async (
   productsCycleData: SeedFertilizationCycle[] | SeedPhytosanitaryCycle[],
   programName: string,
   programType: string,
 ): Promise<ProductCycleConnect[] | null> => {
-  // la función puede retornar null si el programa NO es válido
   const validProductsCycle = []
-  let programValid = true // Variable para rastrear si el programa es válido
+  // Variable para rastrear si el programa es válido
+  let programValid = true
 
   for (const pc of productsCycleData) {
     const agrochemicalExists = await prisma.agrochemical.findUnique({
@@ -45,82 +49,81 @@ const createValidatedProductsCycle = async (
     })
   }
 
-  if (!programValid) {
-    return null // Retornar null para indicar que el programa NO es válido
-  }
-
-  return validProductsCycle // Retornar el array de productsCycle válidos si el programa ES válido
+  return programValid ? validProductsCycle : null
 }
-
+/** 
+ * **Script de Seeding**
+*/
 async function main() {
   const dbUrl = process.env.DATABASE_URL
-
-  if (!dbUrl) {
-    throw new Error('La variable de entorno DATABASE_URL no está definida')
-  }
+  if (!dbUrl) throw new Error('DATABASE_URL no definida')
 
   // Extraer host y nombre de la base de datos de la URL
   const match = dbUrl.match(/@([\w\-.]+):\d+\/(\w+)/)
   const host = match ? match[1] : 'desconocido'
   const dbName = match ? match[2] : 'desconocida'
 
-  console.log('\n\x1b[33m┌──────────────────────────────────────────────────┐')
+  console.log('\n')
+  console.log('\x1b[33m┌──────────────────────────────────────────────────┐')
   console.log('\x1b[33m│               🌱  Script de Seeding              │')
   console.log('\x1b[33m├──────────────────────────────────────────────────┤')
   console.log(`\x1b[33m│ \x1b[0mBase de Datos: \x1b[36m${dbName.padEnd(32)}  \x1b[33m│`)
   console.log(`\x1b[33m│ \x1b[0mServidor:      \x1b[36m${host.padEnd(32)}  \x1b[33m│`)
   console.log('\x1b[33m└──────────────────────────────────────────────────┘\x1b[0m\n')
 
-  // ----------------------------------------------------------------------------------
-  // Borrar registros previos
-  // ----------------------------------------------------------------------------------
+  // ---- Borrar registros previos ----
   console.log('🗑️  Borrando datos antiguos')
+
+  // Tablas de Automatización
+  await prisma.taskLog.deleteMany({})
+  await prisma.automationSchedule.deleteMany({})
+
+  // Tablas de Historial de influxdb
+  await prisma.dailyEnvironmentStat.deleteMany({})
+
+  // Tablas de Gestión
+  await prisma.user.deleteMany({})
   await prisma.plant.deleteMany({})
+  await prisma.productVariant.deleteMany({})
   await prisma.speciesImage.deleteMany({})
   await prisma.species.deleteMany({})
   await prisma.genus.deleteMany({})
   await prisma.stock.deleteMany({})
   await prisma.location.deleteMany({})
-  await prisma.phytosanitaryTask.deleteMany({})
+
+  // Tablas de Planes
   await prisma.phytosanitaryCycle.deleteMany({})
   await prisma.phytosanitaryProgram.deleteMany({})
-  await prisma.fertilizationTask.deleteMany({})
   await prisma.fertilizationCycle.deleteMany({})
   await prisma.fertilizationProgram.deleteMany({})
-  await prisma.irrigationTask.deleteMany({})
-  await prisma.irrigationProgram.deleteMany({})
   await prisma.agrochemical.deleteMany({})
+
   console.log('✅  Datos antiguos borrados')
 
-  // obtener el arreglo de objetos del seed.ts
+  // ---- obtener el arreglo de objetos del seed-data.ts ----
   const {
+    users,
     genus,
     species,
     plants,
     agrochemicals,
     fertilizationPrograms,
-    fertilizationTasks,
     phytosanitaryPrograms,
-    phytosanitaryTasks,
-    irrigationPrograms,
-    irrigationTasks,
+    automationSchedules
   } = initialData
 
-  // ----------------------------------------------------------------------------------
-  // Insertar Genus
-  // ----------------------------------------------------------------------------------
   console.log('🌱  Insertando nuevos datos')
-  await prisma.genus.createMany({
-    data: genus,
-  })
 
-  // ----------------------------------------------------------------------------------
-  // Generar Mapas de Nombres a IDs (Genus) - necesarios para relacionar
-  // ----------------------------------------------------------------------------------
+  // ---- Insertar Users ----
+  await prisma.user.createMany({ data: users })
 
+  // ---- Insertar Genus ----
+  await prisma.genus.createMany({ data: genus })
+
+  // ---- Generar Mapas de Nombres a IDs (Genus) - necesarios para relacionar FKs ----
   // obtener los genus de la base de datos
   const genusDB = await prisma.genus.findMany()
-
+  // crear un mapa de nombres a IDs
   const genusMap = genusDB.reduce(
     (map: Record<string, string>, genus: { id: string; name: string }) => {
       map[genus.name] = genus.id
@@ -130,12 +133,9 @@ async function main() {
     {} as Record<string, string>,
   )
 
-  // ----------------------------------------------------------------------------------
-  // Insertar Species
-  // ----------------------------------------------------------------------------------
-  for (const speciesData of species) {
-    const { genus, ...rest } = speciesData
-
+  // ---- Insertar Species y Variants ----
+  for (const sp of species) {
+    const { genus, variants, ...rest } = sp
     const genusId = genusMap[genus.name]
 
     if (!genusId) {
@@ -150,32 +150,42 @@ async function main() {
       continue
     }
 
-    await prisma.species.create({
+    const createdSpecies = await prisma.species.create({
       data: {
         ...rest,
         genus: { connect: { id: genusId } }, // Conexión con genus
         stock: {
           create: {
-            quantity: speciesData.stock.quantity,
-            available: speciesData.stock.available,
+            quantity: sp.stock.quantity,
+            available: sp.stock.available,
           },
         },
         images: {
           createMany: {
-            data: speciesData.images.map((url) => ({ url })),
+            data: sp.images.map((url) => ({ url })),
           },
         },
       },
     })
+
+    // Crear Variantes si existen en el seed
+    if (variants && variants.length > 0) {
+      await prisma.productVariant.createMany({
+        data: variants.map(v => ({
+          speciesId: createdSpecies.id,
+          size: v.size,
+          price: v.price,
+          quantity: v.quantity,
+          available: v.quantity > 0
+        }))
+      })
+    }
   }
 
-  // ----------------------------------------------------------------------------------
-  // Generar Mapas de Nombres a IDs (Species) - necesarios para relacionar
-  // ----------------------------------------------------------------------------------
-
+  // ---- Generar Mapas de Nombres a IDs (Species) - necesarios para relacionar FKs ----
   // obtener las species de la base de datos
   const speciesDB = await prisma.species.findMany()
-
+  // crear un mapa de nombres a IDs
   const speciesMap = speciesDB.reduce(
     (map: Record<string, string>, species: { id: string; name: string }) => {
       map[species.name] = species.id
@@ -185,9 +195,7 @@ async function main() {
     {} as Record<string, string>,
   )
 
-  // ----------------------------------------------------------------------------------
-  // Generar e Insertar Localizaciones basado en las Zonas y Mesas definidas
-  // ----------------------------------------------------------------------------------
+  // ---- Generar e Insertar Localizaciones basado en las Zonas y Mesas definidas ----
   const locationData: { zone: ZoneType; table: TableType }[] = []
 
   for (const zone of Object.values(ZoneType)) {
@@ -197,17 +205,12 @@ async function main() {
   }
 
   // Insertar Localizaciones
-  await prisma.location.createMany({
-    data: locationData,
-  })
+  await prisma.location.createMany({ data: locationData })
 
-  // ----------------------------------------------------------------------------------
-  // Generar Mapas de Nombres a IDs (Locations) - necesarios para relacionar
-  // ----------------------------------------------------------------------------------
-
+  // ---- Generar Mapas de Nombres a IDs (Locations) - necesarios para relacionar FKs ----
   // obtener las localizaciones de la base de datos
   const locationDB = await prisma.location.findMany()
-
+  // crear un mapa de claves de zona-mesa a IDs
   const locationMap = locationDB.reduce(
     (map: Record<string, string>, location: { zone: ZoneType; table: TableType; id: string }) => {
       const key = `${location.zone}-${location.table}`
@@ -219,9 +222,7 @@ async function main() {
     {} as Record<string, string>,
   )
 
-  // ----------------------------------------------------------------------------------
-  // Insertar Plants
-  // ----------------------------------------------------------------------------------
+  // ---- Insertar Plants ----
   for (const plant of plants) {
     const { species, location, ...rest } = plant
 
@@ -253,322 +254,79 @@ async function main() {
     })
   }
 
-  // ----------------------------------------------------------------------------------
-  // Insertar Agrochemicals
-  // ----------------------------------------------------------------------------------
-  await prisma.agrochemical.createMany({
-    data: agrochemicals,
-  })
+  // ---------------- Planes de Cultivo ----------------
 
-  // ----------------------------------------------------------------------------------
+  // ---- Insertar Agrochemicals ----
+  await prisma.agrochemical.createMany({ data: agrochemicals })
+
+  // ---- Fertilization Programs ----
+  // Guardamos el ID en un mapa para usarlo después en los Schedules
+  const fertProgramMap: Record<string, string> = {};
   // Insertar Fertilization Programs
-  // ----------------------------------------------------------------------------------
-  for (const fertilizationData of fertilizationPrograms) {
-    const { ...rest } = fertilizationData
+  for (const program of fertilizationPrograms) {
+    const cycles = await createValidatedProductsCycle(program.productsCycle, program.name, 'Fertilización')
 
-    const createdProductsCycle = await createValidatedProductsCycle(
-      fertilizationData.productsCycle,
-      fertilizationData.name,
-      'Fertilización',
-    )
-
-    if (createdProductsCycle) {
-      await prisma.fertilizationProgram.create({
+    if (cycles) {
+      const created = await prisma.fertilizationProgram.create({
         data: {
-          ...rest,
-          productsCycle: {
-            create: createdProductsCycle,
-          },
-        },
+          name: program.name,
+          weeklyFrequency: program.weeklyFrequency,
+          productsCycle: { create: cycles }
+        }
       })
+      fertProgramMap[created.name] = created.id; // Guardamos ID
     }
   }
 
-  // ----------------------------------------------------------------------------------
+  // ---- Phytosanitary Programs ----
+  // Guardamos el ID en un mapa para usarlo después en los Schedules
+  const phytoProgramMap: Record<string, string> = {};
   // Insertar Phytosanitary Programs
-  // ----------------------------------------------------------------------------------
-  for (const phytosanitaryData of phytosanitaryPrograms) {
-    const { ...rest } = phytosanitaryData
-
-    const createdProductsCycle = await createValidatedProductsCycle(
-      phytosanitaryData.productsCycle,
-      phytosanitaryData.name,
-      'Fitosanitario',
-    )
-
-    if (createdProductsCycle) {
-      await prisma.phytosanitaryProgram.create({
+  for (const program of phytosanitaryPrograms) {
+    const cycles = await createValidatedProductsCycle(program.productsCycle, program.name, 'Fitosanitario')
+    if (cycles) {
+      const created = await prisma.phytosanitaryProgram.create({
         data: {
-          ...rest,
-          productsCycle: {
-            create: createdProductsCycle,
-          },
-        },
+          name: program.name,
+          monthlyFrequency: program.monthlyFrequency,
+          productsCycle: { create: cycles }
+        }
       })
+      phytoProgramMap[created.name] = created.id; // Guardamos ID
     }
   }
 
-  // ----------------------------------------------------------------------------------
-  // Insertar Irrigation Programs
-  // ----------------------------------------------------------------------------------
-  for (const irrigationData of irrigationPrograms) {
-    const { ...rest } = irrigationData
+  // ---- Rutinas de Automatización ----
+  // Rutina: Riego Interdiario
+  for (const schedule of automationSchedules) {
+    // Preparamos la conexión opcional a programas
+    let fertConnection = undefined;
+    if (schedule.fertilizationProgramName) {
+      const progId = fertProgramMap[schedule.fertilizationProgramName];
+      if (progId) fertConnection = { connect: { id: progId } };
+      else console.warn(`⚠️  Programa Fertilización '${schedule.fertilizationProgramName}' no encontrado para rutina '${schedule.name}'`);
+    }
 
-    await prisma.irrigationProgram.create({
+    let phytoConnection = undefined;
+    if (schedule.phytosanitaryProgramName) {
+      const progId = phytoProgramMap[schedule.phytosanitaryProgramName];
+      if (progId) phytoConnection = { connect: { id: progId } };
+      else console.warn(`⚠️  Programa Fitosanitario '${schedule.phytosanitaryProgramName}' no encontrado para rutina '${schedule.name}'`);
+    }
+
+    await prisma.automationSchedule.create({
       data: {
-        ...rest,
-      },
-    })
-  }
-
-  // ----------------------------------------------------------------------------------
-  // Generar Mapas de Nombres a IDs (Agrochemicals, Programs, Cycles) - necesarios para relacionar
-  // ----------------------------------------------------------------------------------
-
-  // obtener los agrochemicals de la base de datos
-  const agrochemicalsDB = await prisma.agrochemical.findMany()
-
-  const agrochemicalMap = agrochemicalsDB.reduce(
-    (map: Record<string, string>, agrochemical: { id: string; name: string }) => {
-      map[agrochemical.name] = agrochemical.id
-
-      return map
-    },
-    {} as Record<string, string>,
-  )
-
-  // obtener los fertilizationPrograms de la base de datos
-  const fertilizationProgramsDB = await prisma.fertilizationProgram.findMany()
-
-  const fertilizationProgramMap = fertilizationProgramsDB.reduce(
-    (map: Record<string, string>, program: { id: string; name: string }) => {
-      map[program.name] = program.id
-
-      return map
-    },
-    {} as Record<string, string>,
-  )
-
-  // obtener los phytosanitaryPrograms de la base de datos
-  const phytosanitaryProgramsDB = await prisma.phytosanitaryProgram.findMany()
-
-  const phytosanitaryProgramMap = phytosanitaryProgramsDB.reduce(
-    (map: Record<string, string>, program: { id: string; name: string }) => {
-      map[program.name] = program.id
-
-      return map
-    },
-    {} as Record<string, string>,
-  )
-
-  // obtener los irrigationPrograms de la base de datos
-  const irrigationProgramsDB = await prisma.irrigationProgram.findMany()
-
-  const irrigationProgramMap = irrigationProgramsDB.reduce(
-    (map: Record<string, string>, program: { id: string; name: string }) => {
-      map[program.name] = program.id
-
-      return map
-    },
-    {} as Record<string, string>,
-  )
-
-  // obtener los productsCycle de la base de datos
-  const fertilizationCyclesDB = await prisma.fertilizationCycle.findMany()
-
-  const fertilizationCycleMap = fertilizationCyclesDB.reduce(
-    (map: Record<string, string>, cycle: { id: string; programId: string; sequence: number }) => {
-      const key = `${cycle.programId}-${cycle.sequence}`
-
-      map[key] = cycle.id
-
-      return map
-    },
-    {} as Record<string, string>,
-  )
-
-  // obtener los productsCycle de la base de datos
-  const phytosanitaryCyclesDB = await prisma.phytosanitaryCycle.findMany()
-
-  const phytosanitaryCycleMap = phytosanitaryCyclesDB.reduce(
-    (map: Record<string, string>, cycle: { id: string; programId: string; sequence: number }) => {
-      const key = `${cycle.programId}-${cycle.sequence}`
-
-      map[key] = cycle.id
-
-      return map
-    },
-    {} as Record<string, string>,
-  )
-
-  // ----------------------------------------------------------------------------------
-  // Insertar Fertilization Tasks
-  // ----------------------------------------------------------------------------------
-  for (const fertilizationTaskData of fertilizationTasks) {
-    const { zones, agrochemical, productsCycle, ...rest } = fertilizationTaskData
-
-    // Validar Zones
-    if (!Array.isArray(zones) || !zones.every((zone) => Object.values(ZoneType).includes(zone))) {
-      console.warn(`
-          Error: --- '${zones}' NO es una ZONA válida ---
-            Program: ${productsCycle?.programName}
-            Agrochemical: ${agrochemical.name}
-            Task:    ${fertilizationTaskData.scheduledDate}
-          Warning: --- La Tarea se Omitirá ---
-        `)
-      continue // Omitir la tarea si 'zones' no es válido
-    }
-
-    // Validar Agrochemical
-    const agrochemicalId = agrochemicalMap[agrochemical.name]
-
-    if (!agrochemicalId) {
-      console.warn(`
-          Error: --- Agroquímico NO Encontrado ---
-            Program: ${productsCycle?.programName}
-            Agrochemical: '${agrochemical.name}'
-            Date:    ${fertilizationTaskData.scheduledDate}
-          Warning: --- La Tarea se Omitirá --- 
-          `)
-      continue // Omitir la tarea si el Agroquímico no existe
-    }
-
-    // Validar productsCycleId
-    const cycleKey = productsCycle
-      ? `${fertilizationProgramMap[productsCycle.programName]}-${productsCycle.sequence}`
-      : undefined
-    const productsCycleId = cycleKey ? fertilizationCycleMap[cycleKey] : undefined
-
-    const data: {
-      scheduledDate: Date
-      zones: ZoneType[]
-      note?: string
-      agrochemical: { connect: { id: string } }
-      productsCycle?: { connect: { id: string } }
-    } = {
-      ...rest,
-      scheduledDate: fertilizationTaskData.scheduledDate,
-      zones: zones as ZoneType[],
-      agrochemical: { connect: { id: agrochemicalId } },
-    }
-
-    if (productsCycleId) {
-      data.productsCycle = { connect: { id: productsCycleId } }
-    }
-
-    if (!productsCycleId) {
-      data.note = `Task: Ad Hoc (Abordamos las situaciones según vanyan detectándose)`
-    }
-
-    await prisma.fertilizationTask.create({
-      data,
-    })
-  }
-
-  // ----------------------------------------------------------------------------------
-  // Insertar Phytosanitary Tasks
-  // ----------------------------------------------------------------------------------
-  for (const phytosanitaryTaskData of phytosanitaryTasks) {
-    const { zones, agrochemical, productsCycle, ...rest } = phytosanitaryTaskData
-
-    // Validar Zones
-    if (!Array.isArray(zones) || !zones.every((zone) => Object.values(ZoneType).includes(zone))) {
-      console.warn(`
-          Error: --- '${zones}' NO es una ZONA válida ---
-            Program: ${productsCycle?.programName}
-            Agrochemical: ${agrochemical.name}
-            Task:    ${rest.scheduledDate}
-          Warning: --- La Tarea se Omitirá ---
-        `)
-      continue // Omitir la tarea si 'zones' no es válido
-    }
-
-    // Validar Agrochemical
-    const agrochemicalId = agrochemicalMap[agrochemical.name]
-
-    if (!agrochemicalId) {
-      console.warn(`
-          Error: --- Agroquímico NO Encontrado ---
-            Program: ${productsCycle?.programName}
-            Agrochemical: '${agrochemical.name}'
-            Date:    ${rest.scheduledDate}
-          Warning: --- La Tarea se Omitirá --- 
-          `)
-      continue // Omitir la tarea si el Agroquímico no existe
-    }
-
-    // Validar productsCycleId
-    const cycleKey = productsCycle
-      ? `${phytosanitaryProgramMap[productsCycle.programName]}-${productsCycle.sequence}`
-      : undefined
-    const productsCycleId = cycleKey ? phytosanitaryCycleMap[cycleKey] : undefined
-
-    const data: {
-      scheduledDate: Date
-      zones: ZoneType[]
-      note?: string
-      agrochemical: { connect: { id: string } }
-      productsCycle?: { connect: { id: string } }
-    } = {
-      ...rest,
-      zones: zones as ZoneType[],
-      agrochemical: { connect: { id: agrochemicalId } },
-    }
-
-    if (productsCycleId) {
-      data.productsCycle = { connect: { id: productsCycleId } }
-    }
-
-    if (!productsCycleId) {
-      data.note = `Task: Ad Hoc (Abordamos las situaciones según vanyan detectándose)`
-    }
-
-    await prisma.phytosanitaryTask.create({
-      data,
-    })
-  }
-
-  // ----------------------------------------------------------------------------------
-  // Insertar Irrigation Tasks
-  // ----------------------------------------------------------------------------------
-  for (const irrigationTaskData of irrigationTasks) {
-    const { zones, program, ...rest } = irrigationTaskData
-
-    // Validar Zones
-    if (!Array.isArray(zones) || !zones.every((zone) => Object.values(ZoneType).includes(zone))) {
-      console.warn(`
-          Error: --- '${zones}' NO es una ZONA válida ---
-            Date: ${rest.scheduledDate}
-            Actuator: ${rest.actuator}
-            Duration: ${rest.duration}
-            Program: ${program?.name}
-          Warning: --- La Tarea de Riego se Omitirá ---
-        `)
-      continue // Omitir la tarea si 'zones' no es válido
-    }
-
-    // Validar programId
-    const programId = program ? irrigationProgramMap[program.name] : undefined
-
-    const data: {
-      scheduledDate: Date
-      executionDate?: Date
-      actuator: ActuatorType
-      duration: number
-      zones: ZoneType[]
-      status?: TaskStatus
-      program?: { connect: { id: string } }
-    } = {
-      ...rest,
-      zones: zones as ZoneType[],
-    }
-
-    if (programId) {
-      data.program = { connect: { id: programId } }
-    }
-
-    await prisma.irrigationTask.create({
-      data,
+        name: schedule.name,
+        description: schedule.description,
+        purpose: schedule.purpose,
+        cronTrigger: schedule.cronTrigger,
+        durationMinutes: schedule.durationMinutes,
+        zones: schedule.zones,
+        isEnabled: schedule.isEnabled,
+        // Conexiones dinámicas
+        fertilizationProgram: fertConnection,
+        phytosanitaryProgram: phytoConnection
+      }
     })
   }
 
@@ -577,10 +335,9 @@ async function main() {
 
 main()
   .catch((e) => {
-    console.error('Ha ocurrio un Error al ejecutar el Seed:', e)
+    console.error('❌ Ha ocurrio un Error al ejecutar el Seed:', e)
     process.exit(1)
   })
   .finally(async () => {
     await prisma.$disconnect()
   })
-

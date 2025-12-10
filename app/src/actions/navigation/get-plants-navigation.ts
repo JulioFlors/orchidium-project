@@ -1,6 +1,6 @@
 'use server'
 
-import { prisma } from '@package/database'
+import prisma from '@package/database'
 
 import { PlantType } from '@/interfaces'
 

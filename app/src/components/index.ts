@@ -32,6 +32,8 @@ export * from './ui/footer/Footer'
 
 export * from './ui/form/FormField'
 
+export * from './ui/header/AuthHeader'
+
 export * from './ui/icons/PristinoPlant'
 
 export * from './ui/not-found/PageNotFound'

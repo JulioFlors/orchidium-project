@@ -26,7 +26,7 @@ export function MobileSlideshow({ isAvailable, className, images, title }: Props
         autoplay={{
           delay: 8000,
         }}
-        className="aspect-[1/1]"
+        className="aspect-square"
         modules={[Autoplay, FreeMode, Pagination]}
         style={
           {

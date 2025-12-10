@@ -1,9 +1,15 @@
+import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 
 import { ProductGrid, Title, Subtitle } from '@/components'
 import { getAllSpeciesWithImages } from '@/actions'
 import { PlantType, Route } from '@/interfaces'
 import { staticRoutes } from '@/config'
+
+export const metadata: Metadata = {
+  title: 'Plantas',
+  description: 'Descubre nuestra amplia variedad de plantas, incluyendo Orquídeas, Cactus y Suculentas.',
+}
 
 // Awaited<...> se utiliza para obtener el tipo de retorno de una promesa.
 // inferido directamente del retorno del server action.
@@ -12,11 +18,11 @@ type SpeciesWithGenus = Awaited<ReturnType<typeof getAllSpeciesWithImages>>[0]
 // Mapeo para traducir el 'slug' (usado en la configuración de rutas)
 // al valor exacto del 'enum PlantType' (usado en la base de datos).
 const slugToPlantType: Record<string, PlantType> = {
-  orchids: 'Orchid',
-  adenium_obesum: 'Adenium_Obesum',
-  cactus: 'Cactus',
-  succulents: 'Succulent',
-  bromeliads: 'Bromeliad',
+  orchids: 'ORCHID',
+  adenium_obesum: 'ADENIUM_OBESUM',
+  cactus: 'CACTUS',
+  succulents: 'SUCCULENT',
+  bromeliads: 'BROMELIAD',
 }
 
 export default async function PlantsCategoryPage() {

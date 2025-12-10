@@ -1,3 +1,7 @@
+import { PlantType, PotSize } from '@package/database'
+
+export { PlantType, PotSize }
+
 export interface SpeciesImage {
   id: string
   url: string
@@ -28,10 +32,6 @@ export interface Species {
     available: boolean
   }
 }
-
-export type PlantType = 'Orchid' | 'Adenium_Obesum' | 'Cactus' | 'Succulent' | 'Bromeliad'
-
-export type PotSize = 'Nro 5' | 'Nro 7' | 'Nro 10' | 'Nro 14'
 
 export interface CartProduct {
   //id: string

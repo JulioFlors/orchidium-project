@@ -4,7 +4,7 @@
 
 import type { PlantType } from '@/interfaces'
 
-import { prisma } from '@package/database'
+import prisma from '@package/database'
 
 // 1. Interfaz de Opciones Adaptada
 // Cambiamos 'gender' por 'plantType' para que coincida con tu lógica de negocio.

@@ -72,4 +72,10 @@ export const staticRoutes: Route[] = [
     slug: 'login',
     url: '/auth/login',
   },
+  {
+    name: 'Dashboard',
+    slug: 'dashboard',
+    url: '/dashboard',
+    protected: true,
+  },
 ]

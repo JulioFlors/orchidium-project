@@ -2,20 +2,21 @@ import { SVGProps } from 'react'
 
 interface Props extends SVGProps<SVGSVGElement> {
   fillColor?: string // Prop opcional para el color de relleno
+  width?: string
 }
 
-export function PristinoPlant({ fillColor = '#171A20', ...props }: Props) {
+export function PristinoPlant({ fillColor = '#171A20', width = '7rem', ...props }: Props) {
   return (
     <svg
       fill="none"
       height="1.75rem" // 2.1rem Ajusta el tamaño según sea necesario
       preserveAspectRatio="xMidYMid meet" // Mantiene la proporción
       viewBox="-35 0 1075 170" // Ajusta el viewBox según sea necesario
-      width="7rem" // 8rem Ajusta el tamaño según sea necesario
+      width={width} // 8rem Ajusta el tamaño según sea necesario
       xmlns="http://www.w3.org/2000/svg"
       {...props}
     >
-      <title>Logo de Pristino Plant</title>
+      <title>PristinoPlant</title>
       <desc>
         Un logo abstracto con una forma que recuerda a una planta... Eso seria si tuviera
         presupuesto para uno...

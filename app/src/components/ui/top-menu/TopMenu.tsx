@@ -35,9 +35,14 @@ const categoryWrapper: Record<string, string> = {
 interface Props {
   suggestions?: SearchSuggestion[]
   plantsNavData?: PlantsNavData[]
+  isAuthLayout?: boolean
 }
 
-export function TopMenu({ suggestions = [], plantsNavData = [] }: Props) {
+export function TopMenu({
+  suggestions = [],
+  plantsNavData = [],
+  isAuthLayout = false,
+}: Props) {
   // aria-current="page" necesita evaluar la ruta actual
   const pathname = usePathname()
 
@@ -199,245 +204,259 @@ export function TopMenu({ suggestions = [], plantsNavData = [] }: Props) {
               Saltar al contenido principal
             </Link>
 
-            <span className="pipe">|</span>
+            {!isAuthLayout && (
+              <>
+                <span className="pipe">|</span>
 
-            <Link
-              className={clsx('focus-link-hover page-shop', {
-                'aria-current="page"': pathname === '/',
-              })}
-              href="/"
-            >
-              {/* TODO: href="/tienda" */}
-              Tienda
-            </Link>
+                <Link
+                  className={clsx('focus-link-hover page-shop', {
+                    'aria-current="page"': pathname === '/',
+                  })}
+                  href="/"
+                >
+                  {/* TODO: href="/tienda" */}
+                  Tienda
+                </Link>
+              </>
+            )}
           </div>
         </div>
 
-        {/*---- Ocultar main-menu-container en pantallas pequeñas donde se usa el Sidebar ----*/}
-        <div
-          className="tds-xl:block tds-xl:relative hidden"
-          onMouseEnter={handleMainMenuContainerMouseEnter}
-          onMouseLeave={handleMainMenuContainerMouseLeave}
-        >
-          {/* Hover personalizado para la animacion de la Navegacion del main-topMenu */}
-          <div
-            ref={hoveredRef}
-            aria-hidden="true"
-            className="bg-hover text-primary pointer-events-none absolute top-[20%] bottom-0 w-auto rounded opacity-0 transition-all duration-500 ease-in-out"
-          />
+        {!isAuthLayout && (
+          <>
+            {/*---- Ocultar main-menu-container en pantallas pequeñas donde se usa el Sidebar ----*/}
+            <div
+              className="tds-xl:block tds-xl:relative hidden"
+              onMouseEnter={handleMainMenuContainerMouseEnter}
+              onMouseLeave={handleMainMenuContainerMouseLeave}
+            >
+              {/* Hover personalizado para la animacion de la Navegacion del main-topMenu */}
+              <div
+                ref={hoveredRef}
+                aria-hidden="true"
+                className="bg-hover text-primary pointer-events-none absolute top-[20%] bottom-0 w-auto rounded opacity-0 transition-all duration-500 ease-in-out"
+              />
 
-          {/* Navegación */}
-          <nav
-            ref={mainMenuRef}
-            aria-label="Navegación Principal"
-            className="flex min-h-14 w-full flex-1 items-center justify-center px-12"
-            id="main-topMenu"
-          >
-            {staticRoutes
-              .filter((route) => route.categories && route.categories.length > 0)
-              .map((route) => (
-                <Link
-                  key={route.slug}
-                  aria-expanded={isSubMenuOpen && activeSubMenuRoute?.slug === route.slug}
-                  className={clsx('nav-link focus-link-hover relative px-4 py-1', {
-                    'aria-current="page"': pathname === `${route.url}`,
-                  })}
-                  href={route.url}
-                  onMouseEnter={(e) => handleMainMenuLinkMouseEnter(e, route)}
-                >
-                  <span>{route.name}</span>
-                </Link>
-              ))}
-          </nav>
-        </div>
-
-        {/*---- Right Menu Container (SearchBox, Cart, Menu) ----*/}
-        <div className="right-menu-container">
-          <div className="right-menu-wrapper">
-            {/* SearchBox - Ocultar en pantallas pequeñas */}
-            <div className="tds-xl:block hidden">
-              <div ref={searchContainerRef} className="relative flex items-center">
-                <AnimatePresence>
-                  {isSearchBoxExpanded ? (
-                    <motion.div
-                      key="search-input"
-                      animate={motionSearchBox.animate}
-                      className="aceleracion-hardware z-10"
-                      exit={motionSearchBox.exit}
-                      initial={motionSearchBox.initial}
-                      onBlur={handleFocusOutSearch}
+              {/* Navegación */}
+              <nav
+                ref={mainMenuRef}
+                aria-label="Navegación Principal"
+                className="flex min-h-14 w-full flex-1 items-center justify-center px-12"
+                id="main-topMenu"
+              >
+                {staticRoutes
+                  .filter((route) => route.categories && route.categories.length > 0)
+                  .map((route) => (
+                    <Link
+                      key={route.slug}
+                      aria-expanded={isSubMenuOpen && activeSubMenuRoute?.slug === route.slug}
+                      className={clsx('nav-link focus-link-hover relative px-4 py-1', {
+                        'aria-current="page"': pathname === `${route.url}`,
+                      })}
+                      href={route.url}
+                      onMouseEnter={(e) => handleMainMenuLinkMouseEnter(e, route)}
                     >
-                      <SearchBox isTopMenu suggestions={suggestions} />
-                    </motion.div>
-                  ) : (
-                    <motion.button
-                      key="search-icon"
-                      animate={motionIconSearch.animate}
-                      aria-label="Buscar"
-                      className="aceleracion-hardware mx-1.5 outline-none"
-                      exit={motionIconSearch.exit}
-                      initial={motionIconSearch.initial}
-                      type="button"
-                      onClick={openSearchBox}
-                      onFocus={openSearchBox}
-                    >
-                      <IoSearchOutline className="h-[21px] w-[21px] cursor-pointer" />
-                    </motion.button>
-                  )}
-                </AnimatePresence>
-              </div>
+                      <span>{route.name}</span>
+                    </Link>
+                  ))}
+              </nav>
             </div>
 
-            {/* Cart */}
-            <Link aria-label="Carrito de compras" className="cart-link focus-link" href="/cart">
-              <div className="relative">
-                <span
-                  aria-atomic="true"
-                  aria-live="polite"
-                  className="absolute -top-2 -right-2 rounded-full bg-emerald-500 px-1 text-xs font-bold text-white"
-                >
-                  {/* todo: Reemplazar con la cuenta real del carrito */}
-                </span>
-                <IoCartOutline className="icon-cart" />
-              </div>
-            </Link>
+            {/*---- Right Menu Container (SearchBox, Cart, Menu) ----*/}
+            <div className="right-menu-container">
+              <div className="right-menu-wrapper">
+                {/* SearchBox - Ocultar en pantallas pequeñas */}
+                <div className="tds-xl:block hidden">
+                  <div ref={searchContainerRef} className="relative flex items-center">
+                    <AnimatePresence>
+                      {isSearchBoxExpanded ? (
+                        <motion.div
+                          key="search-input"
+                          animate={motionSearchBox.animate}
+                          className="aceleracion-hardware z-10"
+                          exit={motionSearchBox.exit}
+                          initial={motionSearchBox.initial}
+                          onBlur={handleFocusOutSearch}
+                        >
+                          <SearchBox isTopMenu suggestions={suggestions} />
+                        </motion.div>
+                      ) : (
+                        <motion.button
+                          key="search-icon"
+                          animate={motionIconSearch.animate}
+                          aria-label="Buscar"
+                          className="aceleracion-hardware mx-1.5 outline-none"
+                          exit={motionIconSearch.exit}
+                          initial={motionIconSearch.initial}
+                          type="button"
+                          onClick={openSearchBox}
+                          onFocus={openSearchBox}
+                        >
+                          <IoSearchOutline className="h-[21px] w-[21px] cursor-pointer" />
+                        </motion.button>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
 
-            {/* Menu Button */}
-            <button
-              aria-expanded={isSidebarOpen}
-              aria-label="Abrir menú"
-              className="menu-button"
-              type="button"
-              onClick={openSidebar}
-            >
-              Menú
-            </button>
-          </div>
-        </div>
+                {/* Cart */}
+                <Link
+                  aria-label="Carrito de compras"
+                  className="cart-link focus-link"
+                  href="/cart"
+                >
+                  <div className="relative">
+                    <span
+                      aria-atomic="true"
+                      aria-live="polite"
+                      className="absolute -top-2 -right-2 rounded-full bg-emerald-500 px-1 text-xs font-bold text-white"
+                    >
+                      {/* todo: Reemplazar con la cuenta real del carrito */}
+                    </span>
+                    <IoCartOutline className="icon-cart" />
+                  </div>
+                </Link>
+
+                {/* Menu Button */}
+                <button
+                  aria-expanded={isSidebarOpen}
+                  aria-label="Abrir menú"
+                  className="menu-button"
+                  type="button"
+                  onClick={openSidebar}
+                >
+                  Menú
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* SubMenu Container */}
-      <AnimatePresence>
-        {isSubMenuOpen && activeSubMenuRoute?.categories && (
-          <motion.div
-            key={activeSubMenuRoute.slug}
-            animate="animate"
-            className="aceleracion-hardware tds-xl:block absolute top-full right-0 left-0 hidden w-full bg-white"
-            custom={wasSubMenuOpenRef.current}
-            exit="exit"
-            initial="initial"
-            variants={motionSubMenu}
-            onMouseEnter={handleSubMenuContainerMouseEnter}
-            onMouseLeave={handleSubMenuContainerMouseLeave}
-          >
-            {/* Contenedor interno */}
-            <div className="mx-auto flex w-full justify-between px-20 py-15">
-              {/* Columna Izquierda: Categorías y Géneros */}
-              <div className="-mx-4 flex flex-1">
-                {activeSubMenuRoute.categories.map((category) => {
-                  // Encontrar los GRUPOS (géneros) que pertenecen a ESTA categoría
-                  const groupsInCategory = plantsNavData.filter(
-                    (gen) => gen.type.toLowerCase() === categoryWrapper[category.slug],
-                  )
+      {!isAuthLayout && (
+        <AnimatePresence>
+          {isSubMenuOpen && activeSubMenuRoute?.categories && (
+            <motion.div
+              key={activeSubMenuRoute.slug}
+              animate="animate"
+              className="aceleracion-hardware tds-xl:block absolute top-full right-0 left-0 hidden w-full bg-white"
+              custom={wasSubMenuOpenRef.current}
+              exit="exit"
+              initial="initial"
+              variants={motionSubMenu}
+              onMouseEnter={handleSubMenuContainerMouseEnter}
+              onMouseLeave={handleSubMenuContainerMouseLeave}
+            >
+              {/* Contenedor interno */}
+              <div className="mx-auto flex w-full justify-between px-20 py-15">
+                {/* Columna Izquierda: Categorías y Géneros */}
+                <div className="-mx-4 flex flex-1">
+                  {activeSubMenuRoute.categories.map((category) => {
+                    // Encontrar los GRUPOS (géneros) que pertenecen a ESTA categoría
+                    const groupsInCategory = plantsNavData.filter(
+                      (gen) => gen.type.toLowerCase() === categoryWrapper[category.slug],
+                    )
 
-                  // Si no hay géneros en esta categoría, no renderizamos nada
-                  if (groupsInCategory.length === 0) return null
+                    // Si no hay géneros en esta categoría, no renderizamos nada
+                    if (groupsInCategory.length === 0) return null
 
-                  return (
-                    <div key={category.slug} className="flex-1 px-4">
-                      {/* Título de la CATEGORÍA (Link a la página de categoría) */}
-                      <p className="-tracking-2 mb-2 w-full text-base font-semibold text-black">
+                    return (
+                      <div key={category.slug} className="flex-1 px-4">
+                        {/* Título de la CATEGORÍA (Link a la página de categoría) */}
+                        <p className="-tracking-2 mb-2 w-full text-base font-semibold text-black">
+                          <Link
+                            href={category.url}
+                            tabIndex={-1}
+                            onClick={() => setIsSubMenuOpen(false)}
+                          >
+                            {category.name}
+                          </Link>
+                        </p>
+
+                        {/* Barra separadora */}
+                        <div className="mb-5 h-1 w-full bg-neutral-300" />
+
+                        {/* Lista de GRUPOS (géneros) */}
+                        <ul className="max-h-61 w-full space-y-2 overflow-hidden">
+                          {groupsInCategory.map((group) => (
+                            <li key={group.name}>
+                              {/* Link al GRUPO (género) dentro de la página de categoría */}
+                              {/* La URL apunta a la página de categoría con un hash para el scroll */}
+                              <Link
+                                className="-tracking-2 leading-6 font-medium transition-colors duration-500 hover:text-black"
+                                href={`${category.url}#${group.name.toLowerCase()}`}
+                                tabIndex={-1}
+                                onClick={() => setIsSubMenuOpen(false)}
+                              >
+                                {group.name}
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Columna Derecha: Item Destacado */}
+                {activeSubMenuRoute.featuredItem &&
+                  (() => {
+                    const numCategories = activeSubMenuRoute.categories?.length || 0
+                    let marginLeftPercent = 0
+
+                    if (numCategories === 1) {
+                      marginLeftPercent = 53
+                    } else if (numCategories === 2) {
+                      marginLeftPercent = 40
+                    } else if (numCategories === 3) {
+                      marginLeftPercent = 30
+                    } else if (numCategories === 4) {
+                      marginLeftPercent = 15
+                    } else if (numCategories >= 5) {
+                      marginLeftPercent = 2
+                    }
+
+                    return (
+                      <div
+                        className="w-1/3 shrink-0"
+                        style={{
+                          marginLeft: `${marginLeftPercent}%`,
+                        }}
+                      >
                         <Link
-                          href={category.url}
+                          href={activeSubMenuRoute.featuredItem.url}
                           tabIndex={-1}
                           onClick={() => setIsSubMenuOpen(false)}
                         >
-                          {category.name}
-                        </Link>
-                      </p>
-
-                      {/* Barra separadora */}
-                      <div className="mb-5 h-1 w-full bg-neutral-300" />
-
-                      {/* Lista de GRUPOS (géneros) */}
-                      <ul className="max-h-61 w-full space-y-2 overflow-hidden">
-                        {groupsInCategory.map((group) => (
-                          <li key={group.name}>
-                            {/* Link al GRUPO (género) dentro de la página de categoría */}
-                            {/* La URL apunta a la página de categoría con un hash para el scroll */}
-                            <Link
-                              className="-tracking-2 leading-6 font-medium transition-colors duration-500 hover:text-black"
-                              href={`${category.url}#${group.name.toLowerCase()}`}
-                              tabIndex={-1}
-                              onClick={() => setIsSubMenuOpen(false)}
-                            >
-                              {group.name}
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* Columna Derecha: Item Destacado */}
-              {activeSubMenuRoute.featuredItem &&
-                (() => {
-                  const numCategories = activeSubMenuRoute.categories?.length || 0
-                  let marginLeftPercent = 0
-
-                  if (numCategories === 1) {
-                    marginLeftPercent = 53
-                  } else if (numCategories === 2) {
-                    marginLeftPercent = 40
-                  } else if (numCategories === 3) {
-                    marginLeftPercent = 30
-                  } else if (numCategories === 4) {
-                    marginLeftPercent = 15
-                  } else if (numCategories >= 5) {
-                    marginLeftPercent = 2
-                  }
-
-                  return (
-                    <div
-                      className="w-1/3 shrink-0"
-                      style={{
-                        marginLeft: `${marginLeftPercent}%`,
-                      }}
-                    >
-                      <Link
-                        href={activeSubMenuRoute.featuredItem.url}
-                        tabIndex={-1}
-                        onClick={() => setIsSubMenuOpen(false)}
-                      >
-                        {activeSubMenuRoute.featuredItem.image && (
-                          <div className="h-[90%] overflow-hidden rounded-xs">
-                            <div className="relative aspect-video h-full w-full">
-                              <Image
-                                fill
-                                priority
-                                alt={activeSubMenuRoute.featuredItem.name}
-                                className="object-cover"
-                                sizes="(max-width: 768px) 100vw, 33vw"
-                                src={activeSubMenuRoute.featuredItem.image}
-                              />
+                          {activeSubMenuRoute.featuredItem.image && (
+                            <div className="h-[90%] overflow-hidden rounded-xs">
+                              <div className="relative aspect-video h-full w-full">
+                                <Image
+                                  fill
+                                  priority
+                                  alt={activeSubMenuRoute.featuredItem.name}
+                                  className="object-cover"
+                                  sizes="(max-width: 768px) 100vw, 33vw"
+                                  src={activeSubMenuRoute.featuredItem.image}
+                                />
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
 
-                        {/* Título del Item Destacado */}
-                        <p className="tracking-4 mt-3 block text-center text-xl font-semibold antialiased">
-                          {activeSubMenuRoute.featuredItem.name}
-                        </p>
-                      </Link>
-                    </div>
-                  )
-                })()}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                          {/* Título del Item Destacado */}
+                          <p className="tracking-4 mt-3 block text-center text-xl font-semibold antialiased">
+                            {activeSubMenuRoute.featuredItem.name}
+                          </p>
+                        </Link>
+                      </div>
+                    )
+                  })()}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      )}
     </header>
   )
 }

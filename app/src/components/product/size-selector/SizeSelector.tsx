@@ -1,10 +1,10 @@
 import type { PotSize } from '@/interfaces'
-
+import { PotSizeLabels } from '@/config/mappings'
 import clsx from 'clsx'
 
 interface Props {
   selectedSize: PotSize
-  availableSizes: PotSize[] // ['Nro 5', 'Nro 7', 'Nro 10', 'Nro 14']
+  availableSizes: PotSize[] // ['NRO_5', 'NRO_7', 'NRO_10', 'NRO_14']
 }
 
 export function SizeSelector({ selectedSize, availableSizes }: Props) {
@@ -21,7 +21,7 @@ export function SizeSelector({ selectedSize, availableSizes }: Props) {
             })}
             type="button"
           >
-            {size}
+            {PotSizeLabels[size]}
           </button>
         ))}
       </div>

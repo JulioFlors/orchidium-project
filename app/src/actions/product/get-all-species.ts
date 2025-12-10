@@ -1,6 +1,6 @@
 'use server'
 
-import { prisma } from '@package/database'
+import prisma from '@package/database'
 
 export const getAllSpeciesWithImages = async () => {
   try {

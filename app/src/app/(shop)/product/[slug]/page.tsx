@@ -2,10 +2,44 @@ export const revalidate = 604800 // 7 days
 
 import type { Metadata } from 'next'
 
+import dynamic from 'next/dynamic'
 import { notFound } from 'next/navigation'
 
-import { AddToCart, MobileSlideshow, Slideshow } from '@/components'
+import { AddToCart } from '@/components'
 import { getSpeciesBySlug } from '@/actions'
+
+// ----------------------------------------------------------------------
+// Optimización de Renderizado (Lazy Loading)
+// ----------------------------------------------------------------------
+// Usamos next/dynamic para cargar diferidamente los componentes del carrusel.
+//
+// ¿Por qué?
+// 1. Reducción del Bundle Inicial: Los carruseles incluyen librerías pesadas (Swiper)
+//    y lógica de cliente ('use client') que no son críticas para el First Contentful Paint (FCP).
+// 2. Mejora del TTI: Al separar este código, el hilo principal del navegador se libera más rápido
+//    para interactuar con elementos críticos como el botón de "Añadir al carrito".
+//
+// Diseño del Skeleton:
+// Los skeletons replican exactamente las clases de diseño (márgenes negativos, aspect-ratio)
+// de los componentes reales para evitar el Cumulative Layout Shift (CLS) durante la carga.
+
+const MobileSlideshow = dynamic(
+  () => import('@/components/product/slideshow/MobileSlideshow').then((mod) => mod.MobileSlideshow),
+  {
+    loading: () => (
+      <div className="-mx-6 block aspect-square animate-pulse bg-neutral-200 sm:-mx-9 lg:hidden" />
+    ),
+  },
+)
+
+const Slideshow = dynamic(
+  () => import('@/components/product/slideshow/Slideshow').then((mod) => mod.Slideshow),
+  {
+    loading: () => (
+      <div className="hidden aspect-square w-full animate-pulse bg-neutral-200 lg:block" />
+    ),
+  },
+)
 
 type Params = Promise<{ slug: string }>
 

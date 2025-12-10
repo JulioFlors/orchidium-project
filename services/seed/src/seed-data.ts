@@ -1,46 +1,58 @@
-//type RoleType = 'User' | 'Admin'
-type ZoneType = 'Zona_A' | 'Zona_B' | 'Zona_C' | 'Zona_D'
-type TableType = 'Mesa_1' | 'Mesa_2' | 'Mesa_3' | 'Mesa_4' | 'Mesa_5' | 'Mesa_6'
-type PlantType = 'Orchid' | 'Adenium_Obesum' | 'Cactus' | 'Succulent' | 'Bromeliad'
+import bcryptjs from 'bcryptjs'
 
-type TaskStatus = 'Pendiente' | 'Completada' | 'Cancelada' | 'Reprogramada'
-type AgrochemicalType = 'Fertilizante' | 'Fitosanitario'
-type AgrochemicalPorpose =
-  | 'Desarrollo'
-  | 'Floracion'
-  | 'Mantenimiento'
-  | 'Acaricida'
-  | 'Bactericida'
-  | 'Fungicida'
-  | 'Insecticida'
-type TriggerType = 'Diario' | 'Interdiario' | 'Sensores'
-type ActuatorType = 'Aspercion' | 'Nebulizacion' | 'Humedecer_Suelo'
-/* type SensorType = 'Humedad_Relativa' | 'Temperatura' | 'Intensidad_Luminosa' */
+// ---- Enums ----
+type RoleType = 'USER' | 'ADMIN'
+
+type ZoneType = 'ZONA_A' | 'ZONA_B' | 'ZONA_C' | 'ZONA_D'
+type TableType = 'MESA_1' | 'MESA_2' | 'MESA_3' | 'MESA_4' | 'MESA_5' | 'MESA_6'
+type PlantType = 'ORCHID' | 'ADENIUM_OBESUM' | 'CACTUS' | 'SUCCULENT' | 'BROMELIAD'
+type PotSize = 'NRO_5' | 'NRO_7' | 'NRO_10' | 'NRO_14'
+type TaskPurpose = 'IRRIGATION' | 'FERTIGATION' | 'FUMIGATION' | 'HUMIDIFICATION' | 'SOIL_WETTING'
+
+type AgrochemicalType = 'FERTILIZANTE' | 'FITOSANITARIO'
+type AgrochemicalPurpose =
+  | 'DESARROLLO'
+  | 'FLORACION'
+  | 'MANTENIMIENTO'
+  | 'ACARICIDA'
+  | 'BACTERICIDA'
+  | 'FUNGICIDA'
+  | 'INSECTICIDA'
+
+// ---- Interfaces ----
+interface SeedUser {
+  name: string
+  email: string
+  password: string
+  role: RoleType
+}
 
 interface SeedGenus {
   name: string
   type: PlantType
 }
+
 interface SeedSpecies {
   name: string
-  description?: string
-  genus: {
-    name: string // el nombre del genero sera relacionado por UUID en seed-database.ts
-  }
-  price: number
   slug: string
+  genus: { name: string }
+  description?: string
+  price: number
   stock: {
     available: boolean
     quantity: number
   }
   images: string[]
+  variants?: {
+    size: PotSize
+    price: number
+    quantity: number
+  }[]
 }
 
 interface SeedPlant {
   pottingDate?: Date
-  species: {
-    name: string // el nombre de la especie sera relacionado por UUID en seed-database.ts
-  }
+  species: { name: string }
   location?: {
     zone: ZoneType
     table: TableType
@@ -51,8 +63,14 @@ interface SeedAgrochemical {
   name: string
   description: string
   type: AgrochemicalType
-  porpose: AgrochemicalPorpose
+  purpose: AgrochemicalPurpose
   preparation: string
+}
+
+// ---- Rutinas de RIEGO ----
+export interface SeedFertilizationCycle {
+  sequence: number
+  agrochemical: { name: string }
 }
 
 interface SeedFertilizationProgram {
@@ -61,26 +79,9 @@ interface SeedFertilizationProgram {
   productsCycle: SeedFertilizationCycle[]
 }
 
-export interface SeedFertilizationCycle {
+export interface SeedPhytosanitaryCycle {
   sequence: number
-  agrochemical: {
-    name: string // Es necesario relacionarlo en seed-database.ts
-  }
-}
-
-interface SeedFertilizationTask {
-  scheduledDate: Date
-  executionDate?: Date
-  zones: ZoneType[]
-  note?: string
-  status?: TaskStatus
-  agrochemical: {
-    name: string // Es necesario relacionarlo en seed-database.ts
-  }
-  productsCycle?: {
-    sequence: number
-    programName: string // Es necesario relacionarlo en seed-database.ts
-  }
+  agrochemical: { name: string }
 }
 
 interface SeedPhytosanitaryProgram {
@@ -89,89 +90,66 @@ interface SeedPhytosanitaryProgram {
   productsCycle: SeedPhytosanitaryCycle[]
 }
 
-export interface SeedPhytosanitaryCycle {
-  sequence: number
-  agrochemical: {
-    name: string // Es necesario relacionarlo en seed-database.ts
-  }
-}
-
-interface SeedPhytosanitaryTask {
-  scheduledDate: Date
-  executionDate?: Date
-  zones: ZoneType[]
-  note?: string
-  status?: TaskStatus
-  agrochemical: {
-    name: string // Es necesario relacionarlo en seed-database.ts
-  }
-  productsCycle?: {
-    sequence: number
-    programName: string // Es necesario relacionarlo en seed-database.ts
-  }
-}
-
-interface SeedIrrigationProgram {
+// ---- Automatización de las Rutinas ----
+interface SeedAutomationSchedule {
   name: string
-  trigger: TriggerType
-  actuator: ActuatorType
-  startTime: string
-  duration: number
+  description?: string
+  purpose: TaskPurpose
+  cronTrigger: string
+  durationMinutes: number
   zones: ZoneType[]
+  isEnabled: boolean
+  // Opcionales para vincular
+  fertilizationProgramName?: string
+  phytosanitaryProgramName?: string
 }
 
-interface SeedIrrigationTask {
-  scheduledDate: Date
-  executionDate?: Date
-  actuator: ActuatorType
-  duration: number
-  zones: ZoneType[]
-  status?: TaskStatus
-  program?: {
-    name: string // Es necesario relacionarlo en seed-database.ts
-  }
-}
-
-/* interface SeedSensorReading {
-  zone: ZoneType
-  sensorType: SensorType
-  value: number
-  timestamp?: Date
-} */
-
+// ---- Estructura del SeedData ----
 interface SeedData {
+  users: SeedUser[]
   genus: SeedGenus[]
   species: SeedSpecies[]
   plants: SeedPlant[]
   agrochemicals: SeedAgrochemical[]
   fertilizationPrograms: SeedFertilizationProgram[]
-  fertilizationTasks: SeedFertilizationTask[]
   phytosanitaryPrograms: SeedPhytosanitaryProgram[]
-  phytosanitaryTasks: SeedPhytosanitaryTask[]
-  irrigationPrograms: SeedIrrigationProgram[]
-  irrigationTasks: SeedIrrigationTask[]
+  automationSchedules: SeedAutomationSchedule[]
 }
 
 export const initialData: SeedData = {
+  users: [
+    {
+      email: 'noesjulio@gmail.com',
+      name: 'Julio Flores',
+      password: bcryptjs.hashSync('123456'),
+      role: 'ADMIN'
+    },
+    {
+      email: 'yoanny.flores@gmail.com',
+      name: 'Yoanny Flores',
+      password: bcryptjs.hashSync('123456'),
+      role: 'USER'
+    },
+  ],
   genus: [
-    { name: 'Cattleya', type: 'Orchid' },
-    { name: 'Dendrobium', type: 'Orchid' },
-    { name: 'Dimerandra', type: 'Orchid' },
-    { name: 'Enciclea', type: 'Orchid' },
-    { name: 'Single Petals', type: 'Adenium_Obesum' },
-    { name: 'Multiple Petals', type: 'Adenium_Obesum' },
-    { name: 'Euphorbia', type: 'Cactus' },
-    { name: 'Mammillaria', type: 'Cactus' },
-    { name: 'Rebutia', type: 'Cactus' },
-    { name: 'Crassula', type: 'Succulent' },
-    { name: 'Graptopetalum', type: 'Succulent' },
-    { name: 'Graptoveria', type: 'Succulent' },
-    { name: 'Haworthiopsis', type: 'Succulent' },
-    { name: 'Orostachys', type: 'Succulent' },
-    { name: 'Pachyveria', type: 'Succulent' },
-    { name: 'Senecio', type: 'Succulent' },
-    { name: 'Cryptanthus', type: 'Bromeliad' },
-    { name: 'Dyckia', type: 'Bromeliad' },
+    { name: 'Cattleya', type: 'ORCHID' },
+    { name: 'Dendrobium', type: 'ORCHID' },
+    { name: 'Dimerandra', type: 'ORCHID' },
+    { name: 'Enciclea', type: 'ORCHID' },
+    { name: 'Single Petals', type: 'ADENIUM_OBESUM' },
+    { name: 'Multiple Petals', type: 'ADENIUM_OBESUM' },
+    { name: 'Euphorbia', type: 'CACTUS' },
+    { name: 'Mammillaria', type: 'CACTUS' },
+    { name: 'Rebutia', type: 'CACTUS' },
+    { name: 'Crassula', type: 'SUCCULENT' },
+    { name: 'Graptopetalum', type: 'SUCCULENT' },
+    { name: 'Graptoveria', type: 'SUCCULENT' },
+    { name: 'Haworthiopsis', type: 'SUCCULENT' },
+    { name: 'Orostachys', type: 'SUCCULENT' },
+    { name: 'Pachyveria', type: 'SUCCULENT' },
+    { name: 'Senecio', type: 'SUCCULENT' },
+    { name: 'Cryptanthus', type: 'BROMELIAD' },
+    { name: 'Dyckia', type: 'BROMELIAD' },
   ],
   species: [
     /* Bromeliad */
@@ -467,122 +445,122 @@ export const initialData: SeedData = {
     {
       species: { name: 'Cattleya Violacea' },
       pottingDate: new Date('2024-01-15'),
-      location: { zone: 'Zona_A', table: 'Mesa_1' },
+      location: { zone: 'ZONA_A', table: 'MESA_1' },
     },
     {
       species: { name: 'Cattleya Violacea' },
       pottingDate: new Date('2024-02-20'),
-      location: { zone: 'Zona_A', table: 'Mesa_1' },
+      location: { zone: 'ZONA_A', table: 'MESA_1' },
     },
     {
       species: { name: 'Cattlianthe Mary Elizabeth Bohn' },
       pottingDate: new Date('2023-12-20'),
-      location: { zone: 'Zona_A', table: 'Mesa_1' },
+      location: { zone: 'ZONA_A', table: 'MESA_1' },
     },
     {
       species: { name: 'Cattlianthe Mary Elizabeth Bohn' },
       pottingDate: new Date('2024-03-01'),
-      location: { zone: 'Zona_A', table: 'Mesa_2' },
+      location: { zone: 'ZONA_A', table: 'MESA_2' },
     },
     {
       species: { name: 'Cattleya Caudebec x Cattleya Bactia' },
       pottingDate: new Date('2024-02-01'),
-      location: { zone: 'Zona_A', table: 'Mesa_2' },
+      location: { zone: 'ZONA_A', table: 'MESA_2' },
     },
     {
       species: { name: 'Cattleya Caudebec x Cattleya Bactia' },
       pottingDate: new Date('2024-02-10'),
-      location: { zone: 'Zona_A', table: 'Mesa_2' },
+      location: { zone: 'ZONA_A', table: 'MESA_2' },
     },
     {
       species: { name: 'Cattleya Lueddemanniana x Cattleya Gaskelliana' },
       pottingDate: new Date('2024-01-25'),
-      location: { zone: 'Zona_A', table: 'Mesa_3' },
+      location: { zone: 'ZONA_A', table: 'MESA_3' },
     },
     {
       species: { name: 'Cattleya Lueddemanniana x Cattleya Gaskelliana' },
       pottingDate: new Date('2024-02-05'),
-      location: { zone: 'Zona_A', table: 'Mesa_3' },
+      location: { zone: 'ZONA_A', table: 'MESA_3' },
     },
     {
       species: { name: "Rhyncholaeliocattleya George King 'Southern Cross'" },
       pottingDate: new Date('2024-02-15'),
-      location: { zone: 'Zona_A', table: 'Mesa_3' },
+      location: { zone: 'ZONA_A', table: 'MESA_3' },
     },
     {
       species: { name: "Rhyncholaeliocattleya George King 'Southern Cross'" },
       pottingDate: new Date('2024-01-30'),
-      location: { zone: 'Zona_A', table: 'Mesa_4' },
+      location: { zone: 'ZONA_A', table: 'MESA_4' },
     },
     {
       species: { name: "Rhyncholaeliocattleya Memoria 'Anna Balmores'" },
       pottingDate: new Date('2024-02-15'),
-      location: { zone: 'Zona_A', table: 'Mesa_3' },
+      location: { zone: 'ZONA_A', table: 'MESA_3' },
     },
     {
       species: { name: "Rhyncholaeliocattleya Memoria 'Anna Balmores'" },
       pottingDate: new Date('2024-01-30'),
-      location: { zone: 'Zona_A', table: 'Mesa_4' },
+      location: { zone: 'ZONA_A', table: 'MESA_4' },
     },
     {
       species: { name: 'Cattleya Supersonic' },
       pottingDate: new Date('2024-02-28'),
-      location: { zone: 'Zona_A', table: 'Mesa_4' },
+      location: { zone: 'ZONA_A', table: 'MESA_4' },
     },
     {
       species: { name: 'Cattleya Supersonic' },
       pottingDate: new Date('2024-03-10'),
-      location: { zone: 'Zona_A', table: 'Mesa_4' },
+      location: { zone: 'ZONA_A', table: 'MESA_4' },
     },
     {
       species: { name: 'Dendrobium Striata' },
       pottingDate: new Date('2024-01-05'),
-      location: { zone: 'Zona_A', table: 'Mesa_5' },
+      location: { zone: 'ZONA_A', table: 'MESA_5' },
     },
     {
       species: { name: 'Dendrobium Striata' },
       pottingDate: new Date('2024-02-12'),
-      location: { zone: 'Zona_A', table: 'Mesa_5' },
+      location: { zone: 'ZONA_A', table: 'MESA_5' },
     },
     {
       species: { name: 'Dendrobium Ocean Blue' },
       pottingDate: new Date('2023-12-25'),
-      location: { zone: 'Zona_A', table: 'Mesa_5' },
+      location: { zone: 'ZONA_A', table: 'MESA_5' },
     },
     {
       species: { name: 'Dendrobium Ocean Blue' },
       pottingDate: new Date('2024-01-20'),
-      location: { zone: 'Zona_A', table: 'Mesa_6' },
+      location: { zone: 'ZONA_A', table: 'MESA_6' },
     },
     {
       species: { name: 'Dendrobium Diamond' },
       pottingDate: new Date('2024-02-08'),
-      location: { zone: 'Zona_A', table: 'Mesa_6' },
+      location: { zone: 'ZONA_A', table: 'MESA_6' },
     },
     {
       species: { name: 'Dendrobium Diamond' },
       pottingDate: new Date('2024-03-15'),
-      location: { zone: 'Zona_A', table: 'Mesa_6' },
+      location: { zone: 'ZONA_A', table: 'MESA_6' },
     },
     {
       species: { name: 'Dimerandra Stenotepala' },
       pottingDate: new Date('2024-01-18'),
-      location: { zone: 'Zona_A', table: 'Mesa_1' },
+      location: { zone: 'ZONA_A', table: 'MESA_1' },
     },
     {
       species: { name: 'Dimerandra Stenotepala' },
       pottingDate: new Date('2024-02-22'),
-      location: { zone: 'Zona_A', table: 'Mesa_2' },
+      location: { zone: 'ZONA_A', table: 'MESA_2' },
     },
     {
       species: { name: 'Enciclea Cordijera' },
       pottingDate: new Date('2024-01-28'),
-      location: { zone: 'Zona_A', table: 'Mesa_3' },
+      location: { zone: 'ZONA_A', table: 'MESA_3' },
     },
     {
       species: { name: 'Enciclea Cordijera' },
       pottingDate: new Date('2024-03-05'),
-      location: { zone: 'Zona_A', table: 'Mesa_4' },
+      location: { zone: 'ZONA_A', table: 'MESA_4' },
     },
   ],
   agrochemicals: [
@@ -590,152 +568,154 @@ export const initialData: SeedData = {
       name: 'Osmocote Plus',
       description:
         'Fertilizante Granular de liberación lenta. Formulacion 15-9-12 + microelementos. Aplicar cada 4 meses.',
-      type: 'Fertilizante',
-      porpose: 'Desarrollo',
+      type: 'FERTILIZANTE',
+      purpose: 'DESARROLLO',
       preparation: '1/4 cdita por planta',
     },
     {
       name: 'Solucat 25-5-5',
       description:
         'Fertilizante NPK cristalino rico en nitrógeno con microelementos, adecuado como complemento al abonado o para aplicar en las fases de crecimiento vegetativo dónde se consume nitrógeno.',
-      type: 'Fertilizante',
-      porpose: 'Desarrollo',
+      type: 'FERTILIZANTE',
+      purpose: 'DESARROLLO',
       preparation: '1 gramo por litro de agua',
     },
     {
       name: 'Nitrifort M935',
       description:
         'Promueve el crecimiento y desarrollo de hojas verdes, esencial para la fotosíntesis.',
-      type: 'Fertilizante',
-      porpose: 'Desarrollo',
+      type: 'FERTILIZANTE',
+      purpose: 'DESARROLLO',
       preparation: '2 ml/L',
     },
     {
       name: 'Bio-Fert 72',
       description: 'Vigorizante y estimulador de nuevos brotes vegetativos.',
-      type: 'Fertilizante',
-      porpose: 'Desarrollo',
+      type: 'FERTILIZANTE',
+      purpose: 'DESARROLLO',
       preparation: '1 g/L',
     },
     {
       name: 'Razormin',
       description:
         'Bioestimulante y enraizante. Favorece la absorción de nutrientes. Aplicar cada 21 dias.',
-      type: 'Fertilizante',
-      porpose: 'Desarrollo',
+      type: 'FERTILIZANTE',
+      purpose: 'DESARROLLO',
       preparation: '1 ml/L',
     },
     {
       name: 'Melaza',
       description:
         'Promueve el desarrollo radicular, optimiza la capacidad de intercambio catiónico del sustrato e Intensifica la actividad microbiológica del sustrato. Aplicar cada semana (se mezcla con otros fertilizantes).',
-      type: 'Fertilizante',
-      porpose: 'Desarrollo',
+      type: 'FERTILIZANTE',
+      purpose: 'DESARROLLO',
       preparation: '1 cda/L',
     },
     {
       name: 'Dalgin',
       description:
         'Aporta vitalidad y energía al cultivo, especialmente durante el desarrollo vegetativo, y activa la clorofila y procesos fotosintéticos. Aplicar cada mes.',
-      type: 'Fertilizante',
-      porpose: 'Desarrollo',
+      type: 'FERTILIZANTE',
+      purpose: 'DESARROLLO',
       preparation: '1 ml/L',
     },
     {
       name: 'Triple 20-20-20',
       description: 'El fósforo fortalece las raíces, mejora la floración.',
-      type: 'Fertilizante',
-      porpose: 'Mantenimiento',
+      type: 'FERTILIZANTE',
+      purpose: 'MANTENIMIENTO',
       preparation: '1 g/L',
     },
     {
       name: 'Triple 19-19-19',
       description: 'El fósforo fortalece las raíces, mejora la floración.',
-      type: 'Fertilizante',
-      porpose: 'Mantenimiento',
+      type: 'FERTILIZANTE',
+      purpose: 'MANTENIMIENTO',
       preparation: '1 g/L',
     },
     {
       name: 'Solucat 10-52-10',
       description: 'El fósforo fortalece las raíces, mejora la floración.',
-      type: 'Fertilizante',
-      porpose: 'Floracion',
+      type: 'FERTILIZANTE',
+      purpose: 'FLORACION',
       preparation: '1 g/L',
     },
     {
       name: 'Calcio + Boro',
       description:
         'Aumenta la turgencia de las plantas, el desarrollo de las flores y la calidad de las flores. Aplicar cada semana.',
-      type: 'Fertilizante',
-      porpose: 'Floracion',
+      type: 'FERTILIZANTE',
+      purpose: 'FLORACION',
       preparation: '2 ml/L',
     },
     {
       name: 'Curtail',
       description:
         'Actúa por contacto e ingestión contra un amplio espectro de plagas masticadoras, minadoras y perforadoras, tanto larvas, ninfas y adultos.',
-      type: 'Fitosanitario',
-      porpose: 'Insecticida',
+      type: 'FITOSANITARIO',
+      purpose: 'INSECTICIDA',
       preparation: '3 ml/L',
     },
     {
       name: 'ABAC',
       description:
         'insecticida por ingestión y por contacto, el insecto queda inmovilizado poco después de ingerir el producto, deja de alimentarse y acaba muriendo, sin destruir la planta.',
-      type: 'Fitosanitario',
-      porpose: 'Acaricida',
+      type: 'FITOSANITARIO',
+      purpose: 'ACARICIDA',
       preparation: '3 ml/L',
     },
     {
       name: 'Sulphor-NF',
       description:
         'Posee un alto contenido de azufre siendo también un compuesto nitrogenado que favorece el crecimiento y fortalece los cultivos contra condiciones adversas como: stress, plagas y enfermedades por su triple acción (fungicida, acaricida y nutricional).',
-      type: 'Fitosanitario',
-      porpose: 'Acaricida',
+      type: 'FITOSANITARIO',
+      purpose: 'ACARICIDA',
       preparation: '3 ml/L',
     },
     {
       name: 'Kasumin',
       description:
         'Fungicida – bactericida de origen biológico, con acción sistémico con actividad preventiva y curativa.',
-      type: 'Fitosanitario',
-      porpose: 'Fungicida',
+      type: 'FITOSANITARIO',
+      purpose: 'FUNGICIDA',
       preparation: '5 ml/L',
     },
     {
       name: 'Vitavax-200F',
       description:
         'Se puede aplicar a la semilla para prevenir las enfermedades provocadas por microorganismos que pueden ser transmitidos en las semillas o encontrarse en el suelo, protegiendo las semillas durante su almacenaje, germinación y a las plántulas en sus primeros días de desarrollo.',
-      type: 'Fitosanitario',
-      porpose: 'Fungicida',
+      type: 'FITOSANITARIO',
+      purpose: 'FUNGICIDA',
       preparation: '10 ml/L',
     },
     {
       name: 'Mancozeb',
       description:
         'Presenta un amplio espectro antifúngico frente a hongos endoparásitos causantes de enfermedades foliares.',
-      type: 'Fitosanitario',
-      porpose: 'Fungicida',
+      type: 'FITOSANITARIO',
+      purpose: 'FUNGICIDA',
       preparation: '5 g/L',
     },
     {
       name: 'Bitter 97',
       description: 'De acción sistémica, preventiva y curativa.',
-      type: 'Fitosanitario',
-      porpose: 'Fungicida',
+      type: 'FITOSANITARIO',
+      purpose: 'FUNGICIDA',
       preparation: '5 ml/L',
     },
     {
       name: 'Agua Oxigenada',
       description: '12h x 7dias.',
-      type: 'Fitosanitario',
-      porpose: 'Fungicida',
+      type: 'FITOSANITARIO',
+      purpose: 'FUNGICIDA',
       preparation: '50:50',
     },
   ],
   fertilizationPrograms: [
+    // ---- BLOQUES MENSUALES (Duración: 4 semanas) ----
+    // El usuario elige uno de estos bloques para iniciar un ciclo de 4 semanas.
     {
-      name: 'Desarrollo Solucat mensual',
+      name: 'Desarrollo Solucat (Mensual)',
       weeklyFrequency: 4,
       productsCycle: [
         { sequence: 1, agrochemical: { name: 'Solucat 25-5-5' } },
@@ -745,7 +725,7 @@ export const initialData: SeedData = {
       ],
     },
     {
-      name: 'Desarrollo Nitrifort mensual',
+      name: 'Desarrollo Nitrifort (Mensual)',
       weeklyFrequency: 4,
       productsCycle: [
         { sequence: 1, agrochemical: { name: 'Nitrifort M935' } },
@@ -755,7 +735,7 @@ export const initialData: SeedData = {
       ],
     },
     {
-      name: 'Desarrollo Bio-Fert 72 mensual',
+      name: 'Desarrollo Bio-Fert (Mensual)',
       weeklyFrequency: 4,
       productsCycle: [
         { sequence: 1, agrochemical: { name: 'Bio-Fert 72' } },
@@ -764,202 +744,40 @@ export const initialData: SeedData = {
         { sequence: 4, agrochemical: { name: 'Solucat 10-52-10' } },
       ],
     },
+
+    // ---- BLOQUES ADICIONALES / PARALELOS ----
+    // Plan Aditivo: Calcio + Boro (Siempre constante)
     {
       name: 'Calcio + Boro Semanal',
       weeklyFrequency: 1,
-      productsCycle: [{ sequence: 1, agrochemical: { name: 'Calcio + Boro' } }],
+      productsCycle: [
+        { sequence: 1, agrochemical: { name: 'Calcio + Boro' } },
+      ],
     },
+    // Plan Estimulante: Razormin (Cada 21 días ~ 3 semanas)
     {
-      name: 'Razormin 21 dias',
-      weeklyFrequency: 3,
-      productsCycle: [{ sequence: 1, agrochemical: { name: 'Razormin' } }],
+      name: 'Estimulación Radicular (Razormin)',
+      weeklyFrequency: 3, // Se aplica cada 3 semanas
+      productsCycle: [
+        { sequence: 1, agrochemical: { name: 'Razormin' } },
+      ],
     },
+    // Plan Lento: Osmocote (Cada 4 meses ~ 16 semanas)
     {
-      name: 'Osmocote Plus 4 meses',
+      name: 'Fertilización Granular (Osmocote)',
       weeklyFrequency: 16,
-      productsCycle: [{ sequence: 1, agrochemical: { name: 'Osmocote Plus' } }],
-    },
-  ],
-  fertilizationTasks: [
-    // Tareas para Desarrollo Solucat mensual (Marzo 2025 - Mes 1 de alternancia) (Comienzo en Lunes 3 de Marzo)
-    {
-      scheduledDate: new Date('2025-03-03T08:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Solucat 25-5-5' },
-      productsCycle: { sequence: 1, programName: 'Desarrollo Solucat mensual' },
-    }, // Semana 1 - Marzo
-    {
-      scheduledDate: new Date('2025-03-10T08:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Triple 20-20-20' },
-      productsCycle: { sequence: 2, programName: 'Desarrollo Solucat mensual' },
-    }, // Semana 2 - Marzo
-    {
-      scheduledDate: new Date('2025-03-17T08:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Triple 20-20-20' },
-      productsCycle: { sequence: 3, programName: 'Desarrollo Solucat mensual' },
-    }, // Semana 3 - Marzo
-    {
-      scheduledDate: new Date('2025-03-24T08:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Solucat 10-52-10' },
-      productsCycle: { sequence: 4, programName: 'Desarrollo Solucat mensual' },
-    }, // Semana 4 - Marzo
-
-    // Tareas para Desarrollo Nitrifort mensual (Abril 2025 - Mes 2 de alternancia) (Comienzo en Lunes 7 de Abril)
-    {
-      scheduledDate: new Date('2025-04-07T08:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Nitrifort M935' },
-      productsCycle: { sequence: 1, programName: 'Desarrollo Nitrifort mensual' },
-    }, // Semana 1 - Abril
-    {
-      scheduledDate: new Date('2025-04-14T08:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Triple 20-20-20' },
-      productsCycle: { sequence: 2, programName: 'Desarrollo Nitrifort mensual' },
-    }, // Semana 2 - Abril
-    {
-      scheduledDate: new Date('2025-04-21T08:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Triple 20-20-20' },
-      productsCycle: { sequence: 3, programName: 'Desarrollo Nitrifort mensual' },
-    }, // Semana 3 - Abril
-    {
-      scheduledDate: new Date('2025-04-28T08:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Solucat 10-52-10' },
-      productsCycle: { sequence: 4, programName: 'Desarrollo Nitrifort mensual' },
-    }, // Semana 4 - Abril
-
-    // Tareas para Programa Desarrollo Bio-Fert 72 (Mayo 2025 - Mes 3 de alternancia) (Comienzo en Lunes 5 de Mayo)
-    {
-      scheduledDate: new Date('2025-05-05T08:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Bio-Fert 72' },
-      productsCycle: { sequence: 1, programName: 'Desarrollo Bio-Fert 72 mensual' },
-    }, // Semana 1 - Mayo
-    {
-      scheduledDate: new Date('2025-05-12T08:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Triple 20-20-20' },
-      productsCycle: { sequence: 2, programName: 'Desarrollo Bio-Fert 72 mensual' },
-    }, // Semana 2 - Mayo
-    {
-      scheduledDate: new Date('2025-05-19T08:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Triple 20-20-20' },
-      productsCycle: { sequence: 3, programName: 'Desarrollo Bio-Fert 72 mensual' },
-    }, // Semana 3 - Mayo
-    {
-      scheduledDate: new Date('2025-05-26T08:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Solucat 10-52-10' },
-      productsCycle: { sequence: 4, programName: 'Desarrollo Bio-Fert 72 mensual' },
-    }, // Semana 4 - Mayo
-
-    // Tareas para Programa Calcio + Boro Semanal (aplicación semanal continua a partir de Marzo 2025) (Martes 4 de Marzo)
-    {
-      scheduledDate: new Date('2025-03-04T09:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Calcio + Boro' },
-      productsCycle: { sequence: 1, programName: 'Calcio + Boro Semanal' },
-    }, // Semana 1 - Marzo
-    {
-      scheduledDate: new Date('2025-03-11T09:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Calcio + Boro' },
-      productsCycle: { sequence: 1, programName: 'Calcio + Boro Semanal' },
-    }, // Semana 2 - Marzo
-    {
-      scheduledDate: new Date('2025-03-18T09:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Calcio + Boro' },
-      productsCycle: { sequence: 1, programName: 'Calcio + Boro Semanal' },
-    }, // Semana 3 - Marzo
-    {
-      scheduledDate: new Date('2025-03-25T09:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Calcio + Boro' },
-      productsCycle: { sequence: 1, programName: 'Calcio + Boro Semanal' },
-    }, // Semana 4 - Marzo
-    {
-      scheduledDate: new Date('2025-04-01T09:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Calcio + Boro' },
-      productsCycle: { sequence: 1, programName: 'Calcio + Boro Semanal' },
-    }, // Semana 1 - Abril
-
-    // Tareas para Razormin 21 dias (aplicación cada 21 días a partir de Marzo 2025)
-    {
-      scheduledDate: new Date('2025-03-06T11:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Razormin' },
-      productsCycle: { sequence: 1, programName: 'Razormin 21 dias' },
-    }, // Inicio Marzo (Jueves 6 de Marzo)
-    {
-      scheduledDate: new Date('2025-03-27T11:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Razormin' },
-      productsCycle: { sequence: 1, programName: 'Razormin 21 dias' },
-    }, // ~21 días después (finales de Marzo)
-    {
-      scheduledDate: new Date('2025-04-17T11:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Razormin' },
-      productsCycle: { sequence: 1, programName: 'Razormin 21 dias' },
-    }, // ~21 días después (mediados de Abril)
-
-    // Tareas para Osmocote Plus 4 meses (aplicación cada 4 meses a partir de Marzo 2025)
-    {
-      scheduledDate: new Date('2025-03-05T07:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Osmocote Plus' },
-      productsCycle: { sequence: 1, programName: 'Osmocote Plus 4 meses' },
-    }, // Marzo 2025
-    {
-      scheduledDate: new Date('2025-07-05T07:00:00Z'),
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Osmocote Plus' },
-      productsCycle: { sequence: 1, programName: 'Osmocote Plus 4 meses' },
-    }, // Julio 2025 (4 meses después)
-
-    // Tarea Ad hoc
-    {
-      scheduledDate: new Date('2025-03-01T08:00:00Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Melaza' },
+      productsCycle: [
+        { sequence: 1, agrochemical: { name: 'Osmocote Plus' } },
+      ],
     },
   ],
   phytosanitaryPrograms: [
+    // Control Fungicida (Rotación Anual - Cada 2 meses)
     {
-      name: 'Programa Fungicida Ciclo 2 Meses',
+      name: 'Control Fungicida (Rotación Anual)',
       monthlyFrequency: 2,
       productsCycle: [
+        // Proyección de un año (6 aplicaciones)
         { sequence: 1, agrochemical: { name: 'Kasumin' } },
         { sequence: 2, agrochemical: { name: 'Sulphor-NF' } },
         { sequence: 3, agrochemical: { name: 'Kasumin' } },
@@ -968,416 +786,93 @@ export const initialData: SeedData = {
         { sequence: 6, agrochemical: { name: 'Bitter 97' } },
       ],
     },
+    // Control Acaricida (Cada 3 meses, Terapia de choque 3 semanas)
     {
-      name: 'Programa Acaricida Ciclo 3 Meses',
+      name: 'Control Acaricida (ABAC)',
       monthlyFrequency: 3,
-      productsCycle: [{ sequence: 1, agrochemical: { name: 'ABAC' } }],
+      productsCycle: [
+        // Ciclo de 3 semanas con el mismo producto
+        { sequence: 1, agrochemical: { name: 'ABAC' } },
+        { sequence: 2, agrochemical: { name: 'ABAC' } },
+        { sequence: 3, agrochemical: { name: 'ABAC' } },
+      ],
     },
+    // Control Insecticida (Cada 4 meses, Terapia de choque 3 semanas)
     {
-      name: 'Programa Insecticida Ciclo 4 Meses',
+      name: 'Control Insecticida (Curtail)',
       monthlyFrequency: 4,
-      productsCycle: [{ sequence: 1, agrochemical: { name: 'Curtail' } }],
+      productsCycle: [
+        // Ciclo de 3 semanas con el mismo producto
+        { sequence: 1, agrochemical: { name: 'Curtail' } },
+        { sequence: 2, agrochemical: { name: 'Curtail' } },
+        { sequence: 3, agrochemical: { name: 'Curtail' } },
+      ],
     },
   ],
-  phytosanitaryTasks: [
-    // Programa Fungicida Ciclo 2 Meses - Inicio Marzo 2025 - Repetición cada 2 meses
+  automationSchedules: [
+    // ---- RIEGOS DIARIOS/INTERDIARIOS (Agua) ----
     {
-      scheduledDate: new Date('2025-03-05T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Kasumin' },
-      productsCycle: { sequence: 1, programName: 'Programa Fungicida Ciclo 2 Meses' },
-    }, // Secuencia 1: Kasumin - Semana 1
-    {
-      scheduledDate: new Date('2025-03-12T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Kasumin' },
-      productsCycle: { sequence: 1, programName: 'Programa Fungicida Ciclo 2 Meses' },
-    }, // Secuencia 1: Kasumin - Semana 2
-    {
-      scheduledDate: new Date('2025-03-19T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Kasumin' },
-      productsCycle: { sequence: 1, programName: 'Programa Fungicida Ciclo 2 Meses' },
-    }, // Secuencia 1: Kasumin - Semana 3 (ÚLTIMA APLICACIÓN)
-
-    {
-      scheduledDate: new Date('2025-05-14T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Sulphor-NF' },
-      productsCycle: { sequence: 2, programName: 'Programa Fungicida Ciclo 2 Meses' },
-    }, // Secuencia 2: Sulphor-NF - Semana 1 (8 semanas después de la ÚLTIMA aplicación de Kasumin)
-    {
-      scheduledDate: new Date('2025-05-21T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Sulphor-NF' },
-      productsCycle: { sequence: 2, programName: 'Programa Fungicida Ciclo 2 Meses' },
-    }, // Secuencia 2: Sulphor-NF - Semana 2
-    {
-      scheduledDate: new Date('2025-05-28T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Sulphor-NF' },
-      productsCycle: { sequence: 2, programName: 'Programa Fungicida Ciclo 2 Meses' },
-    }, // Secuencia 2: Sulphor-NF - Semana 3 (ÚLTIMA APLICACIÓN)
-
-    {
-      scheduledDate: new Date('2025-07-23T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Kasumin' },
-      productsCycle: { sequence: 3, programName: 'Programa Fungicida Ciclo 2 Meses' },
-    }, // Secuencia 3: Kasumin - Semana 1 (8 semanas después de la ÚLTIMA aplicación de Sulphor-NF)
-    {
-      scheduledDate: new Date('2025-07-30T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Kasumin' },
-      productsCycle: { sequence: 3, programName: 'Programa Fungicida Ciclo 2 Meses' },
-    }, // Secuencia 3: Kasumin - Semana 2
-    {
-      scheduledDate: new Date('2025-08-06T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Kasumin' },
-      productsCycle: { sequence: 3, programName: 'Programa Fungicida Ciclo 2 Meses' },
-    }, // Secuencia 3: Kasumin - Semana 3 (ÚLTIMA APLICACIÓN)
-
-    {
-      scheduledDate: new Date('2025-10-01T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Mancozeb' },
-      productsCycle: { sequence: 4, programName: 'Programa Fungicida Ciclo 2 Meses' },
-    }, // Secuencia 4: Mancozeb - Semana 1 (8 semanas después de la ÚLTIMA aplicación de Kasumin)
-    {
-      scheduledDate: new Date('2025-10-08T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Mancozeb' },
-      productsCycle: { sequence: 4, programName: 'Programa Fungicida Ciclo 2 Meses' },
-    }, // Secuencia 4: Mancozeb - Semana 2
-    {
-      scheduledDate: new Date('2025-10-15T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Mancozeb' },
-      productsCycle: { sequence: 4, programName: 'Programa Fungicida Ciclo 2 Meses' },
-    }, // Secuencia 4: Mancozeb - Semana 3 (ÚLTIMA APLICACIÓN)
-
-    {
-      scheduledDate: new Date('2025-12-10T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Sulphor-NF' },
-      productsCycle: { sequence: 5, programName: 'Programa Fungicida Ciclo 2 Meses' },
-    }, // Secuencia 5: Sulphor-NF - Semana 1 (8 semanas después de la ÚLTIMA aplicación de Mancozeb)
-    {
-      scheduledDate: new Date('2025-12-17T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Sulphor-NF' },
-      productsCycle: { sequence: 5, programName: 'Programa Fungicida Ciclo 2 Meses' },
-    }, // Secuencia 5: Sulphor-NF - Semana 2
-    {
-      scheduledDate: new Date('2025-12-24T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Sulphor-NF' },
-      productsCycle: { sequence: 5, programName: 'Programa Fungicida Ciclo 2 Meses' },
-    }, // Secuencia 5: Sulphor-NF - Semana 3 (ÚLTIMA APLICACIÓN)
-
-    {
-      scheduledDate: new Date('2026-02-18T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Bitter 97' },
-      productsCycle: { sequence: 6, programName: 'Programa Fungicida Ciclo 2 Meses' },
-    }, // Secuencia 6: Bitter 97 - Semana 1 (8 semanas después de la ÚLTIMA aplicación de Sulphor-NF)
-    {
-      scheduledDate: new Date('2026-02-25T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Bitter 97' },
-      productsCycle: { sequence: 6, programName: 'Programa Fungicida Ciclo 2 Meses' },
-    }, // Secuencia 6: Bitter 97 - Semana 2
-    {
-      scheduledDate: new Date('2026-03-04T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Bitter 97' },
-      productsCycle: { sequence: 6, programName: 'Programa Fungicida Ciclo 2 Meses' },
-    }, // Secuencia 6: Bitter 97 - Semana 3 (ÚLTIMA APLICACIÓN)
-
-    // Programa Acaricida Ciclo 3 Meses - Inicio Marzo 2025 - Repetición cada 3 meses
-    {
-      scheduledDate: new Date('2025-03-05T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'ABAC' },
-      productsCycle: { sequence: 1, programName: 'Programa Acaricida Ciclo 3 Meses' },
-    }, // Secuencia 1: ABAC - Semana 1
-    {
-      scheduledDate: new Date('2025-03-12T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'ABAC' },
-      productsCycle: { sequence: 1, programName: 'Programa Acaricida Ciclo 3 Meses' },
-    }, // Secuencia 1: ABAC - Semana 2
-    {
-      scheduledDate: new Date('2025-03-19T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'ABAC' },
-      productsCycle: { sequence: 1, programName: 'Programa Acaricida Ciclo 3 Meses' },
-    }, // Secuencia 1: ABAC - Semana 3 (ÚLTIMA APLICACIÓN)
-
-    {
-      scheduledDate: new Date('2025-06-12T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'ABAC' },
-      productsCycle: { sequence: 1, programName: 'Programa Acaricida Ciclo 3 Meses' },
-    }, // Secuencia 1: ABAC - Semana 1 (Ciclo 3 meses después, 8 semanas después de la ÚLTIMA aplicación)
-    {
-      scheduledDate: new Date('2025-06-19T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'ABAC' },
-      productsCycle: { sequence: 1, programName: 'Programa Acaricida Ciclo 3 Meses' },
-    }, // Secuencia 1: ABAC - Semana 2
-    {
-      scheduledDate: new Date('2025-06-26T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'ABAC' },
-      productsCycle: { sequence: 1, programName: 'Programa Acaricida Ciclo 3 Meses' },
-    }, // Secuencia 1: ABAC - Semana 3 (ÚLTIMA APLICACIÓN)
-
-    {
-      scheduledDate: new Date('2025-09-12T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'ABAC' },
-      productsCycle: { sequence: 1, programName: 'Programa Acaricida Ciclo 3 Meses' },
-    }, // Secuencia 1: ABAC - Semana 1 (Ciclo 3 meses después, 8 semanas después de la ÚLTIMA aplicación)
-    {
-      scheduledDate: new Date('2025-09-19T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'ABAC' },
-      productsCycle: { sequence: 1, programName: 'Programa Acaricida Ciclo 3 Meses' },
-    }, // Secuencia 1: ABAC - Semana 2
-    {
-      scheduledDate: new Date('2025-09-26T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'ABAC' },
-      productsCycle: { sequence: 1, programName: 'Programa Acaricida Ciclo 3 Meses' },
-    }, // Secuencia 1: ABAC - Semana 3 (ÚLTIMA APLICACIÓN)
-
-    {
-      scheduledDate: new Date('2025-12-12T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'ABAC' },
-      productsCycle: { sequence: 1, programName: 'Programa Acaricida Ciclo 3 Meses' },
-    }, // Secuencia 1: ABAC - Semana 1 (Ciclo 3 meses después, 8 semanas después de la ÚLTIMA aplicación)
-    {
-      scheduledDate: new Date('2025-12-19T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'ABAC' },
-      productsCycle: { sequence: 1, programName: 'Programa Acaricida Ciclo 3 Meses' },
-    }, // Secuencia 1: ABAC - Semana 2
-    {
-      scheduledDate: new Date('2025-12-26T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'ABAC' },
-      productsCycle: { sequence: 1, programName: 'Programa Acaricida Ciclo 3 Meses' },
-    }, // Secuencia 1: ABAC - Semana 3 (ÚLTIMA APLICACIÓN)
-
-    {
-      scheduledDate: new Date('2026-03-12T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'ABAC' },
-      productsCycle: { sequence: 1, programName: 'Programa Acaricida Ciclo 3 Meses' },
-    }, // Secuencia 1: ABAC - Semana 1 (Ciclo 3 meses después, 8 semanas después de la ÚLTIMA aplicación)
-    {
-      scheduledDate: new Date('2026-03-19T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'ABAC' },
-      productsCycle: { sequence: 1, programName: 'Programa Acaricida Ciclo 3 Meses' },
-    }, // Secuencia 1: ABAC - Semana 2
-    {
-      scheduledDate: new Date('2026-03-26T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'ABAC' },
-      productsCycle: { sequence: 1, programName: 'Programa Acaricida Ciclo 3 Meses' },
-    }, // Secuencia 1: ABAC - Semana 3 (ÚLTIMA APLICACIÓN)
-
-    // Programa Insecticida Ciclo 4 Meses - Inicio Abril 2025 - Repetición cada 4 meses
-    {
-      scheduledDate: new Date('2025-04-05T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Curtail' },
-      productsCycle: { sequence: 1, programName: 'Programa Insecticida Ciclo 4 Meses' },
-    }, // Secuencia 1: Curtail - Semana 1
-    {
-      scheduledDate: new Date('2025-04-12T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Curtail' },
-      productsCycle: { sequence: 1, programName: 'Programa Insecticida Ciclo 4 Meses' },
-    }, // Secuencia 1: Curtail - Semana 2
-    {
-      scheduledDate: new Date('2025-04-19T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Curtail' },
-      productsCycle: { sequence: 1, programName: 'Programa Insecticida Ciclo 4 Meses' },
-    }, // Secuencia 1: Curtail - Semana 3 (ÚLTIMA APLICACIÓN)
-
-    {
-      scheduledDate: new Date('2025-08-12T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Curtail' },
-      productsCycle: { sequence: 1, programName: 'Programa Insecticida Ciclo 4 Meses' },
-    }, // Secuencia 1: Curtail - Semana 1 (Ciclo 4 meses después, 8 semanas después de la ÚLTIMA aplicación)
-    {
-      scheduledDate: new Date('2025-08-19T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Curtail' },
-      productsCycle: { sequence: 1, programName: 'Programa Insecticida Ciclo 4 Meses' },
-    }, // Secuencia 1: Curtail - Semana 2
-    {
-      scheduledDate: new Date('2025-08-26T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Curtail' },
-      productsCycle: { sequence: 1, programName: 'Programa Insecticida Ciclo 4 Meses' },
-    }, // Secuencia 1: Curtail - Semana 3 (ÚLTIMA APLICACIÓN)
-
-    {
-      scheduledDate: new Date('2025-12-12T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Curtail' },
-      productsCycle: { sequence: 1, programName: 'Programa Insecticida Ciclo 4 Meses' },
-    }, // Secuencia 1: Curtail - Semana 1 (Ciclo 4 meses después, 8 semanas después de la ÚLTIMA aplicación)
-    {
-      scheduledDate: new Date('2025-12-19T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Curtail' },
-      productsCycle: { sequence: 1, programName: 'Programa Insecticida Ciclo 4 Meses' },
-    }, // Secuencia 1: Curtail - Semana 2
-    {
-      scheduledDate: new Date('2025-12-26T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Curtail' },
-      productsCycle: { sequence: 1, programName: 'Programa Insecticida Ciclo 4 Meses' },
-    }, // Secuencia 1: Curtail - Semana 3 (ÚLTIMA APLICACIÓN)
-
-    {
-      scheduledDate: new Date('2026-04-12T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Curtail' },
-      productsCycle: { sequence: 1, programName: 'Programa Insecticida Ciclo 4 Meses' },
-    }, // Secuencia 1: Curtail - Semana 1 (Ciclo 4 meses después, 8 semanas después de la ÚLTIMA aplicación)
-    {
-      scheduledDate: new Date('2026-04-19T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Curtail' },
-      productsCycle: { sequence: 1, programName: 'Programa Insecticida Ciclo 4 Meses' },
-    }, // Secuencia 1: Curtail - Semana 2
-    {
-      scheduledDate: new Date('2026-04-26T07:00:00.000Z'),
-      zones: ['Zona_A', 'Zona_B', 'Zona_C', 'Zona_D'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Curtail' },
-      productsCycle: { sequence: 1, programName: 'Programa Insecticida Ciclo 4 Meses' },
-    }, // Secuencia 1: Curtail - Semana 3 (ÚLTIMA APLICACIÓN)
-
-    // Tarea Ad hoc
-    {
-      scheduledDate: new Date('2025-03-08T08:00:00.000Z'),
-      zones: ['Zona_A'],
-      status: 'Pendiente',
-      agrochemical: { name: 'Agua Oxigenada' },
-    },
-  ],
-  irrigationPrograms: [
-    {
-      name: 'Riego Interdiario Aspersion',
-      trigger: 'Interdiario',
-      actuator: 'Aspercion',
-      startTime: '05:00',
-      duration: 20,
-      zones: ['Zona_A', 'Zona_B'],
+      name: 'Riego Interdiario (6:00)',
+      description: 'Riego Interdiario a las 6:00 AM',
+      purpose: 'IRRIGATION',
+      // Cron: A las 06:00, todos los días. (El service/scheduler decide si toca según intervalo)
+      cronTrigger: '0 6 * * *',
+      durationMinutes: 20,
+      zones: ['ZONA_A'],
+      isEnabled: true
     },
     {
-      name: 'Riego Diario Nebulizacion',
-      trigger: 'Diario',
-      actuator: 'Nebulizacion',
-      startTime: '18:00',
-      duration: 10,
-      zones: ['Zona_A', 'Zona_B'],
+      name: 'Nebulización (16:00)',
+      description: 'Mantener humedad relativa',
+      purpose: 'HUMIDIFICATION',
+      // Cron: A las 16:00, todos los días
+      cronTrigger: '0 18 * * *',
+      durationMinutes: 10,
+      zones: ['ZONA_A'],
+      isEnabled: true
     },
     {
-      name: 'Riego Diario Humedecer Suelo',
-      trigger: 'Diario',
-      actuator: 'Humedecer_Suelo',
-      startTime: '12:00',
-      duration: 10,
-      zones: ['Zona_A', 'Zona_B'],
-    },
-  ],
-  irrigationTasks: [
-    {
-      scheduledDate: new Date('2025-03-03T05:00:00Z'),
-      actuator: 'Aspercion',
-      duration: 20,
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      program: { name: 'Riego Interdiario Aspersion' },
+      name: 'Humidificación del Suelo (11:00)',
+      description: 'Mantener humedad relativa',
+      purpose: 'SOIL_WETTING',
+      // Cron: A las 11:00, todos los días
+      cronTrigger: '0 11 * * *',
+      durationMinutes: 10,
+      zones: ['ZONA_A'],
+      isEnabled: true
     },
     {
-      scheduledDate: new Date('2025-03-03T18:00:00Z'),
-      actuator: 'Nebulizacion',
-      duration: 10,
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Completada',
-      program: { name: 'Riego Diario Nebulizacion' },
+      name: 'Humidificación del Suelo (15:00)',
+      description: 'Mantener humedad relativa',
+      purpose: 'SOIL_WETTING',
+      // Cron: A las 15:00, todos los días
+      cronTrigger: '0 15 * * *',
+      durationMinutes: 10,
+      zones: ['ZONA_A'],
+      isEnabled: true
+    },
+    // ---- Fertirriego ----
+    {
+      name: 'Fertirriego Desarrollo Solucat (Lunes)',
+      description: 'Aplicación del plan de desarrollo semanal.',
+      purpose: 'FERTIGATION',
+      // Cron: A las 17:00, cada Lunes
+      cronTrigger: '0 17 * * 1',
+      durationMinutes: 5,
+      zones: ['ZONA_A'],
+      isEnabled: true,
+      fertilizationProgramName: 'Desarrollo Solucat (Mensual)',
     },
     {
-      scheduledDate: new Date('2025-03-03T12:00:00Z'),
-      actuator: 'Humedecer_Suelo',
-      duration: 10,
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
-      program: { name: 'Riego Diario Humedecer Suelo' },
-    },
-    {
-      scheduledDate: new Date('2025-03-08T07:00:00Z'),
-      actuator: 'Aspercion',
-      duration: 15,
-      zones: ['Zona_A', 'Zona_B'],
-      status: 'Pendiente',
+      name: 'Control Fungicida (Viernes)',
+      description: 'Aplicación preventiva quincenal/mensual.',
+      purpose: 'FUMIGATION',
+      // Cron: A las 17:00, cada Viernes
+      cronTrigger: '0 17 * * 5',
+      durationMinutes: 5,
+      zones: ['ZONA_A'],
+      isEnabled: true,
+      phytosanitaryProgramName: 'Control Fungicida (Rotación Anual)',
     },
   ],
 }

@@ -1,6 +1,6 @@
 'use server'
 
-import { prisma } from '@package/database'
+import prisma from '@package/database'
 
 export const getSearchSpeciesByTerm = async (searchTerm: string) => {
   // Normalizamos el término de búsqueda

@@ -3,9 +3,10 @@
   "tasks": {
     "build": {
       "dependsOn": [
-        "^build",
-        "^db:generate"
+        "^db:generate",
+        "^build"
       ],
+      "cache": false,
       "inputs": [
         "$TURBO_DEFAULT$",
         ".env*"
@@ -16,6 +17,7 @@
         "dist/**"
       ],
       "env": [
+        "AUTH_SECRET",
         "DATABASE_URL",
         "DB_USER",
         "DB_PASSWORD",
@@ -25,7 +27,8 @@
         "MQTT_HOST",
         "MQTT_PORT",
         "MQTT_BROKER_URL",
-        "MQTT_CLIENT_ID",
+        "MQTT_CLIENT_ID_INGEST",
+        "MQTT_CLIENT_ID_SCHEDULER",
         "DB_DATABASE_URL_UNPOOLED",
         "DB_DATABASE_URL",
         "DB_NEON_PROJECT_ID",
@@ -57,14 +60,24 @@
       "cache": false,
       "persistent": true
     },
+    "start": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false,
+      "persistent": true
+    },
     "db:generate": {
       "inputs": [
         "packages/database/prisma/schema.prisma"
       ],
       "outputs": [
-        "packages/database/generated/**"
+        "packages/database/src/generated/prisma/**"
       ],
-      "cache": false
+      "cache": false,
+      "env": [
+        "DATABASE_URL"
+      ]
     },
     "db:migrate": {
       "cache": false,

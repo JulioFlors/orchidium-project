@@ -12,11 +12,11 @@ type SpeciesWithGenus = Awaited<ReturnType<typeof getSpeciesByType>>[0]
 // Mapeo para traducir el 'slug' (usado en la configuración de rutas)
 // al valor exacto del 'enum PlantType' (usado en la base de datos).
 const slugToPlantType: Record<string, PlantType> = {
-  orchids: 'Orchid',
-  adenium_obesum: 'Adenium_Obesum',
-  cactus: 'Cactus',
-  succulents: 'Succulent',
-  bromeliads: 'Bromeliad',
+  orchids: 'ORCHID',
+  adenium_obesum: 'ADENIUM_OBESUM',
+  cactus: 'CACTUS',
+  succulents: 'SUCCULENT',
+  bromeliads: 'BROMELIAD',
 }
 
 interface Props {

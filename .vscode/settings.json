@@ -1,9 +1,12 @@
 {
 	"typescript.tsdk": "node_modules\\typescript\\lib",
 	"typescript.enablePromptUseWorkspaceTsdk": true,
-	"editor.formatOnSave": false,
+	"editor.formatOnSave": true,
 	"editor.codeActionsOnSave": {
 		"source.fixAll.eslint": "always"
+	},
+	"[markdown]": {
+		"editor.defaultFormatter": "DavidAnson.vscode-markdownlint"
 	},
 	"workbench.iconTheme": "material-icon-theme",
 	"material-icon-theme.activeIconPack": "react",
@@ -12,13 +15,16 @@
 		"(shop)": "Cart",
 		"actions": "Server",
 		"bh1750": "Svg",
+		"dashboard": "Benchmark",
 		"firmware": "Core",
+		"influxdb": "Database",
 		"infrastructure": "Cluster",
+		"ingest": "Aws",
 		"login": "Secure",
 		"migrations": "Prisma",
 		"mosquitto": "Server",
-		"mqtt": "Aws",
 		"new-account": "Secure",
+		"ota": "Update",
 		"persistence": "Database",
 		"plant": "Seeders",
 		"plants": "Seeders",
@@ -26,6 +32,8 @@
 		"product": "Seeders",
 		"products": "Seeders",
 		"relay_modules": "Pipe",
+		"scheduler": "Job",
+		"secrets": "Config",
 		"sensors": "Environment",
 		"store": "Store",
 		"umqtt": "Aws",

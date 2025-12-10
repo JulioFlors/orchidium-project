@@ -19,6 +19,12 @@
 # ---- Variables de Entorno y Credenciales ----
 .env
 .env*.local
+**/secrets/__init__.py
+
+# ---- Archivos de IDEs y Editores ----
+# Configuración específica del entorno local del desarrollador.
+**/commit*
+**/gemini*
 
 # ---- Dependencias de Gestores de Paquetes ----
 # La doble estrella (**) asegura que se ignoren en cualquier nivel.
@@ -26,10 +32,10 @@
 **/.pnp
 **/.pnp.js
 
-# ---- Datos Persistentes de Docker ----
+# ---- Datos Persistentes de Docker en la carpeta infrastructure ----
 # Contiene los archivos de la base de datos local.
 # Son datos, no código, y pueden ser muy grandes.
-**/database/postgres
+**/data
 
 # ---- Artefactos de Build y Caché de la Aplicación Next.js ----
 # Especificamos la ruta para ser precisos.
@@ -49,10 +55,6 @@
 *.tsbuildinfo
 # Archivo de definición de tipos de Next.js (se autogenera).
 next-env.d.ts
-
-# ---- Archivos de IDEs y Editores ----
-# Configuración específica del entorno local del desarrollador.
-.vscode
 
 # ---- Despliegues y Plataformas ----
 # Carpeta generada por Vercel para despliegues locales.

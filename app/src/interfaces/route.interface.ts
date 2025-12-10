@@ -9,6 +9,7 @@ export interface Route {
   name: string
   slug: string
   url: string
+  protected?: boolean
   featuredItem?: FeaturedItem
   categories?: Category[]
 }

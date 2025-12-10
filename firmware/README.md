@@ -1,4 +1,4 @@
-# ORCHIDIUM PROJECT: Sistema de Gestión de Invernaderos Inteligente
+# ORCHIDIUM PROJECT: Sistema de Gestión de Invernaderos Inteligentes
 
 Este markdown contiene el código y la documentación para el firmware de los nodos IoT del proyecto ORCHIDIUM, desarrollado en MicroPython para microcontroladores ESP32.
 
@@ -18,6 +18,7 @@ El objetivo de este firmware es monitorear variables ambientales (temperatura, h
    * [Sensor de Lluvia (MH-RD)](#-sensor-de-lluvia-mh-rd)
    * [Transductor de Presión de Agua (150 PSI)](#transductor-de-presión-de-agua-150-psi)
 7. [Arquitectura IoT: Procesamiento en el Borde y Lógica Centralizada](#-arquitectura-iot-procesamiento-en-el-borde-y-lógica-centralizada)
+8. [Mantenimiento y Actualizaciones (OTA)](#-mantenimiento-y-actualizaciones-ota)
 
 ---
 
@@ -28,7 +29,7 @@ El objetivo de este firmware es monitorear variables ambientales (temperatura, h
 Antes de empezar, asegúrate de tener instalado el siguiente software:
 
 * **Python 3.x:** [Descargar Python](https://www.python.org/downloads/).
-* **Herramientas de Python:** Instala `esptool` y `mpremote` globalmente desde tu terminal.
+* **Herramientas de Python:** Instala `esptool` y `mpremote` globalmente desde la terminal.
 
     ```bash
     pip install esptool
@@ -45,7 +46,7 @@ Antes de empezar, asegúrate de tener instalado el siguiente software:
 
 ## 🔧 Configuración del ESP32
 
-Este proceso se realiza una sola vez por cada ESP32 nuevo o cuando se desea actualizar el firmware.
+Este proceso se realiza una sola vez por cada ESP32 nuevo o cuando se desea actualizar el firmware base.
 
 ### Flashear el Firmware de MicroPython
 
@@ -68,90 +69,101 @@ esptool write-flash 0x1000 C:\Dev\pristinoplant\firmware\ESP32_2025-08-09_v1.26.
 
 Usamos la herramienta **`mpremote`** para instalar las librerías que nuestro código necesita en los dispositivos MicroPython.
 
-> **Importante:** La instalación de librerías debe hacerse solo en el dispositivo que las necesite.
+> **Importante:** La instalación de librerías debe hacerse según el rol del dispositivo.
 >
-> * **Actuator Controller Firmware** (Relay Modules): **MQTT**.
-> * **Environmental Monitoring Firmware** (Sensors): **MQTT** y **BH1750**.
+> * **Actuator Controller Firmware** (Relay Modules): Requiere `umqtt.simple2`, `ota` y `secrets`.
+> * **Environmental Monitoring Firmware** (Sensors): Requiere `umqtt.simple2`, `ota`, `secrets` y `bh1750`.
 
-### Librería ASÍNCRONA para MQTT (`umqtt.simple2`)
+#### ⚠️ Paso Preliminar OBLIGATORIO: Crear Directorio `/lib`
 
-Esta librería es **requerida** tanto para el **Actuator Controller** como para el **Environmental Monitoring** para la comunicación **MQTT**.
+Antes de instalar cualquier librería, es **fundamental** asegurarse de que el directorio `/lib` existe en el sistema de archivos del ESP32. Sin este paso, las copias recursivas fallarán.
 
-#### Opción 1: Clonar y Copiar la Librería Oficial (Recomendada si necesitas la última versión)
+Ejecuta este comando una sola vez:
 
-1. **Clona el Repositorio de la Librería `umqtt.simple2`:**
+```bash
+mpremote mkdir :lib
+```
 
-    ```bash
-    git clone https://github.com/fizista/micropython-umqtt-simple2.git
-    ```
+#### 1. Librería ASÍNCRONA para MQTT `umqtt.simple2`
 
-2. **Navega al Directorio de la Versión Minificada (Recomendado para ahorrar espacio):**
+**Fuente:** [https://github.com/fizista/micropython-umqtt.simple2](https://github.com/fizista/micropython-umqtt.simple2)
 
-    ```bash
-    cd .\micropython-umqtt-simple2\src_minimized
-    ```
-
-3. **Crea el Directorio `/lib` en el Dispositivo (si no existe):**
-
-    ```bash
-    mpremote mkdir :lib
-    ```
-
-4. **Carga todos los archivos del directorio a `/lib/umqtt` dentro del Dispositivo:**
-
-    ```bash
-    mpremote cp -r . :lib/umqtt
-    ```
-
-#### Opción 2: Usar los Archivos Proporcionados con el Proyecto (Recomendada para la compatibilidad con el proyecto)
-
-Los archivos de la librería **ya están incluidos** en la ruta local `firmware\lib` del proyecto.
-
-1. **Navega al directorio de la librería umqtt:**
-
-    ```bash
-    cd .\firmware\lib\umqtt\
-    ```
-
-2. **Crea el Directorio `/lib` en el Dispositivo (si no existe):**
-
-    ```bash
-    mpremote mkdir :lib
-    ```
-
-3. **Carga la Carpeta `umqtt` dentro del Directorio `/lib` del Dispositivo:**
-
-    ```bash
-    mpremote cp -r umqtt :lib/
-    ```
-
-### 💡 Librería del Sensor de Luz (`BH1750`)
-
-Esta librería es **exclusiva** para el **Environmental Monitoring Firmware**.
-
-La librería es proporcionada con el proyecto en la ruta: `firmware\lib\bh1750`
-
-El código fuente se obtuvo de este repositorio: [https://github.com/PinkInk/upylib/blob/master/bh1750/bh1750/**init**.py](https://github.com/PinkInk/upylib/blob/master/bh1750/bh1750/__init__.py)
+Esta librería es **requerida para AMBOS firmwares**.
 
 **Instalación:**
+Los archivos de la librería ya están incluidos en la ruta local `firmware\lib` del proyecto.
+*(Ejecuta este comando desde la carpeta del firmware correspondiente)*
 
-1. **Navega al directorio de la librería bh1750:**
+```bash
+mpremote cp -r ../lib/umqtt :lib/
+```
 
-    ```bash
-    cd .\firmware\lib\bh1750\
-    ```
+#### 2\. Librería `OTA`
 
-2. **Crea el Directorio `/lib` en el Dispositivo (si no existe):**
+Esta librería es **requerida para AMBOS firmwares** para permitir actualizaciones remotas.
+Se encuentra en `firmware\lib\ota`.
 
-    ```bash
-    mpremote mkdir :lib
-    ```
+**Instalación:**
+*(Ejecuta este comando desde la carpeta del firmware correspondiente)*
 
-3. **Carga la Carpeta `bh1750` dentro del Directorio `/lib` del Dispositivo:**
+```bash
+mpremote cp -r ../lib/ota :lib/
+```
 
-    ```bash
-    mpremote cp -r bh1750 :lib/bh1750
-    ```
+#### 3\. Archivos de Configuración `secrets`
+
+Esta librería contiene las credenciales WiFi y es **requerida para AMBOS firmwares**.
+Se encuentra en `firmware\lib\secrets`.
+
+**Instalación:**
+*(Ejecuta este comando desde la carpeta del firmware correspondiente)*
+
+```bash
+mpremote cp -r ../lib/secrets :lib/
+```
+
+> **Limpieza:** El archivo template no es necesario en el dispositivo.
+>
+> ```bash
+> mpremote rm :lib/secrets/template.py
+> ```
+>
+> **Nota de Seguridad:** El archivo `secrets/__init__.py` está en `.gitignore`. Debes crearlo localmente con tus credenciales reales antes de subirlo.
+
+#### 4\. Librería del Sensor de Luz `BH1750`
+
+Esta librería es **exclusiva** para el **Environmental Monitoring Firmware**.
+Se encuentra en `firmware\lib\bh1750`.
+
+**Fuente:** [https://github.com/PinkInk/upylib/tree/master/bh1750/bh1750](https://github.com/PinkInk/upylib/blob/master/bh1750/bh1750/__init__.py)
+
+**Instalación:**
+*(Ejecuta este comando desde la carpeta `firmware/sensors/`)*
+
+```bash
+mpremote cp -r ../lib/bh1750 :lib/
+```
+
+---
+
+### 🚀 Despliegue del Código Principal (`main.py`)
+
+Una vez instaladas las librerías, debes subir el código principal del firmware y su manifiesto de versión.
+
+Estos archivos (`main.py` y `manifest.json`) deben residir en la **raíz** (`:/`) del sistema de archivos del ESP32, no dentro de `/lib`.
+
+**Archivos requeridos:**
+
+* **`main.py`**: El punto de entrada y lógica del firmware.
+* **`manifest.json`**: Archivo de control para el sistema OTA.
+* **`boot.py`**: (Opcional pero recomendado) Script de arranque para limpieza de memoria.
+
+**Instalación:**
+Ejecuta estos comandos desde la carpeta específica del firmware que estás configurando (ej. `firmware/sensors/` o `firmware/relay_modules/`).
+
+```bash
+mpremote cp -r . :
+```
 
 ---
 
@@ -177,17 +189,17 @@ Se utiliza el comando fs rm para eliminar.
 
 ```bash
 # Eliminar un archivo específico del directorio raíz
-mpremote fs rm :main.py
+mpremote rm :main.py
 
 # Eliminar un archivo dentro de un subdirectorio (ej. el módulo simple.py)
-mpremote fs rm :lib/umqtt/simple.py
+mpremote rm :lib/umqtt/simple.py
 
 # Eliminar un directorio y todo su contenido (REQUIERE 
--r de forma recursiva)
-mpremote fs rm -r :lib/umqtt
+# -r de forma recursiva
+mpremote rm -r :lib/umqtt
 
 # Eliminar un directorio vacío
-mpremote fs rmdir :mis_archivos_temporales
+mpremote rmdir :mis_archivos_temporales
 ```
 
 ### Comandos principales
@@ -196,7 +208,7 @@ mpremote fs rmdir :mis_archivos_temporales
   Copia tu `main.py` local al directorio raíz (`:/`) del dispositivo.
 
   ```bash
-  mpremote fs cp main.py :/
+  mpremote cp main.py :/
   ```
 
 * **Reiniciar el ESP32:**
@@ -217,7 +229,7 @@ mpremote fs rmdir :mis_archivos_temporales
 Si bien se puede concatenar varias acciones para un ciclo de desarrollo rápido: **copia, reinicia y muestra la salida.**
 
 ```bash
-mpremote fs cp main.py :/ ; mpremote reset ; mpremote repl
+mpremote cp -r . :/ ; mpremote reset ; mpremote repl
 ```
 
 Se puede crear un Comando Personalizado `mprun` para simplificar este proceso:
@@ -244,43 +256,47 @@ code $PROFILE
 # Función para flashear, reiniciar y conectar al REPL de un ESP32 con mpremote
 function mprun {
     param(
-        # El archivo a subir. Por defecto es 'main.py' si no se especifica ninguno.
-        [string]$file = "main.py"
+        # La ruta del directorio que contiene el firmware. 
+        # Por defecto es '.' (directorio actual).
+        [string]$Path = ".",
+
+        # El puerto a usar. Por defecto es 'auto'.
+        [string]$Port = "auto"
     )
 
-    Write-Host "Subiendo archivo: $file" -ForegroundColor Green
-    mpremote connect auto fs cp $file :/
+    # Validamos que la ruta exista
+    if (-not (Test-Path $Path)) {
+        Write-Host "❌  Error: La ruta '$Path' no existe" -ForegroundColor Red
+        return
+    }
 
-    Write-Host "Reiniciando dispositivo" -ForegroundColor Yellow
-    mpremote connect auto reset
+    # Guardamos la ubicación actual y nos movemos hacia la carpeta del firmware
+    Push-Location $Path
 
-    Write-Host "Conectando REPL | Ctrl+C para detener | Ctrl+X para salir |" -ForegroundColor DarkBlue
-    mpremote connect auto repl
+    try {
+        Write-Host "`n"
+        Write-Host "$(Get-Location)" -ForegroundColor DarkBlue
+        Write-Host "Subiendo contenido" -ForegroundColor DarkGreen
+        Write-Host ""
+        
+        # Copia recursiva de TODO lo que hay en la carpeta actual (.) a la raíz del ESP32 (:)
+        mpremote connect $Port fs cp -r . :
+        
+        Write-Host ""
+        Write-Host "Reiniciando dispositivo" -ForegroundColor Yellow
+        mpremote connect $Port reset
+
+        Write-Host "Conectando REPL | Ctrl+C para detener | Ctrl+X para salir |" -ForegroundColor DarkBlue
+        mpremote connect $Port repl
+
+    }
+    catch {
+        Write-Host "Error durante la ejecución: $_" -ForegroundColor Red
+    } finally {
+        # Regresar siempre al directorio original, pase lo que pase
+        Pop-Location
+    }
 }
-```
-
-### 🎨 Paleta de Colores para la terminal de Python
-
-```python
-class Colors:
-    """Clase para almacenar códigos de color ANSI para la terminal."""
-    # Atributos de Estilo
-    RESET = '\x1b[0m'
-    BOLD = '\x1b[1m'
-    UNDERLINE = '\x1b[4m'
-
-    # Colores de Texto (Brillantes / Intensos)
-    BLACK = '\x1b[90m'
-    RED = '\x1b[91m'
-    GREEN = '\x1b[92m'
-    YELLOW = '\x1b[93m'
-    BLUE = '\x1b[94m'
-    MAGENTA = '\x1b[95m'
-    CYAN = '\x1b[96m'
-    WHITE = '\x1b[97m'
-
-# Ejemplo de uso
-print(f"{Colors.YELLOW}.{Colors.RESET}")
 ```
 
 ---
@@ -328,7 +344,7 @@ docker run -p 1883:1883 -p 9001:9001 -v C:\Dev\IOT\PristinoPlant\mosquitto\confi
 
 [MQTT Explorer](http://mqtt-explorer.com/) es una herramienta gráfica indispensable para depurar y interactuar con sistemas IoT. Permite visualizar todos los mensajes del broker en tiempo real y enviar comandos para probar la reacción de los dispositivos.
 
-### 1. Conexión al Broker
+### 1\. Conexión al Broker
 
 * Abre MQTT Explorer.
 * Crea una nueva conexión con los siguientes datos:
@@ -336,76 +352,108 @@ docker run -p 1883:1883 -p 9001:9001 -v C:\Dev\IOT\PristinoPlant\mosquitto\confi
   * **Port:** `1883`.
 * Haz clic en **Connect**.
 
-### 2. Verificar el Estado de los Actuadores (Rol de Receptor)
+### 2\. Verificar el Estado (Rol de Receptor)
 
-Una vez conectado y con el ESP32 de actuadores en funcionamiento, verás aparecer automáticamente la estructura de tópicos en el panel izquierdo. Esto te permite monitorear el estado de cada componente en tiempo real.
+Una vez conectado, verás aparecer la estructura de tópicos en el panel izquierdo. Esto te permite monitorear el sistema en tiempo real.
 
 ▼ PristinoPlant
-▼ Actuator_Controller
-▶ status: online
-▼ irrigation
-▼ state
-▼ valve
-▶ main_water: OFF
-▶ agrochemical: OFF
-▶ fogger: OFF
-▶ ... (etc.)
-▶ pump: OFF
+  ▼ Actuator_Controller
+    status = online
+    ▼ irrigation
+      ▼ state
+        ▼ valve
+          main_water: OFF
+          agrochemical: OFF
+          fogger: OFF
+          ...
+        pump: OFF
 
-* Puedes hacer clic en cualquier tópico de estado (ej. `pump`) para ver su valor actual (`ON`/`OFF`).
+* **Estados:** Haz clic en cualquier tópico dentro de `state` para ver si es `ON` u `OFF`.
+* **Auditoría:** Observa el tópico `.../cmd/received` para confirmar qué instrucciones ha procesado el ESP32.
 
-### 3. Enviar Comandos de Control (Rol de Transmisor)
+### 3\. Enviar Comandos de Control (Rol de Transmisor)
 
-Para controlar los relés, usaremos la función de publicación de MQTT Explorer para enviar mensajes **JSON** al tópico de comandos.
+Para controlar el dispositivo, usaremos el panel de **Publish** (derecha). Dependiendo de lo que quieras hacer, usarás un tópico y un formato diferente.
 
-1. **Localiza la sección `Publish`** en la esquina superior derecha.
-2. Asegúrate de que el formato del `payload` esté configurado como **`JSON`**.
-3. Escribe el **`JSON`**.
-4. Haz clic en el botón azul **`Publish`** (o `Ctrl + Enter`).
+---
 
-#### Comandos Disponibles
+#### A. Comandos de Riego (Irrigation)
 
-**Tópico de Comando (siempre el mismo):**
-`PristinoPlant/Actuator_Controller/irrigation/command`
+**Tópico:** `PristinoPlant/Actuator_Controller/irrigation/cmd`
+**Formato:** Seleccionar **JSON**.
 
-**a) Encender/Apagar un Actuador Individual:**
+**Opción 1: Encendido/Apagado Inmediato (Manual)**
+Control directo del relé.
 
-* **Payload (mensaje):** Usa un objeto JSON con las claves `actuator` y `state`.
-* `actuator`: Puede ser el **número de ID** (ej. `3`) o el **nombre** del actuador en `string` (ej. `"pump"`).
-* `state`: Debe ser `"ON"` o `"OFF"` (no es sensible a mayúsculas/minúsculas).
+* **Payload:**
 
-  **Ejemplo para encender la bomba (actuador 3):**
+    ```json
+    {
+      "actuator": "pump",
+      "state": "ON"
+    }
+    ```
 
-  ```json
-  {
-    "actuator": "pump",
-    "state": "on"
-  }
-  ```
+    *(Nota: `actuator` puede ser el nombre como string o el ID numérico).*
 
-**b) Iniciar un Riego Temporizado:**
+**Opción 2: Riego Temporizado (Auto-Apagado)**
+Enciende el actuador y lo apaga automáticamente tras X segundos.
 
-* **Payload (mensaje):** Añade la clave `duration` con el tiempo en segundos.
+* **Payload (Ej: Encender Válvula 1 por 5 minutos):**
 
-  **Ejemplo para encender la válvula de aspersión (actuador 6) por 10 minutos (600 segundos):**
+    ```json
+    {
+      "actuator": 1,
+      "state": "ON",
+      "duration": 300
+    }
+    ```
 
-  ```json
-  {
-    "actuator": 1,
-    "state": "on",
-    "duration": 60
-  }
-  ```
+**Opción 3: Inicio Diferido (Programación)**
+Programa el actuador para encenderse en el futuro y luego apagarse (opcional).
+*Ideal para secuenciar válvulas o esperar a que se llenen tuberías.*
 
-  *El firmware se encargará de apagar automáticamente este actuador después del tiempo especificado.*
+* **Payload (Ej: Encender la Bomba dentro de 1 minuto, por 10 minutos):**
+
+    ```json
+    {
+      "actuator": "pump",
+      "state": "ON",
+      "start_delay": 60,
+      "duration": 600
+    }
+    ```
+
+    *Si envías un comando "OFF" o un nuevo comando "ON" al mismo actuador durante la espera, la tarea diferida se cancelará (Override).*
+
+---
+
+#### B. Comandos de Sistema (Admin)
+
+**Tópico:** `PristinoPlant/Actuator_Controller/cmd`
+**Formato:** Seleccionar **Raw / Plain Text** (Texto plano).
+
+**Opción 1: Reinicio Remoto (Reboot)**
+Fuerza un reinicio por software del ESP32. Útil tras actualizaciones OTA o comportamientos extraños.
+
+* **Payload:**
+
+    ```text
+    reset
+    ```
+
+---
 
 #### Resultados Esperados
 
-* **Físico:** El relé correspondiente hará "clic" y se activará/desactivará.
-* **REPL del ESP32:** Verás los logs de "Mensaje Recibido" y la acción ejecutada (ej. "Actuador 3: ENCENDIDO").
-* **MQTT Explorer:** Verás cómo el tópico de estado del actuador específico (ej. `.../irrigation/state/pump`) se actualiza instantáneamente al nuevo estado (`ON` u `OFF`).
-
-Este proceso te permite verificar el ciclo completo de control: envías un comando, el ESP32 lo recibe y actúa, y luego reporta su nuevo estado de vuelta al broker.
+1. **Físico:** Escucharás el "clic" de los relés según la lógica (inmediata o diferida).
+2. **REPL del ESP32:**
+      * Verás los logs estilizados: `Recibido`, `Tópico`, `JSON` y la `Acción` resultante.
+      * Si es diferido, verás: `⏳ Inicio Diferido: Esperando X s...`.
+3. **MQTT Explorer:**
+      * El tópico de estado (`.../state/pump`) cambiará a `ON` o `OFF`.
+      * El tópico `.../cmd/received` mostrará una copia del comando que enviaste (confirmación de recepción).
+      * Si enviaste `reset`, el status cambiará brevemente a `rebooting` y luego a `online`.
 
 ---
 
@@ -448,7 +496,7 @@ MicroPython no tiene un driver nativo para el BH1750, así que se requiere desca
 2. **Sube la librería al ESP32** a la carpeta `/lib`.
 
     ```bash
-    mpremote fs cp bh1750.py :/lib/
+    mpremote cp bh1750.py :/lib/
     ```
 
 #### 🔌 Conexión (BH1750)
@@ -653,128 +701,183 @@ Actúa como el **centro de inteligencia y memoria a largo plazo**. Su responsabi
 
 ---
 
-## ☔ Flujo de Datos de Lluvia
+### ☔ Detalle del Flujo: Eventos de Lluvia
 
-### Etapa 1: Detección y Procesamiento en el Borde (ESP32)
+Este es un caso especial que demuestra la potencia de la arquitectura distribuida. El sensor de lluvia no envía datos constantes, sino que gestiona **Estados** y **Eventos**.
 
-El firmware del ESP32 implementa una **máquina de estados** para monitorear el sensor de lluvia.
+#### Etapa 1: Detección y Procesamiento en el Borde (ESP32)
 
-**Objetivos del ESP32:**
+El firmware implementa una **máquina de estados** con histéresis.
 
-1. **Detectar Cambios de Estado:**
-    * Utiliza la salida digital (`D0`) del sensor para una detección binaria (seco/mojado).
-    * Detecta la transición de `SECO` a `LLOVIENDO` y la registra como el **inicio de un evento de lluvia**.
-    * Detecta la transición de `LLOVIENDO` a `SECO` y la registra como el **fin del evento**.
+1. **Detección de Estado:**
+    * Al detectar agua, cambia el estado a `Raining` y publica en `.../rain/state` (con `retain=True`).
+    * Al secarse, cambia el estado a `Dry`.
 
-2. **Calcular Métricas del Evento:**
-    * Al detectar el fin de la lluvia, calcula la **duración total** del evento en segundos.
-
-3. **Publicar Datos Atómicos vía MQTT:**
-    * El ESP32 **NO** almacena historial. Inmediatamente después de un evento, publica los datos relevantes en tópicos específicos.
-    * **Tópico:** `.../lluvia_estado`
-        * **Mensaje:** `LLOVIENDO` (publicado al inicio del evento).
-        * **Mensaje:** `SECO` (publicado al final del evento).
-    * **Tópico:** `.../lluvia_duracion_seg`
-        * **Mensaje:** `1250` (publicado al final del evento, con la duración total en segundos).
+2. **Cálculo del Evento (Al finalizar la lluvia):**
+    * El ESP32 calcula internamente la **duración total** y la **intensidad promedio**.
+    * Genera un paquete JSON: `{"duration_seconds": 1200, "average_intensity_percent": 45}`.
+    * Publica este paquete en el tópico de evento: `.../rain/event`.
 
 **El ESP32 no sabe "cuántas veces llovió hoy" ni toma decisiones sobre el riego. Solo informa fielmente lo que acaba de suceder.**
 
 ---
 
-### Etapa 2: Almacenamiento y Lógica de Negocio (Backend * Next.js/PostgreSQL)
+#### Etapa 2: Almacenamiento y Lógica de Negocio (Backend)
 
-El backend se suscribe a los tópicos MQTT relevantes y actúa como el cerebro del sistema.
-
-**Objetivos del Backend:**
+El servicio de ingesta recibe el paquete JSON.
 
 1. **Escuchar y Almacenar:**
-    * Un servicio en el backend (ej. un cliente MQTT en Node.js) escucha los mensajes de los tópicos `.../lluvia_estado` y `.../lluvia_duracion_seg`.
-    * Cada mensaje recibido se almacena en una tabla de la base de datos PostgreSQL con una **marca de tiempo (timestamp)**.
-        * *Ejemplo de tabla `eventos_lluvia`: `id`, `tipo_evento` ('inicio', 'fin'), `duracion_segundos`, `timestamp`.*
+    * Detecta el tópico `/rain/event`.
+    * Desglosa el JSON y guarda un registro en la tabla `ZoneEventLog` con el tipo `Rain_Stop_Event`.
 
-2. **Agregar y Analizar Datos:**
-    * El backend proporciona endpoints de API para responder a preguntas complejas consultando la base de datos.
-    * **"¿Cuántas veces llovió hoy?"** -> `SELECT COUNT(*) FROM eventos_lluvia WHERE tipo_evento = 'inicio' AND timestamp >= 'hoy'`.
-    * **"¿Cuál fue la duración total de la lluvia hoy?"** -> `SELECT SUM(duracion_segundos) FROM eventos_lluvia WHERE timestamp >= 'hoy'`.
-
-3. **Aplicar Reglas de Decisión (Inteligencia):**
-    * Esta es la lógica de negocio central. Puede ser un trabajo programado (cron job) que se ejecuta diariamente o una lógica que se dispara por eventos.
-    * **Ejemplo de Regla:**
-        > "Cada día a las 5:00 AM, ejecutar una función que:
-        > 1. Consulte la duración total de la lluvia de las últimas 24 horas.
-        > 2. Si la duración total > 1800 segundos (30 minutos), entonces:
-        >     a.  Acceda a la tabla de `tareas_riego` y cancele (o posponga) las tareas programadas para hoy.
-        >     b.  Publique un mensaje en el tópico `.../riego/control` con el payload `OFF` para asegurar que el sistema esté desactivado.
-        >     c.  Genere una notificación para el usuario en el frontend."
-
-**Al separar las responsabilidades de esta manera, creamos un sistema robusto, flexible y escalable.**
+2. **Inteligencia (Motor de Reglas):**
+    * El backend consulta: *"¿Cuál fue la duración acumulada de lluvia en las últimas 24 horas?"*.
+    * **Regla de Negocio:** Si la lluvia acumulada > 30 minutos, el sistema cancela automáticamente los riegos programados para hoy y notifica al usuario.
 
 ---
 
-## 💡 Recomendaciones a Futuro
+## 🔄 Mantenimiento y Actualizaciones (OTA)
 
-Esta sección documenta mejoras y nuevas funcionalidades que pueden ser implementadas para aumentar la robustez y utilidad del firmware.
+El firmware del Proyecto Orchidium incluye un módulo de actualización Over-The-Air (OTA) que permite actualizar el código de los dispositivos sin necesidad de conectarlos por USB.
 
-### Sistema de Logs Remotos vía MQTT
+### Requisitos para OTA
 
-#### Problema Actual
+1. **Librería `ota`:** Debe estar instalada en el dispositivo (`/lib/ota`).
+2. **Archivo `manifest.json`:** Este archivo local en el ESP32 es crítico; le indica al dispositivo cuál es su versión actual y qué archivos debe gestionar.
 
-Actualmente, todos los logs del sistema (estado de la conexión, errores, eventos, etc.) se imprimen únicamente en la consola serie (REPL). Este método es útil para la depuración en fase de desarrollo, pero se vuelve completamente inmanejable una vez que el dispositivo está desplegado en el campo, ya que requiere acceso físico y una conexión por cable para saber qué está ocurriendo.
+### Archivo de Control: `manifest.json`
 
-Sin un sistema de logs remotos, es imposible:
+Cada dispositivo debe tener un archivo `manifest.json` en su raíz. Este archivo actúa como el registro de versión local.
 
-* Monitorear la salud del dispositivo en tiempo real.
-* Depurar problemas que ocurren esporádicamente.
-* Realizar análisis post-mortem de fallos.
-* Entender el comportamiento del dispositivo en su entorno real.
+**Ejemplo de `manifest.json` (Sensors):**
 
-#### Solución Propuesta
+```json
+{
+  "name": "Sensors",
+  "description": "Environmental Monitoring Firmware",
+  "notes_release": "Implementación de Detección Zombie, Publicación JSON Atómica, Actualización de Firmware con OTA, Apagado Controlado v2 y Actualización de Credenciales",
+  "version": "0.3.3",
+  "date": "02-12-2025",
+  "files": [
+    "main.py"
+  ]
+}
+```
 
-Implementar una estrategia de logging dual (local y remoto) para enviar los eventos críticos a un tópico MQTT dedicado.
+* **`version`**: El dispositivo compara este número con el `manifest.json` remoto en GitHub. Si la versión remota es mayor, inicia la actualización.
+* **`files`**: Lista de archivos que el sistema OTA debe descargar y sobrescribir si hay una actualización.
 
-1. **Crear un Tópico MQTT para Logs:**
-    * Definir un nuevo tópico específico para este fin, separado de los datos de sensores y comandos.
-    * Ejemplo: `PristinoPlant/Actuator_Controller/logs`
+**Subir el manifiesto inicial al dispositivo:**
 
-2. **Implementar una Función `log_and_publish()`:**
-    * Crear una función de ayuda en el firmware que centralice la lógica de logging.
-    * Esta función primero imprimirá el mensaje en la consola local (usando la función `log()` existente) para mantener la depuración local.
-    * Inmediatamente después, publicará el mismo mensaje en el tópico de logs.
-    * **Lógica de Publicación Inteligente:**
-        * La función solo debe intentar publicar si el cliente MQTT está conectado (`if client:`).
-        * Debe usar **QoS 0** (entregar como máximo una vez) para los mensajes de log. Esto asegura que el firmware no se bloquee o ralentice intentando garantizar la entrega de un log, que es información no crítica.
-        * Debe capturar silenciosamente cualquier excepción que ocurra durante la publicación del log para evitar que un fallo en el logging cause un fallo en el sistema principal.
+```bash
+mpremote cp manifest.json :/
+```
 
-    ```python
-    # Ejemplo de la función propuesta
+---
+
+### Flujo de Trabajo Seguro para Credenciales `secrets`
+
+Este proyecto implementa una estrategia de "Secretos Ignorados", donde las credenciales WiFi (`lib/secrets/__init__.py`) nunca se suben al repositorio. Para actualizar estas credenciales remotamente sin perder la conexión, se utiliza un **script de migración temporal**.
+
+> **⚠️ Advertencia de Seguridad:** Este proceso implica subir temporalmente un archivo con tus nuevas claves a un repositorio. **Debes borrar el archivo del repositorio inmediatamente después de que los dispositivos se actualicen.**
+
+#### 1\. Preparar el Script de Migración
+
+Crea un archivo local llamado `update_creds.py` con el siguiente contenido, reemplazando los valores con tu nueva configuración de red.
+
+```python
+# -----------------------------------------------------------------------------
+# Script de Actualización de Credenciales via OTA
+# -----------------------------------------------------------------------------
+import os
+
+# ---- CONFIGURACIÓN GLOBAL ----
+DEBUG = True
+
+class Colors:
+    RESET = '\x1b[0m'; RED = '\x1b[91m'; GREEN = '\x1b[92m'; YELLOW = '\x1b[93m'; BLUE = '\x1b[94m'; CYAN = '\x1b[96m'; WHITE = '\x1b[97m'
+
+def log(*args, **kwargs):
+    if DEBUG: print(*args, **kwargs)
+
+# ---- Nuevas Credenciales ----
+NEW_SSID = "Nueva_Red"
+NEW_PASS = "Nueva_Contraseña"
+TARGET_PATH = "lib/secrets/__init__.py"
+
+def apply_update():
+    """
+    Esta función es llamada por main.py.
+    Sobrescribe lib/secrets/__init__.py con la nueva configuración.
+    """
+    log(f"\n{Colors.BLUE}> [UPDATE] {Colors.RESET}{Colors.WHITE}Iniciando migración de credenciales WiFi...{Colors.RESET}")
     
-    MQTT_TOPIC_LOGS = BASE_TOPIC + b"/logs"
+    new_secrets_content = f"""# Credenciales actualizadas via OTA
+# NO SUBIR ESTE ARCHIVO A GITHUB
+WIFI_CONFIG = {{
+    "SSID": "{NEW_SSID}",
+    "PASSWORD": "{NEW_PASS}"
+}}
+"""
+    try:
+        # Asegurar directorio
+        try: os.stat("lib/secrets")
+        except OSError: 
+            try: os.mkdir("lib/secrets")
+            except: pass
 
-    def log_and_publish(msg, topic=MQTT_TOPIC_LOGS):
-        """Imprime el mensaje localmente y lo publica en un tópico MQTT."""
+        with open(TARGET_PATH, 'w') as f:
+            f.write(new_secrets_content)
         
-        # 1. Imprimir en la consola local para depuración en vivo
-        log(msg)
-        
-        # 2. Publicar en MQTT si el cliente está conectado
-        if client:
-            try:
-                # Publicamos con QoS 0 para no bloquear ni esperar confirmación.
-                client.publish(topic, msg.encode('utf-8'), qos=0)
-            except Exception as e:
-                # Si falla la publicación del log, lo imprimimos localmente pero no hacemos nada más.
-                log(f"{Colors.RED}> Fallo al publicar log: {e}{Colors.RESET}")
+        log(f"{Colors.GREEN}> [UPDATE] {Colors.CYAN}{TARGET_PATH}{Colors.GREEN} actualizado correctamente.{Colors.RESET}")
+        return True
+    except Exception as e:
+        log(f"\n{Colors.RED}> [UPDATE] ERROR CRÍTICO: {e}{Colors.RESET}")
+        return False
+```
+
+#### 2\. Desplegar el Script (GitHub)
+
+1. Sube el archivo `update_creds.py` a la carpeta `firmware/shared/` de tu repositorio.
+2. Obtén la URL "Raw" del archivo (ej. `https://raw.githubusercontent.com/.../firmware/shared/update_creds.py`).
+
+#### 3\. Actualizar el Manifiesto de los Dispositivos
+
+Edita el archivo `manifest.json` del dispositivo que deseas migrar (ej. `firmware/sensors/manifest.json`).
+
+1. Incrementa la versión (ej. de `1.1.0` a `1.1.1`).
+2. Añade la URL del script compartido a la lista de `files`.
+
+    ```json
+    {
+      "name": "Sensors",
+      "description": "Environmental Monitoring Firmware",
+      "notes_release": "Detección Zombie, Publicación JSON Atómica y Actualización de Firmware con OTA",
+      "version": "0.10.1",
+      "date": "24-11-2025",
+      "files": [
+        "main.py",
+        "https://raw.githubusercontent.com/TU_USUARIO/ORCHIDIUM/main/firmware/shared/update_creds.py"
+      ]
+    }
     ```
 
-3. **Refactorizar el Código:**
-    * Reemplazar estratégicamente las llamadas a `log()` existentes por `log_and_publish()` para los eventos más importantes:
-        * Cambios de estado de la conexión WiFi (desconexión, reconexión y duración).
-        * Cambios de estado de la conexión MQTT.
-        * Errores críticos capturados en los bloques `try-except`.
-        * Recepción de comandos en `sub_callback` para auditoría.
+3. Haz `git push` de los cambios.
 
-#### Beneficios
+#### 4\. Ejecución Automática en el Dispositivo
 
-* **Monitorización Remota:** Permite suscribirse al tópico de logs desde cualquier lugar para ver la "salud" del dispositivo en tiempo real.
-* **Almacenamiento y Análisis:** Al conectar el tópico a una base de datos (Ej. InfluxDB, PostgreSQL), se puede construir un historial completo del comportamiento del dispositivo, facilitando la creación de dashboards y la detección de patrones de fallo.
-* **Mantenibilidad a Largo Plazo:** Transforma el firmware de un prototipo de "caja negra" a un sistema transparente y de grado productivo.
+El ESP32 detectará la nueva versión en su próximo ciclo de chequeo (o al reiniciar):
+
+1. Descargará `main.py` y `update_creds.py`.
+2. Se reiniciará.
+3. Al inicio (`boot`), detectará la presencia de `update_creds.py`.
+4. Ejecutará la función `apply_update()`, sobrescribiendo su `lib/secrets/__init__.py` local.
+5. Borrará automáticamente `update_creds.py` de su memoria.
+6. Se reiniciará nuevamente para conectar a la **NUEVA** red WiFi.
+
+#### 5\. Limpieza Obligatoria
+
+Una vez confirmada la migración:
+
+1. **Elimina** `update_creds.py` de tu repositorio GitHub.
+2. Actualiza el `manifest.json` para eliminar la referencia al archivo y sube una nueva versión menor para "limpiar" el estado del manifiesto.

@@ -36,7 +36,7 @@ export function Slideshow({ isAvailable, className, images, title }: Props) {
           autoplay={{
             delay: 8000,
           }}
-          className="aspect-[1/1]"
+          className="aspect-square"
           modules={[Autoplay, FreeMode, Keyboard, Navigation, Pagination, Thumbs]}
           pagination={{ clickable: true }} // Swiper genera .swiper-pagination
           spaceBetween={0}
@@ -85,7 +85,7 @@ export function Slideshow({ isAvailable, className, images, title }: Props) {
           onSwiper={setThumbsSwiper}
         >
           {images.map((image) => (
-            <SwiperSlide key={`thumb-${image}`} className="aspect-[1/1]">
+            <SwiperSlide key={`thumb-${image}`} className="aspect-square">
               <Image
                 priority
                 alt={`${title} thumbnail`}

@@ -4,7 +4,6 @@
     /* Opciones específicas para este pakage */
     "composite": true, // Habilita la compilación compuesta para que otros proyectos puedan depender de este.
     "declaration": true, // Habilita la declaración de tipos para que otros paquetes puedan usarlos.
-    "emitDeclarationOnly": true, // Solo emite los archivos de declaración (.d.ts)
     "outDir": "./dist",
     "rootDir": "./src",
   },

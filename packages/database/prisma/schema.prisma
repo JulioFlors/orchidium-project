@@ -1,6 +1,6 @@
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider               = "prisma-client"
+  output                 = "../src/generated/prisma"
   runtime                = "nodejs"
   moduleFormat           = "esm"
   generatedFileExtension = "ts"
@@ -9,94 +9,139 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
+// ---- Enums ---- //
+
 enum Role {
-  User
-  Admin
+  USER
+  ADMIN
 }
 
 enum ZoneType {
-  Zona_A
-  Zona_B
-  Zona_C
-  Zona_D
+  ZONA_A // Zona de Pruebas
+  ZONA_B
+  ZONA_C
+  ZONA_D
 }
 
 enum TableType {
-  Mesa_1
-  Mesa_2
-  Mesa_3
-  Mesa_4
-  Mesa_5
-  Mesa_6
+  MESA_1
+  MESA_2
+  MESA_3
+  MESA_4
+  MESA_5
+  MESA_6
 }
 
 enum PlantType {
-  Adenium_Obesum
-  Bromeliad
-  Cactus
-  Orchid
-  Succulent
+  ADENIUM_OBESUM
+  BROMELIAD
+  CACTUS
+  ORCHID
+  SUCCULENT
 }
 
 enum PotSize {
-  Nro_5
-  Nro_7
-  Nro_10
-  Nro_14
+  NRO_5
+  NRO_7
+  NRO_10
+  NRO_14
 }
 
 enum TaskStatus {
-  Pendiente
-  Completada
-  Cancelada
-  Reprogramada
+  CANCELLED // Cancelada por Clima/Lluvia/Usuario
+  COMPLETED // OK
+  CONFIRMED // confirmación recibida, en espera para ejecutar
+  FAILED // Error técnico
+  IN_PROGRESS // Ejecutando acción
+  PENDING // Creada, esperando su hora
+  SKIPPED // Omitida
+  WAITING_CONFIRMATION // Esperando que el usuario llene el tanque de agrochemicals
+}
+
+enum TaskPurpose {
+  IRRIGATION // Aspersores
+  FERTIGATION // Fertirriego (Agua + Nutrientes)
+  FUMIGATION // Fumigación (Fitosanitarios)
+  HUMIDIFICATION // Nebulizadores
+  SOIL_WETTING // Humedecer Suelo
 }
 
 enum AgrochemicalType {
-  Fertilizante
-  Fitosanitario
+  FERTILIZANTE
+  FITOSANITARIO
 }
 
-enum AgrochemicalPorpose {
-  //Fertilizantes
-  Desarrollo
-  Floracion
-  Mantenimiento
-  //Fitosanitarios
-  Acaricida
-  Bactericida
-  Fungicida
-  Insecticida
+enum AgrochemicalPurpose {
+  // Fertilizantes
+  DESARROLLO
+  FLORACION
+  MANTENIMIENTO
+  // Fitosanitarios
+  ACARICIDA
+  BACTERICIDA
+  FUNGICIDA
+  INSECTICIDA
 }
 
-enum TriggerType {
-  Diario
-  Interdiario
-  Sensores
+// ---- PristinoPlant | Tienda ---- //
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String
+  role          Role      @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }
 
-enum ActuatorType {
-  Aspercion
-  Nebulizacion
-  Humedecer_Suelo
+model Genus {
+  id      String    @id @default(uuid())
+  name    String    @unique
+  type    PlantType
+  species Species[]
 }
 
-enum Metric {
-  Humidity
-  Light_intensity
-  Pressure
-  Rain_intensity_percent
-  Temperature
+model Species {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  slug        String  @unique
+  price       Int     @default(0)
+  description String?
+
+  genus   Genus  @relation(fields: [genusId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  genusId String
+
+  stock   Stock  @relation(fields: [stockId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  stockId String
+
+  plants   Plant[]
+  images   SpeciesImage[]
+  variants ProductVariant[]
+
+  @@unique([genusId, stockId])
+  @@index([genusId])
 }
 
-enum EventType {
-  Irrigation_State
-  Rain_State
-  Rain_Duration
-  Device_Status
+model ProductVariant {
+  id        String  @id @default(uuid())
+  size      PotSize // Tamaño de la maceta
+  price     Int // Precio para este tamaño específico
+  quantity  Int     @default(0) // stock especifico para este tamaño
+  available Boolean @default(false)
+
+  species   Species @relation(fields: [speciesId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  speciesId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([speciesId, size])
+  @@index([speciesId])
 }
 
 model Stock {
@@ -106,53 +151,6 @@ model Stock {
   species   Species[]
 }
 
-model Genus {
-  id   String    @id @default(uuid())
-  name String    @unique
-  type PlantType
-
-  species Species[]
-}
-
-model Species {
-  id    String @id @default(uuid())
-  name  String @unique
-  price Int    @default(0)
-  slug  String @unique
-
-  description String?
-
-  genus   Genus  @relation(fields: [genusId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  genusId String
-
-  stock   Stock  @relation(fields: [stockId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  stockId String
-
-  plants Plant[]
-  images SpeciesImage[]
-  //  variants ProductVariant[]
-
-  @@index([genusId])
-}
-
-// Modelo para las variantes de producto (Stock por tamaño y precio)
-/**
- * model ProductVariant {
- * id        String  @id @default(uuid())
- * size      PotSize // Tamaño de la maceta/presentación
- * price     Int // Precio para este tamaño específico
- * quantity  Int     @default(0) // Cantidad en stock para este tamaño
- * available Boolean @default(false) // Calculado o manejado manualmente
- * species   Species @relation(fields: [speciesId], references: [id], onDelete: Cascade, onUpdate: Cascade)
- * speciesId String
- * createdAt DateTime @default(now())
- * updatedAt DateTime @updatedAt
- * @@unique([speciesId, size]) // No puede haber dos entradas con la misma especie y tamaño
- * @@index([speciesId])
- * }
- */
-
-// Modelo para las Imágenes de Especies
 model SpeciesImage {
   id  String @id @default(uuid())
   url String @unique
@@ -163,28 +161,30 @@ model SpeciesImage {
   @@index([speciesId])
 }
 
-// Modelo para Ubicaciones Físicas
 model Location {
   id    String    @id @default(uuid())
   zone  ZoneType
   table TableType
 
   plants Plant[] // Plantas ubicadas aquí
+
+  // No puede haber dos registros para la misma mesa en la misma zona
+  @@unique([zone, table])
 }
 
-// Modelo para registrar eventos de floración
-/**
- * model FloweringEvent {
- * id        String    @id @default(uuid())
- * startDate DateTime // Fecha de inicio de la floración
- * endDate   DateTime? // Fecha de fin (null si aún está en floración)
- * plant   Plant  @relation(fields: [plantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
- * plantId String
- * createdAt DateTime @default(now())
- * updatedAt DateTime @updatedAt
- * @@index([plantId])
- * }
- */
+model FloweringEvent {
+  id        String    @id @default(uuid())
+  startDate DateTime // Fecha de inicio de la floración
+  endDate   DateTime? // Fecha de fin (null si aún está en floración)
+
+  plant   Plant  @relation(fields: [plantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  plantId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([plantId])
+}
 
 model Plant {
   id          String    @id @default(uuid())
@@ -196,7 +196,7 @@ model Plant {
   location   Location? @relation(fields: [locationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   locationId String?
 
-  //  FloweringEvent FloweringEvent[]
+  FloweringEvent FloweringEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -205,18 +205,19 @@ model Plant {
   @@index([locationId])
 }
 
+// ---- Gestión de cultivo ---- //
+
 model Agrochemical {
   id          String              @id @default(uuid())
   name        String              @unique
   description String
   type        AgrochemicalType
-  porpose     AgrochemicalPorpose
+  purpose     AgrochemicalPurpose
   preparation String
 
   fertilizationCycles FertilizationCycle[]
-  fertilizationTasks  FertilizationTask[]
   phytosanitaryCycles PhytosanitaryCycle[]
-  phytosanitaryTasks  PhytosanitaryTask[]
+  tasksExecuted       TaskLog[]
 }
 
 model FertilizationProgram {
@@ -225,6 +226,7 @@ model FertilizationProgram {
   weeklyFrequency Int
 
   productsCycle FertilizationCycle[]
+  schedules     AutomationSchedule[]
 }
 
 model FertilizationCycle {
@@ -237,22 +239,8 @@ model FertilizationCycle {
   program   FertilizationProgram @relation(fields: [programId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   programId String
 
-  tasks FertilizationTask[]
-}
-
-model FertilizationTask {
-  id            String     @id @default(uuid())
-  scheduledDate DateTime
-  executionDate DateTime?
-  zones         ZoneType[]
-  note          String?
-  status        TaskStatus @default(Pendiente)
-
-  agrochemical   Agrochemical @relation(fields: [agrochemicalId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  agrochemicalId String
-
-  productsCycle   FertilizationCycle? @relation(fields: [productsCycleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  productsCycleId String?
+  // Integridad: No puede haber dos pasos iguales en el mismo programa
+  @@unique([programId, sequence])
 }
 
 model PhytosanitaryProgram {
@@ -261,6 +249,7 @@ model PhytosanitaryProgram {
   monthlyFrequency Int
 
   productsCycle PhytosanitaryCycle[]
+  schedules     AutomationSchedule[]
 }
 
 model PhytosanitaryCycle {
@@ -273,63 +262,79 @@ model PhytosanitaryCycle {
   program   PhytosanitaryProgram @relation(fields: [programId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   programId String
 
-  tasks PhytosanitaryTask[]
+  // Integridad: No puede haber dos pasos iguales en el mismo programa
+  @@unique([programId, sequence])
 }
 
-model PhytosanitaryTask {
-  id            String     @id @default(uuid())
-  scheduledDate DateTime
-  executionDate DateTime?
-  zones         ZoneType[]
-  note          String?
-  status        TaskStatus @default(Pendiente)
+// ---- Planificación de tareas ---- //
 
-  agrochemical   Agrochemical @relation(fields: [agrochemicalId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  agrochemicalId String
+model AutomationSchedule {
+  id              String      @id @default(uuid())
+  name            String      @unique
+  description     String?
+  isEnabled       Boolean     @default(true)
+  purpose         TaskPurpose
+  cronTrigger     String
+  intervalDays    Int         @default(1)
+  durationMinutes Int         @default(10)
+  zones           ZoneType[]
 
-  productsCycle   PhytosanitaryCycle? @relation(fields: [productsCycleId], references: [id])
-  productsCycleId String?
+  fertilizationProgram   FertilizationProgram? @relation(fields: [fertilizationProgramId], references: [id])
+  fertilizationProgramId String?
+
+  phytosanitaryProgram   PhytosanitaryProgram? @relation(fields: [phytosanitaryProgramId], references: [id])
+  phytosanitaryProgramId String?
+
+  taskLogs TaskLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
-model IrrigationProgram {
-  id        String       @id @default(uuid())
-  name      String       @unique
-  trigger   TriggerType  @default(Interdiario)
-  actuator  ActuatorType @default(Aspercion)
-  startTime String       @default("05:00")
-  duration  Int          @default(20)
-  zones     ZoneType[]   @default([Zona_A, Zona_B])
+model TaskLog {
+  id          String      @id @default(uuid())
+  scheduledAt DateTime
+  executedAt  DateTime    @default(now())
+  status      TaskStatus  @default(PENDING)
+  purpose     TaskPurpose
+  zones       ZoneType[]
+  duration    Int
+  notes       String?
 
-  tasks IrrigationTask[]
+  agrochemical   Agrochemical? @relation(fields: [agrochemicalId], references: [id])
+  agrochemicalId String?
+
+  schedule   AutomationSchedule? @relation(fields: [scheduleId], references: [id])
+  scheduleId String?
+
+  @@index([scheduledAt])
+  @@index([status])
 }
 
-model IrrigationTask {
-  id            String       @id @default(uuid())
-  scheduledDate DateTime
-  executionDate DateTime?
-  actuator      ActuatorType
-  duration      Int
-  zones         ZoneType[]
-  status        TaskStatus   @default(Pendiente)
+// ---- Resumen Historico de Influxdb ---- //
 
-  program   IrrigationProgram? @relation(fields: [programId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  programId String?
-}
+model DailyEnvironmentStat {
+  id   String   @id @default(uuid())
+  date DateTime @db.Date
+  zone ZoneType
 
-model SensorReading {
-  id        String   @id @default(uuid())
-  timestamp DateTime @default(now())
-  zone      ZoneType
-  metric    Metric
-  value     Float
-  topic     String
-}
+  avgTemperature Float
+  minTemperature Float
+  maxTemperature Float
 
-model EventLog {
-  id        String    @id @default(uuid())
-  timestamp DateTime  @default(now())
-  zone      ZoneType
-  eventType EventType
-  value     String
-  topic     String
+  avgHumidity Float
+  minHumidity Float
+  maxHumidity Float
+
+  avgLightIntensity  Float
+  maxLightIntensity  Float
+  lightDurationHours Float
+
+  totalRainDuration Int
+
+  createdAt DateTime @default(now())
+
+  // Integridad: Solo un resumen por día por zona
+  @@unique([date, zone])
+  @@index([date])
 }
