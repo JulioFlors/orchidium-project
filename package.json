@@ -46,8 +46,12 @@
 			"@tailwindcss/oxide",
 			"esbuild",
 			"prisma",
+			"protobufjs",
 			"sharp",
 			"unrs-resolver"
 		]
+	},
+	"engines": {
+		"node": ">=22"
 	}
 }
