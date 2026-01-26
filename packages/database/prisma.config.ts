@@ -28,6 +28,9 @@ export default defineConfig({
   datasource: {
     // Lee la URL de la base de datos inyectada por dotenv o el sistema
     // Para migraciones y el CLI, usamos siempre la conexión directa si está disponible
-    url: env('DATABASE_URL_UNPOOLED') || env('DATABASE_URL'),
+
+    // CAMBIO CRÍTICO: Usamos process.env en lugar del helper env()
+    // Esto evita que lance error si la variable UNPOOLED no existe.
+    url: process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL || '',
   },
 })
