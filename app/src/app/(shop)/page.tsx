@@ -37,6 +37,11 @@ const products = initialData.species.map((species) => {
       name: species.genus.name,
       type: genus!.type, // ! non-null assertion operator
     },
+    variants: species.variants.map((variant) => ({
+      ...variant,
+      id: crypto.randomUUID(),
+      speciesId: species.slug,
+    })),
   }
 })
 

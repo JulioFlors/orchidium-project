@@ -3,6 +3,7 @@
   "tasks": {
     "build": {
       "dependsOn": [
+        "db:generate",
         "^db:generate",
         "^build"
       ],
