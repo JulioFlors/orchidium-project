@@ -1,41 +1,169 @@
 @import "tailwindcss";
 
+/* ⚠️ ignora el tema del sistema operativo */
+/*    solo activa cuando encuentre la clase .dark en el HTML.*/
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    /* ---- Light Mode ---- */
+    /* black */
+    --color-black-and-white: black;
+
+    /* Azul Tesla Principal: #3e6ae1 */
+    --color-action: oklch(0.5605 0.1879 265.4);
+    /* Hover Light Mode (Oscurece): #3457b1 */
+    --color-action-hover: oklch(0.4816 0.149 265.22);
+    /* Hover Dark Mode (Ilumina): #6488ea */
+    --color-action-hover-dark: oklch(0.6459 0.1522 266.94);
+    /* Principal: Títulos y cuerpo de texto: #171A20 */
+    --color-primary: oklch(0.2173 0.0127 264.27);
+    /* Secundario: Subtítulos y apoyo: #393C41 */
+    --color-secondary: oklch(0.3552 0.0096 260.72);
+    /* Labels y placeholders: #5C5E62 */
+    --color-label: oklch(0.4815 0.0069 264.5);
+    /* Texto deshabilitado: #757575 */
+    --color-disabled: oklch(0.5624 0 0);
+    /* ring accesibilidad: #8E8E8E */
+    --color-accessibility: oklch(0.6467 0 0);
+    /* Subrayado en deshabilitados: #A2A3A5*/
+    --color-disabled-underline: oklch(0.7153 0.0031 264.54);
+
+    /* Fondo de la aplicación */
+    --color-canvas: oklch(1 0 0);
+    --color-surface: oklch(0.98 0 0);
+
+    /* botones sin borde: #F2F2F2 */
+    --color-hover: oklch(0.9612 0 0);
+    /* Hover Overlay*/
+    --color-hover-overlay: oklch(0 0 0 / 0.05);
+
+    /* input: #F4F4F4 oklch(0.9672 0 0) */
+    --color-input: color-mix(in oklch, var(--color-surface), black 1.5%);
+
+    /* Borde de inputs: #D0D1D2 oklch(0.8602 0.0018 247.84) */
+    --color-input-outline: color-mix(in oklch, var(--color-surface), black 12.5%);
+
+    /* hover dentro del input (Feedback Interactivo): #E8E8E8 oklch(0.931 0 0) */
+    --color-input-hover: oklch(0.931 0 0);
+
+    /* --- shadow-tds-md: shadow de 16px --- */
+    --shadow-tesla: 0 8px 16px 0 rgba(0, 0, 0, 0.16);
+    --shadow-top-highlight: 0 -2px 13px oklch(0.92 0 0 / 1);
+  }
+
+  .dark {
+    /* ---- GEMINI DARK MODE PALETTE ---- */
+
+    /* white */
+    --color-black-and-white: white;
+
+    /* Primary Text: Casi blanco puro (#E3E3E3 - #F0F4F9) */
+    --color-primary: oklch(0.94 0.01 260);
+
+    /* Secondary: Gris medio claro (#C4C7C5).
+       Usado para textos de apoyo o descripciones.
+    */
+    --color-secondary: oklch(0.82 0.01 260);
+
+    /* Labels: Un gris más apagado pero legible.
+    */
+    --color-label: oklch(0.4815 0.0069 264.5);
+
+    /* Canvas desktop (Fondo Principal): #131314 */
+    /* --color-canvas: oklch(0.1872 0.002 286.2); */
+
+    /* Surface desktop (Cards/Sidebar/Inputs): #1E1F20 */
+    /* --color-surface: oklch(0.2386 0.0024 247.93); */
+
+    /* Hover desktop: #232324 */
+    /* --color-hover: oklch(0.2565 0.0019 286.27); */
+
+    /* Canvas (Fondo Principal): #1B1C1E */
+    --color-canvas: oklch(0.2262 0.0041 264.49);
+
+    /* Surface (Cards/Sidebar/Inputs): #282A2C */
+    --color-surface: oklch(0.2838 0.0047 264.49);
+
+    /* Hover general: #343537 */
+    --color-hover: oklch(0.3287 0.0038 264.49);
+
+    /* Inputs: En Gemini, los inputs suelen ser del mismo color que la superficie
+       o ligeramente distintos ("Pilled shaped").
+    */
+    --color-input: oklch(0.2838 0.0047 264.49);
+
+    --color-input-outline: oklch(0.3523 0 264.49);
+
+    /* hover-overlay: "luz" que ilumina el botón */
+    --color-hover-overlay: oklch(1 0 0 / 0.08);
+    /* Blanco al 8% */
+
+    /* El action suele mantenerse o ajustarse ligeramente para contraste */
+    --color-action: oklch(0.6 0.18 265.4);
+    --color-action-hover: var(--color-action-hover-dark);
+
+    /* Sombras ajustadas para Dark Mode (más difusas) */
+    --shadow-tesla: 0 8px 16px 0 rgba(0, 0, 0, 0.5);
+    --shadow-top-highlight: 0 -1px 0 rgba(255, 255, 255, 0.1);
+  }
+}
+
+@layer base {
+  :root {
+    /* ---- Ancho del input del SearchBox ---- */
+    --search-width: clamp(12.5rem,
+        /* MIN: Nunca menos de 200px */
+        calc(100cqw - 8rem),
+        /* IDEAL: 100% del contenedor MENOS 128px (espacio de botones) */
+        15.5rem
+        /* MAX: Nunca más de 248px */
+      );
+  }
+}
+
 @theme {
-  --breakpoint-tds-xs: 26.9375rem;
-  --breakpoint-tds-sm: 37.5rem;
-  --breakpoint-tds-lg: 60.0625rem;
-  --breakpoint-tds-xl: 75rem;
+  /* 26.9375rem; 431px */
   /* 37.5rem; 600px */
+  /* 40.0625rem; 641px */
   /* 60rem; 960px */
   /* 60.0625rem; 961px*/
   /* 75rem; 1200px */
+  --breakpoint-tds-xs: 26.9375rem;
+  --breakpoint-tds-sm: 40.0625rem;
+  --breakpoint-tds-lg: 60.0625rem;
+  --breakpoint-tds-xl: 75rem;
 
-  --color-accessibility: oklch(0.65 0 0 / 1);
-  --color-blue-hover: #3457b1;
-  --color-blue-tesla: #3e6ae1;
-  --color-hover: oklch(0.96 0 0 / 1);
-  --color-label: oklch(0.48 0.01 264.50 / 1);
-  --color-primary-404: oklch(0.25 0 0 / 1);
-  --color-primary: oklch(0.22 0.01 264.27 / 1);
-  --color-secondary-404: oklch(0.51 0 0 / 1);
-  --color-secondary: oklch(0.36 0.01 260.72 / 1);
-  --color-search-box-icon-hover: oklch(0.93 0 0 / 1);
-  --color-search-box-outline: oklch(0.86 0 247.84 / 1);
-  --color-search-box: oklch(0.97 0 0 / 1);
+  --color-light: oklch(0.9491 0 0);
+  --color-dark: oklch(0.3211 0 0);
 
-  --shadow-tesla: 0 8px 16px 0 rgba(0, 0, 0, 0.16);
-  --shadow-top-highlight: 0 -2px 13px oklch(0.92 0 0 / 1);
+  /* Colores conectados a las variables dinámicas */
+  --color-black-and-white: var(--color-black-and-white);
+  --color-action: var(--color-action);
+  --color-action-hover: var(--color-action-hover);
+  --color-action-hover-dark: var(--color-action-hover-dark);
+  --color-primary: var(--color-primary);
+  --color-secondary: var(--color-secondary);
+  --color-label: var(--color-label);
+  --color-disabled: var(--color-disabled);
+  --color-accessibility: var(--color-accessibility);
+  --color-disabled-underline: var(--color-disabled-underline);
+  --color-input-outline: var(--color-input-outline);
+  --color-input-hover: var(--color-input-hover);
+  --color-hover: var(--color-hover);
+  --color-input: var(--color-input);
+  --color-canvas: var(--color-canvas);
+  --color-surface: var(--color-surface);
+  --color-hover-overlay: var(--color-hover-overlay);
 
-  --tracking-0: 0em;
-  --tracking-1: -0.01em;
-  --tracking-2: -0.02em;
-  --tracking-4: -0.04em;
-  --tracking-6: -0.06em;
+  /* Sombras */
+  --shadow-tesla: var(--shadow-tesla);
+  --shadow-top-highlight: var(--shadow-top-highlight);
 }
 
 @layer base {
   body {
-    @apply bg-white font-normal overflow-y-auto text-secondary text-sm tracking-2;
+    @apply antialiased bg-canvas font-normal overflow-y-auto text-secondary text-sm;
   }
 
   p {
@@ -88,16 +216,20 @@
   }
 
   .search-results:hover {
-    @apply bg-hover mx-1 px-2 rounded;
+    @apply bg-hover-overlay mx-1 px-2 rounded;
   }
 
-  .search-results:focus-visible {
-    @apply mx-1 px-2 rounded bg-white hover:bg-hover outline-none ring-accessibility ring-1 ring-offset-0;
+  .focus-bg-canvas:focus-visible {
+    @apply mx-1 px-2 rounded bg-canvas hover:bg-hover-overlay outline-none ring-accessibility ring-1 ring-offset-0;
+  }
+
+  .focus-bg-surface:focus-visible {
+    @apply mx-1 px-2 rounded bg-surface hover:bg-hover-overlay outline-none ring-accessibility ring-1 ring-offset-0;
   }
 
   .focus-sidebar-content {
-    @apply hover:bg-hover mb-2 flex items-center justify-between rounded font-medium text-black;
-    @apply shadow-[inset_0_0_0_2px_transparent] duration-200 ease-in-out outline-none transition-all;
+    @apply w-full hover:bg-hover-overlay mb-2 flex items-center justify-between rounded font-semibold dark:text-primary text-black;
+    @apply shadow-[inset_0_0_0_2px_transparent] duration-300 ease-in-out outline-none transition-all;
   }
 
   .focus-sidebar-content:focus {
@@ -108,32 +240,28 @@
     @apply outline-accessibility outline-2 -outline-offset-2 rounded-sm;
   }
 
-  .focus-search-box:focus {
-    @apply border-none outline-search-box-outline outline-1 -outline-offset-1;
+  .focus-input-form {
+    @apply bg-input mt-2 min-h-10 w-full rounded px-3 leading-6 font-semibold transition-colors duration-300 outline-transparent;
+  }
+
+  .focus-input-form:focus {
+    @apply border-none outline-input-outline outline-1 -outline-offset-1;
   }
 
   .focus-input {
-    @apply bg-search-box w-full rounded px-3 py-2 leading-6 font-medium ease-in-out transition-all;
+    @apply bg-input w-full rounded px-3 py-2 leading-6 font-medium ease-in-out transition-all;
   }
 
   .focus-input:focus {
-    @apply outline-none border-none ring-search-box-outline ring-1;
+    @apply outline-none border-none ring-input-outline ring-1;
   }
 
   .focus-product:focus-visible {
-    @apply bg-white outline-none ring-accessibility ring-2 ring-offset-2 rounded-xs;
-  }
-
-  .focus-link:focus {
-    @apply bg-white outline-none ring-accessibility ring-2 ring-offset-2 rounded;
-  }
-
-  .focus-link-hover:focus {
-    @apply bg-white hover:bg-hover outline-none ring-accessibility ring-2 ring-offset-2 rounded;
+    @apply bg-canvas border-none outline-none ring-accessibility ring-2 ring-offset-2 ring-offset-canvas rounded;
   }
 
   .focus-dashed:focus {
-    @apply outline outline-accessibility outline-dashed outline-offset-2 rounded;
+    @apply outline outline-accessibility outline-dashed outline-offset-2 rounded-xs;
   }
 
   .list-box {
@@ -141,17 +269,17 @@
   }
 
   .btn-disabled {
-    @apply bg-blue-tesla border-3 border-blue-tesla font-semibold leading-[26.5px] outline-none px-6 py-1 rounded-sm text-center text-white opacity-80;
-    @apply shadow-[inset_0_0_0_2px_transparent] duration-200 ease-in-out transition-colors;
+    @apply bg-action border-3 border-action font-semibold leading-[26.5px] outline-none px-6 py-1 rounded-sm text-center text-white opacity-80;
+    @apply shadow-[inset_0_0_0_2px_transparent] duration-300 ease-in-out transition-colors;
   }
 
   .btn-primary {
-    @apply bg-blue-tesla border-3 border-blue-tesla font-semibold leading-[26.5px] outline-none px-6 py-1 rounded-sm text-center text-white;
-    @apply shadow-[inset_0_0_0_2px_transparent] duration-200 ease-in-out transition-colors;
+    @apply bg-action border-3 border-action font-semibold leading-[26.5px] outline-none px-6 py-1 rounded-sm text-center text-white;
+    @apply shadow-[inset_0_0_0_2px_transparent] duration-300 ease-in-out transition-colors;
   }
 
-  .btn-primary:hover {
-    @apply bg-blue-hover border-blue-hover;
+  .btn-primary:not(:disabled):hover {
+    @apply bg-action-hover border-action-hover;
   }
 
   .btn-primary:focus {
@@ -159,18 +287,59 @@
   }
 
   .btn-secondary {
-    @apply bg-white border-3 border-primary font-semibold leading-[26.5px] outline-none px-6 py-1 rounded-sm text-center text-primary;
-    @apply shadow-[inset_0_0_0_2px_transparent] duration-200 ease-in-out transition-colors;
-    @apply transition-shadow;
+    /* --- Estilos Base Comunes --- */
+    @apply border-3 border-primary font-semibold leading-[26.5px] outline-none px-6 py-1 rounded-sm text-center;
+    @apply shadow-[inset_0_0_0_2px_transparent] duration-300 ease-in-out transition-colors;
+
+    /* --- Light Mode Base --- */
+    @apply bg-white text-primary;
+
+    /* --- Dark Mode Base --- */
+    /* Fondo: canvas (se funde con el sidebar) | Texto: Primary (resalta sobre lo oscuro) */
+    @apply dark:bg-canvas dark:text-primary;
   }
 
   .btn-secondary:hover {
+    /* --- Light Mode Hover --- */
     @apply bg-primary text-white;
+
+    /* --- Dark Mode Hover --- */
+    /* Fondo: Se ilumina con Primary */
+    /* Texto: Se oscurece al color canvas para contraste */
+    @apply dark:bg-primary dark:text-canvas;
   }
 
   .btn-secondary:focus {
+    /* --- Light Mode Focus --- */
     @apply bg-primary text-white;
     @apply shadow-[inset_0_0_0_2px_white];
+
+    /* --- Dark Mode Focus --- */
+    @apply dark:bg-primary dark:text-canvas;
+
+    /* El anillo interno (shadow inset) debe ser del color del entorno (canvas)
+       para que parezca que hay un espacio entre el borde y el relleno.
+    */
+    @apply dark:shadow-[inset_0_0_0_2px_var(--color-canvas)];
+  }
+
+
+  .btn-border-none {
+    @apply bg-input border-3 border-input font-semibold leading-[26.5px] outline-none px-3 py-1 rounded text-center text-secondary;
+    @apply shadow-[inset_0_0_0_2px_transparent] duration-300 ease-in-out transition-colors;
+    @apply flex w-full items-center justify-center gap-2 min-h-10;
+  }
+
+  /* NO podemos utilizar border-hover-overlay
+   * seria como sobreponer 2 laminas de acrilico
+   * hay que utilizar un color solido No Dinamico
+  */
+  .btn-border-none:hover {
+    @apply bg-input-hover border-input-hover dark:bg-hover dark:border-hover
+  }
+
+  .btn-border-none:focus {
+    @apply shadow-[inset_0_0_0_2px_var(--color-secondary)];
   }
 
   .btn-link {
@@ -178,56 +347,217 @@
   }
 
   .btn-link:hover {
-    @apply bg-hover text-primary;
+    @apply bg-hover-overlay text-primary;
   }
 
+}
+
+/* ---- Botones de Navegación (Menu, Section-Label, Links) ---- */
+@layer components {
+
+  .toolbar-icon {
+    @apply inline-flex items-center justify-center;
+    @apply h-8 w-8 p-0;
+    @apply relative cursor-pointer rounded;
+    @apply text-primary font-semibold;
+    @apply transition-colors duration-300 ease-in-out;
+    @apply hover:bg-hover-overlay hover:text-primary;
+  }
+
+  .menu-button,
+  .section-label,
   .nav-link {
-    @apply font-semibold hover:text-primary px-4 py-1 relative rounded text-secondary transition-colors;
+    @apply inline-flex items-center justify-center;
+    @apply tds-xs:h-8 tds-sm:px-4 px-0 py-1;
+    @apply relative cursor-pointer rounded;
+    @apply text-secondary font-semibold;
+    @apply transition-colors duration-300 ease-in-out;
+    @apply hover:text-primary;
+  }
+
+  /* Ajustes específicos de Hover */
+  .menu-button:hover,
+  .section-label:hover {
+    @apply bg-hover-overlay;
+  }
+
+  .section-label {
+    @apply text-primary;
+  }
+
+}
+
+/* ---- Lógica de Foco / Accesibilidad (Outline Nativo) ---- */
+@layer components {
+
+  .focus-link,
+  .focus-link-hover,
+  .focus-link-visible {
+    @apply outline-none bg-canvas;
+  }
+
+  .focus-link:focus,
+  .focus-link-hover:focus,
+  .focus-link-visible:focus-visible {
+    @apply rounded;
+    /* @apply outline-2 outline-offset-2 outline-accessibility; */
+    @apply ring-accessibility ring-2 ring-offset-2 ring-offset-canvas;
+  }
+
+  .focus-link-hover:focus:hover {
+    @apply bg-hover;
   }
 }
 
-/*---- Formularios ----*/
+/* ---- Header Sidebar ---- */
+@layer components {
+
+  /* debe ir acompañado de focus-link-hover */
+  .header-sidebar {
+    @apply flex items-center;
+    @apply font-medium rounded text-secondary;
+    @apply cursor-pointer transition-colors duration-300;
+    @apply hover:bg-hover-overlay hover:text-primary;
+
+    @apply tds-xs:h-7 h-4;
+  }
+
+  .title-sidebar {
+    @apply text-primary tds-xs:text-lg text-xs tds-xs:leading-8 leading-4 font-medium tds-xs:tracking-tight tracking-tighter;
+  }
+
+  .icon-close {
+    @apply h-4 w-4;
+    @apply tds-xs:h-7 tds-xs:w-7;
+    @apply block fill-current;
+  }
+}
+
+/* ---- SearchBox Variants ---- */
+@layer components {
+
+  /* Aplicamos los estilos base a TODAS las variantes a la vez */
+  .sidebar-searchbox,
+  .header-searchbox {
+    @apply w-full rounded pl-10 pr-8 py-2 leading-6 font-medium;
+    @apply border-none outline-none ring-1 ring-inset;
+    @apply transition-all duration-300 ease-in-out;
+  }
+
+  .sidebar-searchbox:focus,
+  .header-searchbox:focus {
+    @apply ring-input-outline;
+  }
+
+  /* Definimos solo las diferencias específicas */
+  .sidebar-searchbox {
+    @apply bg-input ring-transparent;
+  }
+
+  .header-searchbox {
+    @apply bg-canvas ring-input;
+  }
+}
+
+/* ---- Formularios ---- */
 @layer components {
   .form-input {
-    @apply bg-search-box -tracking-2 mt-2 min-h-10 w-full rounded px-3 text-[15px] leading-6 font-semibold;
-    /* focus-search-box:focus */
-    @apply focus:border-none focus:outline-search-box-outline focus:outline-1 focus:-outline-offset-1;
+    @apply bg-input tracking-wide mt-2 min-h-10 w-full rounded px-3 text-[15px] leading-6 font-semibold transition-colors duration-300;
+  }
+
+  .form-input:focus {
+    @apply border-none outline-1 -outline-offset-1 outline-input-outline;
   }
 }
 
 /*---- Underlines ----*/
 @layer components {
   .underline-link {
-    @apply bg-linear-to-r from-blue-tesla to-blue-hover bg-clip-text font-semibold outline-none text-transparent transition-all duration-200 ease-in-out;
+    @apply bg-linear-to-r from-action to-action-hover bg-clip-text font-semibold outline-none text-transparent transition-all duration-300 ease-in-out border-b-2 border-transparent cursor-pointer;
   }
 
   .underline-link:focus,
   .underline-link:hover {
-    @apply border-b-2 border-blue-tesla;
+    @apply border-b-2 border-action;
   }
 
   .underline-secondary {
-    @apply text-secondary font-normal outline-none rounded-xs inline-block relative;
-    @apply transition-colors duration-200 ease-in-out;
+    @apply cursor-pointer font-medium inline-block outline-none relative text-secondary;
+    @apply duration-300 ease-in-out transition-colors;
   }
 
   .underline-secondary::after {
     content: '';
     @apply absolute left-[1%] top-[92%] w-[98%] h-px;
-    @apply bg-secondary rounded;
-    @apply transition-all duration-200 ease-in-out;
+    @apply bg-secondary;
+    @apply transition-all duration-300 ease-in-out;
   }
 
   .underline-secondary:hover {
-    @apply text-black;
+    @apply text-primary;
   }
 
   .underline-secondary:hover::after {
-    @apply bg-black h-0.5;
+    @apply bg-primary h-0.5;
   }
 
   .underline-secondary:focus-visible {
-    @apply bg-white ring-2 ring-offset-1 ring-offset-white ring-accessibility;
+    @apply bg-canvas ring-2 ring-offset-1 ring-offset-canvas ring-accessibility;
+  }
+}
+
+
+/*---- PotSizes ----*/
+@layer components {
+  .pot-size-btn {
+    @apply cursor-pointer duration-300 font-semibold inline-block outline-none relative rounded-xs transition-colors tracking-wide;
+  }
+
+  .pot-size-available {
+    @apply text-black-and-white;
+  }
+
+  /* Focus: Outline Negro en Claro / Blanco en Oscuro */
+  .pot-size-available:focus-visible {
+    @apply outline outline-offset-2 outline-dashed;
+    @apply outline-black-and-white;
+  }
+
+  /* Underline Primary (Pseudo-elemento) */
+  .pot-size-available::after {
+    content: '';
+    @apply absolute h-0.5 left-[1%] top-[92%] w-[98%] rounded;
+    @apply transition-transform duration-300 ease-out origin-left scale-x-0;
+    @apply bg-black-and-white;
+  }
+
+  /* Trigger: Mostrar Underline en Hover O cuando está seleccionado (.is-selected) */
+  .pot-size-available:hover::after,
+  .pot-size-available.is-selected::after {
+    @apply scale-x-100;
+  }
+
+  .pot-size-disabled {
+    @apply text-disabled;
+  }
+
+  /* Focus Disabled Outline Dashed */
+  .pot-size-disabled:focus-visible {
+    @apply outline outline-offset-2 outline-dashed outline-disabled;
+  }
+
+  /* Underline (Pseudo-elemento) */
+  .pot-size-disabled::after {
+    content: '';
+    @apply absolute h-px left-[1%] top-[92%] w-[98%];
+    @apply bg-disabled-underline rounded;
+    @apply transition-transform duration-300 ease-out origin-left scale-x-0;
+  }
+
+  /* Trigger: Mostrar Underline en Hover O cuando está seleccionado (.is-selected) */
+  .pot-size-disabled:hover::after,
+  .pot-size-disabled.is-selected::after {
+    @apply scale-x-100;
   }
 }
 
@@ -241,34 +571,34 @@
   }
 
   .left-menu-wrapper {
-    @apply flex min-h-14 flex-1 items-center justify-start pl-5 text-primary;
+    @apply flex tds-xs:min-h-14 min-h-9 flex-1 items-center justify-start pl-5 text-primary;
   }
 
   .pipe {
-    @apply mx-4 text-[0.65625rem] leading-5 font-bold;
+    @apply tds-sm:ml-6 tds-sm:mr-3.5 mx-4 text-[0.65625rem] leading-5 font-bold;
   }
 
-  .page-shop {
-    @apply hover:bg-hover rounded px-0 py-1 transition-colors sm:px-4 cursor-pointer;
-  }
-
-  @container left-menu (width <=160px) {
+  @container left-menu (width <=170px) {
     .left-menu-wrapper {
       @apply pl-2 z-10;
     }
 
-    .pipe {
-      @apply mx-2;
+    .left-menu-wrapper svg {
+      width: 6rem !important;
+      height: 24px !important;
     }
 
+    .pipe {
+      @apply mx-2 text-[8px];
+    }
 
-    .page-shop {
-      @apply text-xs;
+    .section-label {
+      @apply text-[10px];
     }
   }
 }
 
-/*---- Right Menu Container | Cart | Menu | ----*/
+/*---- Right Menu Container | Lupa | Cart | Menu | ----*/
 @layer components {
   .right-menu-container {
     container-type: inline-size;
@@ -278,31 +608,30 @@
   }
 
   .right-menu-wrapper {
-    @apply flex min-h-14 w-full flex-1 items-center justify-end pr-4;
+    @apply flex h-full w-full flex-1 items-center justify-end pr-4 flex-nowrap;
+  }
+
+  .search-button {
+    @apply flex items-center justify-center outline-none tds-sm:mx-2 mx-0.5 tds-xs:h-6 h-4 rounded;
   }
 
   .cart-link {
-    @apply tds-xl:mx-2 mx-[15px];
+    @apply mr-3.5 tds-xl:mr-2 ml-1;
   }
 
-  .icon-cart {
-    @apply h-6 w-6 text-black;
+  .tds-icon {
+    @apply h-4 w-4;
+    @apply tds-xs:h-6 tds-xs:w-6;
+    @apply block fill-current;
   }
 
-  .menu-button:focus {
-    @apply bg-white hover:bg-hover outline-none ring-accessibility ring-2 ring-offset-2 rounded;
-  }
+  @container right-menu (width <=170px) {
 
-  .menu-button {
-    @apply hover:bg-hover hover:text-primary cursor-pointer rounded px-0 py-1 transition-colors sm:px-4;
-  }
-
-  @container right-menu (width <=160px) {
     .cart-link {
-      @apply mx-2;
+      @apply mr-2;
     }
 
-    .icon-cart {
+    .tds-icon {
       @apply h-4 w-4;
     }
 
@@ -311,17 +640,17 @@
     }
 
     .menu-button {
-      @apply text-xs;
+      @apply text-[10px];
     }
   }
 }
 
 @layer components {
   .cart-header {
-    @apply -tracking-0 text-primary font-semibold antialiased transition-all duration-300 ease-in-out;
+    @apply text-primary font-semibold antialiased transition-all duration-300 ease-in-out;
     @apply text-[22px] leading-7 pt-7 pb-6;
     @apply border-b border-neutral-200;
-    @apply sm:leading-9;
+    @apply tds-sm:leading-9;
     @apply tds-lg:border-none tds-lg:text-[26px] tds-lg:pb-2;
   }
 
@@ -333,13 +662,13 @@
   }
 
   .order-summary {
-    @apply tds-lg:bg-white tds-lg:h-fit tds-lg:max-w-[432px] tds-lg:ml-auto tds-lg:p-8 tds-lg:rounded tds-lg:border-none tds-lg:shadow-tesla tds-lg:mt-0;
+    @apply tds-lg:bg-canvas tds-lg:h-fit tds-lg:max-w-[432px] tds-lg:ml-auto tds-lg:p-8 tds-lg:rounded tds-lg:border-none tds-lg:shadow-tesla tds-lg:mt-0;
     @apply border-secondary border-t pt-8 mt-8;
   }
 
   .checkout-button {
-    @apply bg-white shadow-top-highlight fixed bottom-0 left-0 w-full h-auto z-5;
-    @apply flex flex-col justify-center m-0 p-4 rounded-t-xs;
+    @apply bg-canvas shadow-top-highlight fixed bottom-0 left-0 w-full h-auto z-5;
+    @apply flex flex-col justify-center m-0 p-4 rounded-t-sm;
     @apply transition-colors duration-300 ease-in-out;
     @apply tds-lg:contents;
   }

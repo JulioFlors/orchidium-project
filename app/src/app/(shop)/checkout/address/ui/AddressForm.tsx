@@ -36,10 +36,10 @@ export function AddressForm() {
     <div className="flex w-full max-w-[850px] flex-col justify-center text-left">
       {/* ---- Título de la sección ---- */}
       <div className="space-y-8">
-        <h1 className="tracking-2 tds-sm:tracking-4 tds-sm:text-[40px] tds-sm:leading-11 text-primary tds-sm:font-medium mt-0 pb-2 text-[26px] leading-8 font-semibold antialiased">
+        <h1 className="tds-sm:tracking-4 tds-sm:text-[40px] tds-sm:leading-11 text-primary tds-sm:font-medium mt-0 pb-2 text-[26px] leading-8 font-semibold tracking-tight antialiased">
           Entrega
         </h1>
-        <h3 className="tds-sm:text-[24px] text-primary mt-0 pb-2 text-[20px] leading-7 font-semibold tracking-normal antialiased">
+        <h3 className="tds-sm:text-[24px] text-primary mt-0 pb-2 text-[20px] leading-7 font-semibold antialiased">
           Métodos de envío
         </h3>
       </div>
@@ -66,33 +66,24 @@ export function AddressForm() {
         </FormField>
 
         <div className="flex flex-col">
-          <span className="-tracking-2 font-semibold">Cedula</span>
-          <input
-            className="focus-search-box bg-search-box mt-2 min-h-10 w-full rounded px-3 leading-6 font-semibold"
-            type="text"
-          />
+          <span className="font-semibold tracking-wide">Cedula</span>
+          <input className="focus-input-form" type="text" />
         </div>
 
         <div className="flex flex-col">
-          <span className="-tracking-2 font-semibold">Dirección</span>
-          <input
-            className="focus-search-box bg-search-box mt-2 min-h-10 w-full rounded px-3 leading-6 font-semibold"
-            type="text"
-          />
+          <span className="font-semibold tracking-wide">Dirección</span>
+          <input className="focus-input-form" type="text" />
         </div>
 
         <div className="flex flex-col">
-          <span className="-tracking-2 font-semibold">Ciudad</span>
-          <input
-            className="focus-search-box bg-search-box mt-2 min-h-10 w-full rounded px-3 leading-6 font-semibold"
-            type="text"
-          />
+          <span className="font-semibold tracking-wide">Ciudad</span>
+          <input className="focus-input-form" type="text" />
         </div>
 
         {/* todo -> adaptar el QuantityDropdown para la seleccion de los Estados */}
         <div className="flex flex-col">
-          <span className="-tracking-2 font-semibold">Estado</span>
-          <select className="focus-search-box bg-search-box mt-2 min-h-10 w-full rounded px-3 leading-6 font-semibold">
+          <span className="font-semibold tracking-wide">Estado</span>
+          <select className="focus-input-form">
             <option value="">[ Seleccione ]</option>
             <option value="Amazonas">Amazonas</option>
             <option value="Anzoátegui">Anzoátegui</option>
@@ -123,11 +114,8 @@ export function AddressForm() {
         </div>
 
         <div className="flex flex-col">
-          <span className="-tracking-2 font-semibold">Teléfono</span>
-          <input
-            className="focus-search-box bg-search-box mt-2 min-h-10 w-full rounded px-3 leading-6 font-semibold"
-            type="text"
-          />
+          <span className="font-semibold tracking-wide">Teléfono</span>
+          <input className="focus-input-form" type="text" />
         </div>
       </div>
     </div>

@@ -36,14 +36,15 @@ export function Slideshow({ isAvailable, className, images, title }: Props) {
           autoplay={{
             delay: 8000,
           }}
-          className="aspect-square"
+          className="aspect-square rounded"
           modules={[Autoplay, FreeMode, Keyboard, Navigation, Pagination, Thumbs]}
           pagination={{ clickable: true }} // Swiper genera .swiper-pagination
           spaceBetween={0}
           style={
             {
-              '--swiper-navigation-color': 'var(--color-hover)',
-              '--swiper-pagination-color': 'var(--color-secondary)',
+              '--swiper-navigation-color': 'var(--color-light)',
+              '--swiper-pagination-color': 'var(--color-dark)',
+              '--swiper-pagination-bullet-inactive-opacity': '0.3',
 
               '--swiper-pagination-bottom': '36px',
 

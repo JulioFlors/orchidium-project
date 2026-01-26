@@ -34,13 +34,14 @@ export function QuantitySelector({ quantity, onQuantityChanged }: Props) {
   }
 
   return (
-    <div className="mb-5">
-      <h3 className="text-primary -tracking-2 mb-2 font-semibold">Cantidad</h3>
+    <div className="mb-4.5">
+      <h3 className="text-primary mb-2 font-semibold tracking-wide">Cantidad</h3>
 
+      {/* alineamos los botones respecto al input */}
       <div className="flex items-center">
         <button
           aria-label="Disminuir cantidad"
-          className="focus-dashed cursor-pointer p-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+          className="focus-dashed cursor-pointer p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
           disabled={!canDecrement}
           type="button"
           onClick={() => onValueChanged(-1)}
@@ -48,12 +49,12 @@ export function QuantitySelector({ quantity, onQuantityChanged }: Props) {
           <IoRemoveSharp className="text-primary font-bold" size={16} />
         </button>
 
-        <span className="mx-4 w-20 rounded bg-neutral-100 px-4 py-2 text-center font-bold select-none">
+        <span className="bg-input mx-4 flex h-10 w-20 items-center justify-center rounded px-4 font-bold select-none">
           {displayQuantity}
         </span>
 
         <button
-          className="focus-dashed cursor-pointer p-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+          className="focus-dashed cursor-pointer p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
           disabled={!canIncrement}
           type="button"
           onClick={() => onValueChanged(+1)}

@@ -83,6 +83,7 @@ export default [
     {
       rules: {
         ...vercelStyleGuideTypescript.rules,
+        '@typescript-eslint/no-empty-function': 'off',
         '@typescript-eslint/no-non-null-assertion': 'off',
         '@typescript-eslint/no-shadow': 'off',
         '@typescript-eslint/explicit-function-return-type': 'off',
@@ -123,6 +124,7 @@ export default [
       },
     },
   ],
+
   // Import configuration
   {
     plugins: {

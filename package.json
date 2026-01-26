@@ -11,7 +11,7 @@
 		"dev": "pnpm --filter app dev",
 		"build": "pnpm --filter app build",
 		"start": "pnpm --filter app start",
-		"lint": "pnpm --filter app lint",
+		"lint": "pnpm --filter app lint --fix",
 		"// ---- SERVICIOS ----": "",
 		"ingest:build": "pnpm --filter @service/ingest build",
 		"ingest:dev": "pnpm --filter @service/ingest dev",

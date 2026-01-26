@@ -48,12 +48,7 @@ export const getPaginatedSpeciesWithImages = async ({
             type: true,
           },
         },
-        stock: {
-          select: {
-            quantity: true,
-            available: true,
-          },
-        },
+        variants: true,
       },
       // Aplicamos la condición de filtro
       where: whereCondition,
@@ -71,11 +66,13 @@ export const getPaginatedSpeciesWithImages = async ({
       currentPage: page,
       totalPages: totalPages,
       // Mapeamos los resultados para aplanar la estructura de las imágenes
-      species: species.map((specie) => ({
-        ...specie,
-        // Convertimos el array de objetos {url: string} a un array de strings
-        images: specie.images.map((image) => image.url),
-      })),
+      species: species.map((specie) => {
+        return {
+          ...specie,
+          // Convertimos el array de objetos {url: string} a un array de strings
+          images: specie.images.map((image) => image.url),
+        }
+      }),
     }
   } catch (error) {
     // eslint-disable-next-line no-console

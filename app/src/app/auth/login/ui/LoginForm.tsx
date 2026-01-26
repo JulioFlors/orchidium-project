@@ -1,19 +1,24 @@
 'use client'
 
-import { IoInformationOutline } from 'react-icons/io5'
-import { useEffect, useState } from 'react'
+import { FcGoogle } from 'react-icons/fc'
+import { IoAlertOutline } from 'react-icons/io5'
+import { LuLoader } from 'react-icons/lu'
+import { signIn } from 'next-auth/react'
+import { startTransition, useEffect, useActionState, useState } from 'react'
+import { useForm, useWatch } from 'react-hook-form'
 import { useSearchParams } from 'next/navigation'
-import clsx from 'clsx'
-import Link from 'next/link'
-import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
+import clsx from 'clsx'
+import Link from 'next/link'
 
-import { authenticate } from '@/actions'
+import { authenticate, verifyEmailInDb } from '@/actions'
 
 const loginSchema = z.object({
-  email: z.email('Email no válido').min(1, 'El email es obligatorio'),
-  password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
+  email: z.string().email('No es un correo electrónico válido').min(1, 'Rellene este campo'),
+  password: z
+    .string('No es un formato de contraseña válida')
+    .min(6, 'Ingrese al menos 6 caracteres'),
 })
 
 type FormInputs = z.infer<typeof loginSchema>
@@ -22,96 +27,319 @@ export function LoginForm() {
   const searchParams = useSearchParams()
   const callbackUrl = searchParams.get('callbackUrl') || '/'
 
-  const [errorMessage, setErrorMessage] = useState('')
-  const [isPending, setIsPending] = useState(false)
+  // Estados para validar el email (paso 1)
+  const [loginStep, setLoginStep] = useState<'email' | 'password'>('email')
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false)
+
+  // Estado para autenticar (paso 2)
+  const [state, dispatch, isPending] = useActionState(authenticate, undefined)
 
   const {
-    register,
+    clearErrors,
+    control,
     handleSubmit,
+    register,
+    setError,
+    setFocus,
+    setValue,
+    trigger,
     formState: { errors },
   } = useForm<FormInputs>({
     resolver: zodResolver(loginSchema),
   })
 
+  // Monitoreamos ambos campos para validar botones
+  const emailValue = useWatch({ control, name: 'email' })
+  const passwordValue = useWatch({ control, name: 'password' })
+
+  // Redireccionamos si el login final es exitoso
   useEffect(() => {
-    if (errorMessage === 'success') {
-      window.location.replace('/')
+    if (state === 'success') {
+      window.location.replace(callbackUrl)
     }
-  }, [errorMessage])
+  }, [state, callbackUrl])
 
-  const onSubmit = async (data: FormInputs) => {
-    setIsPending(true)
-    setErrorMessage('')
+  // Limpiamos la contraseña si hay error
+  useEffect(() => {
+    if (state && state !== 'success') {
+      setValue('password', '') // Limpia el input
+      setFocus('password') // Devuelve el foco al usuario
+    }
+  }, [state, setValue, setFocus])
 
+  // Enfocamos al cambiar de paso
+  useEffect(() => {
+    if (loginStep === 'email') {
+      setFocus('email')
+    } else {
+      setFocus('password')
+    }
+  }, [loginStep, setFocus])
+
+  // Paso 2 -> Paso 1 con errores
+  const handleGoBackToEmail = () => {
+    setLoginStep('email')
+  }
+
+  // Paso 1: Validamos que el correo sea de un usuario de PristinoPlant
+  const handleNextStep = async () => {
+    clearErrors('email')
+
+    // Validación de formato (Zod)
+    const isFormatValid = await trigger('email')
+
+    if (!isFormatValid) return
+
+    // Validación de Base de Datos (Server Action)
+    setIsCheckingEmail(true)
+
+    // server action
+    const { ok, message } = await verifyEmailInDb(emailValue)
+
+    setIsCheckingEmail(false)
+
+    if (ok) {
+      // Si existe, avanzamos
+      setLoginStep('password')
+    } else {
+      // Si no existe, seteamos el error manualmente en el input
+      setError('email', { type: 'manual', message: message })
+    }
+  }
+
+  // Paso 2: Procesamos el submit del formulario
+  const onSubmit = (data: FormInputs) => {
     const formData = new FormData()
 
     formData.append('email', data.email)
     formData.append('password', data.password)
 
-    const authResult = await authenticate(undefined, formData)
-
-    if (authResult !== 'success') {
-      setErrorMessage(authResult as string)
-    } else {
-      setErrorMessage('success')
+    if (callbackUrl) {
+      formData.append('redirectTo', callbackUrl)
     }
-    setIsPending(false)
+
+    startTransition(() => {
+      dispatch(formData)
+    })
+  }
+
+  // Login con Google
+  const handleGoogleLogin = () => {
+    // google como ID del proveedor
+    signIn('google', { callbackUrl: callbackUrl })
+  }
+
+  // Permite usar ENTER para avanzar del Paso 1 al 2
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && loginStep === 'email') {
+      // Prevenimos el "Submit" nativo del formulario
+      // (Si no lo hacemos, intentaría enviar el form y fallaría porque el password está vacío)
+      e.preventDefault()
+
+      // Ejecutamos manualmente la validación y el avance de paso
+      handleNextStep()
+    }
   }
 
   return (
-    <form className="mx-auto flex max-w-md flex-col" onSubmit={handleSubmit(onSubmit)}>
-      <label htmlFor="email">Correo electrónico</label>
-      <input
-        autoComplete="email"
-        className={clsx('mb-5 rounded border bg-gray-200 px-5 py-2', {
-          'border-red-500': errors.email,
-        })}
-        {...register('email')}
-        type="email"
-      />
-      {errors.email && <p className="text-red-500">{errors.email.message}</p>}
+    <div className="tds-sm:mt-14 mt-0 flex w-full flex-col items-center justify-center px-5 py-4">
+      {/* Título */}
+      <div className="mt-2.5 mb-2 flex w-full max-w-[340px] items-start justify-start">
+        <h1 className="text-primary tds-sm:text-3xl tds-sm:leading-11 text-2xl leading-8 font-semibold">
+          {loginStep === 'email' ? 'Ingresar' : 'Iniciar sesión'}
+        </h1>
+      </div>
 
-      <label htmlFor="password">Contraseña</label>
-      <input
-        className={clsx('mb-5 rounded border bg-gray-200 px-5 py-2', {
-          'border-red-500': errors.password,
-        })}
-        {...register('password')}
-        type="password"
-      />
-      {errors.password && <p className="text-red-500">{errors.password.message}</p>}
+      {/* Error Message (Paso 2) */}
+      {state && state !== 'success' && loginStep === 'password' && (
+        <div className="bg-input fade-in my-2 flex w-full max-w-[340px] items-start rounded">
+          <span className="my-4 mr-0 ml-4 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-400">
+            <IoAlertOutline className="text-black-and-white h-4 w-4" />
+          </span>
+          <span className="text-secondary ml-1 grow pt-4.5 pr-6 pb-4 pl-[5px] font-medium">
+            {state}
+          </span>
+        </div>
+      )}
 
-      <input name="redirectTo" type="hidden" value={callbackUrl} />
-      <button
-        aria-disabled={isPending}
-        className={clsx({
-          'btn-primary': !isPending,
-          'btn-disabled': isPending,
-        })}
-        type="submit"
+      {/* Label del usuario VALIDADO (Paso 2) */}
+      <div
+        className={clsx(
+          loginStep === 'password' ? 'fade-in block w-full max-w-[340px] py-2' : 'hidden',
+        )}
       >
-        Ingresar
-      </button>
+        <div className="mt-2 flex w-full items-center justify-between leading-6 font-semibold">
+          <div className="flex items-center gap-2 overflow-hidden">
+            <span className="truncate pr-4 tracking-wide">{emailValue}</span>
+          </div>
 
-      <div aria-atomic="true" aria-live="polite" className="flex h-8 items-end space-x-1">
-        {errorMessage && errorMessage !== 'success' && (
-          <div className="mb-2 flex flex-row">
-            <IoInformationOutline className="h-5 w-5 text-red-500" />
-            <p className="text-sm text-red-500">{errorMessage}</p>
+          <button className="underline-secondary" type="button" onClick={handleGoBackToEmail}>
+            Cambiar
+          </button>
+        </div>
+      </div>
+
+      {/* Login Card */}
+      <div className="w-full max-w-[340px]">
+        <form className="flex flex-col" onSubmit={handleSubmit(onSubmit)}>
+          {/* ------------ Paso 1: Email ------------ */}
+          <div className={clsx(loginStep === 'email' ? 'fade-in block py-4' : 'hidden')}>
+            <label className="text-label text-sm font-semibold" htmlFor="email">
+              Correo electrónico
+            </label>
+
+            <input
+              required
+              aria-describedby={errors.email ? 'email-error' : undefined}
+              autoComplete="email"
+              className={clsx(
+                'focus-input-form',
+                errors.email && [
+                  'outline -outline-offset-1',
+                  'outline-red-800/75',
+                  'transition-colors duration-300 ease-in-out',
+                ],
+              )}
+              disabled={isCheckingEmail}
+              id="email"
+              type="email"
+              onKeyDown={handleKeyDown}
+              {...register('email')}
+            />
+
+            <div className="mt-2">
+              {errors.email && (
+                <span
+                  className="fade-in mt-1 text-xs font-medium tracking-wide text-red-800/75"
+                  id="email-error"
+                >
+                  {errors.email.message}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* ------------ Paso 2: Password ------------ */}
+          <div className={clsx(loginStep === 'password' ? 'fade-in block py-4' : 'hidden')}>
+            <label className="text-secondary font-semibold" htmlFor="password">
+              Contraseña
+            </label>
+
+            <input
+              aria-describedby={errors.password ? 'password-error' : undefined}
+              autoComplete="current-password"
+              className={clsx(
+                'focus-input-form',
+                errors.password && [
+                  'outline -outline-offset-1',
+                  'outline-red-800/75',
+                  'transition-colors duration-300 ease-in-out',
+                ],
+              )}
+              id="password"
+              required={loginStep === 'password'}
+              type="password"
+              {...register('password')}
+            />
+            <div className="mt-2">
+              {errors.password && (
+                <span
+                  className="fade-in mt-1 text-xs font-medium tracking-wide text-red-800/75"
+                  id="password-error"
+                >
+                  {errors.password.message}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* ------------ Submit Button ------------ */}
+          {loginStep === 'email' ? (
+            /* Paso 1: Verificar email en la DB */
+            <button
+              className={clsx('btn-primary my-2', {
+                'cursor-wait opacity-70': isCheckingEmail,
+                'cursor-not-allowed opacity-70': !emailValue,
+              })}
+              disabled={!emailValue || isCheckingEmail}
+              type="button"
+              onClick={handleNextStep}
+            >
+              {isCheckingEmail ? (
+                <div className="flex items-center justify-center gap-2">
+                  <LuLoader className="animate-spin" /> Verificando
+                </div>
+              ) : (
+                'Siguiente'
+              )}
+            </button>
+          ) : (
+            /* Paso 2: Iniciar Sesión */
+            <button
+              className={clsx('btn-primary my-2', {
+                'cursor-wait opacity-70': isPending,
+                'cursor-not-allowed opacity-70': !passwordValue,
+              })}
+              disabled={isPending || !passwordValue}
+              type="submit"
+            >
+              {isPending ? (
+                <div className="flex items-center justify-center gap-2">
+                  <LuLoader className="animate-spin" /> Autenticando su cuenta
+                </div>
+              ) : (
+                'Ingresar'
+              )}
+            </button>
+          )}
+        </form>
+
+        {/* ------------ (Solo visible en paso 2) ------------ */}
+        {loginStep === 'password' && (
+          <div className="mt-4 text-center">
+            <Link
+              className="underline-secondary"
+              href="#" // "/auth/forgot-password"
+            >
+              ¿Olvidaste la contraseña?
+            </Link>
+          </div>
+        )}
+
+        {/* ------------ (Solo visible en paso 1) ------------ */}
+        {loginStep === 'email' && (
+          <div className="fade-in">
+            {/* Divisor -------------- */}
+            <div className="relative my-6">
+              <div className="inset-0 flex items-center">
+                <div className="border-input-outline w-full border-t" />
+              </div>
+            </div>
+
+            {/* Google Button */}
+            <button className="btn-border-none" type="button" onClick={handleGoogleLogin}>
+              <FcGoogle className="text-secondary h-5 w-5" />
+              Continúa con Google
+            </button>
+
+            {/* New to PristinoPlant? */}
+            <div className="text-secondary mt-4 flex w-full max-w-[340px] flex-col items-center justify-center gap-2 p-4 text-center font-medium">
+              <span>¿Eres nuevo en PristinoPlant? </span>
+
+              <Link
+                className="underline-link"
+                href={
+                  callbackUrl !== '/'
+                    ? `/auth/new-account?callbackUrl=${encodeURIComponent(callbackUrl)}`
+                    : '/auth/new-account'
+                }
+              >
+                Crear una cuenta
+              </Link>
+            </div>
           </div>
         )}
       </div>
-
-      {/* divisor l ine */}
-      <div className="my-5 flex items-center">
-        <div className="flex-1 border-t border-gray-500" />
-        <div className="px-2 text-gray-800">O</div>
-        <div className="flex-1 border-t border-gray-500" />
-      </div>
-
-      <Link className="btn-secondary text-center" href="/auth/new-account">
-        Crear una nueva cuenta
-      </Link>
-    </form>
+    </div>
   )
 }

@@ -32,26 +32,25 @@ interface SeedGenus {
   type: PlantType
 }
 
+interface SeedVariant {
+  size: PotSize
+  price: number
+  quantity: number
+  available: boolean
+}
+
 interface SeedSpecies {
   name: string
   slug: string
   genus: { name: string }
   description?: string
-  price: number
-  stock: {
-    available: boolean
-    quantity: number
-  }
   images: string[]
-  variants?: {
-    size: PotSize
-    price: number
-    quantity: number
-  }[]
+  variants: SeedVariant[]
 }
 
 interface SeedPlant {
   pottingDate?: Date
+  currentSize: PotSize
   species: { name: string }
   location?: {
     zone: ZoneType
@@ -156,197 +155,238 @@ export const initialData: SeedData = {
     /* {
       name: 'Dyckia brevifolia',
       genus: { name: 'Dyckia' },
-      price: 25,
       slug: 'dyckia-brevifolia',
-      stock: { quantity: 1, available: false },
       images: [
         'bromeliads/dyckia-brevifolia_0_2000.webp',
         'bromeliads/dyckia-brevifolia_1_2000.webp',
       ],
+      variants: [
+        { size: 'NRO_5', price: 2, quantity: 20, available: true },
+        { size: 'NRO_7', price: 4, quantity: 15, available: true },
+        { size: 'NRO_10', price: 6, quantity: 10, available: true },
+      ]
     }, */
-    /* Orchid */
+    /* Orchid - Cattleya ($35 NRO_10, $45 NRO_14) */
     {
       name: 'Cattleya Violacea',
       genus: { name: 'Cattleya' },
-      price: 25,
       slug: 'cattleya-violacea',
-      stock: { quantity: 5, available: true },
       images: [
         'orchids/cattleya-violacea_0_2000.webp',
         'orchids/cattleya-violacea_1_2000.webp',
         'orchids/cattleya-violacea_2_2000.webp',
       ],
+      variants: [
+        { size: 'NRO_10', price: 35, quantity: 5, available: true },
+        { size: 'NRO_14', price: 45, quantity: 2, available: true },
+      ]
     },
     {
       name: 'Cattlianthe Mary Elizabeth Bohn',
       genus: { name: 'Cattleya' },
-      price: 20,
       slug: 'cattlianthe-mary-elizabeth-bohn',
-      stock: { quantity: 4, available: true },
       images: [
         'orchids/cattlianthe-mary-elizabeth-bohn_0_2000.webp',
         'orchids/cattlianthe-mary-elizabeth-bohn_1_2000.webp',
       ],
+      variants: [
+        { size: 'NRO_10', price: 35, quantity: 4, available: true },
+        { size: 'NRO_14', price: 45, quantity: 0, available: false }, // Agotado
+      ]
     },
     {
       name: 'Cattleya Caudebec x Cattleya Bactia',
       genus: { name: 'Cattleya' },
-      price: 30,
       slug: 'cattleya-caudebec-x-cattleya-bactia',
-      stock: { quantity: 1, available: false },
       images: ['orchids/cattleya-caudebec-x-cattleya-bactia_0_2000.webp'],
+      variants: [
+        { size: 'NRO_10', price: 35, quantity: 1, available: true },
+        { size: 'NRO_14', price: 45, quantity: 0, available: false },
+      ]
     },
     {
       name: 'Cattleya Lueddemanniana x Cattleya Gaskelliana',
       genus: { name: 'Cattleya' },
-      price: 30,
       slug: 'cattleya-lueddemanniana-x-cattleya-gaskelliana',
-      stock: { quantity: 4, available: true },
       images: ['orchids/cattleya-lueddemanniana-x-cattleya-gaskelliana_0_2000.webp'],
+      variants: [
+        { size: 'NRO_10', price: 35, quantity: 4, available: true },
+        { size: 'NRO_14', price: 45, quantity: 3, available: true },
+      ]
     },
     {
       name: "Rhyncholaeliocattleya George King 'Southern Cross'",
       genus: { name: 'Cattleya' },
-      price: 30,
       slug: 'rhyncholaeliocattleya-george-king',
-      stock: { quantity: 6, available: true },
       images: [
         'orchids/rhyncholaeliocattleya-george-king_0_2000.webp',
         'orchids/rhyncholaeliocattleya-george-king_1_2000.webp',
       ],
       description:
         "Esta Rhyncholaeliocattleya George King 'Southern Cross' es un híbrido clásico muy apreciado por sus grandes y vistosas flores de color salmón a rosa melocotón. Presenta un labio amplio y distintivo con flecos (fruncido), a menudo con tonos amarillentos en la garganta. Las flores son dulcemente perfumadas y suelen aparecer una o dos veces al año. Es una planta de crecimiento vigoroso, ideal para añadir un toque de color y fragancia.",
+      variants: [
+        { size: 'NRO_10', price: 35, quantity: 6, available: true },
+        { size: 'NRO_14', price: 45, quantity: 4, available: true },
+      ]
     },
     {
       name: "Rhyncholaeliocattleya Memoria 'Anna Balmores'",
       genus: { name: 'Cattleya' },
-      price: 30,
       slug: 'rhyncholaeliocattleya-memoria-anna-balmores',
-      stock: { quantity: 6, available: true },
       images: ['orchids/rhyncholaeliocattleya-memoria-anna-balmores_0_2000.webp'],
+      variants: [
+        { size: 'NRO_10', price: 35, quantity: 6, available: true },
+        { size: 'NRO_14', price: 45, quantity: 2, available: true },
+      ]
     },
     {
       name: 'Cattleya Supersonic',
       genus: { name: 'Cattleya' },
-      price: 30,
       slug: 'cattleya-supersonic',
-      stock: { quantity: 1, available: false },
       images: ['orchids/cattleya-supersonic_0_2000.webp'],
+      variants: [
+        { size: 'NRO_10', price: 35, quantity: 1, available: true },
+        { size: 'NRO_14', price: 45, quantity: 0, available: false },
+      ]
     },
+    /* Orchid - Dendrobium ($30 NRO_10, $40 NRO_14) */
     {
       name: 'Dendrobium Striata',
       genus: { name: 'Dendrobium' },
-      price: 20,
       slug: 'dendrobium-striata',
-      stock: { quantity: 3, available: true },
       images: ['orchids/dendrobium-striata_0_2000.webp'],
+      variants: [
+        { size: 'NRO_10', price: 30, quantity: 3, available: true },
+        { size: 'NRO_14', price: 40, quantity: 1, available: true },
+      ]
     },
     {
       name: 'Dendrobium Ocean Blue',
       genus: { name: 'Dendrobium' },
-      price: 25,
       slug: 'dendrobium-ocean-blue',
-      stock: { quantity: 8, available: true },
       images: ['orchids/dendrobium-ocean-blue_0_2000.webp'],
+      variants: [
+        { size: 'NRO_10', price: 30, quantity: 8, available: true },
+        { size: 'NRO_14', price: 40, quantity: 5, available: true },
+      ]
     },
     {
       name: 'Dendrobium Diamond',
       genus: { name: 'Dendrobium' },
-      price: 20,
       slug: 'dendrobium-diamond',
-      stock: { quantity: 2, available: false },
       images: ['orchids/dendrobium-diamond_0_2000.webp'],
+      variants: [
+        { size: 'NRO_10', price: 30, quantity: 2, available: true },
+        { size: 'NRO_14', price: 40, quantity: 0, available: false },
+      ]
     },
+    /* Orchid - Others ($25 NRO_10, $35 NRO_14) */
     {
       name: 'Dimerandra Stenotepala',
       genus: { name: 'Dimerandra' },
-      price: 20,
       slug: 'dimerandra-stenotepala',
-      stock: { quantity: 1, available: false },
       images: ['orchids/dimerandra-stenotepala_0_2000.webp'],
+      variants: [
+        { size: 'NRO_10', price: 25, quantity: 1, available: true },
+        { size: 'NRO_14', price: 35, quantity: 0, available: false },
+      ]
     },
     {
       name: 'Enciclea Cordijera',
       genus: { name: 'Enciclea' },
-      price: 20,
       slug: 'enciclea-cordijera',
-      stock: { quantity: 3, available: true },
       images: ['orchids/enciclea-cordijera_0_2000.webp'],
+      variants: [
+        { size: 'NRO_10', price: 25, quantity: 3, available: true },
+        { size: 'NRO_14', price: 35, quantity: 1, available: true },
+      ]
     },
-    /* Adenium_Obesum */
+    /* Adenium_Obesum ($25 NRO_10, $35 NRO_14) */
     {
       name: 'Adenium Obesum Genoa GNA',
       genus: { name: 'Multiple Petals' },
-      price: 20,
       slug: 'adenium-obesum-genoa-gna',
-      stock: { quantity: 1, available: false },
       images: [
         'adenium_obesum/genoa-gna_0_2000.webp',
         'adenium_obesum/genoa-gna_1_2000.webp',
         'adenium_obesum/genoa-gna_2_2000.webp',
       ],
+      variants: [
+        { size: 'NRO_10', price: 25, quantity: 1, available: true },
+        { size: 'NRO_14', price: 35, quantity: 5, available: true },
+      ]
     },
     {
       name: 'Adenium Obesum Marbella',
       genus: { name: 'Multiple Petals' },
-      price: 20,
       slug: 'adenium-obesum-marbella',
-      stock: { quantity: 1, available: false },
       images: ['adenium_obesum/marbella_0_2000.webp', 'adenium_obesum/marbella_1_2000.webp'],
+      variants: [
+        { size: 'NRO_10', price: 25, quantity: 1, available: true },
+        { size: 'NRO_14', price: 35, quantity: 0, available: false },
+      ]
     },
-    /* Cactus */
+    /* Cactus & Succulents ($2 NRO_5, $4 NRO_7, $6 NRO_10) */
     {
       name: 'Euphorbia ritchiei',
       genus: { name: 'Euphorbia' },
-      price: 3,
       slug: 'euphorbia-ritchiei',
-      stock: { quantity: 9, available: true },
       images: ['cactus/euphorbia-ritchiei_0_2000.webp', 'cactus/euphorbia-ritchiei_1_2000.webp'],
+      variants: [
+        { size: 'NRO_5', price: 2, quantity: 9, available: true },
+        { size: 'NRO_7', price: 4, quantity: 5, available: true },
+        { size: 'NRO_10', price: 6, quantity: 2, available: true },
+      ]
     },
     {
       name: 'Mammillaria prolifera ssp. haitiensis',
       genus: { name: 'Mammillaria' },
-      price: 3,
       slug: 'mammillaria-prolifera-ssp-haitiensis',
-      stock: { quantity: 3, available: false },
       images: [
         'cactus/mammillaria-prolifera-ssp-haitiensis_0_2000.webp',
         'cactus/mammillaria-prolifera-ssp-haitiensis_1_2000.webp',
         'cactus/mammillaria-prolifera-ssp-haitiensis_2_2000.webp',
         'cactus/mammillaria-prolifera-ssp-haitiensis_3_2000.webp',
       ],
+      variants: [
+        { size: 'NRO_5', price: 2, quantity: 3, available: true },
+        { size: 'NRO_7', price: 4, quantity: 0, available: false },
+        { size: 'NRO_10', price: 6, quantity: 1, available: true },
+      ]
     },
     {
       name: 'Mammillaria vetula ssp. gracilis',
       genus: { name: 'Mammillaria' },
-      price: 3,
       slug: 'mammillaria-vetula-ssp-gracilis',
-      stock: { quantity: 3, available: false },
       images: [
         'cactus/mammillaria-vetula-ssp-gracilis_0_2000.webp',
         'cactus/mammillaria-vetula-ssp-gracilis_1_2000.webp',
         'cactus/mammillaria-vetula-ssp-gracilis_2_2000.webp',
         'cactus/mammillaria-vetula-ssp-gracilis_3_2000.webp',
       ],
+      variants: [
+        { size: 'NRO_5', price: 2, quantity: 3, available: true },
+        { size: 'NRO_7', price: 4, quantity: 2, available: true },
+      ]
     },
     {
       name: 'Mammillaria vetula ssp. gracilis cv. roi baudoin yonneux',
       genus: { name: 'Mammillaria' },
-      price: 3,
       slug: 'mammillaria-vetula-ssp-gracilis-cv-roi-baudoin-yonneux',
-      stock: { quantity: 2, available: false },
       images: [
         'cactus/mammillaria-vetula-ssp-gracilis-cv-roi-baudoin-yonneux_0_2000.webp',
         'cactus/mammillaria-vetula-ssp-gracilis-cv-roi-baudoin-yonneux_1_2000.webp',
         'cactus/mammillaria-vetula-ssp-gracilis-cv-roi-baudoin-yonneux_2_2000.webp',
       ],
+      variants: [
+        { size: 'NRO_5', price: 2, quantity: 2, available: true },
+        { size: 'NRO_7', price: 4, quantity: 1, available: true },
+      ]
     },
     {
       name: 'Rebutia heliosa ssp. teresae',
       genus: { name: 'Rebutia' },
-      price: 2,
       slug: 'rebutia-heliosa-teresae',
-      stock: { quantity: 4, available: false },
       images: [
         'cactus/rebutia-heliosa-ssp-teresae_0_2000.webp',
         'cactus/rebutia-heliosa-ssp-teresae_1_2000.webp',
@@ -354,211 +394,254 @@ export const initialData: SeedData = {
         'cactus/rebutia-heliosa-ssp-teresae_3_2000.webp',
         'cactus/rebutia-heliosa-ssp-teresae_4_2000.webp',
       ],
+      variants: [
+        { size: 'NRO_5', price: 2, quantity: 4, available: true },
+        { size: 'NRO_7', price: 4, quantity: 0, available: false },
+      ]
     },
     /* Succulent */
     {
       name: 'Crassula capitella "Campfire"',
       genus: { name: 'Crassula' },
-      price: 4,
       slug: 'crassula-capitella-campfire',
-      stock: { quantity: 1, available: false },
       images: [
         'succulents/crassula-capitella-campfire_0_2000.webp',
         'succulents/crassula-capitella-campfire_1_2000.webp',
         'succulents/crassula-capitella-campfire_2_2000.webp',
         'succulents/crassula-capitella-campfire_3_2000.webp',
       ],
+      variants: [
+        { size: 'NRO_5', price: 2, quantity: 1, available: true },
+        { size: 'NRO_7', price: 4, quantity: 5, available: true },
+      ]
     },
     {
       name: 'Crassula ovata "Gollum"',
       genus: { name: 'Crassula' },
-      price: 5,
       slug: 'crassula-ovata-gollum',
-      stock: { quantity: 0, available: false },
       images: ['succulents/crassula-ovata-gollum_0_2000.webp'],
+      variants: [
+        { size: 'NRO_5', price: 2, quantity: 0, available: false },
+        { size: 'NRO_7', price: 4, quantity: 2, available: true },
+      ]
     },
     {
       name: 'Graptopetalum paraguayense',
       genus: { name: 'Graptopetalum' },
-      price: 3,
       slug: 'graptopetalum-paraguayense',
-      stock: { quantity: 3, available: false },
       images: [
         'succulents/graptopetalum-paraguayense_0_2000.webp',
         'succulents/graptopetalum-paraguayense_1_2000.webp',
       ],
+      variants: [
+        { size: 'NRO_5', price: 2, quantity: 3, available: true },
+        { size: 'NRO_7', price: 4, quantity: 1, available: true },
+      ]
     },
     {
       name: 'Graptoveria fénix',
       genus: { name: 'Graptoveria' },
-      price: 3,
       slug: 'graptoveria-fenix',
-      stock: { quantity: 2, available: false },
       images: [
         'succulents/graptoveria-fenix_0_2000.webp',
         'succulents/graptoveria-fenix_1_2000.webp',
       ],
+      variants: [
+        { size: 'NRO_5', price: 2, quantity: 2, available: true },
+        { size: 'NRO_7', price: 4, quantity: 0, available: false },
+      ]
     },
     {
       name: 'Haworthiopsis attenuata "Zebrina"',
       genus: { name: 'Haworthiopsis' },
-      price: 6,
       slug: 'haworthiopsis-attenuata-zebrina',
-      stock: { quantity: 0, available: false },
       images: ['succulents/haworthiopsis-attenuata-zebrina_0_2000.webp'],
+      variants: [
+        { size: 'NRO_5', price: 2, quantity: 0, available: false }, // Agotado totalmente
+      ]
     },
     {
       name: 'Orostachys boehmeri "Keiko"',
       genus: { name: 'Orostachys' },
-      price: 3,
       slug: 'orostachys-boehmeri-keiko',
-      stock: { quantity: 10, available: true },
       images: [
         'succulents/orostachys-boehmeri-keiko_0_2000.webp',
         'succulents/orostachys-boehmeri-keiko_1_2000.webp',
         'succulents/orostachys-boehmeri-keiko_2_2000.webp',
       ],
+      variants: [
+        { size: 'NRO_5', price: 2, quantity: 10, available: true },
+        { size: 'NRO_7', price: 4, quantity: 5, available: true },
+      ]
     },
     {
       name: 'Senecio rowleyanus "Rosario"',
       genus: { name: 'Senecio' },
-      price: 4,
       slug: 'senecio-rowleyanus-rosario',
-      stock: { quantity: 0, available: false },
       images: ['succulents/senecio-rowleyanus-rosario_0_2000.webp'],
+      variants: [
+        { size: 'NRO_5', price: 2, quantity: 0, available: false },
+      ]
     },
     {
       name: 'Pachyveria "Scheideckeri"',
       genus: { name: 'Pachyveria' },
-      price: 4,
       slug: 'pachyveria-scheideckeri',
-      stock: { quantity: 4, available: false },
       images: [
         'succulents/pachyveria-scheideckeri_0_2000.webp',
         'succulents/pachyveria-scheideckeri_1_2000.webp',
         'succulents/pachyveria-scheideckeri_2_2000.webp',
         'succulents/pachyveria-scheideckeri_3_2000.webp',
       ],
+      variants: [
+        { size: 'NRO_5', price: 2, quantity: 4, available: true },
+        { size: 'NRO_7', price: 4, quantity: 2, available: true },
+        { size: 'NRO_10', price: 6, quantity: 1, available: true },
+      ]
     },
   ],
   plants: [
     {
       species: { name: 'Cattleya Violacea' },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-01-15'),
       location: { zone: 'ZONA_A', table: 'MESA_1' },
     },
     {
       species: { name: 'Cattleya Violacea' },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-02-20'),
       location: { zone: 'ZONA_A', table: 'MESA_1' },
     },
     {
       species: { name: 'Cattlianthe Mary Elizabeth Bohn' },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2023-12-20'),
       location: { zone: 'ZONA_A', table: 'MESA_1' },
     },
     {
       species: { name: 'Cattlianthe Mary Elizabeth Bohn' },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-03-01'),
       location: { zone: 'ZONA_A', table: 'MESA_2' },
     },
     {
       species: { name: 'Cattleya Caudebec x Cattleya Bactia' },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-02-01'),
       location: { zone: 'ZONA_A', table: 'MESA_2' },
     },
     {
       species: { name: 'Cattleya Caudebec x Cattleya Bactia' },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-02-10'),
       location: { zone: 'ZONA_A', table: 'MESA_2' },
     },
     {
       species: { name: 'Cattleya Lueddemanniana x Cattleya Gaskelliana' },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-01-25'),
       location: { zone: 'ZONA_A', table: 'MESA_3' },
     },
     {
       species: { name: 'Cattleya Lueddemanniana x Cattleya Gaskelliana' },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-02-05'),
       location: { zone: 'ZONA_A', table: 'MESA_3' },
     },
     {
       species: { name: "Rhyncholaeliocattleya George King 'Southern Cross'" },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-02-15'),
       location: { zone: 'ZONA_A', table: 'MESA_3' },
     },
     {
       species: { name: "Rhyncholaeliocattleya George King 'Southern Cross'" },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-01-30'),
       location: { zone: 'ZONA_A', table: 'MESA_4' },
     },
     {
       species: { name: "Rhyncholaeliocattleya Memoria 'Anna Balmores'" },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-02-15'),
       location: { zone: 'ZONA_A', table: 'MESA_3' },
     },
     {
       species: { name: "Rhyncholaeliocattleya Memoria 'Anna Balmores'" },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-01-30'),
       location: { zone: 'ZONA_A', table: 'MESA_4' },
     },
     {
       species: { name: 'Cattleya Supersonic' },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-02-28'),
       location: { zone: 'ZONA_A', table: 'MESA_4' },
     },
     {
       species: { name: 'Cattleya Supersonic' },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-03-10'),
       location: { zone: 'ZONA_A', table: 'MESA_4' },
     },
     {
       species: { name: 'Dendrobium Striata' },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-01-05'),
       location: { zone: 'ZONA_A', table: 'MESA_5' },
     },
     {
       species: { name: 'Dendrobium Striata' },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-02-12'),
       location: { zone: 'ZONA_A', table: 'MESA_5' },
     },
     {
       species: { name: 'Dendrobium Ocean Blue' },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2023-12-25'),
       location: { zone: 'ZONA_A', table: 'MESA_5' },
     },
     {
       species: { name: 'Dendrobium Ocean Blue' },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-01-20'),
       location: { zone: 'ZONA_A', table: 'MESA_6' },
     },
     {
       species: { name: 'Dendrobium Diamond' },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-02-08'),
       location: { zone: 'ZONA_A', table: 'MESA_6' },
     },
     {
       species: { name: 'Dendrobium Diamond' },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-03-15'),
       location: { zone: 'ZONA_A', table: 'MESA_6' },
     },
     {
       species: { name: 'Dimerandra Stenotepala' },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-01-18'),
       location: { zone: 'ZONA_A', table: 'MESA_1' },
     },
     {
       species: { name: 'Dimerandra Stenotepala' },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-02-22'),
       location: { zone: 'ZONA_A', table: 'MESA_2' },
     },
     {
       species: { name: 'Enciclea Cordijera' },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-01-28'),
       location: { zone: 'ZONA_A', table: 'MESA_3' },
     },
     {
       species: { name: 'Enciclea Cordijera' },
+      currentSize: 'NRO_10',
       pottingDate: new Date('2024-03-05'),
       location: { zone: 'ZONA_A', table: 'MESA_4' },
     },

@@ -2,7 +2,7 @@
 
 import { initialData, SeedFertilizationCycle, SeedPhytosanitaryCycle } from './seed-data'
 
-import { prisma, ZoneType, TableType } from '@package/database'
+import { prisma, ZoneType, TableType, PotSize, PlantStatus, PlantType } from '@package/database'
 
 // ---- Interfaz auxiliar ----
 interface ProductCycleConnect {
@@ -51,17 +51,31 @@ const createValidatedProductsCycle = async (
 
   return programValid ? validProductsCycle : null
 }
+
 /** 
  * **Script de Seeding**
 */
 async function main() {
-  const dbUrl = process.env.DATABASE_URL
-  if (!dbUrl) throw new Error('DATABASE_URL no definida')
+  let rawUrl = process.env.DATABASE_URL
+  if (!rawUrl) throw new Error('DATABASE_URL no definida')
 
-  // Extraer host y nombre de la base de datos de la URL
-  const match = dbUrl.match(/@([\w\-.]+):\d+\/(\w+)/)
-  const host = match ? match[1] : 'desconocido'
-  const dbName = match ? match[2] : 'desconocida'
+  // Limpieza de la URL (Igual que en client.ts para consistencia)
+  const connectionString = rawUrl.replace(/^["']|["']$/g, '').trim()
+
+  // 3. Extracción basada en delimitadores específicos
+  // Host: Se encuentra entre el '@' y los ':' del puerto
+  // DB Name: Se encuentra entre el '/' y el '?' de los parámetros
+  const hostMatch = connectionString.match(/@([^:]+):/)
+  const dbMatch = connectionString.match(/\/([^/?]+)\?/)
+
+  let host = hostMatch ? hostMatch[1] : 'desconocido'
+  let dbName = dbMatch ? dbMatch[1] : 'desconocida'
+
+  // Caso especial para Neon
+  if (connectionString.includes('neon.tech') || connectionString.includes('neondb')) {
+    host = 'NeonDB (Cloud)'
+    dbName = 'neondb'
+  }
 
   console.log('\n')
   console.log('\x1b[33m┌──────────────────────────────────────────────────┐')
@@ -88,7 +102,6 @@ async function main() {
   await prisma.speciesImage.deleteMany({})
   await prisma.species.deleteMany({})
   await prisma.genus.deleteMany({})
-  await prisma.stock.deleteMany({})
   await prisma.location.deleteMany({})
 
   // Tablas de Planes
@@ -123,22 +136,21 @@ async function main() {
   // ---- Generar Mapas de Nombres a IDs (Genus) - necesarios para relacionar FKs ----
   // obtener los genus de la base de datos
   const genusDB = await prisma.genus.findMany()
-  // crear un mapa de nombres a IDs
+  // crear un mapa de nombres a IDs y Tipos para generar variantes
   const genusMap = genusDB.reduce(
-    (map: Record<string, string>, genus: { id: string; name: string }) => {
-      map[genus.name] = genus.id
-
+    (map: Record<string, {id: string, type: PlantType}>, genus) => {
+      map[genus.name] = { id: genus.id, type: genus.type }
       return map
     },
-    {} as Record<string, string>,
+    {} as Record<string, {id: string, type: PlantType}>,
   )
 
   // ---- Insertar Species y Variants ----
   for (const sp of species) {
     const { genus, variants, ...rest } = sp
-    const genusId = genusMap[genus.name]
+    const genusData = genusMap[genus.name]
 
-    if (!genusId) {
+    if (!genusData) {
       console.warn(`
         ❌  Error: El Genero NO es válido
 
@@ -153,13 +165,7 @@ async function main() {
     const createdSpecies = await prisma.species.create({
       data: {
         ...rest,
-        genus: { connect: { id: genusId } }, // Conexión con genus
-        stock: {
-          create: {
-            quantity: sp.stock.quantity,
-            available: sp.stock.available,
-          },
-        },
+        genus: { connect: { id: genusData.id } }, // Conexión con genus
         images: {
           createMany: {
             data: sp.images.map((url) => ({ url })),
@@ -168,7 +174,7 @@ async function main() {
       },
     })
 
-    // Crear Variantes si existen en el seed
+    // Crear Variantes Hardcodeadas (si existen)
     if (variants && variants.length > 0) {
       await prisma.productVariant.createMany({
         data: variants.map(v => ({
@@ -176,7 +182,7 @@ async function main() {
           size: v.size,
           price: v.price,
           quantity: v.quantity,
-          available: v.quantity > 0
+          available: v.available
         }))
       })
     }
@@ -224,7 +230,7 @@ async function main() {
 
   // ---- Insertar Plants ----
   for (const plant of plants) {
-    const { species, location, ...rest } = plant
+    const { species, location, currentSize, ...rest } = plant
 
     const speciesId = speciesMap[species.name]
 
@@ -239,14 +245,18 @@ async function main() {
     const data: {
       species: { connect: { id: string } }
       pottingDate?: Date
+      currentSize: PotSize
+      status: PlantStatus
       location?: { connect: { id: string } }
     } = {
       ...rest,
-      species: { connect: { id: speciesId } }, // Conexión correcta con la species
+      species: { connect: { id: speciesId } },
+      currentSize: currentSize,
+      status: 'AVAILABLE'
     }
 
     if (locationId) {
-      data.location = { connect: { id: locationId } } // Conexión correcta con la location
+      data.location = { connect: { id: locationId } }
     }
 
     await prisma.plant.create({

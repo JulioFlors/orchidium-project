@@ -1,10 +1,13 @@
 import type { Metadata } from 'next'
 
-import { Footer, Sidebar, TopMenu } from '@/components'
+import { Footer, Sidebar, Header } from '@/components'
 import { getPlantsNavigation, getSearchSuggestions } from '@/actions'
 
 export const metadata: Metadata = {
-  title: 'PristinoPlant | Tienda',
+  title: {
+    template: 'PristinoPlant | %s',
+    default: 'PristinoPlant | Shop',
+  },
 }
 
 export default async function ShopLayout({ children }: { children: React.ReactNode }) {
@@ -16,9 +19,9 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <TopMenu plantsNavData={plantsNavData} suggestions={suggestions} />
+      <Header plantsNavData={plantsNavData} suggestions={suggestions} />
 
-      <Sidebar />
+      <Sidebar suggestions={suggestions} />
 
       <main className="tds-sm:mx-9 tds-xl:mx-12 mx-6 mt-14 grow">{children}</main>
 

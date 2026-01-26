@@ -20,12 +20,7 @@ export const getSpeciesByType = async (plantType: PlantType) => {
             type: true,
           },
         },
-        stock: {
-          select: {
-            quantity: true,
-            available: true,
-          },
-        },
+        variants: true,
       },
 
       where: {
@@ -39,11 +34,13 @@ export const getSpeciesByType = async (plantType: PlantType) => {
       },
     })
 
-    return species.map((specie) => ({
-      ...specie,
-      // Se aplana la estructura de las imágenes.
-      images: specie.images.map((image) => image.url),
-    }))
+    return species.map((specie) => {
+      return {
+        ...specie,
+        // Se aplana la estructura de las imágenes.
+        images: specie.images.map((image) => image.url),
+      }
+    })
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('Error fetching species by type:', error)

@@ -16,9 +16,9 @@ export async function authenticate(_prevState: string | undefined, formData: For
     if (error instanceof AuthError) {
       switch (error.type) {
         case 'CredentialsSignin':
-          return 'Credenciales Inválidas.'
+          return 'No podemos identificar esta combinación de correo electrónico y contraseña'
         default:
-          return 'Algo salió mal.'
+          return 'Algo salió mal'
       }
     }
     throw error

@@ -4,6 +4,8 @@ export * from './auth/logout'
 
 export * from './auth/register'
 
+export * from './auth/verify-email'
+
 export * from './navigation/get-plants-navigation'
 
 export * from './product/get-all-species'

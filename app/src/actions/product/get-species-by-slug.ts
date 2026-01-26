@@ -11,12 +11,7 @@ export const getSpeciesBySlug = async (slug: string) => {
             url: true,
           },
         },
-        stock: {
-          select: {
-            quantity: true,
-            available: true,
-          },
-        },
+        variants: true,
         genus: true,
       },
       where: {

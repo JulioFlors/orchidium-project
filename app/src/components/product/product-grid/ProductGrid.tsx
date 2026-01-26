@@ -10,8 +10,8 @@ interface Props {
 export function ProductGrid({ products, index }: Props) {
   return (
     <div className="mt-9 grid grid-cols-2 gap-x-[4%] gap-y-6 sm:grid-cols-3 2xl:gap-x-[4.5%]">
-      {products.map((product) => (
-        <ProductGridItem key={product.slug} index={index} product={product} />
+      {products.map((product, i) => (
+        <ProductGridItem key={product.slug} index={index < 0 ? -1 : index + i} product={product} />
       ))}
     </div>
   )

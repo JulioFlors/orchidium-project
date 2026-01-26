@@ -4,11 +4,11 @@ import { CheckoutView } from './ui/CheckoutView'
 
 // Metadata SEO
 export const metadata: Metadata = {
-  title: 'PristinoPlant | Finalizar Compra',
+  title: 'Finalizar Compra',
   description:
     'Procede al pago y finaliza la compra de tus plantas seleccionadas en PristinoPlant.',
   openGraph: {
-    title: 'PristinoPlant | Finalizar Compra',
+    title: 'Finalizar Compra',
     description:
       'Estás a un paso de tener tus plantas. Completa tu compra de forma segura en PristinoPlant.',
     url: 'https://pristinoplant.vercel.app/checkout',

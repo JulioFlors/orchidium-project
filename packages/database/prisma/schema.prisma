@@ -49,6 +49,11 @@ enum PotSize {
   NRO_14
 }
 
+enum PlantStatus {
+  AVAILABLE // En inventario, lista para venta o crecimiento
+  MOTHER    // Planta madre, ocupa espacio pero no se vende
+}
+
 enum TaskStatus {
   CANCELLED // Cancelada por Clima/Lluvia/Usuario
   COMPLETED // OK
@@ -110,29 +115,24 @@ model Species {
   id          String  @id @default(uuid())
   name        String  @unique
   slug        String  @unique
-  price       Int     @default(0)
   description String?
 
   genus   Genus  @relation(fields: [genusId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   genusId String
 
-  stock   Stock  @relation(fields: [stockId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  stockId String
-
   plants   Plant[]
   images   SpeciesImage[]
   variants ProductVariant[]
 
-  @@unique([genusId, stockId])
   @@index([genusId])
 }
 
 model ProductVariant {
-  id        String  @id @default(uuid())
-  size      PotSize // Tamaño de la maceta
-  price     Int // Precio para este tamaño específico
-  quantity  Int     @default(0) // stock especifico para este tamaño
-  available Boolean @default(false)
+  id        String   @id @default(uuid())
+  size      PotSize
+  price     Int
+  quantity  Int      @default(0)
+  available Boolean  @default(false)
 
   species   Species @relation(fields: [speciesId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   speciesId String
@@ -142,13 +142,6 @@ model ProductVariant {
 
   @@unique([speciesId, size])
   @@index([speciesId])
-}
-
-model Stock {
-  id        String    @id @default(uuid())
-  quantity  Int       @default(0)
-  available Boolean   @default(false)
-  species   Species[]
 }
 
 model SpeciesImage {
@@ -187,8 +180,10 @@ model FloweringEvent {
 }
 
 model Plant {
-  id          String    @id @default(uuid())
+  id          String      @id @default(uuid())
   pottingDate DateTime?
+  currentSize PotSize
+  status      PlantStatus @default(AVAILABLE)
 
   species   Species @relation(fields: [speciesId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   speciesId String
@@ -203,6 +198,7 @@ model Plant {
 
   @@index([speciesId])
   @@index([locationId])
+  @@index([status])
 }
 
 // ---- Gestión de cultivo ---- //
@@ -282,8 +278,8 @@ model AutomationSchedule {
   fertilizationProgram   FertilizationProgram? @relation(fields: [fertilizationProgramId], references: [id])
   fertilizationProgramId String?
 
-  phytosanitaryProgram   PhytosanitaryProgram? @relation(fields: [phytosanitaryProgramId], references: [id])
-  phytosanitaryProgramId String?
+  phytosanitaryProgram   PhytosanitaryProgram? @relation(fields: [phytosanetaryProgramId], references: [id])
+  phytosanetaryProgramId String?
 
   taskLogs TaskLog[]
 

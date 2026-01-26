@@ -4,7 +4,7 @@ export function ProductGridItemSkeleton() {
   return (
     <div className="mb-6 flex flex-col overflow-hidden px-1 pt-1">
       {/* Placeholder para la Imagen */}
-      <div className="relative aspect-square w-full rounded-xs bg-neutral-200" />
+      <div className="relative aspect-square w-full rounded bg-neutral-200" />
 
       {/* Placeholder para los Detalles */}
       <div className="mt-1 flex flex-col space-y-2">

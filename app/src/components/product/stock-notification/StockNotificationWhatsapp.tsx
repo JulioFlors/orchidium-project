@@ -86,21 +86,21 @@ export function StockNotificationWhatsapp({ productName }: Props) {
   return (
     <div className="mt-3">
       {/* Contenedor principal */}
-      <h3 className="text-primary -tracking-2 mb-3 font-semibold">
-        Este artículo no está disponible
+      <h3 className="text-primary mb-3 font-semibold tracking-wide">
+        No hay stock disponible actualmente
       </h3>
 
       {/* Si el envío fue exitoso, muestra el mensaje de éxito */}
       {submitSuccess && (
-        <span className="text-blue-tesla font-medium">
-          Le enviaremos un WhatsApp cuando vuelva a haber existencias del artículo.
+        <span className="text-action font-medium">
+          Le enviaremos un WhatsApp cuando vuelva a haber existencias de la planta.
         </span>
       )}
 
       {/* Si el formulario no es visible Y el envío no ha sido exitoso, muestra el botón para abrir el formulario */}
       {!isFormVisible && !submitSuccess && (
         <Link className="underline-link" href="#" role="button" onClick={handleShowForm}>
-          Deseo recibir un WhatsApp cuando haya existencias de este artículo
+          Deseo recibir un WhatsApp cuando haya existencias de esta planta
         </Link>
       )}
 
@@ -108,7 +108,7 @@ export function StockNotificationWhatsapp({ productName }: Props) {
       {isFormVisible && (
         <form onSubmit={handleSubmit}>
           <div>
-            <label className="text-secondary-404 font-semibold" htmlFor="whatsapp-notif-name">
+            <label className="text-secondary font-semibold" htmlFor="whatsapp-notif-name">
               Nombre
             </label>
 
@@ -149,7 +149,7 @@ export function StockNotificationWhatsapp({ productName }: Props) {
 
           <div>
             <label
-              className="text-secondary-404 mt-3 block font-semibold"
+              className="text-secondary mt-3 block font-semibold"
               htmlFor="whatsapp-notif-phone"
             >
               WhatsApp

@@ -28,7 +28,7 @@ MQTT_CONFIG = {
     # Intervalo para enviar pings de 'keepalive' al broker MQTT.
     "PING_INTERVAL": 60//2, # keepalive//2
     # Intervalo para revisar mensajes MQTT entrantes.
-    "CHECK_INTERVAL": 10, # seg
+    "CHECK_INTERVAL": 1, # seg
     # Intervalo para publicar el estado `online` para confirmar conectividad
     "PUBLISH_INTERVAL": 300, # 5 minutos
     # tiempo máximo que (connect, check_msg, ping) esperará antes de fallar y lanzar una excepción.

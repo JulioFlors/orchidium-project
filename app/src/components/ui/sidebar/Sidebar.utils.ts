@@ -1,10 +1,9 @@
+import type { Variants } from 'motion/react'
+
 /**
- * Maneja la accesibilidad del sidebar, incluyendo el enfoque del teclado y el bloqueo del scroll del body.
- *
- * @param isSidebarOpen - Indica si el sidebar está abierto.
- * @param navRef - Una referencia al elemento nav del sidebar.
- * @param setSidebarRoute - Una función para establecer la ruta activa.
- * @returns Una función de limpieza para eliminar el event listener del teclado, o undefined si no es necesario.
+ * GESTIONA la accesibilidad dentro del sidebar.
+ * Mapea lo elementos que pueden/deben recibir el foco
+ * y no permite que el `focus` escape hacia el `body`.
  */
 export function handleAccessibility(
   isSidebarOpen: boolean,
@@ -19,8 +18,6 @@ export function handleAccessibility(
   }
 
   if (navRef.current) {
-    // 'navRef.current' es null al inicio y si el sidebar no está en la página.
-    // También es null si el sidebar se quita de la página.
     const focusableElements = navRef.current.querySelectorAll<HTMLElement>(
       'a, button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
     )
@@ -63,28 +60,26 @@ export function handleAccessibility(
     }
   }
 
-  // Pasa cuando el sidebar no está en la página o está cerrado.
-  return () => {
-    /* No hay nada que limpiar */
-  }
+  // eslint-disable-next-line prettier/prettier
+  return () => { }
 }
 
-export const motionProps = {
+export const motionProps: Variants = {
   initial: { x: '80%', opacity: 0 },
   animate: {
     x: 0,
     opacity: 1,
     transition: {
-      x: { duration: 0.5, ease: 'easeOut' as any },
-      opacity: { duration: 0.3, ease: 'easeOut' as any, delay: 0.1 },
+      x: { duration: 0.5, ease: 'easeOut' },
+      opacity: { duration: 0.3, ease: 'easeOut', delay: 0.1 },
     },
   },
   exit: {
     x: '80%',
     opacity: 0,
     transition: {
-      x: { duration: 0.6, ease: 'easeIn' as any },
-      opacity: { duration: 0.4, ease: 'easeIn' as any, delay: 0.1 },
+      x: { duration: 0.6, ease: 'easeIn' },
+      opacity: { duration: 0.4, ease: 'easeIn', delay: 0.1 },
     },
   },
 }

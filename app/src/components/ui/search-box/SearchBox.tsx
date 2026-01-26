@@ -5,13 +5,16 @@ import type { SearchSuggestion } from '@/actions'
 import Link from 'next/link'
 import clsx from 'clsx'
 import { useRouter } from 'next/navigation'
-import { useRef, useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { IoSearchOutline, IoCloseOutline } from 'react-icons/io5'
+import { IoCloseOutline } from 'react-icons/io5'
 
-import { handleFocusSearchInput } from '@/components'
+import { SearchIcon } from '@/components'
 import { useUIStore } from '@/store'
 
+// ----------------------------------------
+//  Funciones Auxiliares
+// ----------------------------------------
 /**
  * Resalta las coincidencias de búsqueda dentro de un texto dado.
  *
@@ -71,6 +74,10 @@ function filterSuggestions(
   return results.slice(0, limit)
 }
 
+// ----------------------------------------
+//  Props
+// ----------------------------------------
+
 const motionProps = {
   initial: { opacity: 0, scale: 0.8, y: -10 },
   animate: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } },
@@ -78,7 +85,7 @@ const motionProps = {
 } as const
 
 interface SearchBoxProps {
-  isTopMenu?: boolean
+  isHeader?: boolean
   suggestions?: SearchSuggestion[]
 }
 
@@ -91,7 +98,7 @@ interface SearchBoxProps {
  *
  * @component
  * @param {SearchBoxProps} props - Las propiedades del componente.
- * @param {boolean} [props.isTopMenu=false] - Adapta su comportamiento y UI al Header y al Sidebar.
+ * @param {boolean} [props.isHeader=false] - Adapta su comportamiento y UI al Header y al Sidebar.
  * @param {SearchSuggestion[]} props.suggestions - Un array con los datos precargados para filtrar y mostrar como sugerencias.
  *
  * @behavior
@@ -100,46 +107,71 @@ interface SearchBoxProps {
  * - Al hacer clic en una sugerencia, navega a la página de detalle del producto `/product/[slug]`.
  * - Utiliza el store de Zustand (`useUIStore`) para gestionar el término de búsqueda global.
  */
-export function SearchBox({ isTopMenu = false, suggestions = [] }: SearchBoxProps) {
+export function SearchBox({ isHeader = false, suggestions = [] }: SearchBoxProps) {
+  // ----- Hooks de Next.js -----
   const router = useRouter()
 
-  // Referencias a elementos del DOM
+  // ---- Referencias a elementos del DOM ----
   const searchRef = useRef<HTMLInputElement | null>(null)
   const resultsRef = useRef<HTMLDivElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
 
-  // Estados globales de Zustand
-  const closeSidebar = useUIStore((state) => state.closeSidebar)
-  const openSearchBox = useUIStore((state) => state.openSearchBox)
-  const closeSearchBox = useUIStore((state) => state.closeSearchBox)
-  const searchTerm = useUIStore((state) => state.searchTerm)
-  const setSearchTerm = useUIStore((state) => state.setSearchTerm)
+  // ----- Estados globales (Zustand) -----
+  const { closeSearchBox, closeSidebar, searchTerm, setSearchTerm, isSearchBoxExpanded } =
+    useUIStore()
 
-  // Estado local para los resultados de la busqueda
-  const [searchResults, setSearchResults] = useState<SearchSuggestion[]>([])
-
-  // Estado local para visibilidad de resultados
+  // ----- Estados locales -----
   const [isResultsVisible, setIsResultsVisible] = useState(false)
 
-  // ---- Actualiza los resultados de búsqueda (only species, min 2 chars, max 5 results) ----
-  useEffect(() => {
-    const filteredResults = filterSuggestions(searchTerm, suggestions)
-
-    setSearchResults(filteredResults)
+  // ----------------------------------------
+  //  Lógica de Filtrado
+  // ----------------------------------------
+  // Actualiza los resultados de búsqueda
+  // (only species, min 2 chars, max 5 results)
+  // Se usa useMemo para derivar el estado
+  // (en lugar de useEffect con setState)
+  const searchResults = useMemo(() => {
+    return filterSuggestions(searchTerm, suggestions)
   }, [searchTerm, suggestions])
 
-  // ---- Manejo de visibilidad de resultados de búsqueda (focus/blur) ----
+  // ----------------------------------------
+  //  Lógica de Focus
+  // ----------------------------------------
+  // Solo auto-enfocamos si estamos en el Header y se ha expandido.
   useEffect(() => {
-    const handleFocusOut = (event: FocusEvent) => {
-      // Verificar si el foco se movió fuera del input del SearchBox y del contenedor de los resultados
-      if (
-        searchRef.current &&
-        !searchRef.current.contains(event.relatedTarget as Node) &&
-        resultsRef.current &&
-        !resultsRef.current.contains(event.relatedTarget as Node)
-      ) {
-        setIsResultsVisible(false) // Ocultar los resultados
-      }
+    if (isHeader && isSearchBoxExpanded) {
+      const timer = setTimeout(() => {
+        if (searchRef.current) {
+          searchRef.current.focus()
+        }
+      }, 350)
+      // 300ms de la animación + 50ms de espera adicional
+      // Esperamos a que la animación termine/DOM esté listo
+
+      return () => clearTimeout(timer)
+    }
+  }, [isHeader, isSearchBoxExpanded])
+
+  // ----------------------------------------
+  //  Gestiona la visibilidad
+  //  de los resultados de búsqueda (FocusOut)
+  // ----------------------------------------
+  useEffect(() => {
+    const handleFocusOut = (_event: FocusEvent) => {
+      // Usamos setTimeout para permitir que el foco se mueva al nuevo elemento antes de verificar
+      setTimeout(() => {
+        const newFocus = document.activeElement
+
+        // Verificar si el foco se movió fuera del input del SearchBox y del contenedor de los resultados
+        if (
+          searchRef.current &&
+          !searchRef.current.contains(newFocus) &&
+          resultsRef.current &&
+          !resultsRef.current.contains(newFocus)
+        ) {
+          setIsResultsVisible(false) // Ocultar los resultados
+        }
+      }, 0)
     }
 
     // Verifica si el contenedor del componente se ha renderizado correctamente en el DOM
@@ -160,9 +192,12 @@ export function SearchBox({ isTopMenu = false, suggestions = [] }: SearchBoxProp
         container.removeEventListener('focusout', handleFocusOut)
       }
     }
-  }, [setIsResultsVisible, isTopMenu, searchTerm, openSearchBox, closeSearchBox])
+  }, [setIsResultsVisible])
 
-  //mostrar los resultados de búsqueda cuando el input recibe el foco.
+  // ----------------------------------------
+  //  Gestiona la visibilidad
+  //  de los resultados de búsqueda (Focus)
+  // ----------------------------------------
   useEffect(() => {
     const inputElement = searchRef.current
 
@@ -182,8 +217,26 @@ export function SearchBox({ isTopMenu = false, suggestions = [] }: SearchBoxProp
     }
   }, [])
 
-  // --- Manejo de Tecla Enter ---
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+  // ----------------------------------------
+  //  Manejo de Submit (Enter) y Navegación
+  // ----------------------------------------
+  const handleInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    // Flecha Abajo o Tab: Mover foco a la lista
+    if (event.key === 'ArrowDown' || (event.key === 'Tab' && !event.shiftKey)) {
+      if (resultsRef.current) {
+        // Solo prevenimos el comportamiento por defecto (saltar al siguiente elemento)
+        // si efectivamente hay resultados a los que ir.
+        event.preventDefault()
+        const firstLink = resultsRef.current.querySelector('a')
+
+        if (firstLink) {
+          firstLink.focus()
+        }
+      }
+
+      return
+    }
+
     // Comprobar si la tecla presionada es Enter
     if (event.key === 'Enter') {
       const trimmedSearchTerm = searchTerm.trim()
@@ -198,81 +251,112 @@ export function SearchBox({ isTopMenu = false, suggestions = [] }: SearchBoxProp
         setSearchTerm('') //          Limpiar el término de búsqueda
         setIsResultsVisible(false) // Ocultar lista de sugerencias
         //                            Cerrar el area de trabajo correspondiente
-        void (isTopMenu ? closeSearchBox() : closeSidebar())
+        void (isHeader ? closeSearchBox() : closeSidebar())
       }
     }
   }
 
-  return (
-    <div ref={containerRef} className="relative w-full" tabIndex={-1}>
-      {/* Contenedor principal del SearchBox */}
+  // ----------------------------------------
+  //  Manejo de Teclado en la Lista de Resultados
+  // ----------------------------------------
+  const handleResultKeyDown = (event: React.KeyboardEvent<HTMLAnchorElement>, _slug: string) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      const nextSibling = event.currentTarget.nextElementSibling as HTMLElement
 
+      if (nextSibling) {
+        nextSibling.focus()
+      }
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      const prevSibling = event.currentTarget.previousElementSibling as HTMLElement
+
+      if (prevSibling) {
+        prevSibling.focus()
+      } else {
+        // Si no hay anterior, volver al input
+        if (searchRef.current) {
+          searchRef.current.focus()
+        }
+      }
+    }
+
+    if (event.key === ' ' || event.key === 'Spacebar') {
+      event.preventDefault()
+      // Simular clic
+      event.currentTarget.click()
+    }
+  }
+
+  // ----------------------------------------
+  //  Render (JSX)
+  // ----------------------------------------
+  return (
+    <div ref={containerRef} className="relative flex h-full w-full items-center" tabIndex={-1}>
+      {/* ---- Contenedor principal del SearchBox ----*/}
+      {/* ---- Contenedor del input de búsqueda ---- */}
       <div
         className={clsx(
-          'text-secondary relative mb-2 flex w-full items-center',
-          { 'mb-0!': isTopMenu }, // Elimina el margen inferior si se usa en el TopMenu
+          'text-primary relative mb-2 flex h-full w-full items-center',
+          { 'mb-0!': isHeader }, // Elimina el margen inferior si se usa en el Header
         )}
       >
-        {/* Contenedor del input de búsqueda */}
-        <IoSearchOutline className="pointer-events-none absolute left-2" size={20} />
-        {/* Icono de búsqueda */}
+        <SearchIcon className="text-secondary pointer-events-none absolute left-3 h-6 w-6" />
+
         <input
           ref={searchRef}
-          className={clsx(
-            'focus-search-box bg-search-box w-full rounded px-8 py-2 leading-6 font-medium',
-            {
-              'outline-search-box border-none bg-white outline-1 -outline-offset-1 transition-all duration-300 ease-in-out':
-                isTopMenu,
-            }, // Estilos específicos si se usa en el TopMenu
-          )}
+          className={clsx(isHeader ? 'header-searchbox' : 'sidebar-searchbox')}
           placeholder="Buscar"
           role="searchbox"
           type="text"
           value={searchTerm} // Enlazar el valor del input al useUIStore searchTerm
           onChange={(e) => setSearchTerm(e.target.value)} // Actualizar el searchTerm
           onFocus={() => setIsResultsVisible(true)} // Mostrar los resultados al enfocar el input
-          onKeyDown={handleKeyDown}
+          onKeyDown={handleInputKeyDown}
         />
         {searchTerm && (
           <button
             aria-label="Borrar búsqueda"
-            className="hover:bg-search-box-icon-hover absolute right-2 flex items-center rounded p-1 focus:outline-none"
+            className="hover:bg-hover-overlay absolute right-2 z-10 flex items-center rounded p-1 backdrop-blur-lg transition-all duration-300 ease-in focus:outline-none"
             tabIndex={-1}
             type="button"
             onClick={() => {
-              setSearchTerm('') // Limpiar el término de búsqueda al hacer clic
-              handleFocusSearchInput(true, containerRef) // Enfoca el input del searchBox
+              setSearchTerm('')
+              // Enfocamos usando la ref local
+              searchRef.current?.focus()
             }}
           >
             <IoCloseOutline className="cursor-pointer" size={16} />
-            {/* Icono de cierre */}
           </button>
         )}
       </div>
 
-      {/* Contenedor de resultados de búsqueda con animación */}
+      {/* ---- Contenedor de resultados de búsqueda con animación ---- */}
       <AnimatePresence>
         {isResultsVisible && searchTerm && searchResults.length > 0 && (
           <motion.div
             key="search-results"
             ref={resultsRef}
-            animate={motionProps.animate} // Aplicar la animación de entrada
-            className="border-search-box-outline absolute top-11 left-0 z-50! w-full rounded border bg-white py-1 text-black shadow-lg"
+            className={clsx(
+              'border-input-outline bg-canvas text-black-and-white absolute top-11 left-0 z-50! w-full rounded border py-1 shadow-lg',
+            )}
             data-testid="search-results-container"
-            exit={motionProps.exit} // Aplicar la animación de salida
-            initial={motionProps.initial} // Aplicar el estado inicial de la animación
+            {...motionProps}
           >
             {searchResults.map((result) => (
               <Link
                 key={`${result.slug}`}
-                className="search-results block"
+                className={clsx('search-results focus-bg-canvas block')}
                 href={`/product/${result.slug}`}
                 onClick={() => {
                   setSearchTerm('') //          Limpiar el término de búsqueda al seleccionar un resultado
                   setIsResultsVisible(false) // Ocultar los resultados al seleccionar un resultado
                   //                            Cerrar el area de trabajo correspondiente
-                  void (isTopMenu ? closeSearchBox() : closeSidebar())
+                  void (isHeader ? closeSearchBox() : closeSidebar())
                 }}
+                onKeyDown={(e) => handleResultKeyDown(e, result.slug)}
               >
                 {highlightMatch(result.name, searchTerm)}
                 {/* Mostrar el título del resultado resaltando las coincidencias con el término de búsqueda */}

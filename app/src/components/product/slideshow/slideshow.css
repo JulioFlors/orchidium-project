@@ -24,12 +24,18 @@
   object-fit: cover;
 }
 
-/* ---- Grosor para los iconos de flecha (pseudo-elementos ::after) de los botones de navegación ---- */
-/* Swiper usa pseudo-elementos ::after para mostrar los iconos de flecha. */
-/* Esta regla aplica un `font-weight: bold` para hacerlos más gruesos. */
-.main-swiper-interactive-area .swiper-button-prev::after,
-.main-swiper-interactive-area .swiper-button-next::after {
-  font-weight: 600;
+/* ---- Grosor y tamaño para los iconos de flecha (SVG) de los botones de navegación ---- */
+.main-swiper-interactive-area .swiper-button-prev svg,
+.main-swiper-interactive-area .swiper-button-next svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+/* Engrosar visualmente el icono SVG aplicando stroke del mismo color */
+.main-swiper-interactive-area .swiper-button-prev svg path,
+.main-swiper-interactive-area .swiper-button-next svg path {
+  stroke: currentColor;
+  stroke-width: 1px;
 }
 
 /* ---- Para que los botones de navegación se posicionen respecto a esta área ---- */

@@ -36,7 +36,7 @@ export function RadioOptionGroup<T extends string>({
           <label
             key={option.value}
             className={clsx(
-              'flex cursor-pointer items-center justify-between p-4 transition-colors duration-150',
+              'flex cursor-pointer items-center justify-between p-4 transition-colors duration-300',
               // Añade un borde inferior a todos menos al último
               optionIdx < options.length - 1 && 'border-b border-gray-300',
               // Estilos cuando la opción está seleccionada

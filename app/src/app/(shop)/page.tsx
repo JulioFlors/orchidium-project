@@ -5,11 +5,11 @@ import { initialData } from '@service/seeding'
 import { ProductGrid, Title, Subtitle } from '@/components'
 
 export const metadata: Metadata = {
-  title: 'PristinoPlant | Tienda',
+  title: 'Tienda',
   description:
     'Descubre nuestra colección de orquídeas, cactus, suculentas, rosas del desierto y kokedamas para interiores. Envíos garantizados y asesoramiento experto para tus plantas.',
   openGraph: {
-    title: 'PristinoPlant | Tienda',
+    title: 'Tienda',
     description:
       'Descubre nuestra colección de orquídeas, cactus, suculentas, rosas del desierto y kokedamas para interiores. Envíos garantizados y asesoramiento experto para tus plantas.',
     url: 'https://pristinoplant.vercel.app/',

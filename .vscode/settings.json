@@ -13,6 +13,8 @@
 	"material-icon-theme.folders.theme": "specific",
 	"material-icon-theme.folders.associations": {
 		"(shop)": "Cart",
+		"(orchidarium)": "Seeders",
+		"orchidarium": "Layout",
 		"actions": "Server",
 		"bh1750": "Svg",
 		"dashboard": "Benchmark",

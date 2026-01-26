@@ -1,14 +1,16 @@
 import type { Metadata } from 'next'
+
 import { notFound } from 'next/navigation'
 
 import { ProductGrid, Title, Subtitle } from '@/components'
 import { getAllSpeciesWithImages } from '@/actions'
 import { PlantType, Route } from '@/interfaces'
-import { staticRoutes } from '@/config'
+import { shopNavigation } from '@/config'
 
 export const metadata: Metadata = {
   title: 'Plantas',
-  description: 'Descubre nuestra amplia variedad de plantas, incluyendo Orquídeas, Cactus y Suculentas.',
+  description:
+    'Descubre nuestra amplia variedad de plantas, incluyendo Orquídeas, Cactus y Suculentas.',
 }
 
 // Awaited<...> se utiliza para obtener el tipo de retorno de una promesa.
@@ -27,7 +29,7 @@ const slugToPlantType: Record<string, PlantType> = {
 
 export default async function PlantsCategoryPage() {
   // Obtenemos la información de la ruta estática
-  const route: Route | undefined = staticRoutes.find((route) => route.slug === 'plants')
+  const route: Route | undefined = shopNavigation.find((route) => route.slug === 'plants')
 
   // Si no existe, mostrar 404
   if (!route) {

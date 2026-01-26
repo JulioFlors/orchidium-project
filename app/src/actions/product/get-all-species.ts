@@ -18,12 +18,7 @@ export const getAllSpeciesWithImages = async () => {
             type: true,
           },
         },
-        stock: {
-          select: {
-            quantity: true,
-            available: true,
-          },
-        },
+        variants: true,
       },
       orderBy: {
         name: 'asc',
@@ -31,10 +26,12 @@ export const getAllSpeciesWithImages = async () => {
     })
 
     // formatea los datos
-    return species.map((specie) => ({
-      ...specie,
-      images: specie.images.map((image) => image.url),
-    }))
+    return species.map((specie) => {
+      return {
+        ...specie,
+        images: specie.images.map((image) => image.url),
+      }
+    })
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('Error fetching all species:', error)

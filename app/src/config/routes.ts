@@ -1,6 +1,7 @@
 import { Route } from '@/interfaces'
 
-export const staticRoutes: Route[] = [
+// Estas alimentan el Header y Sidebar de la tienda pública.
+export const shopNavigation: Route[] = [
   {
     name: 'Plantas',
     slug: 'plants',
@@ -43,39 +44,85 @@ export const staticRoutes: Route[] = [
       }, */
     ],
   },
-  /*   {
-    name: 'Accesorios',
-    slug: 'accesorios',
-    url: '/category/accesorios',
-    categories: [
-      {
-        name: 'Macetas',
-        slug: 'macetas',
-        url: '/category/accesorios/macetas',
-        image: '/placeholder.svg?height=200&width=200',
-      },
-      {
-        name: 'Herramientas',
-        slug: 'herramientas',
-        url: '/category/accesorios/herramientas',
-        image: '/placeholder.svg?height=200&width=200',
-      },
-    ],
-  }, */
+
   {
     name: 'Contacto',
     slug: 'contacto',
     url: '/about/contacto',
   },
+
   {
     name: 'Iniciar sesión',
     slug: 'login',
     url: '/auth/login',
   },
+]
+
+// =====================================================================
+// 2. RUTAS DE GESTIÓN (ORCHIDARIUM - CORE)
+// =====================================================================
+/*
+  ARQUITECTURA DE NAVEGACIÓN - CONTEXTO ADMINISTRACIÓN (ORCHIDARIUM)
+
+  A. Sidebar Izquierdo (Desktop) / Modal de Título (Móvil):
+     - Utiliza: `orchidariumMainRoutes`
+     - Propósito: Navegación PRINCIPAL del sistema de gestión (Core).
+     - Contenido: Herramientas de trabajo diario.
+       * Dashboard: Visión general.
+       * Inventario: Gestión de plantas/insumos.
+       * Planificador: Calendario y rutinas.
+       * Monitoreo: Sensores y actuadores.
+
+  B. Sidebar Derecho Global (Botón "Menú"):
+     - Utiliza: `orchidariumMenuRoutes`
+     - Propósito: Navegación de USUARIO, SALIDA y CONTEXTO GLOBAL.
+     - Contenido: Acciones meta-sistema.
+       * Perfil: Ajustes de cuenta personal.
+       * Ir a Tienda: Salir del admin a la vista pública.
+       * Cerrar Sesión.
+       * Tema: Preferencias de UI.
+
+*/
+
+// Rutas de Secciones de Gestion del Orquideario
+// A. El Sidebar Izquierdo Fijo (Desktop)
+// B. El Modal Pop-up que sale del Título (Móvil)
+export const orchidariumMainRoutes: Route[] = [
   {
     name: 'Dashboard',
     slug: 'dashboard',
-    url: '/dashboard',
-    protected: true,
+    url: '/orchidarium',
+  },
+  {
+    name: 'Inventario',
+    slug: 'inventory',
+    url: '/orchidarium/inventory',
+  },
+  {
+    name: 'Planificador',
+    slug: 'planner',
+    url: '/orchidarium/planner',
+  },
+  {
+    name: 'Monitoreo IoT',
+    slug: 'monitoring',
+    url: '/orchidarium/monitoring',
+  },
+  {
+    name: 'Configuración',
+    slug: 'settings',
+    url: '/orchidarium/settings',
+  },
+]
+
+// =====================================================================
+// A. RUTAS DE NAVEGACIÓN del hearder modo desktop
+// B. BOTÓN MENÚ EN HEADER que abre el sidebar derecho modo mobile
+// =====================================================================
+export const orchidariumMenuRoutes: Route[] = [
+  {
+    name: 'Tienda',
+    slug: 'shop',
+    url: '/',
   },
 ]

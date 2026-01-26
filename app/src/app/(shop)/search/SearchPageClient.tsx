@@ -18,7 +18,7 @@ export default function SearchPageClient({ results, searchTerm }: Props) {
       {/* --- Título de la página de resultados --- */}
       <h1
         aria-labelledby="category-heading"
-        className="tracking-4 text-primary tds-sm:leading-9 tds-sm:text-[26px] tds-sm:tracking-2 mb-2 pt-8 text-[23.5px] leading-7 font-extralight antialiased"
+        className="text-primary tds-sm:leading-9 tds-sm:text-[26px] tds-sm:tracking-tight mb-2 pt-8 text-[23.5px] leading-7 font-extralight tracking-tighter antialiased"
         id=" category-heading"
       >
         Resultados de{' '}

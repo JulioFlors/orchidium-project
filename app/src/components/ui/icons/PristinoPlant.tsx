@@ -5,14 +5,13 @@ interface Props extends SVGProps<SVGSVGElement> {
   width?: string
 }
 
-export function PristinoPlant({ fillColor = '#171A20', width = '7rem', ...props }: Props) {
+export function PristinoPlant({ fillColor = 'currentColor', className, ...props }: Props) {
   return (
     <svg
+      className={`h-8 w-28 ${className || ''}`}
       fill="none"
-      height="1.75rem" // 2.1rem Ajusta el tamaño según sea necesario
       preserveAspectRatio="xMidYMid meet" // Mantiene la proporción
       viewBox="-35 0 1075 170" // Ajusta el viewBox según sea necesario
-      width={width} // 8rem Ajusta el tamaño según sea necesario
       xmlns="http://www.w3.org/2000/svg"
       {...props}
     >

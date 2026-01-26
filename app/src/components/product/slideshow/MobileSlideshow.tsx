@@ -38,12 +38,13 @@ export function MobileSlideshow({ isAvailable, className, images, title }: Props
           } as React.CSSProperties
         }
       >
-        {images.map((image) => (
+        {images.map((image, index) => (
           <SwiperSlide key={image}>
             <Image
               alt={title}
               className="object-cover"
               height={2000}
+              priority={index === 0}
               src={`/plants/${image}`}
               width={2000}
             />

@@ -7,7 +7,7 @@ export const getStockBySlug = async (slug: string): Promise<number> => {
     const species = await prisma.species.findFirst({
       where: { slug },
       include: {
-        stock: {
+        variants: {
           select: {
             quantity: true,
           },
@@ -15,11 +15,12 @@ export const getStockBySlug = async (slug: string): Promise<number> => {
       },
     })
 
-    // Si no se encuentra la especie o su stock, devolvemos 0
-    return species?.stock?.quantity ?? 0
+    if (!species) return 0
+
+    return species.variants.reduce((total, variant) => total + variant.quantity, 0)
   } catch (error) {
     // eslint-disable-next-line no-console
-    console.error(`Error al obtener eel stock de ${slug}: ${error}`)
+    console.error(`Error al obtener el stock de ${slug}: ${error}`)
 
     return 0
   }

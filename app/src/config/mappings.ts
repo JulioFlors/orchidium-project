@@ -24,10 +24,19 @@ export const PlantTypeLabels: Record<PlantType, string> = {
 }
 
 export const PotSizeLabels: Record<PotSize, string> = {
-  [PotSize.NRO_5]: 'Nro 5',
-  [PotSize.NRO_7]: 'Nro 7',
-  [PotSize.NRO_10]: 'Nro 10',
-  [PotSize.NRO_14]: 'Nro 14',
+  [PotSize.NRO_5]: 'P5',
+  [PotSize.NRO_7]: 'P7',
+  [PotSize.NRO_10]: 'P10',
+  /* [PotSize.NRO_12]: 'P12', */
+  [PotSize.NRO_14]: 'P14',
+}
+
+export const PotSizeDimensions: Record<PotSize, string> = {
+  [PotSize.NRO_5]: '5cm',
+  [PotSize.NRO_7]: '7cm',
+  [PotSize.NRO_10]: '10cm',
+  /* [PotSize.NRO_12]: '12cm', */
+  [PotSize.NRO_14]: '14cm',
 }
 
 export const ZoneTypeLabels: Record<ZoneType, string> = {

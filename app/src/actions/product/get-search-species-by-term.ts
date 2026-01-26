@@ -47,17 +47,17 @@ export const getSearchSpeciesByTerm = async (searchTerm: string) => {
         genus: {
           select: { name: true, type: true },
         },
-        stock: {
-          select: { quantity: true, available: true },
-        },
+        variants: true,
       },
     })
 
     // Devolvemos los datos formateados
-    return species.map((specie) => ({
-      ...specie,
-      images: specie.images.map((image) => image.url),
-    }))
+    return species.map((specie) => {
+      return {
+        ...specie,
+        images: specie.images.map((image) => image.url),
+      }
+    })
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error('Error searching species:', error)

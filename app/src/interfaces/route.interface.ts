@@ -1,4 +1,6 @@
-// Route/ruta -> Representa las opciones asociadas a cada apartado del TopMenu/Sidebar
+import type { ReactNode } from 'react'
+
+// Route/ruta -> Representa las opciones asociadas a cada apartado del Header/Sidebar
 // route: Plant -> category: [Orchid, Adenium_Obesum, Cactus, Succulent]
 // category: Orchid -> group: [Cattleya, Dendrobium, Dimerandra, Enciclea]
 
@@ -26,4 +28,32 @@ export interface Category {
   slug: string
   url: string
   image?: string
+}
+
+export interface AdminNavModule {
+  slug: string
+  name: string
+  basePath: string
+  icon: ReactNode
+  dropdownLayout: 'rich' | 'simple'
+  sidebarItems: SidebarItem[]
+}
+
+export interface SidebarItem {
+  name: string
+  url: string
+  icon?: ReactNode
+  description?: string
+  image?: string
+}
+
+// Interfaz unificada para los items del menú
+export interface NavItem {
+  key: string
+  label: string
+  href: string
+  isActive: boolean
+  hasDropdown?: boolean
+  dropdownType?: 'shop' | 'rich' | 'simple'
+  childrenData?: Route | SidebarItem[]
 }

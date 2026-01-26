@@ -2,22 +2,28 @@
 
 import type { Metadata } from 'next'
 
-import { PageNotFound } from '@/components'
-import { Footer, Sidebar, TopMenu } from '@/components'
+import { Footer, Header, PageNotFound, Sidebar } from '@/components'
+import { getPlantsNavigation, getSearchSuggestions } from '@/actions'
 
 export const metadata: Metadata = {
-  title: 'PristinoPlant | Error',
-  description: 'Ha ocurrido un accidente en nuestro vivero | Error',
+  title: 'Error',
+  description: 'Ha ocurrido un accidente en nuestro Orquideario | Error',
 }
 
-export default function ErrorPage() {
+export default async function ErrorPage() {
+  // Usamos Promise.all para cargar todos los datos en paralelo.
+  const [suggestions, plantsNavData] = await Promise.all([
+    getSearchSuggestions(),
+    getPlantsNavigation(),
+  ])
+
   return (
     <div className="flex min-h-dvh flex-col">
-      <TopMenu />
+      <Header plantsNavData={plantsNavData} suggestions={suggestions} />
 
-      <Sidebar />
+      <Sidebar suggestions={suggestions} />
 
-      <main className="flex-grow px-6 sm:px-9 xl:px-12">
+      <main className="tds-sm:mx-9 tds-xl:mx-12 mx-6 mt-14 grow">
         <PageNotFound title="Error" />
       </main>
 

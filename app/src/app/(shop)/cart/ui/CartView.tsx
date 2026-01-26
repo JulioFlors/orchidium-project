@@ -57,7 +57,7 @@ export function CartView() {
           {itemsInCart === 0 ? (
             <div className="tds-lg:mt-11 tds-xl:px-12 mt-[22%] w-full px-0 sm:px-9">
               <div>
-                <p className="tds-lg:text-start -tracking-1 tds-lg:text-[19px] my-auto max-w-[75ch] text-center text-[16px] leading-5 font-medium">
+                <p className="tds-lg:text-start tds-lg:text-[19px] my-auto max-w-[75ch] text-center text-[16px] leading-5 font-medium tracking-wide">
                   Su carrito está vacío.
                 </p>
               </div>
@@ -84,12 +84,12 @@ export function CartView() {
                 {/* ---- Tag Continúa comprando  ---- */}
                 {/* El self-start evitará que el Link se estire a todo lo ancho debido a su padre flex-col */}
                 {/* <div className="tds-lg:mb-0 mt-6 mb-8 flex flex-col">
-                  <p className="-tracking-2 max-w-[75ch] font-semibold">
+                  <p className="tracking-wide max-w-[75ch] font-semibold">
                     Le faltan $ 10 de compra para obtener el envío gratuito
                   </p>
 
                   <Link
-                    className="-tracking-2 underline-secondary mt-0.5 self-start"
+                    className="tracking-wide underline-secondary mt-0.5 self-start"
                     href="/category/plants"
                   >
                     Continúa comprando
@@ -111,7 +111,7 @@ export function CartView() {
                           >
                             <Image
                               alt={product.name}
-                              className="tds-lg:h-[90px] tds-lg:w-[90px] tds-lg:min-w-[90px] tds-lg:mb-0 mb-[5px] aspect-square h-20 w-20 min-w-20 rounded-xs object-cover"
+                              className="tds-lg:h-[90px] tds-lg:w-[90px] tds-lg:min-w-[90px] tds-lg:mb-0 mb-[5px] aspect-square h-20 w-20 min-w-20 rounded object-cover"
                               height={80}
                               src={`/plants/${product.images[0]}`}
                               width={80}
@@ -126,26 +126,25 @@ export function CartView() {
                             id={`${product.slug}__link`}
                             tabIndex={-1} // Evita que reciba focus al navegar con Tab
                           >
-                            <p className="-tracking-2 max-w-[75ch] font-semibold">{product.name}</p>
+                            <p className="max-w-[75ch] font-semibold tracking-wide">
+                              {product.name}
+                            </p>
                           </Link>
 
-                          <p className="max-w-[75ch] pt-[3px] tracking-normal">Maceta, P10</p>
+                          <p className="max-w-[75ch] pt-[3px]">Maceta, P10</p>
 
                           <div className="flex pt-[3px]">
                             {/* ---- Selector de Cantidad ---- */}
                             <QuantityDropdown quantity={quantity} onQuantityChanged={setQuantity} />
-                            <button
-                              className="underline-secondary cursor-pointer tracking-normal"
-                              type="button"
-                            >
+                            <button className="underline-secondary cursor-pointer" type="button">
                               Quitar
                             </button>
                           </div>
                         </div>
                         {/* ---- lineitem__price ---- // */}
                         <div className="lineitem__price">
-                          <p className="-tracking-2 max-w-[75ch] font-semibold">
-                            {formatPrice(product.price)}
+                          <p className="max-w-[75ch] font-semibold tracking-wide">
+                            {formatPrice(product.variants[0].price)}
                           </p>
                         </div>
                       </div>
@@ -159,7 +158,7 @@ export function CartView() {
                 {/* ---- Order Summary - Resumen del pedido ---- */}
                 <div className="order-summary">
                   {/* ---- Order Summary - Title ---- */}
-                  <h2 className="tracking-4 text-primary tds-sm:text-xl tds-sm:leading-7 pt-0 pb-2 text-[17px] leading-5 font-semibold transition-all duration-300 ease-in-out">
+                  <h2 className="text-primary tds-sm:text-xl tds-sm:leading-7 pt-0 pb-2 text-[17px] leading-5 font-semibold tracking-tighter transition-all duration-300 ease-in-out">
                     Resumen del pedido
                   </h2>
 
@@ -172,7 +171,7 @@ export function CartView() {
                       <span className="text-right">Cobro a destino</span>
                     </div>
 
-                    <div className="tracking-4 text-primary tds-sm:text-xl tds-sm:leading-7 flex items-center justify-between py-2 text-[17px] leading-5 font-semibold transition-all duration-300 ease-in-out">
+                    <div className="text-primary tds-sm:text-xl tds-sm:leading-7 flex items-center justify-between py-2 text-[17px] leading-5 font-semibold tracking-tighter transition-all duration-300 ease-in-out">
                       <h2>Subtotal</h2>
                       <h2 translate="no">{formatPrice(10)}</h2>
                     </div>
@@ -184,7 +183,7 @@ export function CartView() {
                   <div className="checkout-button">
                     <div className="my-2.5 flex w-full justify-center">
                       <Link
-                        className="btn-primary -tracking-2 tds-lg:max-w-none inline-block w-full max-w-125 justify-center align-middle"
+                        className="btn-primary tds-lg:max-w-none inline-block w-full max-w-125 justify-center align-middle tracking-wide"
                         href="/checkout/address"
                       >
                         Pagar

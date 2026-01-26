@@ -1,9 +1,9 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { IoChevronDownSharp, IoCheckmarkSharp } from 'react-icons/io5'
+import { IoChevronDownSharp, IoCheckmarkCircleOutline } from 'react-icons/io5'
 import clsx from 'clsx'
-import { AnimatePresence, motion } from 'motion/react'
+import { AnimatePresence, motion, Variants } from 'motion/react' // Quitamos Transition
 
 interface Props {
   quantity: number
@@ -47,10 +47,20 @@ export function QuantityDropdown({ quantity, onQuantityChanged }: Props) {
 
   // Variantes de animación para el panel del dropdown
   // Similar a lo que viste en la documentación de Motion/Framer Motion
-  const dropdownPanelVariants = {
+  const dropdownPanelVariants: Variants = {
     initial: { opacity: 0, scale: 0.95, y: -10 }, // Comienza invisible y ligeramente escalado/desplazado
-    animate: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' as any } }, // Anima a visible y tamaño normal
-    exit: { opacity: 0, scale: 0.95, y: -10, transition: { duration: 0.15, ease: 'easeIn' as any } }, // Anima al salir
+    animate: {
+      opacity: 1,
+      scale: 1,
+      y: 0,
+      transition: { duration: 0.2, ease: 'easeOut' as any }, // eslint-disable-line @typescript-eslint/no-explicit-any
+    }, // Anima a visible y tamaño normal
+    exit: {
+      opacity: 0,
+      scale: 0.95,
+      y: -10,
+      transition: { duration: 0.15, ease: 'easeIn' as any }, // eslint-disable-line @typescript-eslint/no-explicit-any
+    }, // Anima al salir
   }
 
   return (
@@ -85,7 +95,7 @@ export function QuantityDropdown({ quantity, onQuantityChanged }: Props) {
             <motion.ul
               key="quantity-dropdown-panel" // Key es importante para AnimatePresence
               animate="animate" // Animar a este estado cuando entra
-              className="border-search-box-outline absolute top-7 -left-0.5 z-2 max-h-48 w-max rounded border bg-white py-1 shadow-lg focus:outline-none"
+              className="border-input-outline bg-surface absolute top-7 -left-0.5 z-2 max-h-48 w-max rounded border py-1 shadow-lg focus:outline-none"
               exit="exit" // Animar a este estado cuando sale
               initial="initial" // Estado inicial de las variantes
               role="listbox"
@@ -96,8 +106,8 @@ export function QuantityDropdown({ quantity, onQuantityChanged }: Props) {
                   key={optionValue}
                   aria-selected={quantity === optionValue}
                   className={clsx(
-                    'hover:bg-hover flex min-h-8 min-w-18 cursor-pointer items-center justify-between px-5 py-1 text-start leading-6',
-                    quantity === optionValue && 'bg-search-box-icon-hover font-semibold', // Estilo para opción seleccionada
+                    'hover:bg-hover-overlay flex min-h-8 min-w-18 cursor-pointer items-center justify-between px-5 py-1 text-start leading-6',
+                    quantity === optionValue && 'text-primary font-semibold', // Estilo para opción seleccionada
                   )}
                   role="option"
                   onClick={() => handleSelection(optionValue)}
@@ -106,7 +116,9 @@ export function QuantityDropdown({ quantity, onQuantityChanged }: Props) {
                   <span>{optionValue}</span>
 
                   {/*---- Icono de check para seleccionada ----*/}
-                  {quantity === optionValue && <IoCheckmarkSharp className="ml-2 h-4 w-4" />}
+                  {quantity === optionValue && (
+                    <IoCheckmarkCircleOutline className="text-primary l-2 h-4 w-4" />
+                  )}
                 </li>
               ))}
             </motion.ul>

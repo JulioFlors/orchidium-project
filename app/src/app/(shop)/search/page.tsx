@@ -7,12 +7,13 @@ import { getSearchSpeciesByTerm } from '@/actions'
 import { ProductGridSkeleton } from '@/components'
 
 interface Props {
-  searchParams: {
+  searchParams: Promise<{
     term?: string
-  }
+  }>
 }
 
-export default async function SearchPage({ searchParams }: Props) {
+export default async function SearchPage(props: Props) {
+  const searchParams = await props.searchParams
   const searchTerm = searchParams.term || ''
 
   // Si no hay término de búsqueda, redirigimos a la página de inicio.
@@ -42,7 +43,7 @@ function SearchPageFallback({ searchTerm }: { searchTerm: string }) {
     <div className="mt-9">
       <h1
         aria-labelledby="category-heading"
-        className="tracking-4 text-primary tds-sm:leading-9 tds-sm:text-[26px] tds-sm:tracking-2 mb-2 pt-8 text-[23.5px] leading-7 font-extralight antialiased"
+        className="text-primary tds-sm:leading-9 tds-sm:text-[26px] tds-sm:tracking-tight mb-2 pt-8 text-[23.5px] leading-7 font-extralight tracking-tighter antialiased"
       >
         Resultados de <span className="font-medium text-balance hyphens-auto">{searchTerm}</span>
       </h1>

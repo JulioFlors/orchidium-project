@@ -1,4 +1,51 @@
-# 🌸 ORCHIDIUM PROJECT
+# 🌸 PristinoPlant | Orchidarium
+
+---
+
+## Design System
+
+### Azules (Acciones y Marca)
+
+Estos son los colores principales de interacción.
+
+| Hex | Variable Sugerida | OKLCH (Luz / Croma / Matiz) | Uso |
+| --- | --- | --- | --- |
+| `#6488ea` | `--color-action-hover-dark` | `oklch(61.6% 0.162 264.4)` | Hover en Modo Oscuro (Ilumina). |
+| `#3e6ae1` | `--color-action` | `oklch(56.3% 0.191 263.8)` | **Color Principal** (Botones, Links). |
+| `#3457b1` | `--color-action-hover` | `oklch(45.6% 0.163 264.4)` | Hover en Modo Claro (Oscurece). |
+
+---
+
+### Grises Oscuros (Textos Principales y Fondos)
+
+| Hex | Variable Sugerida | OKLCH | Uso y Explicación |
+| --- | --- | --- | --- |
+| `#171A20` | `--color-primary` | `oklch(18.2% 0.007 265)` | Texto principal (Títulos). Es casi negro pero "frío". |
+| `#393C41` | `--color-secondary` | `oklch(33.2% 0.005 256)` | Fondos secundarios o tarjetas oscuras. |
+
+---
+
+### 3. Grises Medios (Textos Secundarios y Bordes)
+
+| Hex | Variable Sugerida | OKLCH | Uso y Explicación |
+| --- | --- | --- | --- |
+| `#5C5E62` | `--color-label` | `oklch(46.3% 0.004 260)` | Etiquetas, placeholders de inputs. |
+| `#757575` | `--color-disabled` | `oklch(53.9% 0 0)` | Texto dentro de un botón desactivado. |
+| `#8E8E8E` | `--color-accessibility` | `oklch(63.7% 0 0)` | Iconos secundarios o bordes fuertes. |
+
+---
+
+### Grises Claros y Blancos (Fondos y Superficies)
+
+| Hex | Variable Sugerida | OKLCH | Uso |
+| --- | --- | --- | --- |
+| `#A2A3A5` | `--color-disabled-underline` | `oklch(68.6% 0.005 264)` | Líneas decorativas en elementos deshabilitados. |
+| `#D0D1D2` | `--color-input-outline` | `oklch(84.6% 0.003 264)` | Borde de inputs inactivos. |
+| `#E8E8E8` | `--color-input-hover` | `oklch(92.4% 0 0)` | Fondo circular al hacer hover en un icono. |
+| `#F2F2F2` | `--color-hover` | `oklch(95.6% 0 0)` | Fondo general al hacer hover en filas/items. |
+| `#F4F4F4` | `--color-input` | `oklch(96.4% 0 0)` | Fondo de los inputs (gris muy pálido). |
+
+---
 
 ## Base de Conocimientos
 

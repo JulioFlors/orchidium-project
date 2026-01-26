@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { AddressForm } from './ui/AddressForm'
 
 export const metadata: Metadata = {
-  title: 'PristinoPlant | Facturación y envío',
+  title: 'Facturación y envío',
 }
 
 export default function AddressPage() {

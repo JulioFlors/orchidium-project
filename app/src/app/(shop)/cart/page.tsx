@@ -4,11 +4,11 @@ import { CartView } from './ui/CartView'
 
 // Metadata SEO
 export const metadata: Metadata = {
-  title: 'PristinoPlant | Su Carrito',
+  title: 'Su Carrito',
   description:
     'Gestiona tus plantas seleccionadas y prepárate para finalizar tu compra en PristinoPlant.',
   openGraph: {
-    title: 'PristinoPlant | Su Carrito',
+    title: 'Su Carrito',
     description: 'Revisa tus plantas seleccionadas. Un paso más cerca de tu colección ideal.',
     url: 'https://pristinoplant.vercel.app/cart',
     siteName: 'PristinoPlant',

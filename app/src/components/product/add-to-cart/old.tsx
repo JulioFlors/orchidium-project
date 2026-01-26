@@ -13,7 +13,8 @@ interface Props {
 
 export function AddToCart({ product }: Props) {
   /*   const addProductToCart = useCartStore((state) => state.addProductTocart) */
-  const isProductAvailable = product.stock?.available ?? false
+  // Refactor: Calcular disponibilidad global basada en variantes
+  const isProductAvailable = product.variants.some((v) => v.available && v.quantity > 0)
 
   /*   const [size, setSize] = useState<Size | undefined>() */
   const [quantity, setQuantity] = useState<number>(1)
@@ -25,7 +26,7 @@ export function AddToCart({ product }: Props) {
       // id: product.id,
       slug: product.slug,
       name: product.name,
-      price: product.price,
+      price: product.variants[0]?.price, // TODO: Usar el precio de la variante seleccionada
       quantity: quantity,
       // size: size,
       image: product.images[0],
