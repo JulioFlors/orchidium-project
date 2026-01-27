@@ -42,12 +42,13 @@
         "DB_POSTGRES_URL_NON_POOLING",
         "DB_POSTGRES_URL",
         "DB_POSTGRES_USER",
-        "DB_STACK_SECRET_SERVER_KEY""DB_USER",
+        "DB_STACK_SECRET_SERVER_KEY",
+        "DB_USER",
         "MQTT_BROKER_URL",
         "MQTT_CLIENT_ID_INGEST",
         "MQTT_CLIENT_ID_SCHEDULER",
         "MQTT_HOST",
-        "MQTT_PORT",
+        "MQTT_PORT"
       ]
     },
     "lint": {
