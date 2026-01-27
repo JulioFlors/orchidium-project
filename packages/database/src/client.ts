@@ -5,7 +5,6 @@ import { PrismaNeon } from '@prisma/adapter-neon'
 import { PrismaPg } from '@prisma/adapter-pg'
 import ws from 'ws'
 
-// ---- Configuración de Colores para Logs ----
 const Colors = {
   RESET: '\x1b[0m',
   RED: '\x1b[91m',
@@ -14,26 +13,22 @@ const Colors = {
   YELLOW: '\x1b[93m'
 }
 
-// 1. Validar existencia de la variable
+// 1. Validación estricta de la variable de entorno
 const rawUrl = process.env.DATABASE_URL
 if (!rawUrl) {
-  // Nota: En tiempo de build de Vercel, si esto falla, detendrá el proceso explícitamente.
-  throw new Error(`❌ ${Colors.RED}DATABASE_URL no definida en las variables de entorno.${Colors.RESET}`)
+  throw new Error(`❌ ${Colors.RED}DATABASE_URL no definida. Revisa las variables de entorno en Vercel.${Colors.RESET}`)
 }
 
-// 2. Limpieza básica de comillas
 const connectionString = rawUrl.replace(/^["']|["']$/g, '').trim()
 
-// 3. Configurar WebSocket solo si es necesario (Neon Serverless Driver)
+// 2. Configuración de WebSocket para el driver Serverless
 neonConfig.webSocketConstructor = ws
 
 const adapter = (() => {
-  // Detectamos entorno
   const isNeonDatabase = connectionString.includes('neon.tech')
-  const isVercel = process.env.VERCEL === '1'
+  const isServerless = process.env.VERCEL === '1'
 
-  // --- LOG DE DEBUG ---
-  // Enmascaramos la contraseña
+  // Log de depuración (ocultando contraseña)
   const maskedUrl = connectionString.replace(/:([^:@]+)@/, ':****@')
   console.log(`${Colors.YELLOW}🔍 Conectando a: ${maskedUrl}${Colors.RESET}`)
 
@@ -41,39 +36,35 @@ const adapter = (() => {
   // CASO A: MODO NEON (Cloud)
   // ---------------------------------------------------------
   if (isNeonDatabase) {
-    // A.1: Entorno Vercel (Production/Preview)
-    // Usamos el driver @neondatabase/serverless que maneja mejor las conexiones
-    // en entornos serverless y edge, incluso si usamos el Pooler.
-    if (isVercel) {
+    // A.1: Entorno Vercel (Serverless)
+    if (isServerless) {
       console.log(`${Colors.CYAN}⚡ [Prisma] Entorno VERCEL detectado: Usando Adapter NEON (Serverless)${Colors.RESET}`)
 
+      // --- CORRECCIÓN CRÍTICA: Limpieza segura de URL ---
       try {
-        // --- CORRECCIÓN CRÍTICA AQUÍ ---
-        // Usamos la API URL para manipular los parámetros de forma segura
-        const urlObj = new URL(connectionString)
+        const url = new URL(connectionString)
 
-        // El driver serverless de Neon prefiere manejar SSL internamente via WebSocket,
-        // pero NO debemos romper la cadena de query params.
-        urlObj.searchParams.delete('sslmode')
+        // Eliminamos sslmode de forma segura. 
+        // La clase URL se encarga de reordenar los '?' y '&' correctamente.
+        url.searchParams.delete('sslmode')
 
-        // Convertimos de nuevo a string. Esto asegura que si quedan params, empiecen con '?'
-        const cleanUrl = urlObj.toString()
+        const cleanUrl = url.toString()
 
         const pool = new NeonPool({ connectionString: cleanUrl })
         return new PrismaNeon(pool as any)
       } catch (error) {
-        console.error('Error parseando URL de Neon:', error)
-        // Fallback inseguro por si la URL no era válida, aunque rawUrl existía
+        console.error('Error parseando la URL de base de datos:', error)
+        // Fallback de emergencia
         const pool = new NeonPool({ connectionString })
         return new PrismaNeon(pool as any)
       }
     }
 
-    // A.2: Entorno Local (Desarrollo contra Neon)
+    // A.2: Entorno Local contra Neon
     console.log(`${Colors.CYAN}⚡ [Prisma] Modo NEON (Local) -> Usando Driver PG Standard con SSL${Colors.RESET}`)
     const pool = new Pool({
       connectionString,
-      ssl: true, // Forzamos SSL para local contra Neon
+      ssl: true,
       connectionTimeoutMillis: 20000,
       idleTimeoutMillis: 20000
     })
@@ -81,22 +72,18 @@ const adapter = (() => {
   }
 
   // ---------------------------------------------------------
-  // CASO B: ENTORNO LOCAL (Docker / Postgres local)
+  // CASO B: ENTORNO LOCAL (Postgres Standard)
   // ---------------------------------------------------------
   console.log(`${Colors.GREEN}💻 [Prisma] Entorno LOCAL detectado: Usando Adapter PG (TCP Standard)${Colors.RESET}`)
-
-  const poolConfig: PoolConfig = {
+  const pool = new Pool({
     connectionString,
     max: 10,
     connectionTimeoutMillis: 20000,
     idleTimeoutMillis: 20000
-  }
-
-  const pool = new Pool(poolConfig)
+  })
   return new PrismaPg(pool)
 })()
 
-// 4. Instanciación Singleton de Prisma
 const prismaClientSingleton = () => {
   return new PrismaClient({ adapter })
 }
