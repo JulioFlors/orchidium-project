@@ -1,0 +1,10 @@
+{
+  "name": "Sensors",
+  "description": "Environmental Monitoring Firmware",
+  "version": "0.4.0",
+  "date": "06-12-2025",
+  "notes_release": "Implementación de Detección Zombie + Publicación JSON Atómica + Actualización de Firmware con OTA + Apagado Controlado v2 + Boot.py + Lazy Imports + new Topic/cmd + Lógica for reboot the device + Interpretación de Errores MQTT v2",
+  "files": [
+    "main.py"
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "name": "@service/ingest",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/bundle.mjs",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/bundle.mjs --target=node23 --external:@prisma/client --external:mqtt --external:pg --external:@influxdata/influxdb3-client",
+    "start": "dotenv -e ../../.env -- node dist/bundle.mjs",
+    "dev": "dotenv -e ../../.env -- tsx src/index.ts"
+  },
+  "dependencies": {
+    "@influxdata/influxdb3-client": "1.4.0",
+    "@package/database": "workspace:*",
+    "@prisma/client": "7.0.1",
+    "mqtt": "5.14.1",
+    "pg": "8.16.3"
+  }
+}

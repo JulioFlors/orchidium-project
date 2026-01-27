@@ -1,0 +1,336 @@
+generator client {
+  provider               = "prisma-client"
+  output                 = "../src/generated/prisma"
+  runtime                = "nodejs"
+  moduleFormat           = "esm"
+  generatedFileExtension = "ts"
+  importFileExtension    = "ts"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---- Enums ---- //
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum ZoneType {
+  ZONA_A // Zona de Pruebas
+  ZONA_B
+  ZONA_C
+  ZONA_D
+}
+
+enum TableType {
+  MESA_1
+  MESA_2
+  MESA_3
+  MESA_4
+  MESA_5
+  MESA_6
+}
+
+enum PlantType {
+  ADENIUM_OBESUM
+  BROMELIAD
+  CACTUS
+  ORCHID
+  SUCCULENT
+}
+
+enum PotSize {
+  NRO_5
+  NRO_7
+  NRO_10
+  NRO_14
+}
+
+enum PlantStatus {
+  AVAILABLE // En inventario, lista para venta o crecimiento
+  MOTHER    // Planta madre, ocupa espacio pero no se vende
+}
+
+enum TaskStatus {
+  CANCELLED // Cancelada por Clima/Lluvia/Usuario
+  COMPLETED // OK
+  CONFIRMED // confirmación recibida, en espera para ejecutar
+  FAILED // Error técnico
+  IN_PROGRESS // Ejecutando acción
+  PENDING // Creada, esperando su hora
+  SKIPPED // Omitida
+  WAITING_CONFIRMATION // Esperando que el usuario llene el tanque de agrochemicals
+}
+
+enum TaskPurpose {
+  IRRIGATION // Aspersores
+  FERTIGATION // Fertirriego (Agua + Nutrientes)
+  FUMIGATION // Fumigación (Fitosanitarios)
+  HUMIDIFICATION // Nebulizadores
+  SOIL_WETTING // Humedecer Suelo
+}
+
+enum AgrochemicalType {
+  FERTILIZANTE
+  FITOSANITARIO
+}
+
+enum AgrochemicalPurpose {
+  // Fertilizantes
+  DESARROLLO
+  FLORACION
+  MANTENIMIENTO
+  // Fitosanitarios
+  ACARICIDA
+  BACTERICIDA
+  FUNGICIDA
+  INSECTICIDA
+}
+
+// ---- PristinoPlant | Tienda ---- //
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String
+  role          Role      @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Genus {
+  id      String    @id @default(uuid())
+  name    String    @unique
+  type    PlantType
+  species Species[]
+}
+
+model Species {
+  id          String  @id @default(uuid())
+  name        String  @unique
+  slug        String  @unique
+  description String?
+
+  genus   Genus  @relation(fields: [genusId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  genusId String
+
+  plants   Plant[]
+  images   SpeciesImage[]
+  variants ProductVariant[]
+
+  @@index([genusId])
+}
+
+model ProductVariant {
+  id        String   @id @default(uuid())
+  size      PotSize
+  price     Int
+  quantity  Int      @default(0)
+  available Boolean  @default(false)
+
+  species   Species @relation(fields: [speciesId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  speciesId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([speciesId, size])
+  @@index([speciesId])
+}
+
+model SpeciesImage {
+  id  String @id @default(uuid())
+  url String @unique
+
+  species   Species @relation(fields: [speciesId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  speciesId String
+
+  @@index([speciesId])
+}
+
+model Location {
+  id    String    @id @default(uuid())
+  zone  ZoneType
+  table TableType
+
+  plants Plant[] // Plantas ubicadas aquí
+
+  // No puede haber dos registros para la misma mesa en la misma zona
+  @@unique([zone, table])
+}
+
+model FloweringEvent {
+  id        String    @id @default(uuid())
+  startDate DateTime // Fecha de inicio de la floración
+  endDate   DateTime? // Fecha de fin (null si aún está en floración)
+
+  plant   Plant  @relation(fields: [plantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  plantId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([plantId])
+}
+
+model Plant {
+  id          String      @id @default(uuid())
+  pottingDate DateTime?
+  currentSize PotSize
+  status      PlantStatus @default(AVAILABLE)
+
+  species   Species @relation(fields: [speciesId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  speciesId String
+
+  location   Location? @relation(fields: [locationId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  locationId String?
+
+  FloweringEvent FloweringEvent[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([speciesId])
+  @@index([locationId])
+  @@index([status])
+}
+
+// ---- Gestión de cultivo ---- //
+
+model Agrochemical {
+  id          String              @id @default(uuid())
+  name        String              @unique
+  description String
+  type        AgrochemicalType
+  purpose     AgrochemicalPurpose
+  preparation String
+
+  fertilizationCycles FertilizationCycle[]
+  phytosanitaryCycles PhytosanitaryCycle[]
+  tasksExecuted       TaskLog[]
+}
+
+model FertilizationProgram {
+  id              String @id @default(uuid())
+  name            String @unique
+  weeklyFrequency Int
+
+  productsCycle FertilizationCycle[]
+  schedules     AutomationSchedule[]
+}
+
+model FertilizationCycle {
+  id       String @id @default(uuid())
+  sequence Int
+
+  agrochemical   Agrochemical @relation(fields: [agrochemicalId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  agrochemicalId String
+
+  program   FertilizationProgram @relation(fields: [programId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  programId String
+
+  // Integridad: No puede haber dos pasos iguales en el mismo programa
+  @@unique([programId, sequence])
+}
+
+model PhytosanitaryProgram {
+  id               String @id @default(uuid())
+  name             String @unique
+  monthlyFrequency Int
+
+  productsCycle PhytosanitaryCycle[]
+  schedules     AutomationSchedule[]
+}
+
+model PhytosanitaryCycle {
+  id       String @id @default(uuid())
+  sequence Int
+
+  agrochemical   Agrochemical @relation(fields: [agrochemicalId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  agrochemicalId String
+
+  program   PhytosanitaryProgram @relation(fields: [programId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  programId String
+
+  // Integridad: No puede haber dos pasos iguales en el mismo programa
+  @@unique([programId, sequence])
+}
+
+// ---- Planificación de tareas ---- //
+
+model AutomationSchedule {
+  id              String      @id @default(uuid())
+  name            String      @unique
+  description     String?
+  isEnabled       Boolean     @default(true)
+  purpose         TaskPurpose
+  cronTrigger     String
+  intervalDays    Int         @default(1)
+  durationMinutes Int         @default(10)
+  zones           ZoneType[]
+
+  fertilizationProgram   FertilizationProgram? @relation(fields: [fertilizationProgramId], references: [id])
+  fertilizationProgramId String?
+
+  phytosanitaryProgram   PhytosanitaryProgram? @relation(fields: [phytosanetaryProgramId], references: [id])
+  phytosanetaryProgramId String?
+
+  taskLogs TaskLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TaskLog {
+  id          String      @id @default(uuid())
+  scheduledAt DateTime
+  executedAt  DateTime    @default(now())
+  status      TaskStatus  @default(PENDING)
+  purpose     TaskPurpose
+  zones       ZoneType[]
+  duration    Int
+  notes       String?
+
+  agrochemical   Agrochemical? @relation(fields: [agrochemicalId], references: [id])
+  agrochemicalId String?
+
+  schedule   AutomationSchedule? @relation(fields: [scheduleId], references: [id])
+  scheduleId String?
+
+  @@index([scheduledAt])
+  @@index([status])
+}
+
+// ---- Resumen Historico de Influxdb ---- //
+
+model DailyEnvironmentStat {
+  id   String   @id @default(uuid())
+  date DateTime @db.Date
+  zone ZoneType
+
+  avgTemperature Float
+  minTemperature Float
+  maxTemperature Float
+
+  avgHumidity Float
+  minHumidity Float
+  maxHumidity Float
+
+  avgLightIntensity  Float
+  maxLightIntensity  Float
+  lightDurationHours Float
+
+  totalRainDuration Int
+
+  createdAt DateTime @default(now())
+
+  // Integridad: Solo un resumen por día por zona
+  @@unique([date, zone])
+  @@index([date])
+}

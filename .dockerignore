@@ -1,0 +1,23 @@
+# Ignora la carpeta de los módulos de Node
+node_modules
+**/node_modules
+dist
+**/dist
+
+# Ignora archivos de construcción y generación
+**/generated
+**/postgres
+
+# Archivos y carpetas específicos del entorno de desarrollo.
+.git
+.gitignore
+.next
+.env
+.env.local 
+.vscode
+.public
+.DS_Store
+
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*

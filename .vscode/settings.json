@@ -1,23 +1,43 @@
 {
-  "editor.formatOnSave": false,
-  "typescript.tsdk": "node_modules\\typescript\\lib",
-  "typescript.enablePromptUseWorkspaceTsdk": true,
-  "editor.codeActionsOnSave": {
-    "source.fixAll.eslint": "always"
-  },
-  "markdown.validate.enabled": true,
-  "CodeGPT.apiKey": "Google AI Studio",
-  "workbench.iconTheme": "material-icon-theme",
+	"typescript.tsdk": "node_modules\\typescript\\lib",
+	"typescript.enablePromptUseWorkspaceTsdk": true,
+	"editor.formatOnSave": true,
+	"editor.codeActionsOnSave": {
+		"source.fixAll.eslint": "always"
+	},
+	"[markdown]": {
+		"editor.defaultFormatter": "DavidAnson.vscode-markdownlint"
+	},
+	"workbench.iconTheme": "material-icon-theme",
 	"material-icon-theme.activeIconPack": "react",
 	"material-icon-theme.folders.theme": "specific",
 	"material-icon-theme.folders.associations": {
-    "postgres": "Database",
-    "migrations": "Prisma",
-    "store": "Store",
 		"(shop)": "Cart",
+		"(orchidarium)": "Seeders",
+		"orchidarium": "Layout",
+		"actions": "Server",
+		"bh1750": "Svg",
+		"dashboard": "Benchmark",
+		"firmware": "Core",
+		"influxdb": "Database",
+		"infrastructure": "Cluster",
+		"ingest": "Aws",
+		"login": "Secure",
+		"migrations": "Prisma",
+		"mosquitto": "Server",
+		"new-account": "Secure",
+		"ota": "Update",
+		"persistence": "Database",
+		"plant": "Seeders",
+		"plants": "Seeders",
+		"postgres": "Database",
 		"product": "Seeders",
 		"products": "Seeders",
-		"login": "Secure",
-		"new-account": "Secure",
-  }
+		"relay_modules": "Pipe",
+		"scheduler": "Job",
+		"secrets": "Config",
+		"sensors": "Environment",
+		"store": "Store",
+		"umqtt": "Aws",
+	},
 }

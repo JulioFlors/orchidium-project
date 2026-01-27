@@ -1,41 +1,130 @@
-version: '3.8'
-x-compose: true
-
 services:
-  # Base de Datos
-  postgres-db:
+  # ----------------------------------------------------------------
+  # Base de Datos Relacional (Gestión y E-commerce)
+  # ----------------------------------------------------------------
+  postgres:
     image: postgres:17.3
+    container_name: postgres
     restart: always
     environment:
       POSTGRES_USER: ${DB_USER}
-      POSTGRES_DB: ${DB_NAME}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-    volumes:
-      # Guarda los datos en la carpeta 'database/postgres'
-      - ./database/postgres:/var/lib/postgresql/data
+      POSTGRES_DB: ${DB_NAME}
     ports:
       - "5432:5432"
+    volumes:
+      - ./infrastructure/postgres/data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
 
+  # ----------------------------------------------------------------
   # Broker MQTT
-  broker-mqtt:
+  # ----------------------------------------------------------------
+  mosquitto:
     image: eclipse-mosquitto
+    container_name: mosquitto
     restart: always
     ports:
       - "1883:1883"
       - "9001:9001"
     volumes:
-      # Carga la configuración desde 'infrastructure/mosquitto/config'
       - ./infrastructure/mosquitto/config:/mosquitto/config
+      - ./infrastructure/mosquitto/data:/mosquitto/data
 
-  # Servicio de Ingesta
-  mqtt-ingest-service:
-   build:
-     context: ./web_app
-     dockerfile: Dockerfile.mqtt-service
-   restart: always
-   environment:
-     - DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@postgres-db:5432/${DB_NAME}
-     - MQTT_BROKER_URL=mqtt://broker-mqtt
-   depends_on:
-     - postgres-db
-     - broker-mqtt
+  # ----------------------------------------------------------------
+  # Base de Datos Series de Tiempo (InfluxDB v3 Core)
+  # ----------------------------------------------------------------
+  influxdb:
+    image: influxdb:3-core
+    container_name: influxdb
+    restart: always
+    ports:
+      - "8181:8181" 
+    volumes:
+      - ./infrastructure/influxdb/data:/var/lib/influxdb3/data
+    environment:
+      INFLUXD_ADMIN_TOKEN: ${INFLUX_TOKEN}
+    command:
+      - influxdb3
+      - serve
+      - --node-id=node0
+      - --object-store=file
+      - --data-dir=/var/lib/influxdb3/data
+      - --http-bind=0.0.0.0:8181
+
+  # ----------------------------------------------------------------
+  # Servicio de adquisición de datos MQTT
+  # ----------------------------------------------------------------
+  ingest:
+    container_name: ingest
+    build:
+      # El contexto de construcción debe apuntar a la raíz del monorepo
+      context: . 
+      dockerfile: services/ingest/Dockerfile
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+    environment:
+      # TODO: Cuando se termine el desarrollo cambiar a NODE_ENV: production
+      NODE_ENV: development
+      
+      # ---- Variables para entrypoint (Healthcheck) ----
+      DB_USER: ${DB_USER}
+      DB_HOST: postgres
+      
+      # ---- Variables para prisma y app ----
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:${DB_PORT}/${DB_NAME}?schema=public
+      
+      # ---- Configuración MQTT ----
+      MQTT_BROKER_URL: mqtt://mosquitto:1883
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID_INGEST}
+
+      # ---- Configuración InfluxDB ----
+      INFLUX_URL: http://influxdb:8181
+      INFLUX_TOKEN: ${INFLUX_TOKEN}
+      INFLUX_BUCKET: ${INFLUX_BUCKET}
+
+  # ----------------------------------------------------------------
+  # Servicio de Automatización (Scheduler)
+  # "El Cerebro": Lee Horarios (Postgres) -> Consulta Clima (Influx) -> Actúa (MQTT)
+  # ----------------------------------------------------------------
+  scheduler:
+    container_name: scheduler
+    build:
+      # Contexto raíz del monorepo
+      context: .
+      dockerfile: services/scheduler/Dockerfile
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
+      influxdb:
+        # Esperamos a que Influx arranque (aunque no tiene healthcheck nativo aun)
+        condition: service_started
+    environment:
+      # TODO: Cuando se termine el desarrollo cambiar a NODE_ENV: production
+      NODE_ENV: development
+      
+      # ---- Variables para entrypoint ----
+      DB_USER: ${DB_USER}
+      DB_HOST: postgres
+      
+      # ---- Variables para prisma ----
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:${DB_PORT}/${DB_NAME}?schema=public
+      
+      # ---- Configuración MQTT ----
+      MQTT_BROKER_URL: mqtt://mosquitto:1883
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID_SCHEDULER}
+
+      # ---- Configuración InfluxDB (Para consultar lluvia) ----
+      INFLUX_URL: http://influxdb:8181
+      INFLUX_TOKEN: ${INFLUX_TOKEN}
+      INFLUX_BUCKET: ${INFLUX_BUCKET}

@@ -1,0 +1,13 @@
+{
+  "name": "@service/seeding",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Script para poblar la base de datos con datos iniciales",
+  "scripts": {
+    "start": "dotenv -e ../../.env -- tsx src/seed-database.ts"
+  },
+  "dependencies": {
+    "@package/database": "workspace:*",
+    "bcryptjs": "3.0.3"
+  }
+}
