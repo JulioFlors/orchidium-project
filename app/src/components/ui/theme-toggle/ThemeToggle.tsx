@@ -4,6 +4,7 @@ import { useRef } from 'react'
 import { useTheme } from 'next-themes'
 import clsx from 'clsx'
 import dynamic from 'next/dynamic'
+import { VscColorMode } from 'react-icons/vsc'
 
 // Importamos el icono SIN SSR.
 // Esto significa que el servidor renderizará el botón vacío (o con el loading),
@@ -11,7 +12,7 @@ import dynamic from 'next/dynamic'
 const ThemeIcon = dynamic(() => import('@/components').then((mod) => mod.ThemeIcon), {
   ssr: false,
   // Un placeholder invisible del mismo tamaño para evitar saltos de layout
-  loading: () => <div aria-hidden="true" className="h-5 w-5" />,
+  loading: () => <VscColorMode className="text-primary h-5 w-5 animate-pulse" />,
 })
 
 interface Props {

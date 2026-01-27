@@ -15,6 +15,7 @@ import {
   PersonIcon,
   SearchBox,
   SearchIcon,
+  SidebarTrigger,
   ThemeToggle,
 } from '@/components'
 import { useUIStore } from '@/store'
@@ -26,7 +27,6 @@ interface Props {
 }
 
 export function Toolbar({ isOrchidarium, isAuthLayout, suggestions }: Props) {
-  const openSidebar = useUIStore((state) => state.openSidebar)
   const openSearchBox = useUIStore((state) => state.openSearchBox)
   const closeSearchBox = useUIStore((state) => state.closeSearchBox)
   const isSearchBoxExpanded = useUIStore((state) => state.isSearchBoxExpanded)
@@ -154,16 +154,9 @@ export function Toolbar({ isOrchidarium, isAuthLayout, suggestions }: Props) {
         </div>
       )}
 
-      {/* ---- Menu Button ---- */}
-      <button
-        aria-expanded={isSidebarOpen}
-        aria-label="Abrir menú"
-        className={clsx('menu-button focus-link-hover', isOrchidarium && 'tds-xl:hidden')}
-        type="button"
-        onClick={openSidebar}
-      >
-        Menú
-      </button>
+      {/* ---- Menu Button (OPTIMIZADO) ---- */}
+      {/* Usamos el componente aislado en lugar del botón HTML directo */}
+      <SidebarTrigger className={clsx(isOrchidarium && 'tds-xl:hidden')} />
     </>
   )
 }
