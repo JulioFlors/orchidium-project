@@ -6,19 +6,18 @@ import { PrismaPg } from '@prisma/adapter-pg'
 const Colors = {
   RESET: '\x1b[0m',
   RED: '\x1b[91m',
-  CYAN: '\x1b[96m',
   GREEN: '\x1b[92m',
-  YELLOW: '\x1b[93m'
+  BLUE: '\x1b[94m',
 }
 
-// 1. Validar existencia de la variable
+// ---- Validar existencia de la variable ----
 const connectionString = process.env.DATABASE_URL
 
 if (!connectionString) {
   throw new Error(`❌ ${Colors.RED}DATABASE_URL no definida.${Colors.RESET}`)
 }
 
-// 2. Configurar el Adapter
+// ---- Configurar el Adapter ----
 // Usamos el driver estándar 'pg' para TODO (Local y Vercel/Producción).
 // Vercel soporta conexiones TCP perfectamente en sus Serverless Functions.
 const adapter = (() => {
@@ -26,12 +25,12 @@ const adapter = (() => {
 
   // Log de depuración (ocultando contraseña)
   const maskedUrl = connectionString.replace(/:([^:@]+)@/, ':****@')
-  console.log(`${Colors.YELLOW}🔍 [Prisma] Conectando a: ${maskedUrl}${Colors.RESET}`)
+  console.log(`${Colors.BLUE}🔍 [Prisma] Conectando a: ${maskedUrl}${Colors.RESET}`)
 
   // Configuración del Pool
   const poolConfig: PoolConfig = {
     connectionString,
-    // Neon requiere SSL. En Vercel es mandatorio.
+    // Neon requiere SSL en Vercel
     // 'ssl: true' es equivalente a 'sslmode=require' pero más compatible con el objeto de config.
     ssl: true,
     // Timeouts generosos para evitar errores en "Cold Starts" de serverless
@@ -43,7 +42,7 @@ const adapter = (() => {
   const pool = new Pool(poolConfig)
 
   if (isVercel) {
-    console.log(`${Colors.CYAN}⚡ [Prisma] Entorno VERCEL detectado: Usando Adapter PG (Standard TCP)${Colors.RESET}`)
+    console.log(`${Colors.BLUE}📡 [Prisma] Entorno VERCEL detectado: Usando Adapter PG (Standard TCP)${Colors.RESET}`)
   } else {
     console.log(`${Colors.GREEN}💻 [Prisma] Entorno LOCAL: Usando Adapter PG (Standard TCP)${Colors.RESET}`)
   }
@@ -51,7 +50,7 @@ const adapter = (() => {
   return new PrismaPg(pool)
 })()
 
-// 3. Instanciación Singleton de Prisma
+// ---- Instanciación Singleton de Prisma ----
 const prismaClientSingleton = () => {
   return new PrismaClient({ adapter })
 }
