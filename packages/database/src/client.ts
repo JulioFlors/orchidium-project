@@ -1,5 +1,5 @@
 import { Pool as NeonPool, neonConfig } from '@neondatabase/serverless'
-import { Pool, type PoolConfig } from 'pg'
+import { Pool } from 'pg'
 import { PrismaClient } from './generated/prisma/client'
 import { PrismaNeon } from '@prisma/adapter-neon'
 import { PrismaPg } from '@prisma/adapter-pg'
