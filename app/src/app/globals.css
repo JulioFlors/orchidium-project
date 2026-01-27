@@ -123,13 +123,14 @@
 }
 
 @theme {
+  /* 23.1875rem; 371px */
   /* 26.9375rem; 431px */
   /* 37.5rem; 600px */
   /* 40.0625rem; 641px */
   /* 60rem; 960px */
   /* 60.0625rem; 961px*/
   /* 75rem; 1200px */
-  --breakpoint-tds-xs: 26.9375rem;
+  --breakpoint-tds-xs: 23.1875rem;
   --breakpoint-tds-sm: 40.0625rem;
   --breakpoint-tds-lg: 60.0625rem;
   --breakpoint-tds-xl: 75rem;
