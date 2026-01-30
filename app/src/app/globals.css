@@ -613,7 +613,10 @@
   }
 
   .search-button {
-    @apply flex items-center justify-center outline-none tds-sm:mx-2 mx-0.5 tds-xs:h-6 h-4 rounded;
+    @apply flex items-center justify-center;
+    @apply cursor-pointer outline-none rounded;
+    @apply h-4 tds-xs:h-6;
+    @apply mx-0.5 tds-sm:mx-2;
   }
 
   .cart-link {

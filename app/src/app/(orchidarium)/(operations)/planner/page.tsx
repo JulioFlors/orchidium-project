@@ -1,3 +1,9 @@
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'Planificador',
+}
+
 export default function PlannerPage() {
   return (
     <div>

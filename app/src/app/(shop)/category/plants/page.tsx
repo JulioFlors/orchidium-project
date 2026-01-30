@@ -4,8 +4,8 @@ import { notFound } from 'next/navigation'
 
 import { ProductGrid, Title, Subtitle } from '@/components'
 import { getAllSpeciesWithImages } from '@/actions'
-import { PlantType, Route } from '@/interfaces'
-import { shopNavigation } from '@/config'
+import { PlantType, ShopRoute } from '@/interfaces'
+import { shopRoutes } from '@/config'
 
 export const metadata: Metadata = {
   title: 'Plantas',
@@ -29,7 +29,7 @@ const slugToPlantType: Record<string, PlantType> = {
 
 export default async function PlantsCategoryPage() {
   // Obtenemos la información de la ruta estática
-  const route: Route | undefined = shopNavigation.find((route) => route.slug === 'plants')
+  const route: ShopRoute | undefined = shopRoutes.find((route) => route.slug === 'plants')
 
   // Si no existe, mostrar 404
   if (!route) {

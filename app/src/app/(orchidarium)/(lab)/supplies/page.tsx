@@ -1,3 +1,9 @@
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'Insumos Químicos',
+}
+
 export default function SuppliesPage() {
   return (
     <div>

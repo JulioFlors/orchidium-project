@@ -5,9 +5,9 @@ import type { PlantsNavData } from '@/actions'
 import Link from 'next/link'
 import Image from 'next/image'
 
-import { NavItem, Route, SidebarItem } from '@/interfaces'
+import { NavbarItem } from '@/interfaces'
 
-// Helper del Header
+// Helper del Header (Hardcoded mapping for catalog layout)
 const categoryWrapper: Record<string, string> = {
   orchids: 'orchid',
   adenium_obesum: 'adenium_obesum',
@@ -17,21 +17,25 @@ const categoryWrapper: Record<string, string> = {
 }
 
 interface Props {
-  activeItem: NavItem
+  activeItem: NavbarItem
   onClose: () => void
   plantsNavData: PlantsNavData[]
 }
 
 export function NavbarDropdown({ activeItem, onClose, plantsNavData }: Props) {
-  // --- A. SHOP LAYOUT ---
-  if (activeItem.dropdownType === 'shop') {
-    const route = activeItem.childrenData as Route
+  const { layout, children } = activeItem
 
+  if (!children) return null
+
+  // ===========================================================================
+  // A. CATALOG LAYOUT (e.g. Plants)
+  // ===========================================================================
+  if (layout === 'catalog' && children.categories) {
     return (
       <div className="mx-auto flex w-full justify-between px-20 py-15">
         {/* Columna Izquierda: Categorías */}
         <div className="-mx-4 flex flex-1">
-          {route.categories?.map((category) => {
+          {children.categories.map((category) => {
             const groupsInCategory = plantsNavData.filter(
               (gen) => gen.type.toLowerCase() === categoryWrapper[category.slug],
             )
@@ -66,24 +70,22 @@ export function NavbarDropdown({ activeItem, onClose, plantsNavData }: Props) {
         </div>
 
         {/* Columna Derecha: Featured Item */}
-        {route.featuredItem && (
+        {children.featuredItem && (
           <div className="ml-15 w-1/3 shrink-0">
-            {' '}
-            {/* Simplificado el margen */}
-            <Link href={route.featuredItem.url} tabIndex={-1} onClick={onClose}>
+            <Link href={children.featuredItem.url} tabIndex={-1} onClick={onClose}>
               <div className="h-[90%] overflow-hidden rounded">
                 <div className="relative aspect-video h-full w-full">
                   <Image
                     fill
                     priority
-                    alt={route.featuredItem.name}
+                    alt={children.featuredItem.name}
                     className="object-cover"
-                    src={route.featuredItem.image}
+                    src={children.featuredItem.image}
                   />
                 </div>
               </div>
               <p className="mt-3 block text-center text-xl font-semibold tracking-tighter antialiased">
-                {route.featuredItem.name}
+                {children.featuredItem.name}
               </p>
             </Link>
           </div>
@@ -92,15 +94,14 @@ export function NavbarDropdown({ activeItem, onClose, plantsNavData }: Props) {
     )
   }
 
-  // --- B. ORCHIDARIUM LAYOUTS ---
-  const items = activeItem.childrenData as SidebarItem[]
-
-  return (
-    <div className="mx-auto max-w-[1400px] px-12 py-10">
-      {activeItem.dropdownType === 'rich' ? (
-        // Grid con Imágenes
+  // ===========================================================================
+  // B. HYBRID LAYOUT (e.g. Inventory with Cards)
+  // ===========================================================================
+  if (layout === 'hybrid' && children.items) {
+    return (
+      <div className="mx-auto max-w-[1400px] px-12 py-10">
         <div className="grid grid-cols-4 gap-6">
-          {items.map((item) => (
+          {children.items.map((item) => (
             <Link
               key={item.url}
               className="group flex flex-col items-center gap-3 text-center"
@@ -127,33 +128,73 @@ export function NavbarDropdown({ activeItem, onClose, plantsNavData }: Props) {
             </Link>
           ))}
         </div>
-      ) : (
-        // Lista Simple con Iconos
-        <div className="grid grid-cols-4 gap-x-12 gap-y-6">
-          {items.map((item) => (
-            <Link
-              key={item.url}
-              className="group flex items-start gap-3"
-              href={item.url}
-              onClick={onClose}
-            >
-              <span className="text-secondary group-hover:text-primary mt-1 transition-colors">
-                {item.icon}
-              </span>
-              <div>
-                <h3 className="text-primary mb-1 text-sm font-bold decoration-2 underline-offset-4 group-hover:underline">
-                  {item.name}
-                </h3>
-                {item.description && (
-                  <p className="text-secondary text-xs leading-relaxed opacity-80">
-                    {item.description}
-                  </p>
-                )}
+      </div>
+    )
+  }
+
+  // ===========================================================================
+  // C. INFORMATIONAL LAYOUT (e.g. Dashboard, Admin)
+  // ===========================================================================
+  if (layout === 'informational') {
+    // 1. Renderizado por Grupos (Columnas)
+    if (children.groups) {
+      return (
+        <div className="mx-auto flex max-w-[1400px] justify-center gap-16 px-12 py-10">
+          {children.groups.map((group) => (
+            <div key={group.title} className="flex flex-col gap-4">
+              <h3 className="text-primary font-bold tracking-wide uppercase opacity-90">
+                {group.title}
+              </h3>
+              <div className="flex flex-col gap-3">
+                {group.items.map((item) => (
+                  <Link
+                    key={item.url}
+                    className="text-secondary hover:text-primary transition-colors"
+                    href={item.url}
+                    onClick={onClose}
+                  >
+                    {item.name}
+                  </Link>
+                ))}
               </div>
-            </Link>
+            </div>
           ))}
         </div>
-      )}
-    </div>
-  )
+      )
+    }
+
+    // 2. Renderizado Plano Simple (Icon + Text)
+    if (children.items) {
+      return (
+        <div className="mx-auto max-w-[1400px] px-12 py-10">
+          <div className="grid grid-cols-4 gap-x-12 gap-y-6">
+            {children.items.map((item) => (
+              <Link
+                key={item.url}
+                className="group flex items-start gap-3"
+                href={item.url}
+                onClick={onClose}
+              >
+                <span className="text-secondary group-hover:text-primary mt-1 transition-colors">
+                  {item.icon}
+                </span>
+                <div>
+                  <h3 className="text-primary mb-1 text-sm font-bold decoration-2 underline-offset-4 group-hover:underline">
+                    {item.name}
+                  </h3>
+                  {item.description && (
+                    <p className="text-secondary text-xs leading-relaxed opacity-80">
+                      {item.description}
+                    </p>
+                  )}
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )
+    }
+  }
+
+  return null
 }

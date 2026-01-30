@@ -6,6 +6,8 @@ export * from './header/animation'
 
 export * from './header/Header'
 
+export * from './header/Header.utils'
+
 export * from './header/Navbar'
 
 export * from './header/Backdrop'

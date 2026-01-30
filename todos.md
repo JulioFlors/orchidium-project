@@ -1,17 +1,6 @@
 # 📋 Tablero de Actividades - ORCHIDIUM PROJECT
 
-**Última Actualización:** 28-01-2026
-
----
-
-## 🎨 REFINAMIENTO DE UI/UX (Header)
-
-Objetivo: Lograr una experiencia de navegación "nativa" y fluida.
-
-* [x] **✨ Perfeccionamiento del NavbarDropdown (Mega Menu)**
-  * [x] **Transición de Altura (Height Morphing):** El contenedor base (`card`) debe adaptar su altura suavemente al contenido del nuevo ítem seleccionado, sin saltos bruscos.
-  * [x] **Cross-fade de Contenido:** Al cambiar entre ítems del menú (ej. de *Orquídeas* a *Insumos*), el contenido antiguo debe desvanecerse (`opacity: 0`) y el nuevo aparecer (`opacity: 1`) **sin movimientos espaciales** (sin deslizarse `x` o `y`).
-  * [ ] **Layouts Específicos:** El diseño visual y maquetación de las rejillas (Grids) finales se abordará **post-funcionalidad**, una vez definidos sus componentes y lógica operativa.
+**Última Actualización:** 29-01-2026
 
 ---
 
@@ -54,6 +43,17 @@ Una vez existan las vistas, inyectamos la "vida" al sistema.
 * [ ] **Gráficos:** Implementación de librería (ej. Recharts) para datos en tiempo real.
 * [ ] **Actuadores:** Interfaz de mando manual (Toggle Switches) para Riego/Luces.
 * [ ] **Orquestador Frontend:** Lógica JS para manejar `start_delay` y `duration` en acciones manuales.
+
+---
+
+## 🎨 REFINAMIENTO DE UI/UX (Header)
+
+Objetivo: Lograr una experiencia de navegación "nativa" y fluida.
+
+* [x] **✨ Perfeccionamiento del NavbarDropdown (Mega Menu)**
+  * [x] **Transición de Altura (Height Morphing):** El contenedor base (`card`) debe adaptar su altura suavemente al contenido del nuevo ítem seleccionado, sin saltos bruscos.
+  * [x] **Cross-fade de Contenido:** Al cambiar entre ítems del menú (ej. de *Orquídeas* a *Insumos*), el contenido antiguo debe desvanecerse (`opacity: 0`) y el nuevo aparecer (`opacity: 1`) **sin movimientos espaciales** (sin deslizarse `x` o `y`).
+  * [ ] **Layouts Específicos:** El diseño visual y maquetación de las rejillas (Grids) finales se abordará **post-funcionalidad**, una vez definidos sus componentes y lógica operativa.
 
 ---
 

@@ -4,13 +4,13 @@ import clsx from 'clsx'
 import Link from 'next/link'
 import { useRef, useEffect, useCallback } from 'react'
 
-import { NavItem } from '@/interfaces'
+import { NavbarItem } from '@/interfaces'
 
 interface Props {
-  items: NavItem[]
-  activeItem: NavItem | null
+  items: NavbarItem[]
+  activeItem: NavbarItem | null
   hoveredLink: HTMLElement | null
-  onItemHover: (item: NavItem, element: HTMLElement) => void
+  onItemHover: (item: NavbarItem, element: HTMLElement) => void
   navRef: React.RefObject<HTMLElement | null>
 }
 

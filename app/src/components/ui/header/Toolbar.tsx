@@ -24,17 +24,10 @@ interface Props {
   isOrchidarium: boolean
   isAuthLayout: boolean
   suggestions: SearchSuggestion[]
-  onDropdownClose?: (delay: number) => void // Propagación del evento
-  onDropdownOpen?: () => void // Propagación del evento
+  closeDropdown?: () => void
 }
 
-export function Toolbar({
-  isOrchidarium,
-  isAuthLayout,
-  suggestions,
-  onDropdownClose,
-  onDropdownOpen,
-}: Props) {
+export function Toolbar({ isOrchidarium, isAuthLayout, suggestions, closeDropdown }: Props) {
   const openSearchBox = useUIStore((state) => state.openSearchBox)
   const closeSearchBox = useUIStore((state) => state.closeSearchBox)
   const isSearchBoxExpanded = useUIStore((state) => state.isSearchBoxExpanded)
@@ -97,8 +90,6 @@ export function Toolbar({
                   key="search-input"
                   className="aceleracion-hardware z-20 flex h-full items-center"
                   onBlur={handleFocusOutSearch}
-                  onMouseEnter={() => onDropdownClose?.(500)}
-                  onMouseLeave={onDropdownOpen}
                   {...motionSearchBox}
                 >
                   <SearchBox isHeader suggestions={suggestions} />
@@ -109,10 +100,10 @@ export function Toolbar({
                   aria-label="Buscar"
                   className="search-button aceleracion-hardware"
                   type="button"
-                  onClick={openSearchBox}
-                  onFocus={openSearchBox}
-                  onMouseEnter={() => onDropdownClose?.(500)}
-                  onMouseLeave={onDropdownOpen}
+                  onClick={() => {
+                    openSearchBox()
+                    closeDropdown?.()
+                  }}
                   {...motionIconSearch}
                 >
                   <SearchIcon className="tds-icon" />
@@ -128,10 +119,11 @@ export function Toolbar({
               className="search-button focus-link-visible"
               type="button"
               // TODO: Conectar con openSearchModal() cuando se implemente el modal móvil
-              // eslint-disable-next-line no-console
-              onClick={() => console.log('Abrir Modal de Búsqueda Móvil')}
-              onMouseEnter={() => onDropdownClose?.(500)}
-              onMouseLeave={onDropdownOpen}
+
+              onClick={() => {
+                // console.log('Abrir Modal de Búsqueda Móvil')
+                closeDropdown?.()
+              }}
             >
               <SearchIcon className="tds-icon" />
             </button>
@@ -142,8 +134,7 @@ export function Toolbar({
             aria-label="Carrito de compras"
             className="cart-link focus-link"
             href="/cart"
-            onMouseEnter={() => onDropdownClose?.(500)}
-            onMouseLeave={onDropdownOpen}
+            onClick={() => closeDropdown?.()}
           >
             <div className="relative">
               <span className="text-black-and-white absolute -top-2 -right-2 rounded-full bg-emerald-500 px-1 text-xs font-bold" />
@@ -162,14 +153,13 @@ export function Toolbar({
             className="focus-link-hover toolbar-icon"
             href="/"
             title="Tienda"
-            onMouseEnter={() => onDropdownClose?.(500)}
-            onMouseLeave={onDropdownOpen}
+            onClick={() => closeDropdown?.()}
           >
             <IoStorefrontOutline size={20} />
           </Link>
 
           {/* ---- ThemeToggle ----*/}
-          <span onMouseEnter={() => onDropdownClose?.(500)} onMouseLeave={onDropdownOpen}>
+          <span onClick={() => closeDropdown?.()}>
             <ThemeToggle />
           </span>
 
@@ -179,8 +169,7 @@ export function Toolbar({
             className="focus-link-hover toolbar-icon mr-4"
             href="/orchidarium/account"
             title="Cuenta"
-            onMouseEnter={() => onDropdownClose?.(500)}
-            onMouseLeave={onDropdownOpen}
+            onClick={() => closeDropdown?.()}
           >
             <PersonIcon className="tds-icon" />
           </Link>
@@ -189,7 +178,7 @@ export function Toolbar({
 
       {/* ---- Menu Button (OPTIMIZADO) ---- */}
       {/* Usamos el componente aislado en lugar del botón HTML directo */}
-      <div onMouseEnter={() => onDropdownClose?.(500)} onMouseLeave={onDropdownOpen}>
+      <div onClick={() => closeDropdown?.()}>
         <SidebarTrigger className={clsx(isOrchidarium && 'tds-xl:hidden')} />
       </div>
     </>
