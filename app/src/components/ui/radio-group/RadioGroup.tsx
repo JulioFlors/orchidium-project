@@ -57,7 +57,7 @@ export function RadioGroup<T extends string>({
           </div>
 
           {/* Etiqueta de texto */}
-          <span className="tracking-wide text-label group-hover:text-primary peer-checked:text-primary ml-3 text-[13.5px] leading-5 font-semibold transition-colors duration-300 ease-in-out">
+          <span className="text-label group-hover:text-primary peer-checked:text-primary ml-3 text-[13.5px] leading-5 font-semibold tracking-wide transition-colors duration-300 ease-in-out">
             {option.label}
           </span>
         </label>

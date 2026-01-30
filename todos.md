@@ -1,65 +1,44 @@
-# 📋 Tablero de Actividades
+# 📋 Tablero de Actividades - ORCHIDIUM PROJECT
 
-**Fecha:** 18-01-2026
-**Estado General:** 🏗️ Fase de Construcción: Implementación del Layout "Tesla-Account" y Rutas de Gestión.
-
----
-
-## 🚀 FASE 1: ARQUITECTURA DE UI Y NAVEGACIÓN (Prioridad Alta)
-
-El objetivo inmediato es establecer el "esqueleto" visual del panel de administración antes de conectar los datos.
-
-### 1. 📐 Layout & Estructura Base
-
-* [ ] **Grid System (Escritorio vs Móvil):**
-  * [ ] Definir CSS Grid: Columna fija `280px` (Sidebar) + `1fr` (Contenido) para Desktop (`>= tds-lg`).
-  * [ ] Definir Stack: `1fr` (Solo contenido) para Mobile (`< tds-lg`).
-  * [ ] **Limpieza:** Asegurar que el layout del Orquideario **NO** herede componentes de la Tienda (SearchBox, Carrito).
-
-### 2. 📱 Navegación Móvil (Réplica Tesla)
-
-* [ ] **Componente `MobileSectionTrigger`:**
-  * [ ] Estructura: Botón que contiene `<h1>` con el título actual.
-  * [ ] **Estilos:**
-    * [ ] `ScrimIcon`: Círculo de 34px (invisible por defecto, gris en active).
-    * [ ] `Typography`: Texto `font-medium`, `text-lg`, con padding-left reservado para el icono.
-    * [ ] `Chevron`: Indicador visual de desplegable a la derecha.
-* [ ] **Modal de Navegación (Menú Full-Screen):**
-  * [ ] **Backdrop:** Fondo con `bg-canvas/60` y **`backdrop-blur-xl`**.
-  * [ ] **Lista:** Reutilizar enlaces del sidebar pero centrados/adaptados a móvil.
-  * [ ] **Cierre:** Botón "X" o texto alineado a la derecha del header del modal.
-
-### 3. 🖥️ Navegación de Escritorio
-
-* [ ] **Sidebar "Invisible":**
-  * [ ] Posición `sticky`.
-  * [ ] Estilos: Sin bordes ni fondo (`bg-transparent`).
-  * [ ] Interacción: Texto gris medio (`--color-secondary`) que pasa a color primario en hover.
+**Última Actualización:** 28-01-2026
 
 ---
 
-## 🛣️ FASE 2: IMPLEMENTACIÓN DE VISTAS (Rutas)
+## 🎨 REFINAMIENTO DE UI/UX (Header)
 
-Creación de las páginas y conexión con el nuevo archivo de configuración de rutas (`orchidariumRoutes`).
+Objetivo: Lograr una experiencia de navegación "nativa" y fluida.
 
+* [x] **✨ Perfeccionamiento del NavbarDropdown (Mega Menu)**
+  * [x] **Transición de Altura (Height Morphing):** El contenedor base (`card`) debe adaptar su altura suavemente al contenido del nuevo ítem seleccionado, sin saltos bruscos.
+  * [x] **Cross-fade de Contenido:** Al cambiar entre ítems del menú (ej. de *Orquídeas* a *Insumos*), el contenido antiguo debe desvanecerse (`opacity: 0`) y el nuevo aparecer (`opacity: 1`) **sin movimientos espaciales** (sin deslizarse `x` o `y`).
+  * [ ] **Layouts Específicos:** El diseño visual y maquetación de las rejillas (Grids) finales se abordará **post-funcionalidad**, una vez definidos sus componentes y lógica operativa.
+
+---
+
+## 🛣️ IMPLEMENTACIÓN DE VISTAS (Rutas)
+
+Creación de la estructura de carpetas y páginas basada en `(orchidarium)/(titulo_principal)/pagina_especifica`.
+
+* [ ] **✅ Validación de Estructura:** Revisar y confirmar que la estructura de carpetas y archivos en `(orchidarium)` cumpla con la convención de rutas y grupos definida.
 * [ ] **🏠 Dashboard (`/orchidarium`)**
-  * [ ] Estructura base del "Home" administrativo.
-  * [ ] Preparar slots para widgets (Clima, Agenda, Alertas).
+  * [ ] Estructura: `(dashboard)/monitoring`, `(dashboard)/timeline`, `(dashboard)/alerts`.
+  * [ ] Paginas: `monitoring/page.tsx`, `timeline/page.tsx`, `alerts/page.tsx`.
 * [ ] **🌺 Inventario (`/orchidarium/inventory`)**
-  * [ ] **Tab Plantas:** Tabla/Grid de gestión de especies (CRUD Prisma).
-  * [ ] **Tab Insumos:** Tabla de Agroquímicos (CRUD con stock y dosis).
-* [ ] **📅 Planificador (`/orchidarium/planner`)**
-  * [ ] Vista de Calendario.
-  * [ ] Interfaz de creación de Rutinas.
-* [ ] **📡 Monitoreo IoT (`/orchidarium/monitoring`)**
-  * [ ] Estructura para visualizar Zonas.
-  * [ ] Listado técnico de dispositivos.
-* [ ] **⚙️ Ajustes (`/orchidarium/settings`)**
-  * [ ] Gestión de usuarios y configuración global.
+  * [ ] Estructura: `(inventory)/species`, `(inventory)/stock`, `(inventory)/shop-manager`.
+  * [ ] Paginas: `species/page.tsx`, `stock/page.tsx`, `shop-manager/page.tsx`.
+* [ ] **🧪 Laboratorio (`/orchidarium/lab`)**
+  * [ ] Estructura: `(lab)/supplies`, `(lab)/recipes`.
+  * [ ] Paginas: `supplies/page.tsx`, `recipes/page.tsx`.
+* [ ] **🏗️ Operaciones (`/orchidarium/operations`)**
+  * [ ] Estructura: `(operations)/control`, `(operations)/planner`, `(operations)/history`.
+  * [ ] Paginas: `control/page.tsx`, `planner/page.tsx`, `history/page.tsx`.
+* [ ] **⚙️ Admin (`/orchidarium/settings`)**
+  * [ ] Estructura: `(admin)/users`, `(admin)/system`.
+  * [ ] Paginas: `users/page.tsx`, `system/page.tsx`.
 
 ---
 
-## 📡 FASE 3: LÓGICA IOT & CONECTIVIDAD (Backend/Frontend)
+## 📡 LÓGICA IOT & CONECTIVIDAD (Backend/Frontend)
 
 Una vez existan las vistas, inyectamos la "vida" al sistema.
 
@@ -78,7 +57,7 @@ Una vez existan las vistas, inyectamos la "vida" al sistema.
 
 ---
 
-## 🏪 FASE 4: LÓGICA DE NEGOCIO Y TIENDA
+## 🏪 LÓGICA DE NEGOCIO Y TIENDA
 
 * [ ] **🌦️ Servicio Meteorológico:**
   * [ ] Integrar API externa (OpenWeather).

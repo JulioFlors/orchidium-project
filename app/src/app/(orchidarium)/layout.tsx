@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 
 import { auth } from '@/auth.config'
-import { ContextSidebar, Footer, Header, Sidebar } from '@/components'
+import { Footer, Header, Sidebar } from '@/components'
 
 export const metadata: Metadata = {
   title: {
@@ -42,11 +42,6 @@ export default async function OchidariumLayout({ children }: { children: React.R
       <Sidebar />
 
       <div className="mx-auto flex w-full max-w-[1920px] flex-1 pt-14">
-        {/* Sidebar Contextual Izquierdo (Nivel 2)
-           Visible solo en Desktop
-        */}
-        <ContextSidebar />
-
         {/* Contenido Principal */}
         <main className="tds-lg:p-10 min-w-0 flex-1 overflow-x-hidden p-6">{children}</main>
       </div>
