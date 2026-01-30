@@ -11,7 +11,7 @@ export function FormField({ label, htmlFor, children, className }: Props) {
   return (
     <div className={className}>
       <label
-        className="tracking-wide text-label text-[13.5px] leading-5 font-semibold"
+        className="text-label text-[13.5px] leading-5 font-semibold tracking-wide"
         htmlFor={htmlFor}
       >
         {label}

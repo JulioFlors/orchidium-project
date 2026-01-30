@@ -8,9 +8,18 @@ import { AnimatePresence, motion } from 'motion/react'
 import { usePathname } from 'next/navigation'
 import { useState, useRef, useEffect } from 'react'
 
+import {
+  Backdrop,
+  motionContent,
+  motionDropdown,
+  Navbar,
+  NavbarDropdown,
+  PristinoPlant,
+  Toolbar,
+} from '@/components'
 import { NavItem } from '@/interfaces'
-import { Navbar, NavbarDropdown, motionSubMenu, PristinoPlant, Toolbar } from '@/components'
 import { shopNavigation, Navigation } from '@/config'
+import { useScrollLock } from '@/hooks'
 
 interface Props {
   suggestions?: SearchSuggestion[]
@@ -23,15 +32,18 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
   const isAuthLayout = pathname.startsWith('/auth')
   const isOrchidarium = pathname.startsWith('/orchidarium')
 
-  // ----- Estados Locales -----
+  // ----- States -----
   const [activeItem, setActiveItem] = useState<NavItem | null>(null)
   const [hoveredLink, setHoveredLink] = useState<HTMLElement | null>(null)
   const [isSubMenuOpen, setIsSubMenuOpen] = useState(false)
-  const [wasSubMenuOpen, setWasSubMenuOpen] = useState(false)
 
   // ----- Refs -----
   const closeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const navRef = useRef<HTMLElement | null>(null)
+
+  // ----- 🔒 Scroll Lock -----
+  // Bloqueamos el scroll cuando el menú está abierto
+  useScrollLock(isSubMenuOpen)
 
   // ----------------------------------------
   // Logica de Navegacion Dinamica
@@ -85,23 +97,21 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
   }
 
   // ---- Gestiona el cierre del subMenu -----
-  const startCloseTimeout = () => {
-    clearCloseTimeout() // Limpia cualquier timeout anterior antes de iniciar uno nuevo
+  // Acepta un argumento 'delay' con valor por defecto de 50ms
+  const startCloseTimeout = (delay = 100) => {
+    clearCloseTimeout() // Limpia cualquier otro cierre pendiente
 
     closeTimeoutRef.current = setTimeout(() => {
       setIsSubMenuOpen(false)
       setActiveItem(null)
       setHoveredLink(null)
-      setWasSubMenuOpen(false)
-    }, 50) // Un pequeño delay antes de cerrar el subMenu
+    }, delay)
+    // Usa el delay dinámico para cerrar el subMenu
   }
 
   // ---- Al hacer hover en algun Link del mainMenu... -----
   const handleItemHover = (item: NavItem, element: HTMLElement) => {
     clearCloseTimeout()
-
-    // Antes de actualizar el estado, registramos si el subMenu estaba abierto
-    setWasSubMenuOpen(isSubMenuOpen)
 
     setHoveredLink(element) // establece el HoveredLink fuera del Timeout
 
@@ -112,17 +122,12 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
   }
 
   // ---- Al entrar al mainMenu, cancela cierre pendiente del subMenu -----
-  const handleHeaderMouseEnter = () => clearCloseTimeout()
-
-  // ---- Al salir del mainMenu, inicia el timeout para cerrar el subMenu -----
-  const handleHeaderMouseLeave = () => startCloseTimeout()
-
   // ---- Al entrar al subMenu, cancela el cierre pendiente -----
-  // Lógica para mantener el pill si entramos al dropdown
   const handleSubMenuMouseEnter = () => {
     // Cancela el cierre si se mueve del main menu al submenu
     clearCloseTimeout()
 
+    // Lógica para mantener el pill si entramos al dropdown
     // Si se perdió el hoveredLink, intentamos restaurarlo
     if (!hoveredLink && activeItem && navRef.current) {
       // Buscamos el link que corresponde al item activo dentro del nav
@@ -133,7 +138,13 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
   }
 
   // ---- Al salir del subMenu, inicia el timeout para cerrar -----
-  const handleSubMenuMouseLeave = () => {
+  const handleSubMenuMouseLeave = (delay?: number) => {
+    startCloseTimeout(delay)
+  }
+  // ---- Al salir del Header, inicia el timeout para cerrar el subMenu -----
+  const handleHeaderMouseLeave = (e: React.MouseEvent) => {
+    // Si sale por arriba (hacia el navegador), no cerramos
+    if (e.clientY <= 0) return
     startCloseTimeout()
   }
 
@@ -152,120 +163,165 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
   //  Render (JSX)
   // ----------------------------------------
   return (
-    <header
-      aria-label="Cabecera principal"
-      className={clsx('bg-canvas top-0 z-10 w-full', isAuthLayout ? 'tds-sm:fixed' : 'fixed')}
-    >
-      {/*---- Contenedor interno para el flex layout ----*/}
-      <div className="tds-xs:h-14 relative flex h-9 w-full items-center justify-between font-semibold">
-        {/*---- Left Menu (Logo | section-label) ----*/}
-        <div className="left-menu-container">
-          <div className="left-menu-wrapper">
-            <Link className="focus-link" href="/">
-              <PristinoPlant className={isAuthLayout ? 'w-36' : ''} />
-            </Link>
+    <>
+      <header
+        aria-label="Cabecera principal"
+        className={clsx(
+          'bg-canvas',
+          'top-0 w-full',
+          isAuthLayout ? 'tds-sm:fixed' : 'fixed',
+          isSubMenuOpen ? 'z-20' : 'z-10',
+        )}
+        style={{ paddingRight: 'var(--scrollbar-width, 0.4px)' }}
+        onMouseEnter={handleSubMenuMouseEnter}
+        onMouseLeave={handleHeaderMouseLeave}
+      >
+        {/*---- Contenedor interno para el flex layout ----*/}
+        <div
+          className="tds-xs:h-14 relative z-10 flex h-9 w-full items-center justify-between font-semibold"
+          onMouseEnter={handleSubMenuMouseEnter}
+        >
+          {/*---- Left Menu (Logo | section-label) ----*/}
+          <div className="left-menu-container">
+            <div className="left-menu-wrapper">
+              <Link
+                className="focus-link"
+                href="/"
+                onMouseEnter={() => handleSubMenuMouseLeave(500)}
+                onMouseLeave={handleSubMenuMouseEnter}
+              >
+                <PristinoPlant className={isAuthLayout ? 'w-36' : ''} />
+              </Link>
 
-            <Link
-              className={clsx(
-                'focus-link tds-xs:text-sm tds-xs:left-5 sr-only top-2 left-2 text-center text-[9px] focus:not-sr-only focus:absolute focus:z-20 focus:p-2',
-                // Centrado respecto al logo | label
-                'tds-xs:focus:h-8 focus:h-6',
-                'tds-xs:focus:top-3 focus:top-1.5',
-                // Centrado del texto dentro del botón
-                'focus:flex focus:items-center focus:justify-center',
-                {
-                  'tds-xs:w-66! w-43!': isOrchidarium,
-                  'tds-xs:w-53! w-37!': !isOrchidarium,
-                },
+              <Link
+                className={clsx(
+                  'focus-link tds-xs:text-sm tds-xs:left-5 sr-only top-2 left-2 text-center text-[9px] focus:not-sr-only focus:absolute focus:z-20 focus:p-2',
+                  // Centrado respecto al logo | label
+                  'tds-xs:focus:h-8 focus:h-6',
+                  'tds-xs:focus:top-3 focus:top-1.5',
+                  // Centrado del texto dentro del botón
+                  'focus:flex focus:items-center focus:justify-center',
+                  {
+                    'tds-xs:w-66! w-43!': isOrchidarium,
+                    'tds-xs:w-53! w-37!': !isOrchidarium,
+                  },
+                )}
+                href="#main-content"
+              >
+                Saltar al contenido principal
+              </Link>
+
+              {/* Etiquetas Contextuales */}
+              {!isAuthLayout && !isOrchidarium && (
+                <>
+                  <span className="pipe">|</span>
+                  <Link
+                    className={clsx('focus-link-hover section-label', {
+                      'aria-current="page"': pathname === '/',
+                    })}
+                    href="/"
+                    onMouseEnter={() => handleSubMenuMouseLeave(500)}
+                    onMouseLeave={handleSubMenuMouseEnter}
+                  >
+                    {/* TODO: href="/shop" cuando se tenga un landing page en href="/" */}
+                    Tienda
+                  </Link>
+                </>
               )}
-              href="#main-content"
+
+              {!isAuthLayout && isOrchidarium && (
+                <>
+                  <span className="pipe">|</span>
+                  <Link
+                    className={clsx('focus-link-hover section-label', {
+                      'aria-current="page"': pathname === '/orchidarium',
+                    })}
+                    href="/orchidarium"
+                    onMouseEnter={() => handleSubMenuMouseLeave(500)}
+                    onMouseLeave={handleSubMenuMouseEnter}
+                  >
+                    Orquideario
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/*---- Navbar.tsx (Desktop) ----*/}
+          {!isAuthLayout && (
+            <div
+              className="tds-xl:block tds-xl:relative hidden h-full flex-1"
+              onMouseEnter={handleSubMenuMouseEnter}
             >
-              Saltar al contenido principal
-            </Link>
+              <Navbar
+                activeItem={activeItem}
+                hoveredLink={hoveredLink}
+                items={navItems}
+                navRef={navRef}
+                onItemHover={handleItemHover}
+              />
+            </div>
+          )}
 
-            {/* Etiquetas Contextuales */}
-            {!isAuthLayout && !isOrchidarium && (
-              <>
-                <span className="pipe">|</span>
-                <Link
-                  className={clsx('focus-link-hover section-label', {
-                    'aria-current="page"': pathname === '/',
-                  })}
-                  href="/"
-                >
-                  {/* TODO: href="/shop" cuando se tenga un landing page en href="/" */}
-                  Tienda
-                </Link>
-              </>
-            )}
-
-            {!isAuthLayout && isOrchidarium && (
-              <>
-                <span className="pipe">|</span>
-                <Link
-                  className={clsx('focus-link-hover section-label', {
-                    'aria-current="page"': pathname === '/orchidarium',
-                  })}
-                  href="/orchidarium"
-                >
-                  Orquideario
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/*---- Navbar.tsx (Desktop) ----*/}
-        {!isAuthLayout && (
+          {/*---- Right Menu Container (Toolbar.tsx) ----*/}
           <div
-            className="tds-xl:block tds-xl:relative hidden h-full flex-1"
-            onMouseEnter={handleHeaderMouseEnter}
-            onMouseLeave={handleHeaderMouseLeave}
+            className={clsx('right-menu-container', isAuthLayout && 'pr-5')}
+            onMouseEnter={handleSubMenuMouseEnter}
           >
-            <Navbar
-              activeItem={activeItem}
-              hoveredLink={hoveredLink}
-              items={navItems}
-              navRef={navRef}
-              onItemHover={handleItemHover}
-            />
-          </div>
-        )}
-
-        {/*---- Right Menu Container (Toolbar.tsx) ----*/}
-        <div className={clsx('right-menu-container', isAuthLayout && 'pr-5')}>
-          <div className="right-menu-wrapper">
-            <Toolbar
-              isAuthLayout={isAuthLayout}
-              isOrchidarium={isOrchidarium}
-              suggestions={suggestions}
-            />
+            <div className="right-menu-wrapper">
+              <Toolbar
+                isAuthLayout={isAuthLayout}
+                isOrchidarium={isOrchidarium}
+                suggestions={suggestions}
+                onDropdownClose={() => handleSubMenuMouseLeave(500)}
+                onDropdownOpen={handleSubMenuMouseEnter}
+              />
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* ---- NavbarDropdown.tsx (Desktop) ---- */}
-      <AnimatePresence>
-        {isSubMenuOpen && activeItem && (
-          <motion.div
-            key={activeItem.key}
-            animate="animate"
-            className="aceleracion-hardware tds-xl:block bg-canvas absolute top-full right-0 left-0 hidden w-full"
-            custom={wasSubMenuOpen}
-            exit="exit"
-            initial="initial"
-            variants={motionSubMenu}
-            onMouseEnter={handleSubMenuMouseEnter}
-            onMouseLeave={handleSubMenuMouseLeave}
-          >
-            <NavbarDropdown
-              activeItem={activeItem}
-              plantsNavData={plantsNavData}
-              onClose={() => setIsSubMenuOpen(false)}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </header>
+        {/* ---- NavbarDropdown.tsx (Desktop) ---- */}
+        <AnimatePresence>
+          {isSubMenuOpen && activeItem && (
+            <motion.div
+              key="dropdown-container"
+              layout
+              animate="animate"
+              className={clsx(
+                'aceleracion-hardware top-0 left-0 w-full pt-14',
+                'bg-canvas absolute',
+                'tds-xl:block hidden',
+              )}
+              exit="exit"
+              initial="initial"
+              style={{ paddingRight: 'var(--scrollbar-width, 0px)' }}
+              variants={motionDropdown}
+              onMouseEnter={handleSubMenuMouseEnter}
+              onMouseLeave={() => handleSubMenuMouseLeave}
+            >
+              {/* Inner Wrapper para el Cross-fade de contenido.
+                  Aquí usamos la KEY dinámica para que React detecte el cambio de ítem.
+              */}
+              <motion.div
+                key={activeItem.key}
+                animate="animate"
+                exit="exit"
+                initial="initial"
+                variants={motionContent}
+              >
+                <NavbarDropdown
+                  activeItem={activeItem}
+                  plantsNavData={plantsNavData}
+                  onClose={() => setIsSubMenuOpen(false)}
+                />
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </header>
+
+      {/* ---- Backdrop + Blur (Oscurecer y Descenfocar body) ---- */}
+      <Backdrop isNavbarOpen={isSubMenuOpen} />
+    </>
   )
 }

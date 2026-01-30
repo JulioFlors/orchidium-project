@@ -2,11 +2,13 @@ export * from './footer/Footer'
 
 export * from './form/FormField'
 
-export * from './header/Header.utils'
+export * from './header/animation'
 
 export * from './header/Header'
 
 export * from './header/Navbar'
+
+export * from './header/Backdrop'
 
 export * from './header/NavbarDropdown'
 

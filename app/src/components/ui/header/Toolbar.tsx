@@ -24,9 +24,17 @@ interface Props {
   isOrchidarium: boolean
   isAuthLayout: boolean
   suggestions: SearchSuggestion[]
+  onDropdownClose?: (delay: number) => void // Propagación del evento
+  onDropdownOpen?: () => void // Propagación del evento
 }
 
-export function Toolbar({ isOrchidarium, isAuthLayout, suggestions }: Props) {
+export function Toolbar({
+  isOrchidarium,
+  isAuthLayout,
+  suggestions,
+  onDropdownClose,
+  onDropdownOpen,
+}: Props) {
   const openSearchBox = useUIStore((state) => state.openSearchBox)
   const closeSearchBox = useUIStore((state) => state.closeSearchBox)
   const isSearchBoxExpanded = useUIStore((state) => state.isSearchBoxExpanded)
@@ -57,7 +65,7 @@ export function Toolbar({ isOrchidarium, isAuthLayout, suggestions }: Props) {
   }, [searchTerm, isSearchBoxExpanded, isSidebarOpen, openSearchBox, closeSearchBox])
 
   // ----------------------------------------
-  //  Render (JSX)
+  //  Render (AuthLayout)
   // ----------------------------------------
 
   // ---- Renderizamos solo el ThemeToggle) ---
@@ -69,6 +77,9 @@ export function Toolbar({ isOrchidarium, isAuthLayout, suggestions }: Props) {
     )
   }
 
+  // ----------------------------------------
+  //  Render (Shop and Orchidarium)
+  // ----------------------------------------
   return (
     <>
       {/* ---- Shop Tollbar (Search + Cart) ---- */}
@@ -86,6 +97,8 @@ export function Toolbar({ isOrchidarium, isAuthLayout, suggestions }: Props) {
                   key="search-input"
                   className="aceleracion-hardware z-20 flex h-full items-center"
                   onBlur={handleFocusOutSearch}
+                  onMouseEnter={() => onDropdownClose?.(500)}
+                  onMouseLeave={onDropdownOpen}
                   {...motionSearchBox}
                 >
                   <SearchBox isHeader suggestions={suggestions} />
@@ -98,6 +111,8 @@ export function Toolbar({ isOrchidarium, isAuthLayout, suggestions }: Props) {
                   type="button"
                   onClick={openSearchBox}
                   onFocus={openSearchBox}
+                  onMouseEnter={() => onDropdownClose?.(500)}
+                  onMouseLeave={onDropdownOpen}
                   {...motionIconSearch}
                 >
                   <SearchIcon className="tds-icon" />
@@ -115,13 +130,21 @@ export function Toolbar({ isOrchidarium, isAuthLayout, suggestions }: Props) {
               // TODO: Conectar con openSearchModal() cuando se implemente el modal móvil
               // eslint-disable-next-line no-console
               onClick={() => console.log('Abrir Modal de Búsqueda Móvil')}
+              onMouseEnter={() => onDropdownClose?.(500)}
+              onMouseLeave={onDropdownOpen}
             >
               <SearchIcon className="tds-icon" />
             </button>
           </div>
 
           {/* ---- Cart ----*/}
-          <Link aria-label="Carrito de compras" className="cart-link focus-link" href="/cart">
+          <Link
+            aria-label="Carrito de compras"
+            className="cart-link focus-link"
+            href="/cart"
+            onMouseEnter={() => onDropdownClose?.(500)}
+            onMouseLeave={onDropdownOpen}
+          >
             <div className="relative">
               <span className="text-black-and-white absolute -top-2 -right-2 rounded-full bg-emerald-500 px-1 text-xs font-bold" />
               {/* todo: Reemplazar con la cuenta real del carrito */}
@@ -135,12 +158,20 @@ export function Toolbar({ isOrchidarium, isAuthLayout, suggestions }: Props) {
       {isOrchidarium && (
         <div className="tds-xl:flex hidden items-center gap-1">
           {/* ---- Store Icon ----*/}
-          <Link className="focus-link-hover toolbar-icon" href="/" title="Tienda">
+          <Link
+            className="focus-link-hover toolbar-icon"
+            href="/"
+            title="Tienda"
+            onMouseEnter={() => onDropdownClose?.(500)}
+            onMouseLeave={onDropdownOpen}
+          >
             <IoStorefrontOutline size={20} />
           </Link>
 
           {/* ---- ThemeToggle ----*/}
-          <ThemeToggle />
+          <span onMouseEnter={() => onDropdownClose?.(500)} onMouseLeave={onDropdownOpen}>
+            <ThemeToggle />
+          </span>
 
           {/* ---- Account ----*/}
           <Link
@@ -148,6 +179,8 @@ export function Toolbar({ isOrchidarium, isAuthLayout, suggestions }: Props) {
             className="focus-link-hover toolbar-icon mr-4"
             href="/orchidarium/account"
             title="Cuenta"
+            onMouseEnter={() => onDropdownClose?.(500)}
+            onMouseLeave={onDropdownOpen}
           >
             <PersonIcon className="tds-icon" />
           </Link>
@@ -156,7 +189,9 @@ export function Toolbar({ isOrchidarium, isAuthLayout, suggestions }: Props) {
 
       {/* ---- Menu Button (OPTIMIZADO) ---- */}
       {/* Usamos el componente aislado en lugar del botón HTML directo */}
-      <SidebarTrigger className={clsx(isOrchidarium && 'tds-xl:hidden')} />
+      <div onMouseEnter={() => onDropdownClose?.(500)} onMouseLeave={onDropdownOpen}>
+        <SidebarTrigger className={clsx(isOrchidarium && 'tds-xl:hidden')} />
+      </div>
     </>
   )
 }

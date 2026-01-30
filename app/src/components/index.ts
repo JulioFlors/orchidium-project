@@ -1,5 +1,5 @@
 // Orchidarium
-export * from './orchidarium'
+//export * from './orchidarium'
 
 // Products
 export * from './product'
