@@ -106,7 +106,7 @@ export const motionDropdown: Variants = {
     // Recortamos el (15%) Desde abajo para simular el "cierre"
     clipPath: "inset(0% 0% 15% 0%)",
     // Lift: Movemos la caja un poco hacia arriba. 
-    y: -15,
+    y: -60,
     // Junto con el Recorte de abajo, da la sensación de que se contrae hacia arriba.
 
     opacity: 0,

@@ -5,11 +5,12 @@ import type { PlantsNavData, SearchSuggestion } from '@/actions'
 import clsx from 'clsx'
 import Link from 'next/link'
 import { AnimatePresence, motion } from 'motion/react'
-import { usePathname } from 'next/navigation'
 import { useState, useRef, useEffect } from 'react'
 
 import {
   Backdrop,
+  getAdminNavItems,
+  getShopNavItems,
   motionContent,
   motionDropdown,
   Navbar,
@@ -17,9 +18,9 @@ import {
   PristinoPlant,
   Toolbar,
 } from '@/components'
-import { NavItem } from '@/interfaces'
-import { shopNavigation, Navigation } from '@/config'
-import { useScrollLock } from '@/hooks'
+import { NavbarItem } from '@/interfaces'
+import { shopRoutes, adminRoutes } from '@/config'
+import { useScrollLock, useNavigationContext } from '@/hooks'
 
 interface Props {
   suggestions?: SearchSuggestion[]
@@ -28,12 +29,10 @@ interface Props {
 
 export function Header({ suggestions = [], plantsNavData = [] }: Props) {
   // ----- Hooks -----
-  const pathname = usePathname()
-  const isAuthLayout = pathname.startsWith('/auth')
-  const isOrchidarium = pathname.startsWith('/orchidarium')
+  const { isOrchidarium, isAuthLayout, pathname } = useNavigationContext()
 
   // ----- States -----
-  const [activeItem, setActiveItem] = useState<NavItem | null>(null)
+  const [activeItem, setActiveItem] = useState<NavbarItem | null>(null)
   const [hoveredLink, setHoveredLink] = useState<HTMLElement | null>(null)
   const [isSubMenuOpen, setIsSubMenuOpen] = useState(false)
 
@@ -48,42 +47,11 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
   // ----------------------------------------
   // Logica de Navegacion Dinamica
   // ----------------------------------------
-  /**
-   * Renderiza los enlaces de navegación central dependiendo del contexto
-   */
-  const getNavItems = (): NavItem[] => {
-    // El Navbar se mantiene limpio.
-    if (isAuthLayout) return []
-
-    if (isOrchidarium) {
-      return Navigation.map((module) => ({
-        key: module.slug,
-        label: module.name,
-        href: module.slug === 'dashboard' ? '/orchidarium' : module.basePath,
-        isActive:
-          module.slug === 'dashboard'
-            ? pathname === '/orchidarium'
-            : pathname.startsWith(module.basePath),
-        hasDropdown: true,
-        dropdownType: module.dropdownLayout,
-        childrenData: module.sidebarItems,
-      }))
-    }
-
-    return shopNavigation
-      .filter((route) => route.categories && route.categories.length > 0)
-      .map((route) => ({
-        key: route.slug,
-        label: route.name,
-        href: route.url,
-        isActive: pathname === route.url,
-        hasDropdown: true,
-        dropdownType: 'shop',
-        childrenData: route,
-      }))
-  }
-
-  const navItems = getNavItems()
+  const navItems = isAuthLayout
+    ? []
+    : isOrchidarium
+      ? getAdminNavItems(adminRoutes, pathname)
+      : getShopNavItems(shopRoutes, pathname)
 
   // ----------------------------------------
   //  MANEJADORES DE EVENTOS (HANDLERS)
@@ -110,7 +78,7 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
   }
 
   // ---- Al hacer hover en algun Link del mainMenu... -----
-  const handleItemHover = (item: NavItem, element: HTMLElement) => {
+  const handleItemHover = (item: NavbarItem, element: HTMLElement) => {
     clearCloseTimeout()
 
     setHoveredLink(element) // establece el HoveredLink fuera del Timeout
@@ -187,8 +155,8 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
               <Link
                 className="focus-link"
                 href="/"
-                onMouseEnter={() => handleSubMenuMouseLeave(500)}
-                onMouseLeave={handleSubMenuMouseEnter}
+                onClick={() => startCloseTimeout(0)}
+                onMouseEnter={handleSubMenuMouseEnter}
               >
                 <PristinoPlant className={isAuthLayout ? 'w-36' : ''} />
               </Link>
@@ -207,6 +175,7 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
                   },
                 )}
                 href="#main-content"
+                onClick={() => startCloseTimeout(0)}
               >
                 Saltar al contenido principal
               </Link>
@@ -220,8 +189,8 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
                       'aria-current="page"': pathname === '/',
                     })}
                     href="/"
-                    onMouseEnter={() => handleSubMenuMouseLeave(500)}
-                    onMouseLeave={handleSubMenuMouseEnter}
+                    onClick={() => startCloseTimeout(0)}
+                    onMouseEnter={handleSubMenuMouseEnter}
                   >
                     {/* TODO: href="/shop" cuando se tenga un landing page en href="/" */}
                     Tienda
@@ -237,8 +206,8 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
                       'aria-current="page"': pathname === '/orchidarium',
                     })}
                     href="/orchidarium"
-                    onMouseEnter={() => handleSubMenuMouseLeave(500)}
-                    onMouseLeave={handleSubMenuMouseEnter}
+                    onClick={() => startCloseTimeout(0)}
+                    onMouseEnter={handleSubMenuMouseEnter}
                   >
                     Orquideario
                   </Link>
@@ -270,11 +239,10 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
           >
             <div className="right-menu-wrapper">
               <Toolbar
+                closeDropdown={() => startCloseTimeout(0)}
                 isAuthLayout={isAuthLayout}
                 isOrchidarium={isOrchidarium}
                 suggestions={suggestions}
-                onDropdownClose={() => handleSubMenuMouseLeave(500)}
-                onDropdownOpen={handleSubMenuMouseEnter}
               />
             </div>
           </div>

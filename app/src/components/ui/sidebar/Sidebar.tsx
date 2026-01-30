@@ -4,12 +4,12 @@ import type { SearchSuggestion } from '@/actions'
 
 import { IoCloseOutline, IoChevronBackOutline } from 'react-icons/io5'
 import { motion, AnimatePresence } from 'motion/react'
-import { usePathname } from 'next/navigation'
 import { useRef, useEffect } from 'react'
 import clsx from 'clsx'
 
 import { handleAccessibility, motionProps, OrchidariumSidebar, ShopSidebar } from '@/components'
-import { Navigation, shopNavigation } from '@/config'
+import { adminRoutes, shopRoutes } from '@/config'
+import { useNavigationContext } from '@/hooks'
 import { useUIStore } from '@/store'
 
 interface Props {
@@ -18,7 +18,7 @@ interface Props {
 
 export function Sidebar({ suggestions = [] }: Props) {
   // ----- Hooks ----
-  const pathname = usePathname()
+  const { isOrchidarium } = useNavigationContext()
 
   // ---- Store (zustand) -----
   const closeSidebar = useUIStore((state) => state.closeSidebar)
@@ -38,11 +38,11 @@ export function Sidebar({ suggestions = [] }: Props) {
     if (!sidebarRoute) return ''
 
     // Buscamos en ambas configuraciones
-    const shopRoute = shopNavigation.find((r) => r.slug === sidebarRoute)
+    const shopRoute = shopRoutes.find((r) => r.slug === sidebarRoute)
 
     if (shopRoute) return shopRoute.name
 
-    const adminRoute = Navigation.find((r) => r.slug === sidebarRoute)
+    const adminRoute = adminRoutes.find((r) => r.slug === sidebarRoute)
 
     if (adminRoute) return adminRoute.name
 
@@ -50,7 +50,6 @@ export function Sidebar({ suggestions = [] }: Props) {
   }
 
   // ----- Helpers -----
-  const isOrchidarium = pathname.startsWith('/orchidarium')
   const currentTitle = getCurrentTitle()
 
   // ----------------------------------------

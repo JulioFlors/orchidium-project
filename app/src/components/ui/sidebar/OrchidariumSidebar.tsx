@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { IoChevronForwardOutline, IoStorefrontOutline } from 'react-icons/io5'
 
-import { Navigation } from '@/config'
+import { adminRoutes } from '@/config'
 import { PersonIcon, ThemeToggle } from '@/components'
 import { useUIStore } from '@/store'
 
@@ -14,9 +14,12 @@ export function OrchidariumSidebar() {
 
   // ---- NIVEL 2: sidebarItems ----
   if (sidebarRoute) {
-    const route = Navigation.find((r) => r.slug === sidebarRoute)
+    const route = adminRoutes.find((r) => r.slug === sidebarRoute)
 
-    if (!route || !route.sidebarItems || route.sidebarItems.length === 0) return null
+    // Aplanamos items y grupos para la vista móvil
+    const allItems = [...(route?.items || []), ...(route?.groups?.flatMap((g) => g.items) || [])]
+
+    if (!route || allItems.length === 0) return null
 
     // ----------------------------------------
     //  Render (JSX)
@@ -24,7 +27,7 @@ export function OrchidariumSidebar() {
     return (
       <div className="tds-xl:hidden relative w-full">
         <div className="grid w-full grid-cols-1 gap-2.5">
-          {route.sidebarItems.map((item) => (
+          {allItems.map((item) => (
             <Link
               key={item.url}
               className="group hover:bg-hover-overlay focus:ring-accessibility flex flex-col rounded-md px-4 py-3 transition-colors focus:ring-2 focus:outline-none"
@@ -54,7 +57,7 @@ export function OrchidariumSidebar() {
   return (
     <div className="flex h-full w-full flex-col">
       <div className="flex w-full flex-1 flex-col">
-        {Navigation.map((route) => (
+        {adminRoutes.map((route) => (
           <button
             key={route.slug}
             className="focus-sidebar-content group px-3 py-2"

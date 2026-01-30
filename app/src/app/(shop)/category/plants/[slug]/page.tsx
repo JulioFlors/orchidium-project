@@ -1,9 +1,9 @@
 import { notFound } from 'next/navigation'
 
 import { ProductGrid, Title, Subtitle } from '@/components'
-import { PlantType, Route, Category } from '@/interfaces'
+import { PlantType, ShopRoute, ShopCategory } from '@/interfaces'
 import { getSpeciesByType } from '@/actions'
-import { shopNavigation } from '@/config'
+import { shopRoutes } from '@/config'
 
 // Awaited<...> se utiliza para obtener el tipo de retorno de una promesa.
 // inferido directamente del retorno del server action.
@@ -33,10 +33,10 @@ export default async function CategoryPage({ params }: Props) {
   const categorySlug = resolvedParams.slug.toLowerCase()
 
   // Seleccionamos la ruta "plants"
-  const route: Route | undefined = shopNavigation.find((route) => route.slug === 'plants')
+  const route: ShopRoute | undefined = shopRoutes.find((route) => route.slug === 'plants')
 
   // Comprobamos que la categoria existe
-  const category: Category | undefined = route?.categories?.find((cat) => {
+  const category: ShopCategory | undefined = route?.categories?.find((cat) => {
     if (typeof categorySlug === 'string') {
       return cat.slug.toLowerCase() === categorySlug
     }

@@ -11,7 +11,7 @@ import { useSession, signOut } from 'next-auth/react'
 import clsx from 'clsx'
 
 import { PersonIcon, SearchBox, ThemeToggle } from '@/components'
-import { shopNavigation } from '@/config'
+import { shopRoutes } from '@/config'
 import { useUIStore } from '@/store'
 
 interface Props {
@@ -35,7 +35,7 @@ export function ShopSidebar({ suggestions = [] }: Props) {
 
   // ---- NIVEL 2: Category Content ----
   if (sidebarRoute) {
-    const route = shopNavigation.find((r) => r.slug === sidebarRoute)
+    const route = shopRoutes.find((r) => r.slug === sidebarRoute)
 
     if (!route || !route.categories || route.categories.length === 0) return null
 
@@ -95,7 +95,7 @@ export function ShopSidebar({ suggestions = [] }: Props) {
       </div>
 
       <div className="flex w-full flex-1 flex-col">
-        {shopNavigation.map((route) => {
+        {shopRoutes.map((route) => {
           // No renderizar ruta del login Si estamos logeados
           if (route.slug === 'login' && isAuthenticated) return null
 

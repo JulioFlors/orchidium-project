@@ -7,8 +7,8 @@ import { Footer, Header, Sidebar } from '@/components'
 
 export const metadata: Metadata = {
   title: {
+    default: 'Orchidarium',
     template: 'PristinoPlant | %s',
-    default: 'PristinoPlant | Orchidarium',
   },
 }
 

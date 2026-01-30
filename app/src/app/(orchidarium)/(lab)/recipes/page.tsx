@@ -1,3 +1,9 @@
+import type { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'Recetas y Mezclas',
+}
+
 export default function RecipesPage() {
   return (
     <div>

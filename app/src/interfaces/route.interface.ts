@@ -1,45 +1,15 @@
 import type { ReactNode } from 'react'
 
-// Route/ruta -> Representa las opciones asociadas a cada apartado del Header/Sidebar
-// route: Plant -> category: [Orchid, Adenium_Obesum, Cactus, Succulent]
-// category: Orchid -> group: [Cattleya, Dendrobium, Dimerandra, Enciclea]
+// =====================================================================
+// TIPOS DE LAYOUT (DISEÑO DEL DROPDOWN)
+// =====================================================================
+export type DropdownLayout = 'catalog' | 'informational' | 'hybrid'
 
-// se implemento la logica de group directamente en los pageComponent de category,
-// filtrando directamente el modelo que funge de grupo para cada Producto.
+// =====================================================================
+// COMUNES
+// =====================================================================
 
-export interface Route {
-  name: string
-  slug: string
-  url: string
-  protected?: boolean
-  featuredItem?: FeaturedItem
-  categories?: Category[]
-}
-
-// item destacado
-export interface FeaturedItem {
-  name: string
-  image: string
-  url: string
-}
-
-export interface Category {
-  name: string
-  slug: string
-  url: string
-  image?: string
-}
-
-export interface AdminNavModule {
-  slug: string
-  name: string
-  basePath: string
-  icon: ReactNode
-  dropdownLayout: 'rich' | 'simple'
-  sidebarItems: SidebarItem[]
-}
-
-export interface SidebarItem {
+export interface SubRoute {
   name: string
   url: string
   icon?: ReactNode
@@ -47,13 +17,77 @@ export interface SidebarItem {
   image?: string
 }
 
-// Interfaz unificada para los items del menú
-export interface NavItem {
+export interface LinkGroup {
+  title: string
+  items: SubRoute[]
+}
+
+// =====================================================================
+// 1. SHOP CONTEXT (Tienda Pública)
+// =====================================================================
+
+export interface ShopRoute {
+  name: string
+  slug: string
+  url: string
+  layout: DropdownLayout
+
+  // Específico Layout 'catalog'
+  featuredItem?: ShopFeaturedItem
+  categories?: ShopCategory[]
+
+  // Específico Layout 'informational' | 'hybrid'
+  items?: SubRoute[]
+  groups?: LinkGroup[]
+}
+
+export interface ShopFeaturedItem {
+  name: string
+  image: string
+  url: string
+}
+
+export interface ShopCategory {
+  name: string
+  slug: string
+  url: string
+  image?: string
+}
+
+// =====================================================================
+// 2. ADMIN CONTEXT (Orchidarium)
+// =====================================================================
+
+export interface AdminRoute {
+  slug: string
+  name: string
+  icon: ReactNode // Obligatorio en Admin
+  layout: DropdownLayout
+
+  // Contenido
+  items?: SubRoute[]
+  groups?: LinkGroup[]
+}
+
+// =====================================================================
+// 3. UI ADAPTER (Navbar & Sidebar unificados)
+// =====================================================================
+
+// Interfaz unificada que consume el componente Navbar
+export interface NavbarItem {
   key: string
   label: string
-  href: string
+  href?: string
   isActive: boolean
-  hasDropdown?: boolean
-  dropdownType?: 'shop' | 'rich' | 'simple'
-  childrenData?: Route | SidebarItem[]
+  layout: DropdownLayout
+
+  // Payload Unificado
+  children?: {
+    // Catalog
+    featuredItem?: ShopFeaturedItem
+    categories?: ShopCategory[]
+    // Generic
+    items?: SubRoute[]
+    groups?: LinkGroup[]
+  }
 }
