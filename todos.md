@@ -1,6 +1,6 @@
 # 📋 Tablero de Actividades - ORCHIDIUM PROJECT
 
-**Última Actualización:** 29-01-2026
+**Última Actualización:** 30-01-2026
 
 ---
 
@@ -8,22 +8,22 @@
 
 Creación de la estructura de carpetas y páginas basada en `(orchidarium)/(titulo_principal)/pagina_especifica`.
 
-* [ ] **✅ Validación de Estructura:** Revisar y confirmar que la estructura de carpetas y archivos en `(orchidarium)` cumpla con la convención de rutas y grupos definida.
-* [ ] **🏠 Dashboard (`/orchidarium`)**
-  * [ ] Estructura: `(dashboard)/monitoring`, `(dashboard)/timeline`, `(dashboard)/alerts`.
-  * [ ] Paginas: `monitoring/page.tsx`, `timeline/page.tsx`, `alerts/page.tsx`.
-* [ ] **🌺 Inventario (`/orchidarium/inventory`)**
-  * [ ] Estructura: `(inventory)/species`, `(inventory)/stock`, `(inventory)/shop-manager`.
-  * [ ] Paginas: `species/page.tsx`, `stock/page.tsx`, `shop-manager/page.tsx`.
-* [ ] **🧪 Laboratorio (`/orchidarium/lab`)**
-  * [ ] Estructura: `(lab)/supplies`, `(lab)/recipes`.
-  * [ ] Paginas: `supplies/page.tsx`, `recipes/page.tsx`.
-* [ ] **🏗️ Operaciones (`/orchidarium/operations`)**
-  * [ ] Estructura: `(operations)/control`, `(operations)/planner`, `(operations)/history`.
-  * [ ] Paginas: `control/page.tsx`, `planner/page.tsx`, `history/page.tsx`.
-* [ ] **⚙️ Admin (`/orchidarium/settings`)**
-  * [ ] Estructura: `(admin)/users`, `(admin)/system`.
-  * [ ] Paginas: `users/page.tsx`, `system/page.tsx`.
+* [x] **✅ Validación de Estructura:** Revisar y confirmar que la estructura de carpetas y archivos en `(orchidarium)` cumpla con la convención de rutas y grupos definida.
+* [x] **🏠 Dashboard (`/orchidarium`)**
+  * [x] Estructura: `(dashboard)/monitoring`, `(dashboard)/timeline`, `(dashboard)/alerts`.
+  * [x] Paginas: `monitoring/page.tsx`, `timeline/page.tsx`, `alerts/page.tsx`.
+* [x] **🌺 Inventario (`/orchidarium/inventory`)**
+  * [x] Estructura: `(inventory)/species`, `(inventory)/stock`, `(inventory)/shop-manager`.
+  * [x] Paginas: `species/page.tsx`, `stock/page.tsx`, `shop-manager/page.tsx`.
+* [x] **🧪 Laboratorio (`/orchidarium/lab`)**
+  * [x] Estructura: `(lab)/supplies`, `(lab)/recipes`.
+  * [x] Paginas: `supplies/page.tsx`, `recipes/page.tsx`.
+* [x] **🏗️ Operaciones (`/orchidarium/operations`)**
+  * [x] Estructura: `(operations)/control`, `(operations)/planner`, `(operations)/history`.
+  * [x] Paginas: `control/page.tsx`, `planner/page.tsx`, `history/page.tsx`.
+* [x] **⚙️ Admin (`/orchidarium/settings`)**
+  * [x] Estructura: `(admin)/users`, `(admin)/system`.
+  * [x] Paginas: `users/page.tsx`, `system/page.tsx`.
 
 ---
 
