@@ -67,7 +67,7 @@ esptool write-flash 0x1000 C:\Dev\pristinoplant\firmware\ESP32_2025-08-09_v1.26.
 
 ### 📚 Instalar Librerías Necesarias
 
-Usamos la herramienta **`mpremote`** para instalar las librerías que nuestro código necesita en los dispositivos MicroPython.
+Usamos la herramienta **`mpremote`** para instalar las librerías que nuestro código necesita en los ESP32
 
 > **Importante:** La instalación de librerías debe hacerse según el rol del dispositivo.
 >
@@ -89,9 +89,9 @@ mpremote mkdir :lib
 **Fuente:** [https://github.com/fizista/micropython-umqtt.simple2](https://github.com/fizista/micropython-umqtt.simple2)
 
 Esta librería es **requerida para AMBOS firmwares**.
+Los archivos de la librería ya están incluidos en la ruta local `firmware\lib` del proyecto.
 
 **Instalación:**
-Los archivos de la librería ya están incluidos en la ruta local `firmware\lib` del proyecto.
 *(Ejecuta este comando desde la carpeta del firmware correspondiente)*
 
 ```bash
@@ -156,7 +156,7 @@ Estos archivos (`main.py` y `manifest.json`) deben residir en la **raíz** (`:/`
 
 * **`main.py`**: El punto de entrada y lógica del firmware.
 * **`manifest.json`**: Archivo de control para el sistema OTA.
-* **`boot.py`**: (Opcional pero recomendado) Script de arranque para limpieza de memoria.
+* **`boot.py`**: Script de arranque.
 
 **Instalación:**
 Ejecuta estos comandos desde la carpeta específica del firmware que estás configurando (ej. `firmware/sensors/` o `firmware/relay_modules/`).

@@ -99,9 +99,6 @@ export function ShopSidebar({ suggestions = [] }: Props) {
           // No renderizar ruta del login Si estamos logeados
           if (route.slug === 'login' && isAuthenticated) return null
 
-          // Manejo de rutas protegidas (Solo Admins)
-          if (route.protected && !isAdmin) return null
-
           // Construcción de href para login con callback
           let href = route.url || '#'
 
