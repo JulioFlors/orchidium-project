@@ -190,6 +190,8 @@ Se utiliza el comando fs rm para eliminar.
 ```bash
 # Eliminar un archivo específico del directorio raíz
 mpremote rm :main.py
+mpremote rm :update_creds.py
+mpremote rm :manifest.json
 
 # Eliminar un archivo dentro de un subdirectorio (ej. el módulo simple.py)
 mpremote rm :lib/umqtt/simple.py

@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # Relay Modules: Actuator Controller Firmware.
 # Descripción: Firmware dedicado para el control de las electroválvulas y la bomba.
-# Versión: v0.4.1 - Refactorización de seguridad MQTT: Importación estricta de secretos + Eliminación de defaults inseguros
+# Versión: v0.4.2 - Fix crítico SSL/MQQT
 # Fecha: 04-02-2026
 # ------------------------------- Configuración -------------------------------
 
