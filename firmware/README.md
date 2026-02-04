@@ -256,45 +256,45 @@ code $PROFILE
 # Función para flashear, reiniciar y conectar al REPL de un ESP32 con mpremote
 function mprun {
     param(
-        # La ruta del directorio que contiene el firmware. 
-        # Por defecto es '.' (directorio actual).
-        [string]$Path = ".",
+ # La ruta del directorio que contiene el firmware. 
+ # Por defecto es '.' (directorio actual).
+ [string]$Path = ".",
 
-        # El puerto a usar. Por defecto es 'auto'.
-        [string]$Port = "auto"
+ # El puerto a usar. Por defecto es 'auto'.
+ [string]$Port = "auto"
     )
 
     # Validamos que la ruta exista
     if (-not (Test-Path $Path)) {
-        Write-Host "❌  Error: La ruta '$Path' no existe" -ForegroundColor Red
-        return
+ Write-Host "❌  Error: La ruta '$Path' no existe" -ForegroundColor Red
+ return
     }
 
     # Guardamos la ubicación actual y nos movemos hacia la carpeta del firmware
     Push-Location $Path
 
     try {
-        Write-Host "`n"
-        Write-Host "$(Get-Location)" -ForegroundColor DarkBlue
-        Write-Host "Subiendo contenido" -ForegroundColor DarkGreen
-        Write-Host ""
-        
-        # Copia recursiva de TODO lo que hay en la carpeta actual (.) a la raíz del ESP32 (:)
-        mpremote connect $Port fs cp -r . :
-        
-        Write-Host ""
-        Write-Host "Reiniciando dispositivo" -ForegroundColor Yellow
-        mpremote connect $Port reset
+ Write-Host "`n"
+ Write-Host "$(Get-Location)" -ForegroundColor DarkBlue
+ Write-Host "Subiendo contenido" -ForegroundColor DarkGreen
+ Write-Host ""
+ 
+ # Copia recursiva de TODO lo que hay en la carpeta actual (.) a la raíz del ESP32 (:)
+ mpremote connect $Port fs cp -r . :
+ 
+ Write-Host ""
+ Write-Host "Reiniciando dispositivo" -ForegroundColor Yellow
+ mpremote connect $Port reset
 
-        Write-Host "Conectando REPL | Ctrl+C para detener | Ctrl+X para salir |" -ForegroundColor DarkBlue
-        mpremote connect $Port repl
+ Write-Host "Conectando REPL | Ctrl+C para detener | Ctrl+X para salir |" -ForegroundColor DarkBlue
+ mpremote connect $Port repl
 
     }
     catch {
-        Write-Host "Error durante la ejecución: $_" -ForegroundColor Red
+ Write-Host "Error durante la ejecución: $_" -ForegroundColor Red
     } finally {
-        # Regresar siempre al directorio original, pase lo que pase
-        Pop-Location
+ # Regresar siempre al directorio original, pase lo que pase
+ Pop-Location
     }
 }
 ```
@@ -361,12 +361,12 @@ Una vez conectado, verás aparecer la estructura de tópicos en el panel izquier
     status = online
     ▼ irrigation
       ▼ state
-        ▼ valve
-          main_water: OFF
-          agrochemical: OFF
-          fogger: OFF
-          ...
-        pump: OFF
+ ▼ valve
+   main_water: OFF
+   agrochemical: OFF
+   fogger: OFF
+   ...
+ pump: OFF
 
 * **Estados:** Haz clic en cualquier tópico dentro de `state` para ver si es `ON` u `OFF`.
 * **Auditoría:** Observa el tópico `.../cmd/received` para confirmar qué instrucciones ha procesado el ESP32.
@@ -476,10 +476,10 @@ mpremote mip install dht
 #### 🔌 Conexión (dht)
 
 | Pin del DHT22 | Conectar a | Pin del ESP32 | Código |
-| :------------------ | :------------- | :-------------------- | :----------------- |
-| **`+` / `VCC`**       | Alimentación 3.3V | **`3V3`**             | -                  |
-| **`-` / `GND`**       | Tierra         | **`GND`**             | -                  |
-| **`OUT` / `DATA`**    | Datos Digitales | **`GPIO 4`**          | `Pin(4)`           |
+| :- | :- | :- | :- |
+| **`+` / `VCC`** | Alimentación 3.3V | **`3V3`** | - |
+| **`-` / `GND`** | Tierra | **`GND`** | - |
+| **`OUT` / `DATA`** | Datos Digitales | **`GPIO 4`** | `Pin(4)` |
 
 ---
 
@@ -501,12 +501,12 @@ MicroPython no tiene un driver nativo para el BH1750, así que se requiere desca
 
 #### 🔌 Conexión (BH1750)
 
-| Pin del BH1750 | Conectar a | Pin del ESP32 | Propósito                                       |
-| :------------------ | :------------ | :--------------------- | :---------------------------------------------- |
-| **`VCC`**           | Alimentación  | **`3V3`**            | Provee el voltaje de 3.3V que necesita el sensor. |
-| **`GND`**           | Tierra        | **`GND`**            | Establece la referencia de tierra común.        |
-| **`SCL`**           | Reloj I2C     | **`GPIO 22`** | Pin I2C SCL por defecto del ESP32.              |
-| **`SDA`**           | Datos I2C     | **`GPIO 21`** | Pin I2C SDA por defecto del ESP32.              |
+| Pin del BH1750 | Conectar a | Pin del ESP32 | Propósito |
+| :- | :- | :- | :- |
+| **`VCC`** | Alimentación | **`3V3`** | Provee el voltaje de 3.3V que necesita el sensor. |
+| **`GND`** | Tierra | **`GND`** | Establece la referencia de tierra común. |
+| **`SCL`** | Reloj I2C | **`GPIO 22`** | Pin I2C SCL por defecto del ESP32. |
+| **`SDA`** | Datos I2C | **`GPIO 21`** | Pin I2C SDA por defecto del ESP32. |
 
 ---
 
@@ -517,10 +517,10 @@ Este módulo actúa como un conjunto de interruptores controlados electrónicame
 #### 🔌 Conexión (Módulo Relé)
 
 | Pin del Relé | Conectar a | Pin del ESP32 | Código |
-| :------------------ | :-------------- | :-------------------- | :----------------- |
-| **`D-` / `GND`**    | Tierra          | **`GND`**           | -                |
-| **`D+` / `VCC`**    | Alimentación 5V | **`VIN`**           | -                |
-| **`IN1`**         | Señal Canal 1   | **`GPIO 5`**        | `Pin(5)`           |
+| :---- | : | :------ | :--- |
+| **`D-` / `GND`**    | Tierra   | **`GND`**    | - |
+| **`D+` / `VCC`**    | Alimentación 5V | **`VIN`**    | - |
+| **`IN1`**  | Señal Canal 1   | **`GPIO 5`** | `Pin(5)`    |
 
 > **⚠️ ¡Importante sobre la Alimentación!**
 > Se debe usar el pin **`VIN`** del ESP32 para alimentar el relé. Este pin proporciona los ~5V directos del USB, necesarios para activar la bobina del relé de forma fiable. Usar `3V3` puede causar inestabilidad y reinicios.
@@ -544,10 +544,10 @@ Este sensor detecta la presencia de gotas de agua. Utilizaremos su salida digita
 #### 🔌 Conexión (Sensor de Lluvia)
 
 | Pin del Módulo | Conectar a | Pin del ESP32 | Código |
-| :-------------------- | :--------------- | :-------------------- | :----------------- |
-| **`VCC`**               | Alimentación 3.3V | **`3V3`**             | -                  |
-| **`GND`**               | Tierra           | **`GND`**             | -                  |
-| **`D0`**                | Salida Digital   | **`GPIO 32`**         | `Pin(32)`          |
+| :- | :- | :------ | :--- |
+| **`VCC`** | Alimentación 3.3V | **`3V3`** | - |
+| **`GND`** | Tierra | **`GND`** | - |
+| **`D0`** | Salida Digital | **`GPIO 32`** | `Pin(32)` |
 
 #### 🔧 Calibración
 
@@ -570,12 +570,12 @@ Este transductor analógico mide la presión en la línea de riego, útil para d
 * Resistencia 2 (R2): **22kΩ**
 
 | Cable del Sensor | Conectar a | Pin del ESP32 | Código |
-| :--------------- | :------------------------------ | :------------------------- | :----------------- |
-| **Rojo (`+5V`)** | Alimentación 5V                 | **`VIN`**                | -                |
-| **Negro (`GND`)** | Tierra                          | **`GND`**                | -                |
-| **Verde (`Signal`)**| Resistencia R1 (12kΩ)           | -                        | -                |
-| -              | Unión de R1 y R2                | **`GPIO 34`**            | `ADC(Pin(34))`     |
-| -              | Otro extremo de R2 (22kΩ)       | **`GND`**                | -                |
+| :- | :- | :- | :- |
+| **Rojo (`+5V`)** | Alimentación 5V | **`VIN`** | - |
+| **Negro (`GND`)** | Tierra | **`GND`** | - |
+| **Verde (`Signal`)** | Resistencia R1 (12kΩ) | - | - |
+| - | Unión de R1 y R2 | **`GPIO 34`** | `ADC(Pin(34))` |
+| - | Otro extremo de R2 (22kΩ) | **`GND`** | - |
 
 ---
 
@@ -820,20 +820,20 @@ WIFI_CONFIG = {{
 }}
 """
     try:
-        # Asegurar directorio
-        try: os.stat("lib/secrets")
-        except OSError: 
-            try: os.mkdir("lib/secrets")
-            except: pass
+ # Asegurar directorio
+ try: os.stat("lib/secrets")
+ except OSError: 
+     try: os.mkdir("lib/secrets")
+     except: pass
 
-        with open(TARGET_PATH, 'w') as f:
-            f.write(new_secrets_content)
-        
-        log(f"{Colors.GREEN}> [UPDATE] {Colors.CYAN}{TARGET_PATH}{Colors.GREEN} actualizado correctamente.{Colors.RESET}")
-        return True
+ with open(TARGET_PATH, 'w') as f:
+     f.write(new_secrets_content)
+ 
+ log(f"{Colors.GREEN}> [UPDATE] {Colors.CYAN}{TARGET_PATH}{Colors.GREEN} actualizado correctamente.{Colors.RESET}")
+ return True
     except Exception as e:
-        log(f"\n{Colors.RED}> [UPDATE] ERROR CRÍTICO: {e}{Colors.RESET}")
-        return False
+ log(f"\n{Colors.RED}> [UPDATE] ERROR CRÍTICO: {e}{Colors.RESET}")
+ return False
 ```
 
 #### 2\. Desplegar el Script (GitHub)
@@ -856,13 +856,14 @@ Edita el archivo `manifest.json` del dispositivo que deseas migrar (ej. `firmwar
       "version": "0.10.1",
       "date": "24-11-2025",
       "files": [
-        "main.py",
-        "https://raw.githubusercontent.com/TU_USUARIO/ORCHIDIUM/main/firmware/shared/update_creds.py"
+
+ "main.py",
+ "<https://raw.githubusercontent.com/TU_USUARIO/ORCHIDIUM/main/firmware/shared/update_creds.py>"
       ]
     }
     ```
 
-3. Haz `git push` de los cambios.
+1. Haz `git push` de los cambios.
 
 #### 4\. Ejecución Automática en el Dispositivo
 
