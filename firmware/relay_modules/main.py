@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # Relay Modules: Actuator Controller Firmware.
 # Descripción: Firmware dedicado para el control de las electroválvulas y la bomba.
-# Versión: v0.4.3 - Fix crítico Race Condition MQTT (Error 28)
+# Versión: v0.4.4 - Fix Flood Control [MQTT-1]
 # Fecha: 04-02-2026
 # ------------------------------- Configuración -------------------------------
 
@@ -833,6 +833,9 @@ async def state_publisher_task():
 
                 # Log con el carácter dinámico
                 log(f"    {tree_char} {relay_info['name']}: {Colors.MAGENTA}{current_state}{Colors.RESET}")
+                
+                # Evita saturar el socket/broker con ráfagas
+                await asyncio.sleep_ms(50)
                 
             except (MQTTException, OSError) as e:
                 log_mqtt_exception(f"Fallo la publicación de {relay_info['name']}", e)
