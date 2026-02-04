@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # Relay Modules: Actuator Controller Firmware.
 # Descripción: Firmware dedicado para el control de las electroválvulas y la bomba.
-# Versión: v0.4.2 - Fix crítico SSL/MQQT
+# Versión: v0.4.3 - Fix crítico Race Condition MQTT (Error 28)
 # Fecha: 04-02-2026
 # ------------------------------- Configuración -------------------------------
 
@@ -791,8 +791,9 @@ async def state_publisher_task():
         # Debounce: Pausa para agrupar múltiples cambios simultáneos
         await asyncio.sleep_ms(50)
 
-        # Validación de Conectividad
-        if client is None or not (wlan and wlan.isconnected()):
+        # Validación de Conectividad (Evitar Error 28)
+        # Verificamos client, wlan y el socket interno antes de intentar publicar
+        if client is None or getattr(client, 'sock', None) is None or not (wlan and wlan.isconnected()):
             log(f"\n❌  Publicación omitida: {Colors.RED}Cliente/WiFi no disponible{Colors.RESET}")
             continue
 
@@ -853,7 +854,8 @@ async def heartbeat_task():
     from umqtt.simple2 import MQTTException # type: ignore
 
     while True:
-        if client and wlan and wlan.isconnected():
+        # Verificamos client.sock para evitar Error 28 (Race condition durante conexión)
+        if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
             try:
                 # Reafirmamos que estamos vivos
                 client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=0)

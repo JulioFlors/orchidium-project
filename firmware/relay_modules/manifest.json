@@ -1,13 +1,13 @@
 {
   "name": "Relay Modules",
   "description": "Actuator Controller Firmware",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "date": "04-02-2026",
-  "notes_release": "Fix crítico: Compatibilidad SSL (ussl/ssl) para MQTT en nuevos entornos MicroPython.",
+  "notes_release": "Fix crítico: Condición de carrera en MQTT (Error 28). Validación de socket antes de publicar.",
   "files": [
     "main.py",
     "boot.py",
     "lib/secrets/template.py",
-    "https://raw.githubusercontent.com/JulioFlors/orchidium-project/main/firmware/shared/update_creds.py"
+    "lib/umqtt/simple2.py"
   ]
 }

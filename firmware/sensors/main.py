@@ -1,7 +1,7 @@
 # -----------------------------------------------------------------------------
 # Sensors: Environmental Monitoring Firmware.
 # Descripción: Firmware dedicado al Monitoreo de las condiciones ambientales del Invernadero.
-# Versión: v0.4.2 - Fix crítico SSL/MQTT
+# Versión: v0.4.3 - Fix crítico Race Condition MQTT (Error 28)
 # Fecha: 04-02-2026
 # ------------------------------- Configuración -------------------------------
 

@@ -22,9 +22,9 @@ NEW_MQTT_USER   = "pristinoplant-iot-device"
 NEW_MQTT_PASS   = "TU_PASSWORD"
 NEW_MQTT_PORT   = 1883
 NEW_MQTT_SSL    = False # True para HiveMQ Cloud
-# Parametros SSL (Solo si SSL=True)
-# Ej: '{"server_hostname": "..."}'
 NEW_MQTT_SSL_PARAMS = {} 
+# Parametros SSL (Solo si SSL=True)
+# Ej: '{"server_hostname": NEW_MQTT_SERVER}'
 
 # ---- Ruta de Destino ----
 TARGET_PATH = "lib/secrets/__init__.py"
