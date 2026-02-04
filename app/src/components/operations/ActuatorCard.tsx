@@ -48,11 +48,11 @@ export function ActuatorCard({
       {/* Botón de Acción */}
       <button
         className={`group absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full transition-colors ${isActive
-            ? 'bg-white/20 text-white hover:bg-white/30'
-            : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-white'
+          ? 'bg-white/20 text-white hover:bg-white/30'
+          : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-white'
           }`}
         disabled={isLoading || isDisabled}
-        onClick={(e) => {
+        onClick={() => {
           if (isDisabled) return
           onToggle()
         }}
