@@ -1,9 +1,9 @@
 {
   "name": "Relay Modules",
   "description": "Actuator Controller Firmware",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "date": "04-02-2026",
-  "notes_release": "Refactorización de seguridad MQTT: Importación estricta de secretos + Eliminación de defaults inseguros",
+  "notes_release": "Fix crítico: Compatibilidad SSL (ussl/ssl) para MQTT en nuevos entornos MicroPython.",
   "files": [
     "main.py",
     "boot.py",

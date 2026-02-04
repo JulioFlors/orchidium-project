@@ -1,3 +1,4 @@
+import clsx from 'clsx'
 import { ReactNode } from 'react'
 import { IoPower } from 'react-icons/io5'
 
@@ -33,25 +34,44 @@ export function ActuatorCard({
 
   return (
     <div
-      className={`relative flex flex-col items-center justify-center gap-4 rounded-2xl p-6 transition-all duration-300 ${isDisabled ? 'cursor-not-allowed opacity-50 grayscale' : ''
-        } ${isActive ? 'text-white' : 'text-zinc-400 hover:bg-zinc-700/50'} ${isActive ? activeClass : 'border border-zinc-800 bg-zinc-900'
-        }`}
+      className={clsx(
+        'relative flex flex-col items-center justify-center gap-4 rounded-2xl p-6 transition-all duration-300',
+        isDisabled ? 'cursor-not-allowed opacity-50 grayscale' : '',
+        isActive ? 'text-white' : 'text-zinc-400 hover:bg-zinc-700/50',
+        isActive ? activeClass : 'border border-zinc-800 bg-zinc-900',
+      )}
     >
       {/* Icono Principal */}
-      <div className={`text-4xl ${isActive ? 'scale-110' : ''} transition-transform duration-300`}>
+      <div
+        className={clsx(
+          'text-4xl',
+          isActive ? 'scale-110' : '',
+          'transition-transform duration-300',
+        )}
+      >
         {icon}
       </div>
 
       {/* Título */}
-      <h3 className="text-lg font-medium tracking-wide">{title}</h3>
+      <h3
+        className={clsx(
+          'text-lg font-medium tracking-wide',
+          isActive ? 'text-white' : 'text-zinc-400 hover:bg-zinc-700/50',
+        )}
+      >
+        {title}
+      </h3>
 
       {/* Botón de Acción */}
       <button
-        className={`group absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full transition-colors ${isActive
-          ? 'bg-white/20 text-white hover:bg-white/30'
-          : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-white'
-          }`}
+        className={clsx(
+          'group absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full transition-colors',
+          isActive
+            ? 'bg-white/20 text-white hover:bg-white/30'
+            : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-white',
+        )}
         disabled={isLoading || isDisabled}
+        type="button"
         onClick={() => {
           if (isDisabled) return
           onToggle()
