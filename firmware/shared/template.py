@@ -51,10 +51,10 @@ def apply_update():
     Esta función es llamada por boot.py.
     Sobrescribe lib/secrets/__init__.py con la nueva configuración.
     """
-    log(f"\n🔑  {Colors.BLUE}Actualizando Credenciales WiFi y MQTT{Colors.RESET}")
-    log(f"    ├─ Objetivo:  {Colors.CYAN}{TARGET_PATH}{Colors.RESET}")
-    log(f"    ├─ Nueva Red: {Colors.MAGENTA}{NEW_SSID}{Colors.RESET}")
-    log(f"    ├─ Broker:    {Colors.MAGENTA}{NEW_MQTT_SERVER}:{NEW_MQTT_PORT}{Colors.RESET}")
+    log(f"\n🔑  {Colors.GREEN}Actualizando Credenciales WiFi y MQTT{Colors.RESET}")
+    log(f"    ├─ Objetivo:  {Colors.BLUE}{TARGET_PATH}{Colors.RESET}")
+    log(f"    ├─ Nueva Red: {Colors.BLUE}{NEW_SSID}{Colors.RESET}")
+    log(f"    ├─ Broker:    {Colors.BLUE}{NEW_MQTT_SERVER}:{NEW_MQTT_PORT}{Colors.RESET}")
 
     # Contenido del Archivo __init__.py actualizado
     new_secrets_content = f"""# Credenciales actualizadas via OTA (update_creds.py)
