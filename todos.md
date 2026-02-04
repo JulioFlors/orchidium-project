@@ -1,99 +1,113 @@
-# 📋 Tablero de Actividades - ORCHIDIUM PROJECT
+# 📋 Backlog de Ingeniería (Micro-Gerencia)
 
-**Última Actualización:** 30-01-2026
-
----
-
-## ☁️ INFRAESTRUCTURA HÍBRIDA (Local / Cloud)
-
-Objetivo: Lograr que el sistema sea desplegable en la nube sin fricción, manteniendo un entorno local robusto.
-
-### 1. Estandarización MQTT (HiveMQ Cloud & Mosquitto)
-
-* [ ] **Seguridad Local:** Configurar Mosquitto (`mosquitto.conf`) para exigir usuario y contraseña (file authentication), replicando el comportamiento de HiveMQ.
-* [ ] **Gestión de Credenciales:** Crear usuarios estándar (`admin`, `backend`, `device`) tanto en HiveMQ Cloud como en Mosquitto local.
-* [ ] **Adaptación de Firmware:** Actualizar `secrets.py` en los ESP32 para soportar SSL/TLS (necesario para HiveMQ puerto 8883) y autenticación.
-* [ ] **Variables de Entorno:** Refactorizar `.env` para soportar `MQTT_PROTOCOL` (mqtt/mqtts) y puertos dinámicos.
-
-### 2. Almacenamiento y Base de Datos
-
-* [ ] **InfluxDB Híbrido:** Validar que los servicios `ingest` y `scheduler` conmuten correctamente entre InfluxDB Docker (Local) e InfluxDB Cloud (Prod) según la variable `INFLUX_URL`.
-* [ ] **Vercel Blob / S3:** Implementar subida de imágenes de plantas a almacenamiento en la nube (Vercel Blob) en lugar de `public/local`, para persistencia en despliegues serverless.
-
-### 3. Despliegue de Servicios (Backend)
-
-* [ ] **Dockerización de Producción:** Crear un `Dockerfile` optimizado para producción o configurar un servicio PaaS (como Railway o Render) para desplegar los contenedores `ingest` y `scheduler` que deben correr 24/7 (Vercel no sirve para esto porque es Serverless/Event-driven).
+Este documento centraliza todas las tareas del proyecto, fusionando la Estrategia de 4 Fases con los requerimientos técnicos de infraestructura y hardware.
 
 ---
 
-## 🛣️ IMPLEMENTACIÓN DE VISTAS (Rutas)
+## 🏗️ FASE 0: INFRAESTRUCTURA & DEVOPS
 
-Creación de la estructura de carpetas y páginas basada en `(orchidarium)/(titulo_principal)/pagina_especifica`.
+*Objetivo:* Cimientos sólidos para el despliegue híbrido (Local/Cloud).
 
-* [x] **✅ Validación de Estructura:** Revisar y confirmar que la estructura de carpetas y archivos en `(orchidarium)` cumpla con la convención de rutas y grupos definida.
-* [x] **🏠 Dashboard (`/orchidarium`)**
-  * [x] Estructura: `(dashboard)/monitoring`, `(dashboard)/timeline`, `(dashboard)/alerts`.
-  * [x] Paginas: `monitoring/page.tsx`, `timeline/page.tsx`, `alerts/page.tsx`.
-* [x] **🌺 Inventario (`/orchidarium/inventory`)**
-  * [x] Estructura: `(inventory)/species`, `(inventory)/stock`, `(inventory)/shop-manager`.
-  * [x] Paginas: `species/page.tsx`, `stock/page.tsx`, `shop-manager/page.tsx`.
-* [x] **🧪 Laboratorio (`/orchidarium/lab`)**
-  * [x] Estructura: `(lab)/supplies`, `(lab)/recipes`.
-  * [x] Paginas: `supplies/page.tsx`, `recipes/page.tsx`.
-* [x] **🏗️ Operaciones (`/orchidarium/operations`)**
-  * [x] Estructura: `(operations)/control`, `(operations)/planner`, `(operations)/history`.
-  * [x] Paginas: `control/page.tsx`, `planner/page.tsx`, `history/page.tsx`.
-* [x] **⚙️ Admin (`/orchidarium/settings`)**
-  * [x] Estructura: `(admin)/users`, `(admin)/system`.
-  * [x] Paginas: `users/page.tsx`, `system/page.tsx`.
+### ☁️ 0.1 Almacenamiento y Base de Datos
+
+* [ ] **Vercel Blob / S3:** Implementar subida de imágenes de plantas a almacenamiento en la nube (Vercel Blob) en lugar de `public/local`, para persistencia en despliegues serverless. <!-- Prioridad: Alta -->
+* [ ] **InfluxDB Híbrido:** Validar conmutación entre servicio local (Docker) y Cloud según `INFLUX_URL`.
+
+### 🚀 0.2 Despliegue de Servicios (Backend)
+
+* [ ] **Dockerización Producción:** Configurar `Dockerfile` optimizado o servicio PaaS (Railway/Render) para `ingest` y `scheduler` (servicios 24/7).
 
 ---
 
-## 📡 LÓGICA IOT & CONECTIVIDAD (Backend/Frontend)
+## 🟣 FASE 1: FUNDAMENTOS DE GESTIÓN (Sistemas CRUD)
 
-Una vez existan las vistas, inyectamos la "vida" al sistema.
+*Objetivo:* Poblar la base de datos con la realidad biológica y de insumos.
 
-### 1. Conectividad MQTT (Tiempo Real)
+### 🌿 1.1 Gestión de Inventario (Taxonomía y Activos)
 
-* [ ] **Cliente Web:** Implementar conexión Websocket a broker MQTT en el cliente (navegador).
-* [ ] **Hook `useMqttConnection`:** Gestión de estado de conexión, suscripciones y reconexión.
-* [ ] **Heartbeat:** Lógica para escuchar tópicos `.../status` y determinar Online/Offline.
+* [ ] **Sistema de Géneros (`Genus`):** CRUD completo con validación.
+* [ ] **Sistema de Especies (`Species`):**
+  * [ ] CRUD con Slug autogenerado.
+  * [ ] Integración con componente de carga de imágenes (Vercel Blob).
+* [ ] **Sistema de Plantas (`Plant`):** CRUD de activos vivos (Gemelo Digital).
 
-### 2. Visualización y Control
+### 🌸 1.2 Tienda & Lógica de Negocio
 
-* [ ] **Componentes de Sensores:** Cards reutilizables para Temperatura, Humedad, Luz.
-* [ ] **Gráficos:** Implementación de librería (ej. Recharts) para datos en tiempo real.
-* [ ] **Actuadores:** Interfaz de mando manual (Toggle Switches) para Riego/Luces.
-* [ ] **Orquestador Frontend:** Lógica JS para manejar `start_delay` y `duration` en acciones manuales.
-
----
-
-## 🎨 REFINAMIENTO DE UI/UX (Header)
-
-Objetivo: Lograr una experiencia de navegación "nativa" y fluida.
-
-* [x] **✨ Perfeccionamiento del NavbarDropdown (Mega Menu)**
-  * [x] **Transición de Altura (Height Morphing):** El contenedor base (`card`) debe adaptar su altura suavemente al contenido del nuevo ítem seleccionado, sin saltos bruscos.
-  * [x] **Cross-fade de Contenido:** Al cambiar entre ítems del menú (ej. de *Orquídeas* a *Insumos*), el contenido antiguo debe desvanecerse (`opacity: 0`) y el nuevo aparecer (`opacity: 1`) **sin movimientos espaciales** (sin deslizarse `x` o `y`).
-  * [ ] **Layouts Específicos:** El diseño visual y maquetación de las rejillas (Grids) finales se abordará **post-funcionalidad**, una vez definidos sus componentes y lógica operativa.
-
----
-
-## 🏪 LÓGICA DE NEGOCIO Y TIENDA
-
-* [ ] **🌦️ Servicio Meteorológico:**
-  * [ ] Integrar API externa (OpenWeather).
-  * [ ] Algoritmo de comparación: "Sensor Lluvia Local" vs "Predicción API".
-* [ ] **🌸 Mejoras en Tienda:**
-  * [ ] **Filtro Floración:** Checkbox/Filtro para mostrar solo plantas en "Floración Activa".
+* [ ] **CRUD Variantes (`ProductVariant`):** Gestión de precios y stock.
+* [ ] **Mejoras UI Tienda:**
+  * [ ] Filtro "En Floración Activa" (Checkbox).
   * [ ] Distintivo visual en la card de producto.
 
+### 🧪 1.3 Gestión de Laboratorio (Insumos)
+
+* [ ] **Catálogo de Agroquímicos:** CRUD Clasificado (Fertilizante/Fitosanitario) con instrucciones de uso.
+
+### 👥 1.4 Gestión de Usuarios
+
+* [ ] **Panel Admin:** Promover/Degradar usuarios.
+* [ ] **Mi Cuenta:** Botón "Cerrar Sesión" y gestión básica.
+
 ---
 
-## ⏸️ PAUSADO: HARDWARE & FIRMWARE (Relay Modules v0.4.0)
+## 🎮 FASE 2: NÚCLEO OPERATIVO (Control Manual)
 
-> Pendiente de validación física de componentes.
+*Objetivo:* Control en tiempo real con feedback inmediato.
 
-* [ ] Integración Transductor de Presión (Protección de bomba).
-* [ ] Migración lógica Sensor de Lluvia (Nodo Sensors -> Relays).
-* [ ] Integración Sensor de Luminosidad (BH1750 via I2C).
+### ⚙️ 2.1 Backend: Abstracción
+
+* [x] **API de Comandos:** Implementado como **Cliente MQTT Directo** para latencia cero.
+* [x] **Seguridad:** Implementado **Exclusión Mutua** en Frontend y Timeout de 10min.
+
+### 🎛️ 2.2 Frontend: Centro de Control (`/operations/control`)
+
+* [x] **Conectividad MQTT (Cliente):**
+  * [x] Hook `useMqttConnection`: Gestión de estado, suscripciones y reconexión.
+  * [x] Lógica **Heartbeat**: Indicador UI Online/Offline basado en tópicos `.../status`.
+* [x] **UI de Mando:**
+  * [x] **Grid Acciones:** Regar, Nebulizar, Humedecer, Fertirriego.
+  * [x] **Orquestador JS:** Manejo de exclusión mutua y timeouts visuales.
+* [ ] **Refinamiento UI/UX:** Pulido general de la página de operaciones.
+* [ ] **Smart Safety Checks (Roadmap):** Modal de confirmación "Pre-Flight" consultando sensores.
+
+### 📅 2.3 Agendamiento (Nueva Vista)
+
+* [ ] **Separación Lógica:** Mover "Tareas Programadas" a su propia vista/componente, independiente del control manual inmediato.
+
+---
+
+## 🧠 FASE 3: AUTOMATIZACIÓN INTELIGENTE
+
+*Objetivo:* El sistema se cuida solo.
+
+### 📅 3.1 Gestión de Rutinas
+
+* [ ] **CRUD Programas de Cultivo:** Creación de secuencias de fertilización.
+* [ ] **Scheduler UI:** Interfaz para gestionar `AutomationSchedule` (Crons).
+
+### 🌤️ 3.2 WeatherGuard (Inteligencia)
+
+* [ ] **Servicio Meteorológico Híbrido:**
+  * [ ] Integrar API externa (Ej: OpenWeatherMap).
+  * [ ] **Algoritmo de Decisión:** Comparar "Sensor Lluvia Local" vs "Predicción API" para cancelar riegos programados.
+
+---
+
+## ✨ FASE 4: EXPERIENCIA (Dashboard)
+
+*Objetivo:* Visualización de datos para toma de decisiones.
+
+### 📊 4.1 UI/UX & Visualización
+
+* [ ] **Gráficos en Tiempo Real:** Implementar Recharts para Temperatura/Humedad.
+* [ ] **Componentes de Sensores:** Cards reutilizables con datos en vivo.
+* [ ] **Layouts:** Refinar Grids y transiciones (Morphing/Cross-fade) post-funcionalidad.
+
+---
+
+## 🔌 HARDWARE (Pausado / Pendiente Validación)
+>
+> Tareas físicas pendientes de validación de componentes.
+
+* [ ] **Integración Transductor de Presión:** Lógica de protección de bomba en seco.
+* [ ] **Migración Sensor Lluvia:** Mover lógica de nodo `Sensors` a `Relays` (si aplica).
+* [ ] **Sensor de Luminosidad:** Integración final BH1750 via I2C.

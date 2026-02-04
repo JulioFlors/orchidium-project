@@ -1,11 +1,12 @@
 services:
   # ----------------------------------------------------------------
-  # Base de Datos Relacional (Gestión y E-commerce)
+  # INFRAESTRUCTURA DE DESARROLLO (Active Profile: local)
   # ----------------------------------------------------------------
   postgres:
     image: postgres:17.3
     container_name: postgres
     restart: always
+    profiles: ["local"]
     environment:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
@@ -20,27 +21,24 @@ services:
       timeout: 10s
       retries: 5
 
-  # ----------------------------------------------------------------
-  # Broker MQTT
-  # ----------------------------------------------------------------
   mosquitto:
     image: eclipse-mosquitto
     container_name: mosquitto
     restart: always
+    profiles: ["local"]
     ports:
       - "1883:1883"
       - "9001:9001"
     volumes:
       - ./infrastructure/mosquitto/config:/mosquitto/config
       - ./infrastructure/mosquitto/data:/mosquitto/data
+      - ./infrastructure/mosquitto/log:/mosquitto/log
 
-  # ----------------------------------------------------------------
-  # Base de Datos Series de Tiempo (InfluxDB v3 Core)
-  # ----------------------------------------------------------------
   influxdb:
     image: influxdb:3-core
     container_name: influxdb
     restart: always
+    profiles: ["local"]
     ports:
       - "8181:8181" 
     volumes:
@@ -55,11 +53,14 @@ services:
       - --data-dir=/var/lib/influxdb3/data
       - --http-bind=0.0.0.0:8181
 
+
   # ----------------------------------------------------------------
-  # Servicio de adquisición de datos MQTT
+  # SERVICIOS LOCALES (Conectados a Docker Interno)
+  # Profile: local
   # ----------------------------------------------------------------
-  ingest:
-    container_name: ingest
+  ingest-local:
+    container_name: ingest-local
+    profiles: ["local"]
     build:
       # El contexto de construcción debe apuntar a la raíz del monorepo
       context: . 
@@ -78,24 +79,20 @@ services:
       DB_USER: ${DB_USER}
       DB_HOST: postgres
       
-      # ---- Variables para prisma y app ----
-      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:${DB_PORT}/${DB_NAME}?schema=public
+      # Variables Local
+      DATABASE_URL: ${DATABASE_URL_LOCAL}
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL_LOCAL}
+      INFLUX_URL: ${INFLUX_URL_LOCAL}
       
-      # ---- Configuración MQTT ----
-      MQTT_BROKER_URL: mqtt://mosquitto:1883
       MQTT_CLIENT_ID: ${MQTT_CLIENT_ID_INGEST}
-
-      # ---- Configuración InfluxDB ----
-      INFLUX_URL: http://influxdb:8181
+      MQTT_USERNAME: ${MQTT_USER_BACKEND}
+      MQTT_PASSWORD: ${MQTT_PASS_BACKEND}
       INFLUX_TOKEN: ${INFLUX_TOKEN}
       INFLUX_BUCKET: ${INFLUX_BUCKET}
 
-  # ----------------------------------------------------------------
-  # Servicio de Automatización (Scheduler)
-  # "El Cerebro": Lee Horarios (Postgres) -> Consulta Clima (Influx) -> Actúa (MQTT)
-  # ----------------------------------------------------------------
-  scheduler:
-    container_name: scheduler
+  scheduler-local:
+    container_name: scheduler-local
+    profiles: ["local"]
     build:
       # Contexto raíz del monorepo
       context: .
@@ -107,7 +104,6 @@ services:
       mosquitto:
         condition: service_started
       influxdb:
-        # Esperamos a que Influx arranque (aunque no tiene healthcheck nativo aun)
         condition: service_started
     environment:
       # TODO: Cuando se termine el desarrollo cambiar a NODE_ENV: production
@@ -117,14 +113,65 @@ services:
       DB_USER: ${DB_USER}
       DB_HOST: postgres
       
-      # ---- Variables para prisma ----
-      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@postgres:${DB_PORT}/${DB_NAME}?schema=public
+      # Variables Local
+      DATABASE_URL: ${DATABASE_URL_LOCAL}
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL_LOCAL}
+      INFLUX_URL: ${INFLUX_URL_LOCAL}
       
-      # ---- Configuración MQTT ----
-      MQTT_BROKER_URL: mqtt://mosquitto:1883
       MQTT_CLIENT_ID: ${MQTT_CLIENT_ID_SCHEDULER}
+      MQTT_USERNAME: ${MQTT_USER_BACKEND}
+      MQTT_PASSWORD: ${MQTT_PASS_BACKEND}
+      INFLUX_TOKEN: ${INFLUX_TOKEN}
+      INFLUX_BUCKET: ${INFLUX_BUCKET}
 
-      # ---- Configuración InfluxDB (Para consultar lluvia) ----
-      INFLUX_URL: http://influxdb:8181
+
+  # ----------------------------------------------------------------
+  # SERVICIOS CLOUD (Conectados a Internet)
+  # Profile: cloud
+  # ----------------------------------------------------------------
+  ingest-cloud:
+    container_name: ingest-cloud
+    profiles: ["cloud"]
+    build:
+      context: . 
+      dockerfile: services/ingest/Dockerfile
+    restart: always
+    # No depende de Mosquitto/Postgres locales
+    environment:
+      NODE_ENV: production
+      DB_USER: ${DB_USER_CLOUD}
+      DB_HOST: ${DB_HOST_CLOUD}
+      
+      # Variables Cloud
+      DATABASE_URL: ${DATABASE_URL_CLOUD}
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL_CLOUD}
+      INFLUX_URL: ${INFLUX_URL_CLOUD}
+      
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID_INGEST}
+      MQTT_USERNAME: ${MQTT_USER_BACKEND}
+      MQTT_PASSWORD: ${MQTT_PASS_BACKEND}
+      INFLUX_TOKEN: ${INFLUX_TOKEN}
+      INFLUX_BUCKET: ${INFLUX_BUCKET}
+
+  scheduler-cloud:
+    container_name: scheduler-cloud
+    profiles: ["cloud"]
+    build:
+      context: .
+      dockerfile: services/scheduler/Dockerfile
+    restart: always
+    environment:
+      NODE_ENV: production
+      DB_USER: ${DB_USER_CLOUD}
+      DB_HOST: ${DB_HOST_CLOUD}
+      
+      # Variables Cloud
+      DATABASE_URL: ${DATABASE_URL_CLOUD}
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL_CLOUD}
+      INFLUX_URL: ${INFLUX_URL_CLOUD}
+      
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID_SCHEDULER}
+      MQTT_USERNAME: ${MQTT_USER_BACKEND}
+      MQTT_PASSWORD: ${MQTT_PASS_BACKEND}
       INFLUX_TOKEN: ${INFLUX_TOKEN}
       INFLUX_BUCKET: ${INFLUX_BUCKET}

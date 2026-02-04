@@ -21,8 +21,10 @@ COPY services/scheduler/package.json ./services/scheduler/
 
 # Instala dependencias (Caché persistente)
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile --fetch-retries 10 \
-    --fetch-retry-mintimeout 5000 --fetch-retry-maxtimeout 5000
+    pnpm install --frozen-lockfile \
+    --fetch-retries 10 \
+    --fetch-retry-mintimeout 5000 \
+    --fetch-retry-maxtimeout 5000
 
 # Copia el código fuente
 COPY packages/database/ ./packages/database/
@@ -40,8 +42,10 @@ RUN pnpm --filter=@service/scheduler build
 # Desplegamos en un carpeta /deploy lista para producción, limpia y podada.
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
     pnpm deploy --filter=@service/scheduler --legacy --prod /deploy \
-    --prefer-offline --fetch-retries 10 \
-    --fetch-retry-mintimeout 5000 --fetch-retry-maxtimeout 5000
+    --prefer-offline \
+    --fetch-retries 10 \
+    --fetch-retry-mintimeout 5000 \
+    --fetch-retry-maxtimeout 5000
 
 # ---- Production: Imagen final ----
 FROM base AS production
@@ -65,6 +69,8 @@ COPY --from=builder /app/packages/database ./packages/database
 # /usr/local/bin está en el PATH del sistema, lo que permite que el script
 # se ejecute directamente por su nombre sin necesidad de una ruta relativa.
 COPY services/scheduler/entrypoint.sh /usr/local/bin/
+# Elimina caracteres de retorno de carro (CR) formato Windows
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh
 # Otorga permisos de ejecución al script de entrypoint.
 RUN chmod +x /usr/local/bin/entrypoint.sh
 

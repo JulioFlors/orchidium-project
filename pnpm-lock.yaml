@@ -56,6 +56,9 @@ importers:
       motion:
         specifier: 12.23.24
         version: 12.23.24(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+      mqtt:
+        specifier: 5.14.1
+        version: 5.14.1
       next:
         specifier: 16.1.5
         version: 16.1.5(@babel/core@7.28.4)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
@@ -4992,7 +4995,7 @@ snapshots:
 
   '@types/readable-stream@4.0.21':
     dependencies:
-      '@types/node': 25.0.10
+      '@types/node': 22.19.3
 
   '@types/semver@7.7.1': {}
 
@@ -7247,7 +7250,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.0
-      '@types/node': 25.0.10
+      '@types/node': 22.19.3
       long: 5.3.2
 
   punycode@2.3.1: {}

@@ -10,7 +10,7 @@ DEBUG = True
 
 # ---- Configuración OTA ----
 OTA_CONFIG = {
-    "URL": "https://raw.githubusercontent.com/JulioFlors/orchidium-project/Dev/firmware/relay_modules/"
+    "URL": "https://raw.githubusercontent.com/JulioFlors/orchidium-project/main/firmware/relay_modules/"
 }
 
 # ---- Colors for logs ----

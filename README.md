@@ -117,7 +117,16 @@ Dentro de la carpeta `app` crea una copia del archivo `.env.template` y renómbr
 cp .env.template .env
 ```
 
-Abre el archivo `.env` y ajusta las variables si es necesario (aunque los valores por defecto son adecuados para el desarrollo local).
+El archivo `.env` está dividido en secciones. Rellena tus credenciales (Google, Neon, HiveMQ) en las variables correspondientes.
+
+#### ⚙️ Configuración de la App (Next.js)
+
+Al final del archivo `.env`, encontrarás la sección **"APP NEXT.JS"**. Aquí decides a dónde se conecta tu entorno de desarrollo local (`pnpm dev`):
+
+* **Opción A (Cloud):** Descomenta las líneas bajo `Opción A` para usar datos reales en la nube (Neon, HiveMQ).
+* **Opción B (Local):** Descomenta las líneas bajo `Opción B` para usar los contenedores locales (Postgres, Mosquitto).
+
+> **Nota:** Esto solo afecta a la App Web. Los servicios de backend (ingesta/scheduler) se controlan por separado usando **Docker Profiles** (ver paso 3).
 
 ### 2. Instalar Dependencias
 
@@ -127,19 +136,40 @@ Instala las dependencias del proyecto utilizando pnpm.
 pnpm install
 ```
 
-### 3. Levantar la Infraestructura de Backend
+### 3. Levantar la Infraestructura (Selecciona tu Perfil)
 
-Desde la **raíz del proyecto**, ejecuta:
+Hemos simplificado el despliegue usando **Docker Profiles**. Elige el comando según tu entorno deseado:
+
+#### OPCIÓN A: Entorno 100% Local (Offline)
+
+Levanta toda la infraestructura localmente: Postgres, Mosquitto, InfluxDB y los servicios conectados a ellos.
 
 ```bash
-docker-compose up --build -d
+docker-compose --profile local up --build -d
 ```
 
-Esto iniciará PostgreSQL, InfluxDB, Mosquitto, el servicio de Ingesta y el Schedule.
+#### OPCIÓN B: Entorno Híbrido (Cloud)
 
-* `--build`: Es necesario la primera vez para construir la imagen del servicio de ingesta.
+Levanta SOLO los servicios de aplicación (`ingest`, `scheduler`) que se conectan a HiveMQ y Neon en la nube.
+*(No levanta bases de datos locales).*
 
-* `-d`: Ejecuta los contenedores en segundo plano (detached mode).
+```bash
+docker-compose --profile cloud up --build -d
+```
+
+#### Detener todo
+
+```bash
+docker-compose --profile local --profile cloud down
+```
+
+> [!TIP]
+> **Nombre del Proyecto (Stack):**
+> Por defecto, Docker usa el nombre de la carpeta (`pristinoplant`). Si ya tienes un stack con este nombre o quieres correr ambos perfiles simultáneamente en stacks separados, usa la bandera `-p`:
+>
+> ```bash
+> docker-compose -p pristinoplant-cloud --profile cloud up --build -d
+> ```
 
 ### 4. Aplicar las Migraciones de la Base de Datos
 
@@ -190,268 +220,3 @@ Para desplegar correctamente el directorio `app`, configura el proyecto en Verce
 4. Habilita la opción **"Include files outside of the Root Directory in the Build Step"**. Esto es fundamental para que Turborepo pueda acceder a toda la estructura del monorepositorio durante el proceso de compilación.
 
 5. Habilita la opción **"Skip deployments when there are no changes to the root directory or its dependencies."**. Evita Despliegues innecesarios, configura Vercel para que omita una compilación si un commit no afecta a la aplicación web.
-
----
-
-## Ficheros del Proyecto
-
-```bash
-└── pristinoplant/
-    │
-    ├── 📁 .turbo/                <-- Configuración de turborepo
-    │
-    ├── 📁 .vscode/                <-- Configuración de VS Code
-    │   └── settings.json
-    │
-    ├── 📁 app/                    <-- proyecto de Next.js
-    │   ├── .next/
-    │   ├── .turbo/
-    │   ├── node_modules/
-    │   ├── public/
-    │   ├── src/
-    │   │   ├── actions/
-    │   │   │   ├── auth/
-    │   │   │   │   ├── login.ts
-    │   │   │   │   ├── logout.ts
-    │   │   │   │   └── register.ts
-    │   │   │   ├── navigation/
-    │   │   │   │   └── get-plants-navigation.ts
-    │   │   │   ├── product/
-    │   │   │   │   ├── get-all-species.ts
-    │   │   │   │   ├── get-paginated-species.ts
-    │   │   │   │   ├── get-search-species-by-term.ts
-    │   │   │   │   ├── get-search-suggestions.ts
-    │   │   │   │   ├── get-species-by-slug.ts
-    │   │   │   │   ├── get-species-by-type.ts
-    │   │   │   │   └── get-stock-by-slug.ts
-    │   │   │   └── index.ts
-    │   │   ├── app/
-    │   │   │   ├── (shop)/
-    │   │   │   │   ├── admin/
-    │   │   │   │   │   ├── dashboard/
-    │   │   │   │   │   │   └── page.tsx
-    │   │   │   │   │   └── page.tsx
-    │   │   │   │   ├── cart/
-    │   │   │   │   │   └── page.tsx
-    │   │   │   │   ├── category/
-    │   │   │   │   │   ├── plants/
-    │   │   │   │   │   │   ├── [slug]/
-    │   │   │   │   │   │   │   └── page.tsx
-    │   │   │   │   │   │   └── page.tsx
-    │   │   │   │   │   ├── error.tsx
-    │   │   │   │   │   └── not-found.tsx
-    │   │   │   │   ├── checkout/
-    │   │   │   │   │   ├── address/
-    │   │   │   │   │   │   └── page.tsx
-    │   │   │   │   │   ├── ui/
-    │   │   │   │   │   │   └── AddressForm.tsx
-    │   │   │   │   │   └── page.tsx
-    │   │   │   │   ├── empty/
-    │   │   │   │   │   └── page.tsx
-    │   │   │   │   ├── orders/
-    │   │   │   │   │   ├── [id]/
-    │   │   │   │   │   │   └── page.tsx
-    │   │   │   │   │   └── page.tsx
-    │   │   │   │   ├── product/
-    │   │   │   │   │   └── [slug]/
-    │   │   │   │   │       └── page.tsx
-    │   │   │   │   ├── search/
-    │   │   │   │   │   ├── page.tsx
-    │   │   │   │   │   └── SearchPageClient.tsx
-    │   │   │   │   ├── layout.tsx
-    │   │   │   │   └── page.tsx
-    │   │   │   ├── api/
-    │   │   │   │   └── auth/
-    │   │   │   │       └── [...nextauth]/
-    │   │   │   │           └── route.ts
-    │   │   │   ├── auth/
-    │   │   │   │   ├── login/
-    │   │   │   │   │   ├── ui/
-    │   │   │   │   │   │   └── LoginForm.tsx
-    │   │   │   │   │   └── page.tsx
-    │   │   │   │   ├── new-account/
-    │   │   │   │   │   ├── ui/
-    │   │   │   │   │   │   └── RegisterForm.tsx
-    │   │   │   │   │   └── page.tsx
-    │   │   │   │   └── layout.tsx
-    │   │   │   ├── dashboard/
-    │   │   │   │   ├── layout.tsx
-    │   │   │   │   └── page.tsx
-    │   │   │   ├── error.tsx
-    │   │   │   ├── favicon.ico
-    │   │   │   ├── globals.css
-    │   │   │   ├── layout.tsx
-    │   │   │   └── not-found.tsx
-    │   │   ├── components/
-    │   │   │   ├── cart/
-    │   │   │   │   ├── OrderSummary.tsx
-    │   │   │   │   └── ProductsInCart.tsx
-    │   │   │   ├── product/
-    │   │   │   │   ├── product-image/
-    │   │   │   │   │   └── ProductImage.tsx
-    │   │   │   │   ├── quantity-selector/
-    │   │   │   │   │   ├── QuantityDropdown.tsx
-    │   │   │   │   │   └── QuantitySelector.tsx
-    │   │   │   │   ├── size-selector/
-    │   │   │   │   │   └── SizeSelector.tsx
-    │   │   │   │   ├── slideshow/
-    │   │   │   │   │   ├── MobileSlideshow.tsx
-    │   │   │   │   │   ├── slideshow.css
-    │   │   │   │   │   └── Slideshow.tsx
-    │   │   │   │   ├── stock-label/
-    │   │   │   │   │   └── StockLabel.tsx
-    │   │   │   │   ├── stock-notification/
-    │   │   │   │   │   └── StockNotificationWhatsapp.tsx
-    │   │   │   │   └── ui/
-    │   │   │   │       └── AddToCart.tsx
-    │   │   │   ├── products/
-    │   │   │   │   └── product-grid/
-    │   │   │   │       ├── ProductGrid.tsx
-    │   │   │   │       ├── ProductGridItem.tsx
-    │   │   │   │       ├── ProductGridItemSkeleton.tsx
-    │   │   │   │       └── ProductGridSkeleton.tsx
-    │   │   │   ├── ui/
-    │   │   │   │   ├── footer/
-    │   │   │   │   │   └── Footer.tsx
-    │   │   │   │   ├── form/
-    │   │   │   │   │   └── FormField.tsx
-    │   │   │   │   ├── header/
-    │   │   │   │   │   └── Header.tsx
-    │   │   │   │   ├── icons/
-    │   │   │   │   │   └── PristinoPlant.tsx
-    │   │   │   │   ├── not-found/
-    │   │   │   │   │   └── PageNotFound.tsx
-    │   │   │   │   ├── radio-group/
-    │   │   │   │   │   └── RadioGroup.tsx
-    │   │   │   │   ├── radio-option-group/
-    │   │   │   │   │   └── RadioOptionGroup.tsx
-    │   │   │   │   ├── search-box/
-    │   │   │   │   │   ├── SearchBox.tsx
-    │   │   │   │   │   └── SearchBox.utils.ts
-    │   │   │   │   ├── sidebar/
-    │   │   │   │   │   ├── CategoryContent.tsx
-    │   │   │   │   │   ├── MainContent.tsx
-    │   │   │   │   │   ├── Sidebar.tsx
-    │   │   │   │   │   └── Sidebar.utils.ts
-    │   │   │   │   ├── skeleton/
-    │   │   │   │   │   └── OrderSummarySkeleton.tsx
-    │   │   │   │   ├── subtitle/
-    │   │   │   │   │   └── Subtitle.tsx
-    │   │   │   │   └──title/
-    │   │   │   │       └── Title.tsx
-    │   │   │   └── index.ts
-    │   │   ├── config/
-    │   │   │   ├── fonts.ts
-    │   │   │   ├── index.ts
-    │   │   │   ├── mappings.ts
-    │   │   │   └── routes.ts
-    │   │   ├── interfaces/
-    │   │   │   ├── index.ts
-    │   │   │   ├── product.interface.ts
-    │   │   │   └── route.interface.ts
-    │   │   ├── store/
-    │   │   │   │   └── cart-store.ts
-    │   │   │   ├── cart/
-    │   │   │   ├── ui/
-    │   │   │   │   └── ui-store.ts
-    │   │   │   └── index.ts
-    │   │   ├── utils/
-    │   │   │   ├── currencyFormat.ts
-    │   │   │   └── index.ts
-    │   │   ├── auth.config.ts
-    │   │   └── proxy.ts
-    │   ├── .editorconfig
-    │   ├── eslint.config.mjs
-    │   ├── next-env.d.ts
-    │   ├── next.config.ts
-    │   ├── nextauth.d.ts
-    │   ├── package.json
-    │   ├── postcss.config.mjs
-    │   ├── README.md
-    │   └── tsconfig.json
-    │
-    ├── 📁 firmware/               <-- Código del ESP32
-    │   ├── lib/
-    │   │   ├── bh1750/
-    │   │   │   └──__init__.py
-    │   │   ├── ota/
-    │   │   │   └──__init__.py
-    │   │   ├── secrets/
-    │   │   │   └──__init__template.py
-    │   │   └── umqtt/
-    │   │       ├──__init__.py
-    │   │       ├──errno.py
-    │   │       └──simple2.py
-    │   ├── relay_modules/
-    │   │   ├── main.py
-    │   │   └── manifest.json
-    │   ├── sensors/
-    │   │   ├── main.py
-    │   │   └── manifest.json
-    │   ├── shared/
-    │   │   └── update_creds_template.py
-    │   ├── ESP32_2025-08-09_v1.26.0.bin
-    │   └── README.md
-    │
-    ├── 📁 infrastructure/         <-- Configuración de servicios de Docker
-    │   └── mosquitto/
-    │       └── config/
-    │           └── mosquitto.conf
-    │
-    ├── 📁 node_modules/           <-- node_modules del monorepo
-    │
-    ├── 📁 packages/               <-- Paquetes del monorepo
-    │   └── database/
-    │       ├── .turbo/
-    │       │   └── turbo-build.log
-    │       ├── dist/
-    │       │   ├── client.js
-    │       │   └── index.js
-    │       ├── node_modules/
-    │       ├── postgres/
-    │       ├── prisma/
-    │       │   ├── migrations/
-    │       │   └── schema.prisma
-    │       ├── src/
-    │       │   ├── generated/
-    │       │   ├── client.ts
-    │       │   └── index.ts
-    │       ├── package.json
-    │       ├── prisma.config.ts
-    │       └── tsconfig.json
-    │
-    ├── 📁 services/               <-- Servicios de Docker
-    │   ├── mqtt/
-    │   │   ├── .turbo/
-    │   │   │   └── turbo-build.log
-    │   │   ├── dist/
-    │   │   │   └── bundle.mjs
-    │   │   ├── node_modules/
-    │   │   ├── src/s
-    │   │   │   └── index.ts
-    │   │   ├── Dockerfile
-    │   │   ├── entrypoint.sh
-    │   │   ├── package.json
-    │   │   └── tsconfig.json
-    │   │
-    │   └── seed/
-    │       ├── node_modules/
-    │       ├── src/
-    │       │   ├── index.ts
-    │       │   ├── seed-data.ts
-    │       │   └── seed-database.ts
-    │       ├── package.json
-    │       └── tsconfig.json
-    │
-    ├── .dockerignore
-    ├── .env
-    ├── .env.template
-    ├── .gitignore
-    ├── docker-compose.yml
-    ├── package.json
-    ├── pnpm-lock.yaml
-    ├── pnpm-workspace.yaml
-    ├── README.md
-    ├── tsconfig.base.json
-    └── turbo.json
-```
