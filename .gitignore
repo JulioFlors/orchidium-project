@@ -24,7 +24,7 @@
 # ---- Archivos de IDEs y Editores ----
 # Configuración específica del entorno local del desarrollador.
 **/commit*
-**/gemini*
+**/context*
 
 # ---- Dependencias de Gestores de Paquetes ----
 # La doble estrella (**) asegura que se ignoren en cualquier nivel.
@@ -36,6 +36,7 @@
 # Contiene los archivos de la base de datos local.
 # Son datos, no código, y pueden ser muy grandes.
 **/data
+infrastructure/mosquitto/config/passwd
 
 # ---- Artefactos de Build y Caché de la Aplicación Next.js ----
 # Especificamos la ruta para ser precisos.

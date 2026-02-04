@@ -1,8 +1,8 @@
 # -----------------------------------------------------------------------------
 # Relay Modules: Actuator Controller Firmware.
 # Descripción: Firmware dedicado para el control de las electroválvulas y la bomba.
-# Versión: v0.4.0 - Implementación de Detección Zombie + Start Delay + Actualización de Firmware con OTA + Apagado Controlado v2 + Boot.py + Lazy Imports + new Topic/cmd + Lógica for reboot the device + Interpretación de Errores MQTT v2
-# Fecha: 06-12-2025
+# Versión: v0.4.1 - Refactorización de seguridad MQTT: Importación estricta de secretos + Eliminación de defaults inseguros
+# Fecha: 04-02-2026
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib. 
@@ -19,10 +19,6 @@ DEBUG = True
 
 # ---- Configuración MQTT ----
 MQTT_CONFIG = {
-    "SERVER": "192.168.1.5",
-    "PORT": 1883,
-    "USER": "",
-    "PASS": "",
     # El broker esperará ~1.5x este valor antes de desconectar al cliente.
     "KEEPALIVE": 60, # ~1.5x = 90 seg
     # Intervalo para enviar pings de 'keepalive' al broker MQTT.
@@ -94,13 +90,17 @@ def log(*args, **kwargs):
     if DEBUG:
         print(*args, **kwargs)
 
-# ---- Importar configuración WiFi de forma segura ---- #
+# ---- Importar configuración desde lib/secrets de forma segura ---- #
 try:
-    from secrets import WIFI_CONFIG
+    from secrets import WIFI_CONFIG, MQTT_CONFIG as SECRETS_MQTT
+
+    # Si la importación tiene éxito, actualizamos los valores por defecto.
+    MQTT_CONFIG.update(SECRETS_MQTT)
 except ImportError:
     log(f"\n\n❌  Error: {Colors.RED}No se encontró{Colors.RESET} lib/secrets")
     # Evitamos que el código crashee, aunque no conectará
     WIFI_CONFIG = {"SSID": "", "PASS": ""}
+    MQTT_CONFIG = {"SERVER": "", "USER": "", "PASS": "", "PORT": 1883, "SSL": False, "SSL_PARAMS": {}}
 
 # ---- Función Auxiliar: Interpretación de Errores MQTT ----
 def log_mqtt_exception(context, e):
@@ -580,6 +580,8 @@ async def mqtt_connector_task(client_id):
                     port=MQTT_CONFIG["PORT"],
                     user=MQTT_CONFIG["USER"], password=MQTT_CONFIG["PASS"],
                     keepalive=MQTT_CONFIG["KEEPALIVE"],
+                    ssl=MQTT_CONFIG["SSL"],
+                    ssl_params=MQTT_CONFIG["SSL_PARAMS"],
                     socket_timeout=MQTT_CONFIG["SOCKET_TIMEOUT"],
                     message_timeout=MQTT_CONFIG["MESSAGE_TIMEOUT"]
                 )

@@ -12,7 +12,11 @@ import mqtt from 'mqtt'
 const DEBUG = process.env.NODE_ENV !== 'production'
 
 // ---- Configuración MQTT ----
-const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || 'mqtt://localhost:1883'
+const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || process.env.MQTT_BROKER_URL_CLOUD || process.env.MQTT_BROKER_URL_LOCAL || ''
+
+const MQTT_USERNAME = process.env.MQTT_USERNAME || process.env.MQTT_USER_BACKEND || ''
+const MQTT_PASSWORD = process.env.MQTT_PASSWORD || process.env.MQTT_PASS_BACKEND || ''
+
 const MQTT_CLIENT_ID = process.env.MQTT_CLIENT_ID_SCHEDULER || 'PristinoPlant-Scheduler'
 const ACTUATOR_TOPIC = 'PristinoPlant/Actuator_Controller/irrigation/command'
 
@@ -102,8 +106,22 @@ const influxClient = new InfluxDBClient({
   database: INFLUX_BUCKET
 })
 
+
+Logger.info(
+  `\n${colors.blue}📡 [ MQTT ] ${colors.reset}${colors.white}Conectando a ${colors.reset}${colors.blue}${MQTT_BROKER_URL}${colors.reset}`,
+)
+
 // ---- Cliente MQTT ----
-const mqttClient = mqtt.connect(MQTT_BROKER_URL, { clientId: MQTT_CLIENT_ID, protocolVersion: 5 })
+const mqttClient = mqtt.connect(MQTT_BROKER_URL, {
+  clientId: MQTT_CLIENT_ID,
+  protocolVersion: 5,
+  username: MQTT_USERNAME,
+  password: MQTT_PASSWORD,
+  // Opciones típicamente requeridas o recomendadas para HiveMQ Cloud
+  protocol: MQTT_BROKER_URL.startsWith('mqtts') ? 'mqtts' : 'mqtt',
+  rejectUnauthorized: true, // Requerido para verificar certificados públicos de HiveMQ
+  servername: new URL(MQTT_BROKER_URL).hostname, // SNI: Garantiza que se envíe el hostname correcto en el handshake TLS
+})
 
 mqttClient.on('connect', () => Logger.success('Conectado a Broker MQTT'))
 mqttClient.on('error', (err) => Logger.error('NO pudo establecer la conexión con el cliente MQTT:', err))

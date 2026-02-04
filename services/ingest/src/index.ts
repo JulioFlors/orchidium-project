@@ -19,14 +19,18 @@ import { ZoneType } from '@package/database'
 const DEBUG = process.env.NODE_ENV !== 'production'
 
 // ---- Configuración MQTT ----
-const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || 'mqtt://localhost:1883'
+const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || process.env.MQTT_BROKER_URL_CLOUD || process.env.MQTT_BROKER_URL_LOCAL || ''
+
+const MQTT_USERNAME = process.env.MQTT_USERNAME || process.env.MQTT_USER_BACKEND || ''
+const MQTT_PASSWORD = process.env.MQTT_PASSWORD || process.env.MQTT_PASS_BACKEND || ''
+
 const MQTT_CLIENT_ID = process.env.MQTT_CLIENT_ID_INGEST || 'PristinoPlant-Ingest'
 const BASE_TOPIC_PREFIX = 'PristinoPlant'
 
 // ---- Configuración InfluxDB ----
-const INFLUX_URL = process.env.INFLUX_URL || 'http://localhost:8181'
-const INFLUX_TOKEN = process.env.INFLUX_TOKEN
-const INFLUX_BUCKET = process.env.INFLUX_BUCKET || 'sensors'
+const INFLUX_URL = process.env.INFLUX_URL || process.env.INFLUX_URL_CLOUD || process.env.INFLUX_URL_LOCAL || ''
+const INFLUX_TOKEN = process.env.INFLUX_TOKEN || ''
+const INFLUX_BUCKET = process.env.INFLUX_BUCKET || 'telemetry'
 
 if (!INFLUX_TOKEN) {
   console.error('❌ ERROR CRÍTICO: INFLUX_TOKEN no está definido.')
@@ -163,13 +167,20 @@ async function processZoneStateEvent(
   await writeToInflux(point)
 }
 
-// ---- Cliente MQTT ----
 Logger.info(
-  `\n${colors.blue}📡 [ MQTT ] ${colors.reset}${colors.white}Conectando ${colors.reset}${colors.blue}${MQTT_BROKER_URL}${colors.reset}`,
+  `\n${colors.blue}📡 [ MQTT ] ${colors.reset}${colors.white}Conectando a ${colors.reset}${colors.blue}${MQTT_BROKER_URL}${colors.reset}`,
 )
 
+// ---- Cliente MQTT ----
 const client = mqtt.connect(MQTT_BROKER_URL, {
   clientId: MQTT_CLIENT_ID,
+  protocolVersion: 5,
+  username: MQTT_USERNAME,
+  password: MQTT_PASSWORD,
+  // Opciones típicamente requeridas o recomendadas para HiveMQ Cloud
+  protocol: MQTT_BROKER_URL.startsWith('mqtts') ? 'mqtts' : 'mqtt',
+  rejectUnauthorized: true,
+  servername: new URL(MQTT_BROKER_URL).hostname, // SNI: Garantiza que se envíe el hostname correcto en el handshake TLS
 })
 
 client.on('connect', () => {

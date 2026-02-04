@@ -1,0 +1,7 @@
+# Archivo de contraseñas de Mosquitto
+# Formato: username:password
+
+pristinoplant:
+pristinoplant-backend:
+pristinoplant-web-client:
+pristinoplant-iot-device:
