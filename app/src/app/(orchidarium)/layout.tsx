@@ -30,23 +30,13 @@ export default async function OchidariumLayout({ children }: { children: React.R
   }
 
   return (
-    <div className="bg-canvas flex min-h-dvh flex-col">
-      {/* Header Específico del Admin (Nivel 1) 
-         Contiene la lógica del Mega Menú y Toolbar
-      */}
+    <div className="flex min-h-dvh flex-col">
       <Header />
 
-      {/* Sidebar Global Derecho (Reutilizado de la tienda)
-         Se activa con el botón "Menú" en móviles.
-      */}
       <Sidebar />
 
-      <div className="mx-auto flex w-full max-w-[1920px] flex-1 pt-14">
-        {/* Contenido Principal */}
-        <main className="tds-lg:p-10 min-w-0 flex-1 overflow-x-hidden p-6">{children}</main>
-      </div>
+      <main className="tds-sm:mx-9 tds-xl:mx-12 mx-6 mt-14 grow">{children}</main>
 
-      {/* Footer (Opcional en dashboard, a veces se quita para ganar espacio vertical) */}
       <Footer />
     </div>
   )

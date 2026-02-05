@@ -1,8 +1,8 @@
 # -----------------------------------------------------------------------------
 # Relay Modules: Actuator Controller Firmware.
 # Descripción: Firmware dedicado para el control de las electroválvulas y la bomba.
-# Versión: v0.4.4 - Fix Flood Control [MQTT-1]
-# Fecha: 04-02-2026
+# Versión: v0.4.5 - Fix: ERROR [-202] (Fallo Handshake SSL/Red) - Refactorizacion: force_disconnect_mqtt
+# Fecha: 05-02-2026
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib. 
@@ -162,6 +162,7 @@ def log_mqtt_exception(context, e):
         if e.args and e.args[0] == 110: err_msg = "ETIMEDOUT (Conexión lenta/caída)"
         if e.args and e.args[0] == 113: err_msg = "EHOSTUNREACH (Ruta al host inalcanzable)"
         if e.args and e.args[0] == 104: err_msg = "ECONNRESET (Conexión reseteada por par)"
+        if e.args and e.args[0] == -202: err_msg = "MBEDTLS_ERR_NET_CONNECT_FAILED (Fallo Handshake SSL/Red)"
         
         log(f"\n❌  {context}: {Colors.RED}[Red] {err_msg}{Colors.RESET}")
     
@@ -430,15 +431,20 @@ def force_disconnect_mqtt():
     """**Cierra forzosamente el socket MQTT e invalida el cliente.**"""
     global client
 
-    if client and hasattr(client, 'sock') and client.sock and wlan and wlan.isconnected():
-        try: client.disconnect()
-        except OSError: pass
-        finally:
-            if hasattr(client, 'sock') and client.sock:
-                try: client.sock.close()
+    try:
+        if client and hasattr(client, 'sock') and client.sock:
+             # Solo intentamos desconectar "limpiamente" si hay WiFi
+            if wlan and wlan.isconnected():
+                try: client.disconnect()
                 except OSError: pass
-            client = None
-            log(f"📡  Cliente  {Colors.GREEN}Desconectado{Colors.RESET}")
+            
+            try: client.sock.close()
+            except OSError: pass
+    except Exception:
+        pass
+    finally:
+        client = None
+        log(f"📡  Cliente  {Colors.GREEN}Desconectado{Colors.RESET}")
 
 # ---- FUNCIÓN AUXILIAR: Gestión de desconexión (Graceful Shutdown - Relay Modules) ----
 def shutdown():
@@ -558,6 +564,7 @@ async def mqtt_connector_task(client_id):
 
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
+    from gc import collect
     from umqtt.simple2 import MQTTClient, MQTTException # type: ignore
     from utime import ticks_ms, ticks_diff #type: ignore
 
@@ -595,12 +602,12 @@ async def mqtt_connector_task(client_id):
                 # Configura el callback de estado
                 client.set_callback_status(sub_status_callback)
 
+                # Liberamos memoria antes del handshake SSL (Crítico para HiveMQ)
+                collect()
+
                 # Iniciamos en una sesión limpia.
                 # Sin persistencia
-                # client.connect()
-
-                # El método connect() nos dice si la sesión se reanudó.
-                session_resumed = client.connect(clean_session=False)
+                client.connect()
 
                 log(f"📡  Conexión MQTT {Colors.GREEN}Establecida{Colors.RESET}", end="\n")
 
@@ -608,11 +615,10 @@ async def mqtt_connector_task(client_id):
                 client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=1)
 
                 # Suscripción a tópicos
-                if not session_resumed:
-                    # cmd/
-                    client.subscribe(MQTT_TOPIC_CMD, qos=1)
-                    # irrigation/cmd
-                    client.subscribe(MQTT_TOPIC_IRRIGATION_CMD, qos=1)
+                # cmd/
+                client.subscribe(MQTT_TOPIC_CMD, qos=1)
+                # irrigation/cmd
+                client.subscribe(MQTT_TOPIC_IRRIGATION_CMD, qos=1)
 
                 # Con sesión reanudada, el broker enviará los mensajes pendientes.
 
@@ -627,7 +633,8 @@ async def mqtt_connector_task(client_id):
                 log_mqtt_exception("Fallo la Conexión MQTT", e)
                 # Invalidamos el cliente MQTT forzando una reconexión completa.
                 force_disconnect_mqtt()
-                await asyncio.sleep(10)
+                # Backoff para no saturar el BROKER
+                await asyncio.sleep(20)
                 continue
 
         # Gestionamos la Conexión Activa
@@ -658,6 +665,8 @@ async def mqtt_connector_task(client_id):
                 log_mqtt_exception("Error en Operación MQTT", e)
                 # Invalidamos el cliente MQTT forzando una reconexión completa.
                 force_disconnect_mqtt()
+                # Backoff para no saturar el BROKER
+                await asyncio.sleep(20)
                 continue
 
         # Cede el control al planificador de asyncio
@@ -903,10 +912,10 @@ async def main():
     # ---- Bucle de Supervisión y Recolección de Basura ----
     while True:
         # Gestión de Memoria Proactiva
-        collect() 
+        collect()
 
         # El event loop cede control a todas las tareas asíncronas.
-        await asyncio.sleep(30)
+        await asyncio.sleep(10)
 
 # ---- Punto de Entrada ----
 if __name__ == '__main__':

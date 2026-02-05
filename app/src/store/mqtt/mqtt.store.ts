@@ -22,7 +22,14 @@ interface MqttState {
 }
 
 // Configuración desde variables de entorno
-const BROKER_URL = `${process.env.NEXT_PUBLIC_MQTT_PROTOCOL}://${process.env.NEXT_PUBLIC_MQTT_BROKER}:${process.env.NEXT_PUBLIC_MQTT_PORT}/mqtt`
+const MQTT_PROTOCOL = process.env.NEXT_PUBLIC_MQTT_PROTOCOL || 'ws'
+const MQTT_BROKER = process.env.NEXT_PUBLIC_MQTT_BROKER
+const MQTT_PORT = process.env.NEXT_PUBLIC_MQTT_PORT
+
+// Validamos si la configuración es válida para intentar conectar
+const IS_CONFIG_VALID = Boolean(MQTT_BROKER && MQTT_PORT)
+
+const BROKER_URL = IS_CONFIG_VALID ? `${MQTT_PROTOCOL}://${MQTT_BROKER}:${MQTT_PORT}/mqtt` : ''
 
 const OPTIONS: IClientOptions = {
   // Deshabilitamos el keepalive explícito para evitar el error "Keepalive timeout" en consola
@@ -53,6 +60,15 @@ export const useMqttStore = create<MqttState>()(
 
         // Evitar reconexiones si ya está intentando o conectado
         if (client || status === 'connected' || status === 'connecting') return
+
+        if (!IS_CONFIG_VALID) {
+          console.warn(
+            '⚠️ [MQTT] Configuración incompleta. Revisa las variables de entorno (BROKER/PORT). Conexión omitida.',
+          )
+          set({ status: 'disconnected' })
+
+          return
+        }
 
         console.log(`🔌 [MQTT] Conectando a ${BROKER_URL}...`)
         set({ status: 'connecting' })

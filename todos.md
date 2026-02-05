@@ -104,6 +104,14 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 
 ---
 
+## 🛡️ DEUDA TÉCNICA & SEGURIDAD
+
+* [ ] **HiveMQ ACLs (Permisos):** Configurar listas de control de acceso (ACLs) en HiveMQ Cloud una vez que la arquitectura esté 100% estable.
+  * Objetivo: Restringir permisos por usuario (Frontend solo publicar en `/cmd`, etc).
+  * Nota: Actualmente todos los usuarios tienen permisos `PUB/SUB` totales.
+
+---
+
 ## 🔌 HARDWARE (Pausado / Pendiente Validación)
 >
 > Tareas físicas pendientes de validación de componentes.

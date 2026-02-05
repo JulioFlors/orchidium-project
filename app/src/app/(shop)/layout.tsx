@@ -15,7 +15,15 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
   const [suggestions, plantsNavData] = await Promise.all([
     getSearchSuggestions(),
     getPlantsNavigation(),
-  ])
+  ]).catch((err) => {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '⚠️ Error al obtener los datos (shop)/layout (la base de datos podría estar caída):',
+      err,
+    )
+
+    return [[], []]
+  })
 
   return (
     <div className="flex min-h-dvh flex-col">
