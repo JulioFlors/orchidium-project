@@ -6,13 +6,17 @@ import { IoFlaskOutline, IoRainyOutline, IoWarningOutline, IoWaterOutline } from
 
 import { ActuatorCard } from './ActuatorCard'
 
-import { useMqttStore } from '@/store/mqtt/mqtt.store'
+import { useMqttStore } from '@/store'
+import { IrrigationCommand } from '@/interfaces'
 
 // Definición de Tópicos
 const TOPIC_PREFIX = 'PristinoPlant/Actuator_Controller'
 const TOPIC_COMMAND = `${TOPIC_PREFIX}/irrigation/cmd`
 const TOPIC_STATUS = `${TOPIC_PREFIX}/status`
+
 // Tópicos de Estado (Feedback)
+const TOPIC_STATE_WILDCARD = `${TOPIC_PREFIX}/irrigation/state/valve/#`
+// Tópicos específicos para mapeo (coinciden con lo que llega del wildcard)
 const TOPIC_STATE_SPRINKLER = `${TOPIC_PREFIX}/irrigation/state/valve/sprinkler`
 const TOPIC_STATE_FOGGER = `${TOPIC_PREFIX}/irrigation/state/valve/fogger`
 const TOPIC_STATE_SOIL_WET = `${TOPIC_PREFIX}/irrigation/state/valve/soil_wet`
@@ -37,7 +41,7 @@ export function ControlPanel() {
   // Estado local para Loading (optimista/transicional)
   const [loadingZones, setLoadingZones] = useState<Record<string, boolean>>({})
 
-  // 1. Suscripción a Tópicos Reales
+  // 1. Suscripción a Tópicos Reales (Wildcard + Status + Pump)
   useEffect(() => {
     connect() // Asegurar conexión
   }, [connect])
@@ -45,19 +49,25 @@ export function ControlPanel() {
   useEffect(() => {
     if (status === 'connected') {
       subscribe(TOPIC_STATUS) // Heartbeat (online/offline)
-      subscribe(TOPIC_STATE_SPRINKLER) // Feedback Riego
-      subscribe(TOPIC_STATE_FOGGER) // Feedback Nebulización
-      subscribe(TOPIC_STATE_SOIL_WET) // Feedback Suelo
-      subscribe(TOPIC_STATE_FERTIGATION) // Feedback Fertirriego
+      subscribe(TOPIC_STATE_WILDCARD) // Feedback Válvulas (Todas)
+      // Si la bomba tuviera su propio tópico fuera de valve/#, habría que suscribirlo.
+      // Asumiremos por ahora que la bomba reporta su estado. Si no reporta, la UI no se activará.
     }
   }, [status, subscribe])
 
-  // 2. Mapeo de Mensajes a Estado Visual
-  // El firmware manda 'ON' / 'OFF' (string) o bytes. useMqttStore intenta parsear JSON, si no, es string.
-  const sprinklerState = String(messages[TOPIC_STATE_SPRINKLER] || 'OFF').replace(/['"]+/g, '') // Limpieza básica
-  const foggerState = String(messages[TOPIC_STATE_FOGGER] || 'OFF').replace(/['"]+/g, '')
-  const soilWetState = String(messages[TOPIC_STATE_SOIL_WET] || 'OFF').replace(/['"]+/g, '')
-  const fertigationState = String(messages[TOPIC_STATE_FERTIGATION] || 'OFF').replace(/['"]+/g, '')
+  // Helper para determinar si una zona está REALMENTE activa (Solo Válvula)
+  // [MODIFICADO]: Se eliminó la dependencia de la bomba para evitar que la UI quede en 'pending' durante el delay.
+  const isZoneActive = (valveTopic: string) => {
+    const valveState = String(messages[valveTopic] || 'OFF').replace(/['"]+/g, '')
+
+    return valveState === 'ON'
+  }
+
+  const sprinklerState = isZoneActive(TOPIC_STATE_SPRINKLER)
+  const foggerState = isZoneActive(TOPIC_STATE_FOGGER)
+  const soilWetState = isZoneActive(TOPIC_STATE_SOIL_WET)
+  const fertigationState = isZoneActive(TOPIC_STATE_FERTIGATION)
+
   const deviceStatus = String(messages[TOPIC_STATUS] || 'unknown').replace(/['"]+/g, '')
 
   const isDeviceOnline = deviceStatus === 'online'
@@ -101,10 +111,10 @@ export function ControlPanel() {
 
   // Estado Derivado
   const activeZones = {
-    irrigation: sprinklerState === 'ON',
-    humidification: foggerState === 'ON',
-    soilWet: soilWetState === 'ON',
-    fertigation: fertigationState === 'ON',
+    irrigation: sprinklerState,
+    humidification: foggerState,
+    soilWet: soilWetState,
+    fertigation: fertigationState,
   }
 
   // Mutua Exclusión: Si alguna zona está activa o cargando, el sistema está ocupado.
@@ -113,13 +123,19 @@ export function ControlPanel() {
 
   // Helper para enviar comando MQTT estandarizado
   const sendActuatorCommand = (id: number, state: 'ON' | 'OFF', duration = 0, delay = 0) => {
-    const payload = {
+    // Construimos payload optimizado
+    const payload: IrrigationCommand = {
       actuator: id,
       state,
-      duration,
-      start_delay: delay,
     }
 
+    if (state === 'ON') {
+      if (duration > 0) payload.duration = duration
+      if (delay > 0) payload.start_delay = delay
+    }
+
+    // TODO: Implementar throttling de 50ms si se permiten pulsaciones muy rápidas
+    // (Actualmente la UI deshabilita el boón mientras carga, lo que ya actúa como throttle básico)
     publish(TOPIC_COMMAND, payload)
   }
 
@@ -136,38 +152,62 @@ export function ControlPanel() {
 
     // Duración por defecto: 10 minutos
     const DURATION_SEC = 10 * 60
+    // Delay de la bomba: 30 segundos
+    const PUMP_DELAY = 30
+    // Duración compensada para válvulas (Duración + Delay) para sincronizar apagado
+    const VALVE_DURATION = DURATION_SEC + PUMP_DELAY
 
     if (zone === 'irrigation') {
       const state = isTurningOn ? 'ON' : 'OFF'
 
-      sendActuatorCommand(HARDWARE.VALVES.MAIN_SOURCE, state, DURATION_SEC)
-      sendActuatorCommand(HARDWARE.VALVES.SPRINKLERS, state, DURATION_SEC)
-      sendActuatorCommand(HARDWARE.PUMP, state, DURATION_SEC, isTurningOn ? 60 : 0)
+      sendActuatorCommand(HARDWARE.VALVES.MAIN_SOURCE, state, isTurningOn ? VALVE_DURATION : 0)
+      sendActuatorCommand(HARDWARE.VALVES.SPRINKLERS, state, isTurningOn ? VALVE_DURATION : 0)
+      sendActuatorCommand(
+        HARDWARE.PUMP,
+        state,
+        isTurningOn ? DURATION_SEC : 0,
+        isTurningOn ? PUMP_DELAY : 0,
+      )
     }
 
     if (zone === 'humidification') {
       const state = isTurningOn ? 'ON' : 'OFF'
 
-      sendActuatorCommand(HARDWARE.VALVES.MAIN_SOURCE, state, DURATION_SEC)
-      sendActuatorCommand(HARDWARE.VALVES.FOGGERS, state, DURATION_SEC)
-      sendActuatorCommand(HARDWARE.PUMP, state, DURATION_SEC, isTurningOn ? 60 : 0)
+      sendActuatorCommand(HARDWARE.VALVES.MAIN_SOURCE, state, isTurningOn ? VALVE_DURATION : 0)
+      sendActuatorCommand(HARDWARE.VALVES.FOGGERS, state, isTurningOn ? VALVE_DURATION : 0)
+      sendActuatorCommand(
+        HARDWARE.PUMP,
+        state,
+        isTurningOn ? DURATION_SEC : 0,
+        isTurningOn ? PUMP_DELAY : 0,
+      )
     }
 
     if (zone === 'soilWet') {
       const state = isTurningOn ? 'ON' : 'OFF'
 
-      sendActuatorCommand(HARDWARE.VALVES.MAIN_SOURCE, state, DURATION_SEC)
-      sendActuatorCommand(HARDWARE.VALVES.SOIL_WET, state, DURATION_SEC)
-      sendActuatorCommand(HARDWARE.PUMP, state, DURATION_SEC, isTurningOn ? 60 : 0)
+      sendActuatorCommand(HARDWARE.VALVES.MAIN_SOURCE, state, isTurningOn ? VALVE_DURATION : 0)
+      sendActuatorCommand(HARDWARE.VALVES.SOIL_WET, state, isTurningOn ? VALVE_DURATION : 0)
+      sendActuatorCommand(
+        HARDWARE.PUMP,
+        state,
+        isTurningOn ? DURATION_SEC : 0,
+        isTurningOn ? PUMP_DELAY : 0,
+      )
     }
 
     if (zone === 'fertigation') {
       const state = isTurningOn ? 'ON' : 'OFF'
 
       // Fertirriego usa AGROCHEMICAL (Tanque) en lugar de MAIN_SOURCE
-      sendActuatorCommand(HARDWARE.VALVES.AGROCHEMICAL, state, DURATION_SEC)
-      sendActuatorCommand(HARDWARE.VALVES.FERTIGATION, state, DURATION_SEC)
-      sendActuatorCommand(HARDWARE.PUMP, state, DURATION_SEC, isTurningOn ? 60 : 0)
+      sendActuatorCommand(HARDWARE.VALVES.AGROCHEMICAL, state, isTurningOn ? VALVE_DURATION : 0)
+      sendActuatorCommand(HARDWARE.VALVES.FERTIGATION, state, isTurningOn ? VALVE_DURATION : 0)
+      sendActuatorCommand(
+        HARDWARE.PUMP,
+        state,
+        isTurningOn ? DURATION_SEC : 0,
+        isTurningOn ? PUMP_DELAY : 0,
+      )
     }
   }
 

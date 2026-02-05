@@ -13,18 +13,16 @@ import os
 DEBUG = True
 
 # ---- Nuevas Credenciales WiFi ----
-NEW_SSID = "NOMBRE_DE_LA_RED"
-NEW_PASS = "CONTRASEÑA_WIFI"
+NEW_SSID = "TU_WIFI_SSID"
+NEW_PASS = "TU_WIFI_PASSWORD"
 
-# ---- Nuevas Credenciales MQTT ----
-NEW_MQTT_SERVER = "192.168.1.5"
-NEW_MQTT_USER   = "pristinoplant-iot-device"
-NEW_MQTT_PASS   = "TU_PASSWORD"
-NEW_MQTT_PORT   = 1883
-NEW_MQTT_SSL    = False # True para HiveMQ Cloud
-# Parametros SSL (Solo si SSL=True)
-# Ej: '{"server_hostname": "..."}'
-NEW_MQTT_SSL_PARAMS = {} 
+# ---- Nuevas Credenciales MQTT (HiveMQ Cloud) ----
+NEW_MQTT_SERVER = "cluster.url.hivemq.cloud"
+NEW_MQTT_USER   = "usuario_mqtt"
+NEW_MQTT_PASS   = "password_mqtt"
+NEW_MQTT_PORT   = 8883
+NEW_MQTT_SSL    = True 
+NEW_MQTT_SSL_PARAMS = {"server_hostname": "cluster.url.hivemq.cloud"} 
 
 # ---- Ruta de Destino ----
 TARGET_PATH = "lib/secrets/__init__.py"

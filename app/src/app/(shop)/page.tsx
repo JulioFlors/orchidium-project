@@ -39,7 +39,7 @@ const products = initialData.species.map((species) => {
     },
     variants: species.variants.map((variant) => ({
       ...variant,
-      id: crypto.randomUUID(),
+      id: typeof crypto !== 'undefined' ? crypto.randomUUID() : `variant-${Math.random()}`,
       speciesId: species.slug,
     })),
   }

@@ -25,6 +25,7 @@ Este documento define las directrices, convenciones y flujos de trabajo ESTRICTO
 1. **Idioma**: Todo en **Español**.
 2. **Usuario**: Perfil de aprendizaje. Explicaciones claras.
 3. **Archivos de Chat**: Usar `.txt` para archivos efímeros (context.txt, commit.txt).
+4. **Artefactos**: Todos los documentos generados (`walkthrough.md`, `implementation_plan.md`, `task.md`, etc.) y el **razonamiento** deben estar en **Español**.
 
 ### Paso 2: Flujo de Trabajo de Commits (Estricto)
 
@@ -65,6 +66,14 @@ Formato: `[Emoji] [tipo] ([área]): [Título Conciso]`
 3. Push `Dev`.
 4. Checkout `main` -> Pull `main` -> Merge `Dev` -> Push `main`.
 5. Checkout `Dev`.
+
+### Paso 5: Estándares de Código
+
+1. **Importaciones (`@/`)**:
+   - Para **todas las carpetas directas dentro de `src`** (ej. `components`, `interfaces`, `store`, `lib`, etc.), importar **SIEMPRE** desde el primer nivel (archivo barril `index.ts`).
+   - ❌ *Incorrecto:* `import { Button } from '@/components/ui/Button'`
+   - ✅ *Correcto:* `import { Button } from '@/components'`
+   - Esto asegura encapsulamiento y facilita refactorizaciones.
 
 ## Comandos Específicos
 

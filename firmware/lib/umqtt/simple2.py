@@ -66,9 +66,9 @@ class MQTTClient:
 			if H.args[0]!=I.EINPROGRESS:raise
 		if A.ssl:
 			try:
-				import ussl
+				import ussl # type: ignore
 			except ImportError:
-				import ssl as ussl
+				import ssl as ussl # type: ignore
 			A.sock_raw.setblocking(True);A.sock=ussl.wrap_socket(A.sock_raw,**A.ssl_params);A.sock_raw.setblocking(False)
 		else:A.sock=A.sock_raw
 		A.poller_r=uselect.poll();A.poller_r.register(A.sock,uselect.POLLERR|uselect.POLLIN|uselect.POLLHUP);A.poller_w=uselect.poll();A.poller_w.register(A.sock,uselect.POLLOUT);G=bytearray(b'\x10\x00\x00\x00\x00\x00');B=bytearray(b'\x00\x04MQTT\x04\x00\x00\x00');E=10+2+len(A.client_id);B[7]=bool(F)<<1

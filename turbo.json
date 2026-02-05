@@ -48,7 +48,12 @@
         "MQTT_CLIENT_ID_INGEST",
         "MQTT_CLIENT_ID_SCHEDULER",
         "MQTT_HOST",
-        "MQTT_PORT"
+        "MQTT_PORT",
+        "NEXT_PUBLIC_MQTT_PROTOCOL",
+        "NEXT_PUBLIC_MQTT_BROKER",
+        "NEXT_PUBLIC_MQTT_PORT",
+        "NEXT_PUBLIC_MQTT_USERNAME",
+        "NEXT_PUBLIC_MQTT_PASSWORD"
       ]
     },
     "lint": {

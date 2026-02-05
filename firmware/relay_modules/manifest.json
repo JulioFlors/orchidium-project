@@ -1,13 +1,10 @@
 {
   "name": "Relay Modules",
   "description": "Actuator Controller Firmware",
-  "version": "0.4.2",
-  "date": "04-02-2026",
-  "notes_release": "Fix crítico: Compatibilidad SSL (ussl/ssl) para MQTT en nuevos entornos MicroPython.",
+  "version": "0.4.5",
+  "date": "05-02-2026",
+  "notes_release": "Fix: ERROR [-202] (Fallo Handshake SSL/Red) - Refactorizacion: force_disconnect_mqtt",
   "files": [
-    "main.py",
-    "boot.py",
-    "lib/secrets/template.py",
-    "https://raw.githubusercontent.com/JulioFlors/orchidium-project/main/firmware/shared/update_creds.py"
+    "main.py"
   ]
 }
