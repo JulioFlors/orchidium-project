@@ -26,7 +26,7 @@ MQTT_CONFIG = {
     # Intervalo para revisar mensajes MQTT entrantes.
     "CHECK_INTERVAL": 1, # seg
     # Intervalo para publicar el estado `online` para confirmar conectividad
-    "PUBLISH_INTERVAL": 300, # 5 minutos
+    "PUBLISH_INTERVAL": 60, # 1 minuto
     # tiempo máximo que (connect, check_msg, ping) esperará antes de fallar y lanzar una excepción.
     "SOCKET_TIMEOUT": 60,
     # tiempo máximo que el cliente esperará para que se complete un intercambio completo de mensajes MQTT(QoS) 1
@@ -557,6 +557,15 @@ async def wifi_coro():
             # Revisamos la conexion cada 20 segundos
             await asyncio.sleep(20)
 
+# ---- Función Auxiliar: Callback Timeout Conexión ----
+def _connection_timeout_handler(t):
+    """Callback del Timer de Hardware: Reinicia si la conexión se cuelga."""
+    # Lazy Import (Importación tardía)
+    from machine import reset # type: ignore
+    
+    log(f"\n💀 {Colors.RED}FATAL: Timeout en conexión MQTT (Socket Bloqueado). Reiniciando...{Colors.RESET}")
+    reset()
+
 # ---- CORUTINA: Gestión de Conexión MQTT (Relay Modules) ----
 async def mqtt_connector_task(client_id):
     """Gestiona la (re)conexión y operación MQTT con verificación activa."""
@@ -585,7 +594,8 @@ async def mqtt_connector_task(client_id):
                     client_id=client_id,
                     server=MQTT_CONFIG["SERVER"],
                     port=MQTT_CONFIG["PORT"],
-                    user=MQTT_CONFIG["USER"], password=MQTT_CONFIG["PASS"],
+                    user=MQTT_CONFIG["USER"],
+                    password=MQTT_CONFIG["PASS"],
                     keepalive=MQTT_CONFIG["KEEPALIVE"],
                     ssl=MQTT_CONFIG["SSL"],
                     ssl_params=MQTT_CONFIG["SSL_PARAMS"],
@@ -602,12 +612,29 @@ async def mqtt_connector_task(client_id):
                 # Configura el callback de estado
                 client.set_callback_status(sub_status_callback)
 
-                # Liberamos memoria antes del handshake SSL (Crítico para HiveMQ)
-                collect()
-
                 # Iniciamos en una sesión limpia.
                 # Sin persistencia
-                client.connect()
+                
+                # [SEGURIDAD] Watchdog para conexión síncrona bloqueante
+                # Si client.connect() se cuelga por siempre (socket blocking), 
+                # el Timer nos reiniciará.
+                from machine import Timer # type: ignore
+                
+                # Definimos el timeout (ms)
+                # Damos un pequeño margen extra sobre el MESSAGE_TIMEOUT
+                wd_timeout_ms = (MQTT_CONFIG["MESSAGE_TIMEOUT"] + 5) * 1000
+                
+                wd_timer = Timer(0)
+                wd_timer.init(period=wd_timeout_ms, mode=Timer.ONE_SHOT, callback=_connection_timeout_handler)
+                
+                try:
+                    # [OPTIMIZACIÓN] Última limpieza de RAM para el Handshake SSL (RSA/MPI)
+                    # Ayuda a prevenir MBEDTLS_ERR_MPI_ALLOC_FAILED
+                    collect()
+                    client.connect()
+                finally:
+                    # SIEMPRE desactivamos el timer si la función retorna (éxito o error Python)
+                    wd_timer.deinit()
 
                 log(f"📡  Conexión MQTT {Colors.GREEN}Establecida{Colors.RESET}", end="\n")
 
@@ -915,7 +942,7 @@ async def main():
         collect()
 
         # El event loop cede control a todas las tareas asíncronas.
-        await asyncio.sleep(10)
+        await asyncio.sleep(20)
 
 # ---- Punto de Entrada ----
 if __name__ == '__main__':

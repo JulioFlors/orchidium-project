@@ -12,7 +12,9 @@ export const useNavigationContext = () => {
       const allItems = [...(module.items || []), ...(module.groups?.flatMap((g) => g.items) || [])]
 
       return allItems.some((item) => pathname === item.url || pathname.startsWith(`${item.url}/`))
-    }) || pathname.startsWith('/orchidarium')
+    }) ||
+    pathname.startsWith('/orchidarium') ||
+    pathname.startsWith('/admin')
 
   const isAuthLayout = pathname.startsWith('/auth')
 

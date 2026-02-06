@@ -12,6 +12,7 @@ Este documento sintetiza la implementación actual del módulo de **Control Manu
 | **Failsafe (Seguridad)** | ✅ Completo | **Timeout Automático**: El sistema se apaga forzosamente tras **10 minutos** (definido en UI y Firmware) para prevenir inundaciones si el usuario olvida apagarlo. |
 | **Control de Usuario** | ✅ Completo | Capacidad de **Detener (Stop)** manualmente cualquier acción antes del timeout. |
 | **Feedback Visual** | ⚠️ Parcial | Indicadores LED y estado. **Pendiente:** Animación de llenado de agua en la card mientras espera confirmación de bomba. |
+| **Orquestación** | ✅ Completo | Traducción de intenciones a comandos: Abrir Válvula Main -> Abrir Válvula Zona -> Encender Bomba. |
 
 ## 2. Limitaciones y Riesgos Aceptados
 
@@ -48,11 +49,20 @@ Este documento sintetiza la implementación actual del módulo de **Control Manu
 * **Animación de Carga:** El usuario requiere una animación de **"llenado de agua"** en la card (del color correspondiente) que progrese hasta que la **Bomba** confirme `ON`.
 * **Estado Activo:** El botón UI solo se muestra "Activo" cuando `Válvula ON` AND `Bomba ON`.
 
+### F. Gestión de Orfandad (Offline Fallback / Estado Zombie)
+
+* **Situación (Bug):** Cuando una card es activada y el dispositivo IoT (ESP32) se desconecta o pierde internet, la card en el frontend queda visualmente "activada" (Zombie) indefinidamente.
+* **Riesgo:** Inconsistencia entre la UI y la realidad (la bomba podría estar apagada o encendida, pero la UI no lo refleja). Si el internet falla, la UI pierde capacidad de control.
+* **Requerimiento:**
+    1. **Limpieza de Estado:** El frontend debe detectar la desconexión del dispositivo (heartbeat perdido) y gestionar el estado visual de las cards.
+    2. **Temporizador de Respaldo:** La animación de activación debe tener su propio temporizador local. Si el dispositivo no envía señal de apagado al terminar el tiempo, la UI debe asumir el apagado o permitir al usuario forzarlo.
+    3. **Reconexión:** Al reconectarse, sincronizar el estado real o permitir apagado manual.
+
 ## 3. Hoja de Ruta (Roadmap) Refinada
 
 Para alcanzar la excelencia operativa, se proponen las siguientes mejoras:
 
-### 1. Smart Safety Engine (Motor de Inferencia Climática)
+### A. Smart Safety Engine (Motor de Inferencia Climática)
 
 Este será el cerebro de seguridad preventiva del sistema:
 
@@ -66,7 +76,8 @@ Este será el cerebro de seguridad preventiva del sistema:
   * **Confirmación Manual:** Si el usuario insiste en riego manual bajo alerta roja, solicitar confirmación explícita.
 * **Configuración:** Se requiere definir dónde residirán los umbrales de este motor (¿Base de datos? ¿Archivo de configuración?).
 
-1. **Gestión de Horarios (Scheduling):**
+### B. Gestión de Horarios (Scheduling)
+
     * Separar estrictamente el **Control Manual** (Acción Inmediata) de la **Programación** (Tareas Futuras).
     * Crear una vista dedicada para "Rutinas de Riego" donde sí se apliquen reglas climáticas estrictas por defecto.
 

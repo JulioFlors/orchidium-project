@@ -167,7 +167,7 @@ export function Toolbar({ isOrchidarium, isAuthLayout, suggestions, closeDropdow
           <Link
             aria-label="Cuenta"
             className="focus-link-hover toolbar-icon mr-4"
-            href="/orchidarium/account"
+            href="/admin"
             title="Cuenta"
             onClick={() => closeDropdown?.()}
           >

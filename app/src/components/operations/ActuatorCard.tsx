@@ -1,6 +1,5 @@
 import clsx from 'clsx'
 import { ReactNode } from 'react'
-import { IoPower } from 'react-icons/io5'
 
 interface ActuatorCardProps {
   title: string
@@ -8,8 +7,9 @@ interface ActuatorCardProps {
   isActive: boolean
   isLoading?: boolean
   isDisabled?: boolean
-  onToggle: () => void
   color?: 'blue' | 'green' | 'amber' | 'purple' | 'cyan'
+  isDeviceOnline?: boolean
+  onToggle: () => void
 }
 
 export function ActuatorCard({
@@ -20,6 +20,7 @@ export function ActuatorCard({
   isDisabled = false,
   onToggle,
   color = 'blue',
+  isDeviceOnline = true,
 }: ActuatorCardProps) {
   // Mapa de colores para estados activos
   const colorMap = {
@@ -35,11 +36,24 @@ export function ActuatorCard({
   return (
     <div
       className={clsx(
-        'relative flex flex-col items-center justify-center gap-4 rounded-2xl p-6 transition-all duration-300',
-        isDisabled ? 'cursor-not-allowed opacity-50 grayscale' : '',
-        isActive ? 'text-white' : 'text-zinc-400 hover:bg-zinc-700/50',
-        isActive ? activeClass : 'border border-zinc-800 bg-zinc-900',
+        'relative flex flex-col items-center justify-center gap-4 overflow-hidden rounded-2xl p-6 shadow-sm transition-all duration-300 select-none',
+
+        // --- Estado Deshabilitado o Cargando ---
+        isDisabled
+          ? 'cursor-not-allowed border border-zinc-200 bg-zinc-100/50 text-zinc-400 grayscale dark:border-zinc-700 dark:bg-zinc-800/50 dark:text-zinc-500'
+          : 'cursor-pointer',
+
+        // --- Estado Activo vs Inactivo (Solo si habilitado) ---
+        !isDisabled && isActive
+          ? clsx('transform text-white hover:scale-[1.02] hover:shadow-lg', activeClass)
+          : !isDisabled
+            ? 'border border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:bg-zinc-800/80'
+            : '',
       )}
+      onClick={() => {
+        if (isDisabled) return
+        onToggle()
+      }}
     >
       {/* Icono Principal */}
       <div
@@ -49,48 +63,44 @@ export function ActuatorCard({
           'transition-transform duration-300',
         )}
       >
-        {icon}
+        {isLoading ? (
+          <div className="h-9 w-9 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        ) : (
+          icon
+        )}
       </div>
 
       {/* Título */}
       <h3
         className={clsx(
           'text-lg font-medium tracking-wide',
-          isActive ? 'text-white' : 'text-zinc-400 hover:bg-zinc-700/50',
+          isActive ? 'text-white' : 'text-zinc-700 dark:text-zinc-300', // Light mode text
         )}
       >
         {title}
       </h3>
 
-      {/* Botón de Acción */}
-      <button
-        className={clsx(
-          'group absolute top-4 right-4 flex h-8 w-8 items-center justify-center rounded-full transition-colors',
-          isActive
-            ? 'bg-white/20 text-white hover:bg-white/30'
-            : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700 hover:text-white',
-        )}
-        disabled={isLoading || isDisabled}
-        type="button"
-        onClick={() => {
-          if (isDisabled) return
-          onToggle()
-        }}
-      >
-        <IoPower className={`text-sm ${isLoading ? 'animate-spin' : ''}`} />
-      </button>
-
       {/* Indicador de Estado (Puntito) */}
       <div className="absolute top-4 left-4 flex items-center gap-2">
         <span
-          className={`h-2 w-2 rounded-full ${isActive ? 'animate-pulse bg-white' : 'bg-zinc-700'}`}
+          className={clsx(
+            'h-2 w-2 rounded-full',
+            isActive
+              ? isDeviceOnline
+                ? 'animate-pulse bg-white'
+                : 'animate-ping bg-amber-500' // Alerta visual si está activo pero offline
+              : 'bg-zinc-400 dark:bg-zinc-700', // Light mode dot
+          )}
         />
-        <span className="font-mono text-xs tracking-wider uppercase opacity-60">
-          {isActive ? 'ON' : 'OFF'}
+        <span
+          className={clsx(
+            'font-mono text-xs tracking-wider uppercase opacity-60',
+            isActive ? 'text-white' : 'text-zinc-500 dark:text-zinc-500',
+          )}
+        >
+          {isActive ? (isDeviceOnline ? 'ON' : 'OFFLINE') : 'OFF'}
         </span>
       </div>
-
-      {/* TODO: Slider de Duración aquí */}
     </div>
   )
 }

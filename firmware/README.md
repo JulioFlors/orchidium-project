@@ -231,7 +231,7 @@ mpremote rmdir :mis_archivos_temporales
 Si bien se puede concatenar varias acciones para un ciclo de desarrollo rápido: **copia, reinicia y muestra la salida.**
 
 ```bash
-mpremote cp -r . :/ ; mpremote reset ; mpremote repl
+mpremote cp -r . :/ +  reset +  repl
 ```
 
 Se puede crear un Comando Personalizado `mprun` para simplificar este proceso:
@@ -282,14 +282,14 @@ function mprun {
  Write-Host ""
  
  # Copia recursiva de TODO lo que hay en la carpeta actual (.) a la raíz del ESP32 (:)
- mpremote connect $Port fs cp -r . :
+ mpremote connect $Port fs cp -r . : + reset + repl
  
- Write-Host ""
- Write-Host "Reiniciando dispositivo" -ForegroundColor Yellow
- mpremote connect $Port reset
+ # Write-Host ""
+ # Write-Host "Reiniciando dispositivo" -ForegroundColor Yellow
+ # mpremote connect $Port reset
 
- Write-Host "Conectando REPL | Ctrl+C para detener | Ctrl+X para salir |" -ForegroundColor DarkBlue
- mpremote connect $Port repl
+ # Write-Host "Conectando REPL | Ctrl+C para detener | Ctrl+X para salir |" -ForegroundColor DarkBlue
+ # mpremote connect $Port repl
 
     }
     catch {

@@ -289,7 +289,7 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
       </header>
 
       {/* ---- Backdrop + Blur (Oscurecer y Descenfocar body) ---- */}
-      <Backdrop isNavbarOpen={isSubMenuOpen} />
+      <Backdrop visible={isSubMenuOpen} />
     </>
   )
 }

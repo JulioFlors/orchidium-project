@@ -96,7 +96,7 @@ export function OrchidariumSidebar() {
         <Link
           aria-label="Cuenta"
           className="focus-sidebar-content mb-4! justify-start! px-3 py-2"
-          href="/orchidarium/account"
+          href="/admin"
           type="button"
           onClick={() => closeSidebar()}
         >
