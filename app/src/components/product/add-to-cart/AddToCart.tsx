@@ -98,7 +98,7 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
               {!selectedVariant && posted && (
                 <motion.p
                   animate={{ height: 'auto', marginBottom: 8, opacity: 1, y: 0 }}
-                  className="overflow-hidden text-xs font-medium tracking-wide text-red-800/75"
+                  className="overflow-hidden text-xs font-medium tracking-wide text-red-800/75 dark:text-red-400/75"
                   exit={{ height: 0, marginBottom: 0, opacity: 1, y: 0 }}
                   initial={{ height: 0, marginBottom: 0, opacity: 0, y: -10 }}
                   transition={{ duration: 0.25, ease: 'easeInOut' }}

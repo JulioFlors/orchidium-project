@@ -209,12 +209,16 @@ export function RegisterForm() {
                   }}
                   className={clsx(
                     'focus-input-form',
-                    errors.name && ['outline -outline-offset-1', 'outline-red-800/75'],
+                    errors.name && [
+                      'outline -outline-offset-1',
+                      'outline-red-800/75',
+                      'dark:outline-red-400/75',
+                    ],
                   )}
                 />
                 {errors.name && (
                   <p
-                    className="fade-in mt-1 text-xs font-medium tracking-wide text-red-800/75"
+                    className="fade-in mt-1 text-xs font-medium tracking-wide text-red-800/75 dark:text-red-400/75"
                     id="name-error"
                   >
                     {errors.name.message}
@@ -232,7 +236,11 @@ export function RegisterForm() {
                   autoComplete="email"
                   className={clsx(
                     'focus-input-form',
-                    errors.email && ['outline -outline-offset-1', 'outline-red-800/75'],
+                    errors.email && [
+                      'outline -outline-offset-1',
+                      'outline-red-800/75',
+                      'dark:outline-red-400/75',
+                    ],
                   )}
                   id="email"
                   placeholder="ejemplo@correo.com"
@@ -244,7 +252,7 @@ export function RegisterForm() {
                 />
                 {errors.email && (
                   <p
-                    className="fade-in mt-1 text-xs font-medium tracking-wide text-red-800/75"
+                    className="fade-in mt-1 text-xs font-medium tracking-wide text-red-800/75 dark:text-red-400/75"
                     id="email-error"
                   >
                     {errors.email.message}
@@ -262,7 +270,11 @@ export function RegisterForm() {
                   autoComplete="new-password"
                   className={clsx(
                     'focus-input-form',
-                    errors.password && ['outline -outline-offset-1', 'outline-red-800/75'],
+                    errors.password && [
+                      'outline -outline-offset-1',
+                      'outline-red-800/75',
+                      'dark:outline-red-400/75',
+                    ],
                   )}
                   id="password"
                   placeholder="Al menos 6 caracteres"
@@ -274,7 +286,7 @@ export function RegisterForm() {
                 />
                 {errors.password && (
                   <p
-                    className="fade-in mt-1 text-xs font-medium tracking-wide text-red-800/75"
+                    className="fade-in mt-1 text-xs font-medium tracking-wide text-red-800/75 dark:text-red-400/75"
                     id="password-error"
                   >
                     {errors.password.message}
