@@ -68,6 +68,7 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
   * [x] **Orquestador JS:** Manejo de exclusión mutua y timeouts visuales.
 * [ ] **Refinamiento UI/UX:** Pulido general de la página de operaciones.
 * [ ] **Smart Safety Checks (Roadmap):** Modal de confirmación "Pre-Flight" consultando sensores.
+  * [ ] **Gestión de Orfandad (Offline Fallback):** Implementar lógica para desactivar visualmente las cards activas (transcurrido el tiempo estipulado) si el dispositivo se desconecta ("offline"), evitando estados inconsistentes en la UI.
 
 ### 📅 2.3 Agendamiento (Nueva Vista)
 

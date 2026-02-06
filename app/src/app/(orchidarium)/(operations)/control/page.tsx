@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
 import { ControlPanel } from '@/components/operations/ControlPanel'
-import { Subtitle, Title } from '@/components'
+import { Title } from '@/components'
 
 export const metadata: Metadata = {
   title: 'Centro de Control',
@@ -10,14 +10,12 @@ export const metadata: Metadata = {
 
 export default function ControlPage() {
   return (
-    <div className="flex flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
       <div className="flex flex-col gap-2">
-        <Title title="Centro de Control" />
+        <Title className="text-xl" title="Control de Riego" />
 
-        <Subtitle subtitle="Operaciones Manuales" />
-
-        <p className="max-w-2xl text-zinc-400">
-          Control directo sobre los actuadores del invernadero. Utilice estas herramientas para
+        <p className="text-secondary max-w-2xl">
+          Control directo sobre los actuadores del orquideario. Utilice estas herramientas para
           mantenimiento, pruebas o correcciones puntuales del microclima.
         </p>
       </div>

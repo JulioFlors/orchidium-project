@@ -1,8 +1,10 @@
 'use client'
 
 import clsx from 'clsx'
-import { useEffect, useState } from 'react'
-import { IoFlaskOutline, IoRainyOutline, IoWarningOutline, IoWaterOutline } from 'react-icons/io5'
+import { IoFlaskOutline, IoWarning, IoWaterOutline } from 'react-icons/io5'
+import { MdDewPoint } from 'react-icons/md'
+import { PiSprayBottle } from 'react-icons/pi'
+import { ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 
 import { ActuatorCard } from './ActuatorCard'
 
@@ -16,150 +18,244 @@ const TOPIC_STATUS = `${TOPIC_PREFIX}/status`
 
 // Tópicos de Estado (Feedback)
 const TOPIC_STATE_WILDCARD = `${TOPIC_PREFIX}/irrigation/state/valve/#`
-// Tópicos específicos para mapeo (coinciden con lo que llega del wildcard)
+// Tópicos específicos para mapeo
 const TOPIC_STATE_SPRINKLER = `${TOPIC_PREFIX}/irrigation/state/valve/sprinkler`
 const TOPIC_STATE_FOGGER = `${TOPIC_PREFIX}/irrigation/state/valve/fogger`
 const TOPIC_STATE_SOIL_WET = `${TOPIC_PREFIX}/irrigation/state/valve/soil_wet`
 const TOPIC_STATE_FERTIGATION = `${TOPIC_PREFIX}/irrigation/state/valve/fertigation`
 
-// IDs de Hardware (Sincronizados con Scheduler/Firmware)
+// IDs de Hardware (Sincronizados con firmware/relay_modules/main.py)
 const HARDWARE = {
-  PUMP: 3,
+  PUMP: 'pump',
   VALVES: {
-    MAIN_SOURCE: 1,
-    AGROCHEMICAL: 2, // Tank Source
-    FOGGERS: 4,
-    FERTIGATION: 5,
-    SPRINKLERS: 6,
-    SOIL_WET: 7,
+    MAIN_SOURCE: 'main_water',
+    AGROCHEMICAL: 'agrochemical',
+    FOGGERS: 'fogger',
+    FERTIGATION: 'fertigation',
+    SPRINKLERS: 'sprinkler',
+    SOIL_WET: 'soil_wet',
   },
 }
 
 export function ControlPanel() {
   const { connect, status, publish, subscribe, messages } = useMqttStore()
 
-  // Estado local para Loading (optimista/transicional)
+  // --- Estados Visuales ---
   const [loadingZones, setLoadingZones] = useState<Record<string, boolean>>({})
 
-  // 1. Suscripción a Tópicos Reales (Wildcard + Status + Pump)
+  // Nivel de Notificación (Info vs Error)
+  const [notification, setNotification] = useState<{ type: 'info' | 'error'; message: ReactNode }>({
+    type: 'info',
+    message: (
+      <>
+        El sistema se desactivará automáticamente tras <strong>10 minutos</strong> por seguridad.
+        Puede detener la acción manualmente en cualquier momento.
+      </>
+    ),
+  })
+
+  // Flag de "Listo" (Sincronizado con MQTT)
+  const [isReady, setIsReady] = useState(false)
+
+  // Referencias para Timeouts de Comandos (120s)
+  // Usamos ref para no provocar re-renders y poder limpiarlos imperativamente
+  const commandTimeouts = useRef<Record<string, NodeJS.Timeout>>({})
+
+  // --- 1. Conexión & Suscripción ---
   useEffect(() => {
-    connect() // Asegurar conexión
+    connect()
   }, [connect])
+
+  const deviceStatus = String(messages[TOPIC_STATUS] || 'unknown').replace(/['"]+/g, '')
+  const isDeviceOnline = deviceStatus === 'online'
 
   useEffect(() => {
     if (status === 'connected') {
-      subscribe(TOPIC_STATUS) // Heartbeat (online/offline)
-      subscribe(TOPIC_STATE_WILDCARD) // Feedback Válvulas (Todas)
-      // Si la bomba tuviera su propio tópico fuera de valve/#, habría que suscribirlo.
-      // Asumiremos por ahora que la bomba reporta su estado. Si no reporta, la UI no se activará.
+      subscribe(TOPIC_STATUS)
+      subscribe(TOPIC_STATE_WILDCARD)
+      setTimeout(() => setIsReady(true), 0)
     }
   }, [status, subscribe])
 
-  // Helper para determinar si una zona está REALMENTE activa (Solo Válvula)
-  // [MODIFICADO]: Se eliminó la dependencia de la bomba para evitar que la UI quede en 'pending' durante el delay.
+  // --- 2. Helper de Estado Activo ---
   const isZoneActive = (valveTopic: string) => {
+    if (!isReady) return false
     const valveState = String(messages[valveTopic] || 'OFF').replace(/['"]+/g, '')
 
     return valveState === 'ON'
   }
 
-  const sprinklerState = isZoneActive(TOPIC_STATE_SPRINKLER)
-  const foggerState = isZoneActive(TOPIC_STATE_FOGGER)
-  const soilWetState = isZoneActive(TOPIC_STATE_SOIL_WET)
-  const fertigationState = isZoneActive(TOPIC_STATE_FERTIGATION)
-
-  const deviceStatus = String(messages[TOPIC_STATUS] || 'unknown').replace(/['"]+/g, '')
-
-  const isDeviceOnline = deviceStatus === 'online'
-
-  // Refrescamos loading: Si el estado real coincide con lo esperado, quitamos loading.
-  useEffect(() => {
-    // Usamos setTimeout para evitar "setState synchronously in effect"
-    // Esto mueve la actualización al siguiente ciclo de eventos, evitando cascadas síncronas.
-    const timer = setTimeout(() => {
-      setLoadingZones((prev) => {
-        if (Object.keys(prev).length === 0) return prev
-
-        const next = { ...prev }
-        let hasChanges = false
-
-        // Limpieza genérica si el estado ya cambió
-        // (Nota: Esto asume que el cambio de estado en activeZones dispara este effect)
-        if (prev.irrigation !== undefined) {
-          delete next.irrigation
-          hasChanges = true
-        }
-        if (prev.humidification !== undefined) {
-          delete next.humidification
-          hasChanges = true
-        }
-        if (prev.soilWet !== undefined) {
-          delete next.soilWet
-          hasChanges = true
-        }
-        if (prev.fertigation !== undefined) {
-          delete next.fertigation
-          hasChanges = true
-        }
-
-        return hasChanges ? next : prev
-      })
-    }, 0)
-
-    return () => clearTimeout(timer)
-  }, [sprinklerState, foggerState, soilWetState, fertigationState])
-
-  // Estado Derivado
+  // Mapeo Directo (Sin timers locales, solo verdad del firmware)
   const activeZones = {
-    irrigation: sprinklerState,
-    humidification: foggerState,
-    soilWet: soilWetState,
-    fertigation: fertigationState,
+    irrigation: isZoneActive(TOPIC_STATE_SPRINKLER),
+    humidification: isZoneActive(TOPIC_STATE_FOGGER),
+    soilWet: isZoneActive(TOPIC_STATE_SOIL_WET),
+    fertigation: isZoneActive(TOPIC_STATE_FERTIGATION),
   }
 
-  // Mutua Exclusión: Si alguna zona está activa o cargando, el sistema está ocupado.
-  const isSystemBusy =
-    Object.values(activeZones).some((isActive) => isActive) || Object.keys(loadingZones).length > 0
+  // --- 3. Monitoreo de Resiliencia (Limpieza de Timeouts) ---
 
-  // Helper para enviar comando MQTT estandarizado
-  const sendActuatorCommand = (id: number, state: 'ON' | 'OFF', duration = 0, delay = 0) => {
-    // Construimos payload optimizado
-    const payload: IrrigationCommand = {
-      actuator: id,
-      state,
+  // A) Si el dispositivo se desconecta -> Limpieza TOTAL
+  useEffect(() => {
+    if (!isDeviceOnline) {
+      // Limpiar todos los timers pendientes
+      Object.keys(commandTimeouts.current).forEach((key) => {
+        clearTimeout(commandTimeouts.current[key])
+        delete commandTimeouts.current[key]
+      })
+
+      // Desbloquear UI inmediatamente (Async para evitar linter warning)
+      setTimeout(() => setLoadingZones({}), 0)
+
+      // Mostrar Error si estábamos "Listos" y se cayó
+      if (isReady) {
+        setTimeout(() => {
+          setNotification({
+            type: 'error',
+            message: 'Conexión perdida con el Módulo de Relés. Esperando reconexión...',
+          })
+        }, 0)
+      }
+    } else {
+      // Al volver, restaurar mensaje default si no hay error pendiente
+      if (notification.type === 'error') {
+        setTimeout(() => {
+          setNotification({
+            type: 'info',
+            message: (
+              <>
+                El sistema se desactivará automáticamente tras <strong>10 minutos</strong> por
+                seguridad. Puede detener la acción manualmente en cualquier momento.
+              </>
+            ),
+          })
+        }, 0)
+      }
     }
+  }, [isDeviceOnline, isReady, notification.type])
+
+  // Stable stopLoading function
+  const stopLoading = useCallback((zone: string) => {
+    if (commandTimeouts.current[zone]) {
+      clearTimeout(commandTimeouts.current[zone])
+      delete commandTimeouts.current[zone]
+    }
+    // Async update
+    setTimeout(() => {
+      setLoadingZones((prev) => {
+        const next = { ...prev }
+
+        delete next[zone]
+
+        return next
+      })
+    }, 0)
+  }, []) // Empty deps is fine as ref and setState are stable
+
+  // B) Si el estado cambia a lo esperado -> ÉXITO (Limpiar Timeout)
+  // Usamos useEffect para analizar cambios. Si activeZones cambia,
+  // verificamos si estábamos esperando esa zona (timeout activo).
+  useEffect(() => {
+    if (commandTimeouts.current['irrigation']) {
+      setTimeout(() => stopLoading('irrigation'), 0)
+    }
+  }, [activeZones.irrigation, stopLoading])
+
+  useEffect(() => {
+    if (commandTimeouts.current['humidification']) {
+      setTimeout(() => stopLoading('humidification'), 0)
+    }
+  }, [activeZones.humidification, stopLoading])
+
+  useEffect(() => {
+    if (commandTimeouts.current['soilWet']) {
+      setTimeout(() => stopLoading('soilWet'), 0)
+    }
+  }, [activeZones.soilWet, stopLoading])
+
+  useEffect(() => {
+    if (commandTimeouts.current['fertigation']) {
+      setTimeout(() => stopLoading('fertigation'), 0)
+    }
+  }, [activeZones.fertigation, stopLoading])
+
+  // --- 4. Timeout Handler (Fallo) ---
+  const handleCommandTimeout = (zone: string) => {
+    // 1. Limpiar ref por si acaso
+    if (commandTimeouts.current[zone]) {
+      delete commandTimeouts.current[zone]
+    }
+
+    // 2. Quitar loading (Desbloquear UI)
+    setLoadingZones((prev) => {
+      const next = { ...prev }
+
+      delete next[zone]
+
+      return next
+    })
+
+    // 3. Mostrar Error Rojo
+    setNotification({
+      type: 'error',
+      message: 'No se pudo establecer conexión con el ESP32 Relay Modules (Timeout 120s).',
+    })
+  }
+
+  // Mutua Exclusión (Si hay loading o offline)
+  // Pero permitimos 'resetear' si hay error? No, el timeout ya resetea.
+  const isSystemBusy =
+    Object.values(activeZones).some(Boolean) || Object.keys(loadingZones).length > 0
+
+  // Helper MQTT
+  const sendActuatorCommand = (id: string, state: 'ON' | 'OFF', duration = 0, delay = 0) => {
+    const payload: IrrigationCommand = { actuator: id, state }
 
     if (state === 'ON') {
       if (duration > 0) payload.duration = duration
       if (delay > 0) payload.start_delay = delay
     }
-
-    // TODO: Implementar throttling de 50ms si se permiten pulsaciones muy rápidas
-    // (Actualmente la UI deshabilita el boón mientras carga, lo que ya actúa como throttle básico)
     publish(TOPIC_COMMAND, payload)
   }
 
-  // 3. Orquestación con Feedback
+  // Action Handler
   const toggleZone = (zone: keyof typeof activeZones) => {
-    if (!isDeviceOnline) return // Offline protection
+    if (!isDeviceOnline) return
 
     const isTurningOn = !activeZones[zone]
 
-    // Mutua Exclusión: No permitir encender si ya hay algo activo (y no somos nosotros apagándonos)
     if (isTurningOn && isSystemBusy) return
 
+    // 1. Set Loading
     setLoadingZones((prev) => ({ ...prev, [zone]: true }))
 
-    // Duración por defecto: 10 minutos
-    const DURATION_SEC = 10 * 60
-    // Delay de la bomba: 30 segundos
+    // 2. Reset Notification to Info (Optimistic)
+    setNotification({
+      type: 'info',
+      message: (
+        <>
+          El sistema se desactivará automáticamente tras <strong>10 minutos</strong> por seguridad.
+          Puede detener la acción manualmente en cualquier momento.
+        </>
+      ),
+    })
+
+    // 3. Start Safety Timeout (120s)
+    // Limpiar previo si existiera
+    if (commandTimeouts.current[zone]) clearTimeout(commandTimeouts.current[zone])
+
+    commandTimeouts.current[zone] = setTimeout(() => {
+      handleCommandTimeout(zone)
+    }, 120000) // 120 seconds
+
+    // 4. Send Command
+    const DURATION_SEC = 600
     const PUMP_DELAY = 30
-    // Duración compensada para válvulas (Duración + Delay) para sincronizar apagado
     const VALVE_DURATION = DURATION_SEC + PUMP_DELAY
+    const state = isTurningOn ? 'ON' : 'OFF'
 
+    // Definimos hardware targets según zona
     if (zone === 'irrigation') {
-      const state = isTurningOn ? 'ON' : 'OFF'
-
       sendActuatorCommand(HARDWARE.VALVES.MAIN_SOURCE, state, isTurningOn ? VALVE_DURATION : 0)
       sendActuatorCommand(HARDWARE.VALVES.SPRINKLERS, state, isTurningOn ? VALVE_DURATION : 0)
       sendActuatorCommand(
@@ -168,11 +264,7 @@ export function ControlPanel() {
         isTurningOn ? DURATION_SEC : 0,
         isTurningOn ? PUMP_DELAY : 0,
       )
-    }
-
-    if (zone === 'humidification') {
-      const state = isTurningOn ? 'ON' : 'OFF'
-
+    } else if (zone === 'humidification') {
       sendActuatorCommand(HARDWARE.VALVES.MAIN_SOURCE, state, isTurningOn ? VALVE_DURATION : 0)
       sendActuatorCommand(HARDWARE.VALVES.FOGGERS, state, isTurningOn ? VALVE_DURATION : 0)
       sendActuatorCommand(
@@ -181,11 +273,7 @@ export function ControlPanel() {
         isTurningOn ? DURATION_SEC : 0,
         isTurningOn ? PUMP_DELAY : 0,
       )
-    }
-
-    if (zone === 'soilWet') {
-      const state = isTurningOn ? 'ON' : 'OFF'
-
+    } else if (zone === 'soilWet') {
       sendActuatorCommand(HARDWARE.VALVES.MAIN_SOURCE, state, isTurningOn ? VALVE_DURATION : 0)
       sendActuatorCommand(HARDWARE.VALVES.SOIL_WET, state, isTurningOn ? VALVE_DURATION : 0)
       sendActuatorCommand(
@@ -194,12 +282,7 @@ export function ControlPanel() {
         isTurningOn ? DURATION_SEC : 0,
         isTurningOn ? PUMP_DELAY : 0,
       )
-    }
-
-    if (zone === 'fertigation') {
-      const state = isTurningOn ? 'ON' : 'OFF'
-
-      // Fertirriego usa AGROCHEMICAL (Tanque) en lugar de MAIN_SOURCE
+    } else if (zone === 'fertigation') {
       sendActuatorCommand(HARDWARE.VALVES.AGROCHEMICAL, state, isTurningOn ? VALVE_DURATION : 0)
       sendActuatorCommand(HARDWARE.VALVES.FERTIGATION, state, isTurningOn ? VALVE_DURATION : 0)
       sendActuatorCommand(
@@ -211,31 +294,76 @@ export function ControlPanel() {
     }
   }
 
+  // Estado Visual
+  const isConnecting = !isReady || deviceStatus === 'unknown'
+  const isOffline = deviceStatus === 'offline'
+
+  const statusLabel = isConnecting
+    ? 'Conectando'
+    : isOffline
+      ? 'Controlador Offline'
+      : 'Controlador Activo'
+
+  // Clase Dinámica Notificación
+  const notificationClass = clsx(
+    'flex items-start gap-2 rounded-lg border p-4 text-sm transition-all duration-300',
+    notification.type === 'error'
+      ? 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400'
+      : 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-500',
+  )
+
   return (
     <div className="space-y-6">
-      {/* Barra de Estado del Dispositivo (Heartbeat) */}
+      {/* Barra de Estado del Dispositivo (Heartbeat) - Premium Design */}
       <div
         className={clsx(
-          'flex items-center justify-between rounded-lg border p-4 transition-colors duration-300',
-          isDeviceOnline
-            ? 'border-green-500/20 bg-green-500/10 text-green-700 dark:text-green-400'
-            : 'border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-400',
+          'relative flex items-center justify-between overflow-hidden rounded-xl border p-5 shadow-sm transition-all duration-500',
+          'backdrop-blur-md', // Glass effect
+          isConnecting
+            ? 'border-zinc-200 bg-zinc-100/80 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-400'
+            : isOffline
+              ? 'border-red-200 bg-red-50/90 text-red-700 dark:border-red-900/30 dark:bg-red-900/20 dark:text-red-400'
+              : 'border-emerald-200 bg-emerald-50/90 text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-900/20 dark:text-emerald-400',
         )}
       >
-        <div className="flex items-center gap-3">
-          <div
-            className={clsx(
-              'h-3 w-3 rounded-full shadow-sm',
-              isDeviceOnline ? 'animate-pulse bg-green-500' : 'bg-red-500',
-            )}
-          />
-          <span className="font-mono text-sm font-semibold tracking-wide uppercase">
-            {isDeviceOnline ? 'Controlador Activo' : 'Controlador Offline'}
-          </span>
+        {/* Background Gradient Glow */}
+        <div
+          className={clsx(
+            'absolute inset-0 opacity-10 blur-3xl transition-colors duration-500',
+            isConnecting ? 'bg-zinc-400' : isOffline ? 'bg-red-500' : 'bg-emerald-500',
+          )}
+        />
+
+        <div className="relative flex items-center gap-4">
+          {/* Status Indicator Ring */}
+          <div className="relative flex h-4 w-4 items-center justify-center">
+            <span
+              className={clsx(
+                'absolute inline-flex h-full w-full animate-ping rounded-full opacity-75',
+                isConnecting ? 'bg-zinc-400' : isOffline ? 'bg-red-400' : 'bg-emerald-400',
+              )}
+            />
+            <span
+              className={clsx(
+                'relative inline-flex h-3 w-3 rounded-full',
+                isConnecting ? 'bg-zinc-500' : isOffline ? 'bg-red-500' : 'bg-emerald-500',
+              )}
+            />
+          </div>
+
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold tracking-tight uppercase">{statusLabel}</span>
+            <span className="text-[10px] font-medium tracking-widest uppercase opacity-70">
+              {isOffline ? 'Verifique conexión WiFi/MQTT' : 'Sistema Operativo'}
+            </span>
+          </div>
         </div>
-        <div className="flex flex-col items-end font-mono text-xs opacity-70">
-          <span>ESP32 Relay Module</span>
-          <span className="text-[10px]">{TOPIC_STATUS}</span>
+
+        <div className="relative flex flex-col items-end text-right">
+          <span className="text-[10px] font-bold tracking-widest uppercase opacity-50">
+            Dispositivo
+          </span>
+          <span className="font-mono text-xs font-medium">ESP32 Relay Module</span>
         </div>
       </div>
 
@@ -245,7 +373,8 @@ export function ControlPanel() {
           color="blue"
           icon={<IoWaterOutline />}
           isActive={activeZones.irrigation}
-          isDisabled={isSystemBusy && !activeZones.irrigation}
+          isDeviceOnline={isDeviceOnline}
+          isDisabled={isConnecting || isOffline || (isSystemBusy && !activeZones.irrigation)}
           isLoading={loadingZones['irrigation']}
           title="Regar"
           onToggle={() => toggleZone('irrigation')}
@@ -253,9 +382,10 @@ export function ControlPanel() {
 
         <ActuatorCard
           color="purple"
-          icon={<IoRainyOutline />}
+          icon={<PiSprayBottle />}
           isActive={activeZones.humidification}
-          isDisabled={isSystemBusy && !activeZones.humidification}
+          isDeviceOnline={isDeviceOnline}
+          isDisabled={isConnecting || isOffline || (isSystemBusy && !activeZones.humidification)}
           isLoading={loadingZones['humidification']}
           title="Nebulizar"
           onToggle={() => toggleZone('humidification')}
@@ -263,9 +393,10 @@ export function ControlPanel() {
 
         <ActuatorCard
           color="cyan"
-          icon={<IoWarningOutline />} // TODO: Buscar icono de suelo mojado
+          icon={<MdDewPoint />}
           isActive={activeZones.soilWet}
-          isDisabled={isSystemBusy && !activeZones.soilWet}
+          isDeviceOnline={isDeviceOnline}
+          isDisabled={isConnecting || isOffline || (isSystemBusy && !activeZones.soilWet)}
           isLoading={loadingZones['soilWet']}
           title="Humedecer Suelo"
           onToggle={() => toggleZone('soilWet')}
@@ -275,20 +406,22 @@ export function ControlPanel() {
           color="amber"
           icon={<IoFlaskOutline />}
           isActive={activeZones.fertigation}
-          isDisabled={isSystemBusy && !activeZones.fertigation}
+          isDeviceOnline={isDeviceOnline}
+          isDisabled={isConnecting || isOffline || (isSystemBusy && !activeZones.fertigation)}
           isLoading={loadingZones['fertigation']}
           title="Fertirriego"
           onToggle={() => toggleZone('fertigation')}
         />
       </div>
 
-      <div className="flex items-start gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4 text-sm text-yellow-700 dark:text-yellow-500">
-        <IoWarningOutline className="shrink-0 text-xl" />
-        <p>
-          El sistema se desactivará automáticamente tras <strong>10 minutos</strong> por seguridad.
-          Puede detener la acción manualmente en cualquier momento. Nota: El control manual ignora
-          sensores de lluvia/viento.
-        </p>
+      {/* Notificación Dinámica */}
+      <div className={notificationClass}>
+        {notification.type === 'error' ? (
+          <IoWarning className="shrink-0 text-xl text-red-500" />
+        ) : (
+          <IoWarning className="shrink-0 text-xl text-yellow-500" />
+        )}
+        <p>{notification.message}</p>
       </div>
     </div>
   )
