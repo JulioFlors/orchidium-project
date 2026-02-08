@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 
 import { redirect } from 'next/navigation'
 
-import { auth } from '@/auth.config'
+import { auth } from '@/auth'
 import { Header, Footer } from '@/components'
 
 export const metadata: Metadata = {

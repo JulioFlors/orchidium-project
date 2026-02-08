@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import prisma from '@package/database'
 
-import { auth } from '@/auth.config'
+import { auth } from '@/auth'
 
 export const getPaginatedUsers = async () => {
   const session = await auth()
@@ -21,7 +21,7 @@ export const getPaginatedUsers = async () => {
       ok: true,
       users,
     }
-  } catch (error) {
+  } catch {
     return { ok: false, message: 'Error al obtener usuarios' }
   }
 }

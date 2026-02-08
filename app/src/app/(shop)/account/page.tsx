@@ -4,7 +4,7 @@ import { IoPersonOutline, IoSettingsOutline, IoReaderOutline } from 'react-icons
 
 import { LogoutButton } from './ui/LogoutButton'
 
-import { auth } from '@/auth.config'
+import { auth } from '@/auth'
 import { Title } from '@/components'
 
 export default async function AccountPage() {

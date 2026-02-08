@@ -1,6 +1,6 @@
 'use server'
 
-import { signOut } from '@/auth.config'
+import { signOut } from '@/auth'
 
 /**
  * Cierra la sesión del usuario **en el servidor**.

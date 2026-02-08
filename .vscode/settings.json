@@ -12,6 +12,7 @@
 	"material-icon-theme.activeIconPack": "react",
 	"material-icon-theme.folders.theme": "specific",
 	"material-icon-theme.folders.associations": {
+		".agent": "Rules",
 		"(orchidarium)": "Seeders",
 		"(shop)": "Cart",
 		"actions": "Server",
