@@ -5,7 +5,7 @@ import { UsersTable } from './ui/UsersTable'
 
 import { getPaginatedUsers } from '@/actions'
 import { LogoutButton } from '@/app/(shop)/account/ui/LogoutButton'
-import { auth } from '@/auth.config'
+import { auth } from '@/auth'
 import { Title } from '@/components'
 
 export default async function AdminPage() {

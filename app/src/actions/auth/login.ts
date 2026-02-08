@@ -2,7 +2,7 @@
 
 import { AuthError } from 'next-auth'
 
-import { signIn } from '@/auth.config'
+import { signIn } from '@/auth'
 
 export async function authenticate(_prevState: string | undefined, formData: FormData) {
   try {
