@@ -84,3 +84,11 @@ Formato: `[Emoji] [tipo] ([área]): [Título Conciso]`
 
 - `context.txt`: Contexto general del proyecto.
 - `package.json`: Scripts oficiales.
+
+### Paso 6: Reglas de TypeScript
+
+1. **PROHIBIDO USAR `any`**:
+   - Bajo ninguna circunstancia usar `as any` o el tipo `any`.
+   - Si un tipo es complejo, definir una `interface` o `type` adecuado.
+   - Si una librería no exporta tipos, crear un archivo de definición `d.ts` o usar `unknown` con Type Guards.
+   - **Excepción**: Solo si es absolutamente imposible de tipar (casos extremos de librerías legacy sin tipos), documentar exhaustivamente por qué. Pero en el 99.9% de los casos, `any` es un error.

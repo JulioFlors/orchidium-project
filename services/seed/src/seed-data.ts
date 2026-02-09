@@ -1,5 +1,3 @@
-import bcryptjs from 'bcryptjs'
-
 // ---- Enums ----
 type RoleType = 'USER' | 'ADMIN'
 
@@ -120,15 +118,9 @@ export const initialData: SeedData = {
     {
       email: 'noesjulio@gmail.com',
       name: 'Julio Flores',
-      password: bcryptjs.hashSync('123456'),
+      password: process.env.ADMIN_PASSWORD || '12345678',
       role: 'ADMIN'
-    },
-    {
-      email: 'yoanny.flores@gmail.com',
-      name: 'Yoanny Flores',
-      password: bcryptjs.hashSync('123456'),
-      role: 'USER'
-    },
+    }
   ],
   genus: [
     { name: 'Cattleya', type: 'ORCHID' },

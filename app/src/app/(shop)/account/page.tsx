@@ -1,22 +1,23 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { IoPersonOutline, IoSettingsOutline, IoReaderOutline } from 'react-icons/io5'
+import { headers } from 'next/headers'
 
 import { LogoutButton } from './ui/LogoutButton'
 
-import { auth } from '@/auth'
+import { auth } from '@/lib/auth'
 import { Title } from '@/components'
 
 export default async function AccountPage() {
-  /*
-   * Nota: La verificación de sesión se maneja en el layout.tsx de esta ruta.
-   * Sin embargo, mantenemos 'auth()' aquí para obtener los datos del usuario para la UI.
-   */
-  const session = await auth()
+  // ---- Obtenemos los datos de la session ----
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
 
-  // Verificación de seguridad adicional (opcional, por si el layout falla o cambia)
+  // ---- Está logueado? ----
   if (!session?.user) {
-    redirect('/auth/login')
+    // Redirigimos al login y guardamos la URL de retorno
+    redirect('/auth/login?callbackUrl=/account')
   }
 
   return (

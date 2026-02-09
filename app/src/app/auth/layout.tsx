@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
 
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 
-import { auth } from '@/auth'
+import { auth } from '@/lib/auth'
 import { Header, Footer } from '@/components'
 
 export const metadata: Metadata = {
@@ -14,7 +15,9 @@ export const metadata: Metadata = {
 }
 
 export default async function AuthLayout({ children }: { children: React.ReactNode }) {
-  const session = await auth()
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
 
   if (session?.user) {
     redirect('/')

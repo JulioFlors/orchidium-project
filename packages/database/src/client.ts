@@ -44,8 +44,8 @@ const prismaClientSingleton = () => {
     // 'ssl: true' es equivalente a 'sslmode=require' pero más compatible con el objeto de config.
     ssl: true,
     // Timeouts generosos para evitar errores en "Cold Starts" de serverless
-    connectionTimeoutMillis: 60000, // 60s
-    idleTimeoutMillis: 60000,       // 60s
+    connectionTimeoutMillis: 120000, // 120s
+    idleTimeoutMillis: 120000,       // 120s
     max: 10 // Límite de conexiones en el pool local del contenedor
   }
 

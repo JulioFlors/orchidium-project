@@ -1,11 +1,5 @@
 export * from './auth/admin-users'
 
-export * from './auth/login'
-
-export * from './auth/logout'
-
-export * from './auth/register'
-
 export * from './auth/verify-email'
 
 export * from './navigation/get-plants-navigation'

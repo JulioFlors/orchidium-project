@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
 
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 
-import { auth } from '@/auth'
+import { auth } from '@/lib/auth'
 import { Footer, Header, Sidebar } from '@/components'
 
 export const metadata: Metadata = {
@@ -13,19 +14,20 @@ export const metadata: Metadata = {
 }
 
 export default async function OchidariumLayout({ children }: { children: React.ReactNode }) {
-  const session = await auth()
+  // ---- Obtenemos los datos de la session ----
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
 
-  // 1. Verificación de Autenticación (¿Está logueado?)
+  // ---- Está logueado? ----
   if (!session?.user) {
-    // Redirigir al login y guardar la URL de retorno
+    // Redirigimos al login y guardamos la URL de retorno
     redirect('/auth/login?callbackUrl=/orchidarium')
   }
 
-  // 2. Verificación de Autorización (¿Es Admin?)
-  // Asegúrate de que tu objeto session tenga la propiedad role.
-  // A veces viene como session.user.role o necesitas extender el tipo.
-  if (session.user.role !== 'admin' && session.user.role !== 'ADMIN') {
-    // Si está logueado pero no es admin, lo mandamos al Home o a una página 403
+  // ---- Es Admin? ----
+  if (session.user.role !== 'ADMIN') {
+    // Si está logueado pero no es admin, lo redirigimos al Home
     redirect('/')
   }
 

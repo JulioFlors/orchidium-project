@@ -2,13 +2,16 @@
 
 import { revalidatePath } from 'next/cache'
 import prisma from '@package/database'
+import { headers } from 'next/headers'
 
-import { auth } from '@/auth'
+import { auth } from '@/lib/auth'
 
 export const getPaginatedUsers = async () => {
-  const session = await auth()
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
 
-  if (session?.user.role !== 'admin' && session?.user.role !== 'ADMIN') {
+  if (session?.user.role !== 'ADMIN') {
     return { ok: false, message: 'No tiene privilegios de administrador' }
   }
 
@@ -27,14 +30,16 @@ export const getPaginatedUsers = async () => {
 }
 
 export const changeUserRole = async (userId: string, role: string) => {
-  const session = await auth()
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
 
-  if (session?.user.role !== 'admin' && session?.user.role !== 'ADMIN') {
+  if (session?.user.role !== 'ADMIN') {
     return { ok: false, message: 'No tiene privilegios de administrador' }
   }
 
   try {
-    const newRole = role === 'admin' ? 'ADMIN' : 'USER'
+    const newRole = role === 'ADMIN' ? 'USER' : 'ADMIN'
 
     await prisma.user.update({
       where: { id: userId },
@@ -50,9 +55,11 @@ export const changeUserRole = async (userId: string, role: string) => {
 }
 
 export const deleteUser = async (userId: string) => {
-  const session = await auth()
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
 
-  if (session?.user.role !== 'admin' && session?.user.role !== 'ADMIN') {
+  if (session?.user.role !== 'ADMIN') {
     return { ok: false, message: 'No tiene privilegios de administrador' }
   }
 

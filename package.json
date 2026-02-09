@@ -23,6 +23,7 @@
 		"db:build": "pnpm --filter @package/database build",
 		"db:deploy": "pnpm --filter @package/database db:deploy",
 		"db:migrate": "pnpm --filter @package/database db:migrate",
+		"db:push": "pnpm --filter @package/database db:push",
 		"db:generate": "pnpm --filter @package/database db:generate",
 		"db:reset": "pnpm --filter @package/database db:reset",
 		"db:seed": "pnpm --filter @service/seeding start",
@@ -48,8 +49,7 @@
 			"prisma",
 			"protobufjs",
 			"sharp",
-			"unrs-resolver",
-			"bcryptjs"
+			"unrs-resolver"
 		]
 	},
 	"engines": {

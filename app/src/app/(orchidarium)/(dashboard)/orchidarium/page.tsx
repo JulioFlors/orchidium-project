@@ -1,12 +1,24 @@
-import { auth } from '@/auth'
+import { headers } from 'next/headers'
+import { redirect } from 'next/navigation'
+
+import { auth } from '@/lib/auth'
 
 export default async function DashboardPage() {
-  const session = await auth()
+  // ---- Obtenemos los datos de la session ----
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
 
-  // El layout verifica la sesión y el rol de 'admin'.
+  // ---- Está logueado? ----
   if (!session?.user) {
-    // Esto teóricamente no debería ocurrir si el layout funciona correctamente.
-    return <p>Error: No se pudo cargar la sesión del usuario.</p>
+    // Redirigimos al login y guardamos la URL de retorno
+    redirect('/auth/login?callbackUrl=/orchidarium')
+  }
+
+  // ---- Es Admin? ----
+  if (session.user.role !== 'ADMIN') {
+    // Si está logueado pero no es admin, lo redirigimos al Home
+    redirect('/')
   }
 
   return (

@@ -5,26 +5,27 @@ import clsx from 'clsx'
 import Link from 'next/link'
 import { FcGoogle } from 'react-icons/fc'
 import { IoAlertOutline } from 'react-icons/io5'
-import { signIn } from 'next-auth/react'
-import { startTransition, useEffect, useActionState, useState } from 'react'
+import { useState } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { zodResolver } from '@hookform/resolvers/zod'
 
-import { authenticate, verifyEmailInDb } from '@/actions'
+import { verifyEmailInDb } from '@/actions'
 import { Backdrop } from '@/components'
+import { authClient } from '@/lib/auth-client'
 
 const loginSchema = z.object({
   email: z.string().email('No es un correo electrónico válido').min(1, 'Rellene este campo'),
   password: z
-    .string('No es un formato de contraseña válida')
-    .min(6, 'Ingrese al menos 6 caracteres'),
+    .string({ required_error: 'No es un formato de contraseña válida' })
+    .min(8, 'Ingrese al menos 8 caracteres'),
 })
 
 type FormInputs = z.infer<typeof loginSchema>
 
 export function LoginForm() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const callbackUrl = searchParams.get('callbackUrl') || '/'
 
   // Estados para validar el email (paso 1)
@@ -32,7 +33,9 @@ export function LoginForm() {
   const [isCheckingEmail, setIsCheckingEmail] = useState(false)
 
   // Estado para autenticar (paso 2)
-  const [state, dispatch, isPending] = useActionState(authenticate, undefined)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [isPending, setIsPending] = useState(false)
+  const [isSuccess, setIsSuccess] = useState(false)
 
   const {
     clearErrors,
@@ -52,33 +55,11 @@ export function LoginForm() {
   const emailValue = useWatch({ control, name: 'email' })
   const passwordValue = useWatch({ control, name: 'password' })
 
-  // Redireccionamos si el login final es exitoso
-  useEffect(() => {
-    if (state === 'success') {
-      window.location.replace(callbackUrl)
-    }
-  }, [state, callbackUrl])
-
-  // Limpiamos la contraseña si hay error
-  useEffect(() => {
-    if (state && state !== 'success') {
-      setValue('password', '') // Limpia el input
-      setFocus('password') // Devuelve el foco al usuario
-    }
-  }, [state, setValue, setFocus])
-
-  // Enfocamos al cambiar de paso
-  useEffect(() => {
-    if (loginStep === 'email') {
-      setFocus('email')
-    } else {
-      setFocus('password')
-    }
-  }, [loginStep, setFocus])
-
   // Paso 2 -> Paso 1 con errores
   const handleGoBackToEmail = () => {
     setLoginStep('email')
+    setErrorMessage(null)
+    setValue('password', '')
   }
 
   // Paso 1: Validamos que el correo sea de un usuario de PristinoPlant
@@ -90,61 +71,77 @@ export function LoginForm() {
 
     if (!isFormatValid) return
 
-    // Validación de Base de Datos (Server Action)
+    // Validación de Base de Datos (Server Action - Opcional, pero mantiene UX)
     setIsCheckingEmail(true)
 
-    // server action
-    const { ok, message } = await verifyEmailInDb(emailValue)
+    try {
+      const { ok, message } = await verifyEmailInDb(emailValue)
 
-    setIsCheckingEmail(false)
-
-    if (ok) {
-      // Si existe, avanzamos
-      setLoginStep('password')
-    } else {
-      // Si no existe, seteamos el error manualmente en el input
-      setError('email', { type: 'manual', message: message })
+      if (ok) {
+        setLoginStep('password')
+        // Pequeño timeout para dar foco
+        setTimeout(() => setFocus('password'), 100)
+      } else {
+        setError('email', { type: 'manual', message: message })
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error(error)
+      setError('email', { type: 'manual', message: 'Error verificando correo' })
+    } finally {
+      setIsCheckingEmail(false)
     }
   }
 
   // Paso 2: Procesamos el submit del formulario
-  const onSubmit = (data: FormInputs) => {
-    const formData = new FormData()
+  const onSubmit = async (data: FormInputs) => {
+    setIsPending(true)
+    setErrorMessage(null)
 
-    formData.append('email', data.email)
-    formData.append('password', data.password)
+    // Better Auth SDK: Inicio de sesión directo desde el cliente
+    // Esto maneja cookies, sesiones y CSRF automáticamente
+    await authClient.signIn.email({
+      email: data.email,
+      password: data.password,
+      callbackURL: callbackUrl,
+      fetchOptions: {
+        onSuccess: () => {
+          setIsSuccess(true)
+          router.push(callbackUrl)
+        },
+        onError: (ctx) => {
+          const fallbackError =
+            'No podemos identificar esta combinación de correo electrónico y contraseña'
 
-    if (callbackUrl) {
-      formData.append('redirectTo', callbackUrl)
-    }
-
-    startTransition(() => {
-      dispatch(formData)
+          setErrorMessage(ctx.error.message || fallbackError)
+          setIsPending(false)
+          setValue('password', '')
+          setFocus('password')
+        },
+      },
     })
   }
 
   // Login con Google
-  const handleGoogleLogin = () => {
-    // google como ID del proveedor
-    signIn('google', { callbackUrl: callbackUrl })
+  const handleGoogleLogin = async () => {
+    // Better Auth SDK: Inicio de sesión social (Google)
+    await authClient.signIn.social({
+      provider: 'google',
+      callbackURL: callbackUrl,
+    })
   }
 
   // Permite usar ENTER para avanzar del Paso 1 al 2
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && loginStep === 'email') {
-      // Prevenimos el "Submit" nativo del formulario
-      // (Si no lo hacemos, intentaría enviar el form y fallaría porque el password está vacío)
       e.preventDefault()
-
-      // Ejecutamos manualmente la validación y el avance de paso
       handleNextStep()
     }
   }
 
   // Estado visual de carga (para el Backdrop)
-  const isAuthenticating = isPending || state === 'success' || isCheckingEmail
-  const loadingText =
-    state === 'success' ? 'Redirigiendo' : isCheckingEmail ? 'Verificando' : 'Autenticando'
+  const isAuthenticating = isPending || isSuccess || isCheckingEmail
+  const loadingText = isSuccess ? 'Redirigiendo' : isCheckingEmail ? 'Verificando' : 'Autenticando'
 
   return (
     <>
@@ -165,13 +162,13 @@ export function LoginForm() {
         </div>
 
         {/* Error Message (Paso 2) */}
-        {state && state !== 'success' && loginStep === 'password' && (
+        {errorMessage && loginStep === 'password' && (
           <div className="bg-input fade-in my-2 flex w-full max-w-[340px] items-start rounded">
             <span className="my-4 mr-0 ml-4 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-400">
-              <IoAlertOutline className="text-black-and-white h-4 w-4" />
+              <IoAlertOutline className="h-4 w-4 text-white" />
             </span>
             <span className="text-secondary ml-1 grow pt-4.5 pr-6 pb-4 pl-[5px] font-medium">
-              {state}
+              {errorMessage}
             </span>
           </div>
         )}
