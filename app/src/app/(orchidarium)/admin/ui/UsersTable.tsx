@@ -18,11 +18,11 @@ export function UsersTable({ users }: Props) {
   const [searchTerm, setSearchTerm] = useState('')
 
   const handleRoleChange = async (userId: string, currentRole: string) => {
-    const newRole = currentRole === 'ADMIN' ? 'user' : 'admin'
+    const newRole = currentRole === 'ADMIN' ? 'USER' : 'ADMIN'
 
     if (
       !window.confirm(
-        `¿Estás seguro de cambiar el rol a ${newRole === 'admin' ? 'Administrador' : 'Usuario'}?`,
+        `¿Estás seguro de cambiar el rol a ${newRole === 'ADMIN' ? 'Administrador' : 'Usuario'}?`,
       )
     )
       return

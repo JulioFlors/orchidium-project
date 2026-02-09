@@ -1,22 +1,29 @@
 import { redirect } from 'next/navigation'
 import { IoPeopleOutline, IoPersonOutline, IoSettingsOutline } from 'react-icons/io5'
+import { headers } from 'next/headers'
 
 import { UsersTable } from './ui/UsersTable'
 
 import { getPaginatedUsers } from '@/actions'
 import { LogoutButton } from '@/app/(shop)/account/ui/LogoutButton'
-import { auth } from '@/auth'
+import { auth } from '@/lib/auth'
 import { Title } from '@/components'
 
 export default async function AdminPage() {
-  const session = await auth()
+  // ---- Obtenemos los datos de la session ----
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  })
 
+  // ---- Está logueado? ----
   if (!session?.user) {
-    redirect('/auth/login')
+    // Redirigimos al login y guardamos la URL de retorno
+    redirect('/auth/login?callbackUrl=/admin')
   }
 
-  // Doble check de seguridad por si acaso
-  if (session.user.role !== 'admin' && session.user.role !== 'ADMIN') {
+  // ---- Es Admin? ----
+  if (session.user.role !== 'ADMIN') {
+    // Si está logueado pero no es admin, lo redirigimos al Home
     redirect('/')
   }
 

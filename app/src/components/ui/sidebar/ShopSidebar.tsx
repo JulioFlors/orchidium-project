@@ -7,9 +7,9 @@ import Image from 'next/image'
 import { TbPlant } from 'react-icons/tb'
 import { IoChevronForwardOutline } from 'react-icons/io5'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { useSession, signOut } from 'next-auth/react'
 import clsx from 'clsx'
 
+import { authClient } from '@/lib/auth-client'
 import { PersonIcon, SearchBox, ThemeToggle } from '@/components'
 import { shopRoutes } from '@/config'
 import { useUIStore } from '@/store'
@@ -22,7 +22,9 @@ export function ShopSidebar({ suggestions = [] }: Props) {
   // ----- Hooks -----
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const { data: session } = useSession()
+  // Better Auth SDK: Hook para obtener la sesión en componentes cliente
+  // Se actualiza automáticamente cuando cambia el estado de autenticación
+  const { data: session } = authClient.useSession()
 
   // ----- Store (Zustand) -----
   const closeSidebar = useUIStore((state) => state.closeSidebar)
@@ -31,6 +33,7 @@ export function ShopSidebar({ suggestions = [] }: Props) {
 
   // ----- Helpers de Auth -----
   const isAuthenticated = !!session?.user
+  // @ts-expect-error: Role might not be typed yet without generation, but exists in DB
   const isAdmin = session?.user?.role?.toUpperCase() === 'ADMIN'
 
   // ---- NIVEL 2: Category Content ----
@@ -144,9 +147,16 @@ export function ShopSidebar({ suggestions = [] }: Props) {
           <button
             className="focus-sidebar-content p-2"
             type="button"
-            onClick={() => {
+            onClick={async () => {
               closeSidebar() // Cierra el sidebar
-              signOut() // Cierra la sesión y actualiza el hook useSession
+              // Better Auth SDK: Cerrar sesión
+              await authClient.signOut({
+                fetchOptions: {
+                  onSuccess: () => {
+                    window.location.reload()
+                  },
+                },
+              })
             }}
           >
             Cerrar sesión

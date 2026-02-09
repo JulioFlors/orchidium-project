@@ -1,32 +1,27 @@
 'use client'
 
-import { useSession, signOut } from 'next-auth/react'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { IoLogOutOutline } from 'react-icons/io5'
 import clsx from 'clsx'
 
 import { Backdrop } from '@/components'
+import { authClient } from '@/lib/auth-client'
 
 export function LogoutButton() {
-  const { status } = useSession()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const router = useRouter()
 
   const handleLogout = async () => {
     setIsLoggingOut(true)
-    // Redirigir al inicio o login tras logout
-    await signOut({ callbackUrl: '/auth/login' })
-  }
-
-  if (status === 'loading') {
-    return (
-      <button
-        className="flex w-full items-center gap-2 rounded-lg px-4 py-3 text-left transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800/50"
-        type="button"
-      >
-        <div className="h-5 w-5 animate-pulse rounded bg-gray-200 dark:bg-zinc-700" />
-        <div className="h-4 w-24 animate-pulse rounded bg-gray-200 dark:bg-zinc-700" />
-      </button>
-    )
+    // Usamos el SDK Cliente de Better Auth para cerrar sesión y redirigir
+    await authClient.signOut({
+      fetchOptions: {
+        onSuccess: () => {
+          router.push('/auth/login')
+        },
+      },
+    })
   }
 
   return (

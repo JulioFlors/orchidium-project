@@ -1,8 +1,19 @@
 /* eslint-disable no-console */
 
 import { initialData, SeedFertilizationCycle, SeedPhytosanitaryCycle } from './seed-data'
-
 import { prisma, ZoneType, TableType, PotSize, PlantStatus, PlantType } from '@package/database'
+import { betterAuth } from 'better-auth'
+import { prismaAdapter } from 'better-auth/adapters/prisma'
+
+const auth = betterAuth({
+  database: prismaAdapter(prisma, {
+    provider: 'postgresql',
+  }),
+  emailAndPassword: {
+    enabled: true,
+    minPasswordLength: 8,
+  },
+})
 
 // ---- Interfaz auxiliar ----
 interface ProductCycleConnect {
@@ -128,7 +139,31 @@ async function main() {
   console.log('🌱  Insertando nuevos datos')
 
   // ---- Insertar Users ----
-  await prisma.user.createMany({ data: users })
+
+  for (const user of users) {
+    try {
+      const res = await auth.api.signUpEmail({
+        body: {
+          email: user.email,
+          password: user.password,
+          name: user.name,
+        },
+      })
+
+      if (res?.user) {
+        // Actualizar rol, ya que signUp no permite establecerlo directamente por seguridad
+        await prisma.user.update({
+          where: { id: res.user.id },
+          data: {
+            role: user.role === 'ADMIN' ? 'ADMIN' : 'USER',
+            emailVerified: true
+          },
+        })
+      }
+    } catch (error) {
+      console.error(`Error creando usuario ${user.email}:`, error)
+    }
+  }
 
   // ---- Insertar Genus ----
   await prisma.genus.createMany({ data: genus })
@@ -138,11 +173,11 @@ async function main() {
   const genusDB = await prisma.genus.findMany()
   // crear un mapa de nombres a IDs y Tipos para generar variantes
   const genusMap = genusDB.reduce(
-    (map: Record<string, {id: string, type: PlantType}>, genus) => {
+    (map: Record<string, { id: string, type: PlantType }>, genus) => {
       map[genus.name] = { id: genus.id, type: genus.type }
       return map
     },
-    {} as Record<string, {id: string, type: PlantType}>,
+    {} as Record<string, { id: string, type: PlantType }>,
   )
 
   // ---- Insertar Species y Variants ----

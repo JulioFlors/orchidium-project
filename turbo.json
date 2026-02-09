@@ -19,7 +19,8 @@
       "env": [
         "AUTH_GOOGLE_ID",
         "AUTH_GOOGLE_SECRET",
-        "AUTH_SECRET",
+        "BETTER_AUTH_SECRET",
+        "BETTER_AUTH_URL",
         "DATABASE_URL_UNPOOLED",
         "DATABASE_URL",
         "DB_DATABASE_URL_UNPOOLED",
@@ -49,11 +50,11 @@
         "MQTT_CLIENT_ID_SCHEDULER",
         "MQTT_HOST",
         "MQTT_PORT",
-        "NEXT_PUBLIC_MQTT_PROTOCOL",
         "NEXT_PUBLIC_MQTT_BROKER",
+        "NEXT_PUBLIC_MQTT_PASSWORD",
         "NEXT_PUBLIC_MQTT_PORT",
-        "NEXT_PUBLIC_MQTT_USERNAME",
-        "NEXT_PUBLIC_MQTT_PASSWORD"
+        "NEXT_PUBLIC_MQTT_PROTOCOL",
+        "NEXT_PUBLIC_MQTT_USERNAME"
       ]
     },
     "lint": {

@@ -14,7 +14,7 @@ import {
 } from 'react-icons/io5'
 import { LuLoader } from 'react-icons/lu'
 
-import { login, registerUser } from '@/actions'
+import { authClient } from '@/lib/auth-client'
 
 // --- Types & Data ---
 
@@ -141,17 +141,21 @@ export function RegisterForm() {
     setIsSubmitting(true)
     const { name, email, password } = data
 
-    const resp = await registerUser(name, email, password)
-
-    if (!resp.ok) {
-      setErrorMessage(resp.message)
-      setIsSubmitting(false)
-
-      return
-    }
-
-    await login(email.toLowerCase(), password)
-    window.location.replace(redirectUrl)
+    await authClient.signUp.email({
+      email,
+      password,
+      name,
+      callbackURL: redirectUrl,
+      fetchOptions: {
+        onSuccess: () => {
+          window.location.replace(redirectUrl)
+        },
+        onError: (ctx) => {
+          setErrorMessage(ctx.error.message || 'Error al crear la cuenta')
+          setIsSubmitting(false)
+        },
+      },
+    })
   }
 
   return (

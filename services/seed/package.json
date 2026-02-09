@@ -8,6 +8,6 @@
   },
   "dependencies": {
     "@package/database": "workspace:*",
-    "bcryptjs": "3.0.3"
+    "better-auth": "1.4.18"
   }
 }
