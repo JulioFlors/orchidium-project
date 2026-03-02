@@ -45,6 +45,9 @@
         "DB_POSTGRES_USER",
         "DB_STACK_SECRET_SERVER_KEY",
         "DB_USER",
+        "INFLUX_BUCKET",
+        "INFLUX_TOKEN",
+        "INFLUX_URL",
         "MQTT_BROKER_URL",
         "MQTT_CLIENT_ID_INGEST",
         "MQTT_CLIENT_ID_SCHEDULER",
@@ -54,10 +57,7 @@
         "NEXT_PUBLIC_MQTT_PASSWORD",
         "NEXT_PUBLIC_MQTT_PORT",
         "NEXT_PUBLIC_MQTT_PROTOCOL",
-        "NEXT_PUBLIC_MQTT_USERNAME",
-        "INFLUX_BUCKET",
-        "INFLUX_URL_CLOUD",
-        "INFLUX_TOKEN"
+        "NEXT_PUBLIC_MQTT_USERNAME"
       ]
     },
     "lint": {
