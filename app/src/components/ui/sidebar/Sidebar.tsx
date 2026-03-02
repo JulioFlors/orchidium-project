@@ -120,28 +120,44 @@ export function Sidebar({ suggestions = [] }: Props) {
                 `${sidebarRoute ? 'my-2' : ''}`,
               )}
             >
-              {/* IZQUIERDA: Botón Volver (con ancho fijo para balancear flex) */}
-              <div className="flex flex-1 justify-start">
-                {sidebarRoute ? (
-                  <button
-                    aria-label="Volver al menú principal"
-                    className="focus-link-hover header-sidebar"
-                    type="button"
-                    onClick={() => setSidebarRoute(null)}
-                  >
-                    <IoChevronBackOutline className="tds-icon" />
-                    <span className="tds-xs:block mr-1 hidden">Volver</span>
-                  </button>
-                ) : (
-                  // Placeholder vacío para mantener el layout
-                  <div className="h-8 w-8" />
-                )}
-              </div>
+              <AnimatePresence mode="wait">
+                {/* IZQUIERDA: Botón Volver (con ancho fijo para balancear flex) */}
+                <motion.div
+                  key={sidebarRoute ? 'back-btn' : 'empty-btn'}
+                  animate={{ opacity: 1 }}
+                  className="flex flex-1 justify-start"
+                  exit={{ opacity: 0 }}
+                  initial={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {sidebarRoute ? (
+                    <button
+                      aria-label="Volver al menú principal"
+                      className="focus-link-hover header-sidebar"
+                      type="button"
+                      onClick={() => setSidebarRoute(null)}
+                    >
+                      <IoChevronBackOutline className="tds-icon" />
+                      <span className="tds-xs:block mr-1 hidden">Volver</span>
+                    </button>
+                  ) : (
+                    // Placeholder vacío para mantener el layout
+                    <div className="h-8 w-8" />
+                  )}
+                </motion.div>
 
-              {/* CENTRO: Título de Sección */}
-              <div className="shrink-0 text-center">
-                {sidebarRoute && <h2 className="title-sidebar">{currentTitle}</h2>}
-              </div>
+                {/* CENTRO: Título de Sección */}
+                <motion.div
+                  key={currentTitle || 'empty-title'}
+                  animate={{ opacity: 1 }}
+                  className="shrink-0 text-center"
+                  exit={{ opacity: 0 }}
+                  initial={{ opacity: 0 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {sidebarRoute && <h2 className="title-sidebar">{currentTitle}</h2>}
+                </motion.div>
+              </AnimatePresence>
 
               {/* DERECHA: Botón Cerrar */}
               <div className="flex flex-1 justify-end">

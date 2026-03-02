@@ -6,13 +6,13 @@ import { useEffect, useState } from 'react'
 
 import { Footer, Header, PageNotFound, Sidebar } from '@/components'
 import { getPlantsNavigation, getSearchSuggestions } from '@/actions'
+import { adminRoutes } from '@/config'
 
 // La Metadata no se puede exportar desde un Componente Cliente (error.tsx debe ser cliente).
 // Generalmente se aplica la metadata del layout raíz, o un layout específico puede definirla.
 
 interface ErrorProps {
   error: Error & { digest?: string }
-  // reset: () => void
 }
 
 export default function ErrorPage({ error }: ErrorProps) {
@@ -28,22 +28,42 @@ export default function ErrorPage({ error }: ErrorProps) {
     // eslint-disable-next-line no-console
     console.error('🚨 Application Error:', error)
 
-    const fetchData = async () => {
-      try {
-        const [suggestionsData, navData] = await Promise.all([
-          getSearchSuggestions(),
-          getPlantsNavigation(),
-        ])
+    const pathname = window.location.pathname
 
-        setSuggestions(suggestionsData)
-        setPlantsNavData(navData)
-      } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error('🚨 Error recovering navigation data:', err)
+    // Validar si la ruta coincide con un módulo administrativo del menú
+    const isOrchidarium =
+      adminRoutes.some((module) => {
+        const allItems = [
+          ...(module.items || []),
+          ...(module.groups?.flatMap((g) => g.items) || []),
+        ]
+
+        return allItems.some((item) => pathname === item.url || pathname.startsWith(`${item.url}/`))
+      }) ||
+      pathname.startsWith('/orchidarium') ||
+      pathname.startsWith('/admin')
+
+    // Evitamos cargar datos masivos de la tienda si estamos en el modo Administrativo/Orquideario
+    const isShopRoute = !isOrchidarium && !pathname.startsWith('/auth')
+
+    if (isShopRoute) {
+      const fetchData = async () => {
+        try {
+          const [suggestionsData, navData] = await Promise.all([
+            getSearchSuggestions(),
+            getPlantsNavigation(),
+          ])
+
+          setSuggestions(suggestionsData)
+          setPlantsNavData(navData)
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error('🚨 Error recovering navigation data:', err)
+        }
       }
-    }
 
-    fetchData()
+      fetchData()
+    }
   }, [error])
 
   return (

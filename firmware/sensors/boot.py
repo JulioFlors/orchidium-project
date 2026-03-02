@@ -35,7 +35,8 @@ try:
     update_creds.apply_update()
     # Borramos el archivo del ESP32
     remove('update_creds.py')
-    log(f"📡  Credenciales {Colors.GREEN}Actualizadas{Colors.RESET}")
+    if DEBUG:
+        log(f"📡  Credenciales {Colors.GREEN}Actualizadas{Colors.RESET}")
     sleep(1)
     reset()
 except ImportError:
@@ -45,7 +46,8 @@ except ImportError:
 try:
     from secrets import WIFI_CONFIG
 except ImportError:
-    log(f"\n\n❌  Error: {Colors.RED}No se encontró{Colors.RESET} lib/secrets")
+    if DEBUG:
+        log(f"\n\n❌  Error: {Colors.RED}No se encontró{Colors.RESET} lib/secrets")
     # Evitamos que el código crashee, aunque no conectará
     WIFI_CONFIG = {"SSID": "", "PASS": ""}
 
@@ -58,20 +60,24 @@ def connect_wifi_sync():
     wlan.active(True)
     
     if not wlan.isconnected():
-        log(f"\n\n📡  Conectándose a {Colors.BLUE}{WIFI_CONFIG['SSID']}{Colors.RESET}", end="")
+        if DEBUG:
+            log(f"\n\n📡  Conectándose a {Colors.BLUE}{WIFI_CONFIG['SSID']}{Colors.RESET}", end="")
         wlan.connect(WIFI_CONFIG['SSID'], WIFI_CONFIG['PASS'])
 
         timeout = 60
         while not wlan.isconnected() and timeout > 0:
-            log(f"{Colors.BLUE}.{Colors.RESET}", end="")
+            if DEBUG:
+                log(f"{Colors.BLUE}.{Colors.RESET}", end="")
             sleep(1)
             timeout -= 1
             
     if wlan.isconnected():
-        log(f"\n📡  Conexión WiFi Establecida {Colors.GREEN}| IP: {wlan.ifconfig()[0]}{Colors.RESET}")
+        if DEBUG:
+            log(f"\n📡  Conexión WiFi Establecida {Colors.GREEN}| IP: {wlan.ifconfig()[0]}{Colors.RESET}")
         return True
     
-    log(f"\n❌  No se pudo establecer la conexión WiFi: {Colors.RED}{e}{Colors.RESET}")
+    if DEBUG:
+        log(f"\n❌  No se pudo establecer la conexión WiFi {Colors.RED}(Timeout){Colors.RESET}.")
     return False
 
 # ---- Comprobar/Actualizar firmware via OTA ----
@@ -83,14 +89,27 @@ if connect_wifi_sync():
         collect()
         # Ejecutar OTA
         ota = OTAUpdater(OTA_CONFIG['URL'], debug=DEBUG)
-        ota.check_for_updates()
-        
-        # Limpieza profunda
-        del ota, OTAUpdater
-        collect()
-        
+
+        # Si falla la verificación (DNS/Red), reiniciamos para reintentar limpio.
+        if not ota.check_for_updates():
+            if DEBUG:
+                log(f"\n💀  {Colors.RED}DEATH: Fallo Crítico de Red en Boot.{Colors.RESET}")
+                log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo{Colors.RESET}\n\n")
+            sleep(1)
+            reset()
+
     except Exception as e:
-        log(f"🔥 Error en proceso OTA: {Colors.RED}{e}{Colors.RESET}")
+        if DEBUG:
+            log(f"🔥 Error en proceso OTA: {Colors.RED}{e}{Colors.RESET}")
+
+    finally:
+        # (Liberar RAM Realmente)
+        import sys
+        modules_to_free = ['machine', 'ntptime', 'ota']
+        for mod in modules_to_free:
+            if mod in sys.modules:
+                del sys.modules[mod]
+        collect()
 
 # Al terminar boot.py, MicroPython ejecuta automáticamente main.py
 # El WiFi queda conectado.

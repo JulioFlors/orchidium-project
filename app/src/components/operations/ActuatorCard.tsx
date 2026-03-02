@@ -36,7 +36,7 @@ export function ActuatorCard({
   return (
     <div
       className={clsx(
-        'relative flex flex-col items-center justify-center gap-4 overflow-hidden rounded-2xl p-6 shadow-sm transition-all duration-300 select-none',
+        'relative flex flex-col items-center justify-center gap-4 overflow-hidden rounded-lg p-6 shadow-sm transition-all duration-300 select-none',
 
         // --- Estado Deshabilitado o Cargando ---
         isDisabled

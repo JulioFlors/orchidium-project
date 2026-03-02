@@ -1,5 +1,7 @@
 export * from './backdrop/Backdrop'
 
+export * from './border-trail/BorderTrail'
+
 export * from './footer/Footer'
 
 export * from './form/FormField'
@@ -49,3 +51,5 @@ export * from './theme-toggle/ThemeIcon'
 export * from './theme-toggle/ThemeToggle'
 
 export * from './title/Title'
+
+export * from './select/SelectDropdown'

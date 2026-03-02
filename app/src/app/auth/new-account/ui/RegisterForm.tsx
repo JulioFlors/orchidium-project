@@ -281,11 +281,11 @@ export function RegisterForm() {
                     ],
                   )}
                   id="password"
-                  placeholder="Al menos 6 caracteres"
+                  placeholder="Al menos 8 caracteres"
                   type="password"
                   {...register('password', {
                     required: 'Contraseña requerida',
-                    minLength: { value: 6, message: 'Mínimo 6 caracteres' },
+                    minLength: { value: 8, message: 'Mínimo 8 caracteres' },
                   })}
                 />
                 {errors.password && (

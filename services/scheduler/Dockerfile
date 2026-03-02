@@ -9,6 +9,7 @@ RUN corepack enable
 
 # ---- Builder: Instala, compila y genera ----
 FROM base AS builder
+ENV NODE_OPTIONS="--dns-result-order=ipv4first"
 
 # Copia manifiestos y configuraciones del monorepo.
 COPY package.json pnpm-lock.yaml ./
@@ -18,6 +19,7 @@ COPY tsconfig.base.json ./
 # Copia los package.json de cada workspace
 COPY packages/database/package.json ./packages/database/
 COPY services/scheduler/package.json ./services/scheduler/
+
 
 # Instala dependencias (Caché persistente)
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \

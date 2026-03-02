@@ -369,8 +369,8 @@ async function main() {
         zones: schedule.zones,
         isEnabled: schedule.isEnabled,
         // Conexiones dinámicas
-        fertilizationProgram: fertConnection,
-        phytosanitaryProgram: phytoConnection
+        ...(fertConnection && { fertilizationProgram: fertConnection }),
+        ...(phytoConnection && { phytosanitaryProgram: phytoConnection })
       }
     })
   }

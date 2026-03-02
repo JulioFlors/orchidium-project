@@ -16,6 +16,7 @@ Implementación de sistemas CRUD completos para modelar la realidad biológica.
 
 * **Taxonomía:** Gestión de Géneros y Especies (La base genética).
 * **Activos Vivos:** Gestión de Plantas individuales (Gemelos Digitales) con rastreo de estado y ubicación.
+* **Diario Biológico:** Registro de eventos del ciclo de vida (Floraciones, Plagas, Hongos) cruzados con los Gemelos Digitales.
 * **Tienda:** Gestión de Variantes de Producto (Lógica de venta y stock).
 
 ### 1.2 Recursos del Laboratorio
@@ -41,15 +42,13 @@ Gestión de los insumos necesarios para el mantenimiento de la vida.
 El usuario no sabe qué es un relé o un tópico MQTT. El sistema traduce intenciones en comandos.
 
 * **Orquestación de Comandos:** Transformar "Humedecer Suelo" en: `Abrir Válvula Main -> Abrir Válvula Suelo -> Encender Bomba`.
-* **Gestión de Tiempos:**
-  * **Inmediato:** Start/Stop manual (Toggle).
-  * **Temporizado:** "Humedecer por 10 minutos".
-  * **Diferido:** "Humedecer a las 4:00 PM por 15 minutos".
+* **Gestión de Tiempos:** Inmediato (Toggle), Temporizado (Auto-apagado) y Diferido (Programado).
 
 ### 2.2 Interfaz de Control (Frontend)
 
 * Panel de Operaciones en tiempo real (`/operations/control`).
 * Feedback visual inmediato del estado de los actuadores (Socket/MQTT Hooks).
+* **Confirmación de Agroquímicos:** Modal obligatorio antes de activar circuitos de Fertirriego/Fumigación que valide la preparación del tanque auxiliar.
 
 ---
 
@@ -57,22 +56,23 @@ El usuario no sabe qué es un relé o un tópico MQTT. El sistema traduce intenc
 
 *Objetivo:* Automatización persistente que toma decisiones basándose en el contexto ambiental.
 
-### 3.1 Gestión de Rutinas (Scheduler CRUD)
+### 3.1 Gestión de Rutinas (Scheduler CRUD - El Músculo)
 
-Interfaz para crear/editar/eliminar rutinas de automatización (`AutomationSchedule`).
+Interfaz para crear/editar/eliminar rutinas de automatización (`AutomationSchedule`). Riegos, Fertilización, etc., con bloqueos simples en tiempo real (ej. Sensor de lluvia).
 
-* **Tipos:** Riego, Fertilización, Fumigación, Humidificación.
-* **Persistencia:** Las rutinas viven en la base de datos y se recargan al reiniciar el servicio.
+* **Confirmación Previa de Agroquímicos:** Las tareas de Fertirriego/Fumigación requieren confirmación del usuario 1h antes. Sin confirmación, la tarea se cancela automáticamente. Depende del Sistema de Notificaciones.
 
-### 3.2 Inteligencia Ambiental (WeatherGuard)
+### 3.2 WeatherGuard (El Escudo Preventivo)
 
-El sistema evalúa si es seguro ejecutar una tarea programada.
+Algoritmo híbrido que actúa como "guardia de seguridad" antes de cada riego. Cruza la telemetría del sensor de lluvia local (pasado/presente) con las APIs meteorológicas globales (futuro) para cancelar riegos si el suelo ya está húmedo o si se avecina una tormenta, optimizando el agua y previniendo hongos.
 
-* **Fuentes de Datos:**
-  * Estación Meteorológica Local (Sensores MQTT).
-  * API Clima Externa (Predicción).
-* **Lógica de Decisión:** "Si llovió > 5mm en la última hora O hay > 80% probabilidad de lluvia, SALTAR riego programado".
-* *Nota:* El control manual (Fase 2) siempre tiene prioridad y no puede ser bloqueado por esta lógica.
+### 3.3 Motor de Inferencias (El Cerebro)
+
+Análisis profundo en segundo plano (Data Science agronómico) para predecir y evaluar.
+
+* **Segmentación Circadiana:** Comprensión de las 4 fases del día (Valle Nocturno, Rampa Matutina, Pico Diurno, Transición Vespertina).
+* **Métricas Complejas:** Cálculo diario del DLI (Daily Light Integral) discriminando luz solar de artificial, y VPD (Déficit de Presión de Vapor).
+* **Predicción Epidemiológica:** Cruce del historial ambiental con el "Diario Biológico" para alertar sobre condiciones propensas a hongos o plagas específicas.
 
 ---
 
@@ -80,11 +80,33 @@ El sistema evalúa si es seguro ejecutar una tarea programada.
 
 *Objetivo:* Pulido visual y métricas para la toma de decisiones humanas.
 
-### 4.1 Dashboard Vivo
+### 4.1 Dashboard Vivo y Analítico
 
-* Visualización de datos históricos y en tiempo real (Temperaturas, Humedad, Luz).
-* Gráficos interactivos de eventos (Lluvias, Riegos ejecutados).
+* Visualización en tiempo real y micro-visión (24h) con sombreado contextual (Día/Noche) y escalas logarítmicas para iluminancia.
+* Macro-visión (7/30 días) usando condensación de datos (Velas/Cajas) para promedios, máximos y mínimos.
+* Componentes Skeletons y UX select-none.
 
-### 4.2 Gestión de Cuenta
+### 4.2 Lógica Avanzada de Sensores (Hardware)
+
+* Eficiencia Energética: Implementación de Deep Sleep en nodos remotos.
+* Cálculo de Transmisión de Luz (Malla vs Sol directo).
+* Detección de Anomalías Hidráulicas mediante transductores de presión.
+
+### 4.3 Gestión de Cuenta
 
 * Perfil de usuario, cambio de contraseña y eliminación de cuenta (GDPR).
+
+### 4.4 Sistema de Notificaciones (Transversal)
+
+* Integración con Telegram/WhatsApp para notificaciones bidireccionales (alertas, confirmaciones).
+* Web Push Notifications como canal secundario.
+* Log de interacciones visible en la web.
+
+### 4.5 Observabilidad del Sistema
+
+* Registro de eventos `online`/`offline` de todos los nodos (Sensors, Actuador) y servicios backend (Scheduler, Ingest) en InfluxDB.
+* Correlación automática de desconexiones con tareas fallidas para generar notas de diagnóstico.
+* Dashboard de salud en `/orchidarium`: estado de nodos, uptime, última lectura.
+* Notificaciones de desconexión/reconexión de nodos vía Telegram/WhatsApp.
+* Flexible por zona: nuevos nodos Sensors se registran automáticamente.
+* Ver: `docs/observability_architecture.md`.

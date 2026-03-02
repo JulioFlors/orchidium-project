@@ -36,6 +36,7 @@ export function LoginForm() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isPending, setIsPending] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false)
 
   const {
     clearErrors,
@@ -124,6 +125,7 @@ export function LoginForm() {
 
   // Login con Google
   const handleGoogleLogin = async () => {
+    setIsGoogleLoading(true)
     // Better Auth SDK: Inicio de sesión social (Google)
     await authClient.signIn.social({
       provider: 'google',
@@ -140,8 +142,14 @@ export function LoginForm() {
   }
 
   // Estado visual de carga (para el Backdrop)
-  const isAuthenticating = isPending || isSuccess || isCheckingEmail
-  const loadingText = isSuccess ? 'Redirigiendo' : isCheckingEmail ? 'Verificando' : 'Autenticando'
+  const isAuthenticating = isPending || isSuccess || isCheckingEmail || isGoogleLoading
+  const loadingText = isSuccess
+    ? 'Redirigiendo'
+    : isCheckingEmail
+      ? 'Verificando'
+      : isGoogleLoading
+        ? 'Cargando'
+        : 'Autenticando'
 
   return (
     <>
@@ -149,7 +157,9 @@ export function LoginForm() {
       <Backdrop visible={isAuthenticating}>
         <div className="flex flex-col items-center gap-4 p-8">
           <div className="text-primary h-12 w-12 animate-spin rounded-full border-4 border-current border-t-transparent" />
-          <span className="text-primary text-lg font-medium tracking-wide">{loadingText}</span>
+          <span className="text-primary animate-pulse text-lg font-medium tracking-wide">
+            {loadingText}
+          </span>
         </div>
       </Backdrop>
 

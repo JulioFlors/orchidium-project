@@ -20,7 +20,7 @@ import {
 } from '@/components'
 import { NavbarItem } from '@/interfaces'
 import { shopRoutes, adminRoutes } from '@/config'
-import { useScrollLock, useNavigationContext } from '@/hooks'
+import { useScrollLock, useNavigationContext, useCloseDropdownOnBlur } from '@/hooks'
 
 interface Props {
   suggestions?: SearchSuggestion[]
@@ -127,6 +127,10 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
     }
   }, [])
 
+  // ----- ❌ Close on Blur/Tab Change -----
+  // Cerramos el menú cuando el usuario cambia de pestaña o se desenfoca la ventana
+  useCloseDropdownOnBlur(isSubMenuOpen, () => startCloseTimeout(0))
+
   // ----------------------------------------
   //  Render (JSX)
   // ----------------------------------------
@@ -155,6 +159,7 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
               <Link
                 className="focus-link"
                 href="/"
+                prefetch={!isAuthLayout}
                 onClick={() => startCloseTimeout(0)}
                 onMouseEnter={handleSubMenuMouseEnter}
               >

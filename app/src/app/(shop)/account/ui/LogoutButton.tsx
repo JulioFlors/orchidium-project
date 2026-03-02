@@ -29,7 +29,9 @@ export function LogoutButton() {
       <Backdrop visible={isLoggingOut}>
         <div className="flex flex-col items-center gap-4 p-8">
           <div className="text-primary h-12 w-12 animate-spin rounded-full border-4 border-current border-t-transparent" />
-          <span className="text-lg font-medium tracking-wide text-white">Cerrando sesión</span>
+          <span className="text-primary animate-pulse text-lg font-medium tracking-wide">
+            Cerrando sesión
+          </span>
         </div>
       </Backdrop>
 

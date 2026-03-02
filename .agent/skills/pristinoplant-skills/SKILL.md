@@ -92,3 +92,21 @@ Formato: `[Emoji] [tipo] ([área]): [Título Conciso]`
    - Si un tipo es complejo, definir una `interface` o `type` adecuado.
    - Si una librería no exporta tipos, crear un archivo de definición `d.ts` o usar `unknown` con Type Guards.
    - **Excepción**: Solo si es absolutamente imposible de tipar (casos extremos de librerías legacy sin tipos), documentar exhaustivamente por qué. Pero en el 99.9% de los casos, `any` es un error.
+
+### Paso 7: Estándares de Diseño UI
+
+1. **Contenedor Principal**:
+    - Para todas las páginas principales (`admin`, `dashboard`, `account`), usar SIEMPRE el contenedor estándar para evitar desbordes y mantener consistencia:
+    - `className="mx-auto mt-8 max-w-7xl px-4 py-8 sm:px-6 lg:px-8"`
+    - Esto asegura márgenes consistentes y un ancho máximo legible en desktop.
+
+2. **Estilo Visual**:
+    - Usar `EnvironmentCard` para métricas.
+3. **Reglas de Componentes UI**:
+    - **Botones**: Todo `<button>` DEBE tener explícitamente `type="button"` (salvo que sea submit).
+    - **Estilos Condicionales**: Usar SIEMPRE `clsx` para clases condicionales. Nunca usar ternarios directos en `className` sin envolver.
+    - **Variables CSS**: Usar las clases de utilidad de Tailwind definidas en el tema (ej. `bg-surface`, `text-primary`, `border-input-outline`) en lugar de valores arbitrarios (`bg-[var(--color-surface)]`) o colores hardcoded (`bg-zinc-900`). Esto asegura limpieza y consistencia.
+
+4. **Colores Semánticos (Sensores)**:
+    - Mantener consistencia con el sistema: Temp (Orange), Hum (Blue), Lux (Yellow), Rain (Cyan).
+    - Usar estos colores en combinación con `bg-surface` y `text-primary`.

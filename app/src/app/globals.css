@@ -238,7 +238,7 @@
   }
 
   .focus-sidebar-img:focus-visible {
-    @apply outline-accessibility outline-2 -outline-offset-2 rounded-sm;
+    @apply outline-accessibility outline-2 -outline-offset-2 rounded;
   }
 
   .focus-input-form {
@@ -270,12 +270,12 @@
   }
 
   .btn-disabled {
-    @apply bg-action border-3 border-action font-semibold leading-[26.5px] outline-none px-6 py-1 rounded-sm text-center text-white opacity-80;
+    @apply bg-action border-3 border-action font-semibold leading-[26.5px] outline-none px-6 py-1 rounded text-center text-white opacity-80;
     @apply shadow-[inset_0_0_0_2px_transparent] duration-300 ease-in-out transition-colors;
   }
 
   .btn-primary {
-    @apply bg-action border-3 border-action font-semibold leading-[26.5px] outline-none px-6 py-1 rounded-sm text-center text-white;
+    @apply bg-action border-3 border-action font-semibold leading-[26.5px] outline-none px-6 py-1 rounded text-center text-white;
     @apply shadow-[inset_0_0_0_2px_transparent] duration-300 ease-in-out transition-colors;
   }
 
@@ -289,7 +289,7 @@
 
   .btn-secondary {
     /* --- Estilos Base Comunes --- */
-    @apply border-3 border-primary font-semibold leading-[26.5px] outline-none px-6 py-1 rounded-sm text-center;
+    @apply border-3 border-primary font-semibold leading-[26.5px] outline-none px-6 py-1 rounded text-center;
     @apply shadow-[inset_0_0_0_2px_transparent] duration-300 ease-in-out transition-colors;
 
     /* --- Light Mode Base --- */
@@ -672,7 +672,7 @@
 
   .checkout-button {
     @apply bg-canvas shadow-top-highlight fixed bottom-0 left-0 w-full h-auto z-5;
-    @apply flex flex-col justify-center m-0 p-4 rounded-t-sm;
+    @apply flex flex-col justify-center m-0 p-4 rounded-t;
     @apply transition-colors duration-300 ease-in-out;
     @apply tds-lg:contents;
   }

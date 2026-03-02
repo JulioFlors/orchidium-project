@@ -8,8 +8,8 @@ import { MqttStatus } from '@/interfaces'
 interface MqttState {
   client: MqttClient | null
   status: MqttStatus
-  // Mapa: Tópico -> Payload (Puede ser objeto JSON parseado o string)
-  messages: Record<string, unknown>
+  // Mapa: Tópico -> { payload, receivedAt }
+  messages: Record<string, { payload: unknown; receivedAt: number }>
   // Set de tópicos a los que estamos suscritos (para evitar duplicados)
   subscriptions: Set<string>
 
@@ -119,7 +119,10 @@ export const useMqttStore = create<MqttState>()(
           set((state) => ({
             messages: {
               ...state.messages,
-              [topic]: parsedPayload,
+              [topic]: {
+                payload: parsedPayload,
+                receivedAt: Date.now(),
+              },
             },
           }))
         })

@@ -1,15 +1,16 @@
 'use client'
 
-import clsx from 'clsx'
-import { IoFlaskOutline, IoWarning, IoWaterOutline } from 'react-icons/io5'
+import { IoFlaskOutline, IoWaterOutline, IoInformationCircleOutline } from 'react-icons/io5'
 import { MdDewPoint } from 'react-icons/md'
 import { PiSprayBottle } from 'react-icons/pi'
-import { ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { ActuatorCard } from './ActuatorCard'
 
 import { useMqttStore } from '@/store'
 import { IrrigationCommand } from '@/interfaces'
+import { useDeviceHeartbeat } from '@/hooks'
+import { SmartDeviceHeader } from '@/components/dashboard/SmartDeviceHeader'
 
 // Definición de Tópicos
 const TOPIC_PREFIX = 'PristinoPlant/Actuator_Controller'
@@ -17,12 +18,17 @@ const TOPIC_COMMAND = `${TOPIC_PREFIX}/irrigation/cmd`
 const TOPIC_STATUS = `${TOPIC_PREFIX}/status`
 
 // Tópicos de Estado (Feedback)
-const TOPIC_STATE_WILDCARD = `${TOPIC_PREFIX}/irrigation/state/valve/#`
+// Escuchamos todo lo que venga de irrigation/state (pump, valves, etc)
+const TOPIC_STATE_WILDCARD = `${TOPIC_PREFIX}/irrigation/state/#`
 // Tópicos específicos para mapeo
 const TOPIC_STATE_SPRINKLER = `${TOPIC_PREFIX}/irrigation/state/valve/sprinkler`
 const TOPIC_STATE_FOGGER = `${TOPIC_PREFIX}/irrigation/state/valve/fogger`
 const TOPIC_STATE_SOIL_WET = `${TOPIC_PREFIX}/irrigation/state/valve/soil_wet`
 const TOPIC_STATE_FERTIGATION = `${TOPIC_PREFIX}/irrigation/state/valve/fertigation`
+// Tópicos de Actuadores Comunes
+
+const TOPIC_STATE_MAIN_WATER = `${TOPIC_PREFIX}/irrigation/state/valve/main_water`
+const TOPIC_STATE_AGROCHEMICAL = `${TOPIC_PREFIX}/irrigation/state/valve/agrochemical`
 
 // IDs de Hardware (Sincronizados con firmware/relay_modules/main.py)
 const HARDWARE = {
@@ -43,18 +49,7 @@ export function ControlPanel() {
   // --- Estados Visuales ---
   const [loadingZones, setLoadingZones] = useState<Record<string, boolean>>({})
 
-  // Nivel de Notificación (Info vs Error)
-  const [notification, setNotification] = useState<{ type: 'info' | 'error'; message: ReactNode }>({
-    type: 'info',
-    message: (
-      <>
-        El sistema se desactivará automáticamente tras <strong>10 minutos</strong> por seguridad.
-        Puede detener la acción manualmente en cualquier momento.
-      </>
-    ),
-  })
-
-  // Flag de "Listo" (Sincronizado con MQTT)
+  // Nivel de Notificación removido, render estático  // Flag de "Listo" (Sincronizado con MQTT)
   const [isReady, setIsReady] = useState(false)
 
   // Referencias para Timeouts de Comandos (120s)
@@ -66,8 +61,10 @@ export function ControlPanel() {
     connect()
   }, [connect])
 
-  const deviceStatus = String(messages[TOPIC_STATUS] || 'unknown').replace(/['"]+/g, '')
-  const isDeviceOnline = deviceStatus === 'online'
+  // --- Heartbeat ---
+  const { connectionState } = useDeviceHeartbeat()
+  // "Online" ahora significa Online REAL (no zombie)
+  const isDeviceOnline = connectionState === 'online'
 
   useEffect(() => {
     if (status === 'connected') {
@@ -80,17 +77,23 @@ export function ControlPanel() {
   // --- 2. Helper de Estado Activo ---
   const isZoneActive = (valveTopic: string) => {
     if (!isReady) return false
-    const valveState = String(messages[valveTopic] || 'OFF').replace(/['"]+/g, '')
+    const valveState = String(messages[valveTopic]?.payload || 'OFF').replace(/['"]+/g, '')
 
     return valveState === 'ON'
   }
 
   // Mapeo Directo (Sin timers locales, solo verdad del firmware)
+  // [MODIFICACIÓN] Estado Estricto: Solo activo si TODOS los componentes están ON
+  const isMainWaterOn = isZoneActive(TOPIC_STATE_MAIN_WATER)
+  const isAgroOn = isZoneActive(TOPIC_STATE_AGROCHEMICAL)
+
+  // [MODIFICACIÓN] Estado "Activo": Válvula de Zona + Válvula Principal (Ignoramos Bomba por el delay)
+  // Esto da feedback inmediato al usuario mientras la bomba arranca en background (10s después)
   const activeZones = {
-    irrigation: isZoneActive(TOPIC_STATE_SPRINKLER),
-    humidification: isZoneActive(TOPIC_STATE_FOGGER),
-    soilWet: isZoneActive(TOPIC_STATE_SOIL_WET),
-    fertigation: isZoneActive(TOPIC_STATE_FERTIGATION),
+    irrigation: isZoneActive(TOPIC_STATE_SPRINKLER) && isMainWaterOn,
+    humidification: isZoneActive(TOPIC_STATE_FOGGER) && isMainWaterOn,
+    soilWet: isZoneActive(TOPIC_STATE_SOIL_WET) && isMainWaterOn,
+    fertigation: isZoneActive(TOPIC_STATE_FERTIGATION) && isAgroOn, // Aquí Ferti + Agro (No Main)
   }
 
   // --- 3. Monitoreo de Resiliencia (Limpieza de Timeouts) ---
@@ -106,33 +109,8 @@ export function ControlPanel() {
 
       // Desbloquear UI inmediatamente (Async para evitar linter warning)
       setTimeout(() => setLoadingZones({}), 0)
-
-      // Mostrar Error si estábamos "Listos" y se cayó
-      if (isReady) {
-        setTimeout(() => {
-          setNotification({
-            type: 'error',
-            message: 'Conexión perdida con el Módulo de Relés. Esperando reconexión...',
-          })
-        }, 0)
-      }
-    } else {
-      // Al volver, restaurar mensaje default si no hay error pendiente
-      if (notification.type === 'error') {
-        setTimeout(() => {
-          setNotification({
-            type: 'info',
-            message: (
-              <>
-                El sistema se desactivará automáticamente tras <strong>10 minutos</strong> por
-                seguridad. Puede detener la acción manualmente en cualquier momento.
-              </>
-            ),
-          })
-        }, 0)
-      }
     }
-  }, [isDeviceOnline, isReady, notification.type])
+  }, [isDeviceOnline, isReady])
 
   // Stable stopLoading function
   const stopLoading = useCallback((zone: string) => {
@@ -194,12 +172,6 @@ export function ControlPanel() {
 
       return next
     })
-
-    // 3. Mostrar Error Rojo
-    setNotification({
-      type: 'error',
-      message: 'No se pudo establecer conexión con el ESP32 Relay Modules (Timeout 120s).',
-    })
   }
 
   // Mutua Exclusión (Si hay loading o offline)
@@ -229,17 +201,6 @@ export function ControlPanel() {
     // 1. Set Loading
     setLoadingZones((prev) => ({ ...prev, [zone]: true }))
 
-    // 2. Reset Notification to Info (Optimistic)
-    setNotification({
-      type: 'info',
-      message: (
-        <>
-          El sistema se desactivará automáticamente tras <strong>10 minutos</strong> por seguridad.
-          Puede detener la acción manualmente en cualquier momento.
-        </>
-      ),
-    })
-
     // 3. Start Safety Timeout (120s)
     // Limpiar previo si existiera
     if (commandTimeouts.current[zone]) clearTimeout(commandTimeouts.current[zone])
@@ -250,7 +211,7 @@ export function ControlPanel() {
 
     // 4. Send Command
     const DURATION_SEC = 600
-    const PUMP_DELAY = 30
+    const PUMP_DELAY = 10
     const VALVE_DURATION = DURATION_SEC + PUMP_DELAY
     const state = isTurningOn ? 'ON' : 'OFF'
 
@@ -295,80 +256,25 @@ export function ControlPanel() {
   }
 
   // Estado Visual
-  const isConnecting = !isReady || deviceStatus === 'unknown'
-  const isOffline = deviceStatus === 'offline'
-
-  const statusLabel = isConnecting
-    ? 'Conectando'
-    : isOffline
-      ? 'Controlador Offline'
-      : 'Controlador Activo'
-
-  // Clase Dinámica Notificación
-  const notificationClass = clsx(
-    'flex items-start gap-2 rounded-lg border p-4 text-sm transition-all duration-300',
-    notification.type === 'error'
-      ? 'border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400'
-      : 'border-yellow-500/30 bg-yellow-500/10 text-yellow-700 dark:text-yellow-500',
-  )
+  const isConnecting = !isReady || connectionState === 'unknown'
+  const isOffline = connectionState === 'offline'
 
   return (
     <div className="space-y-6">
-      {/* Barra de Estado del Dispositivo (Heartbeat) - Premium Design */}
-      <div
-        className={clsx(
-          'relative flex items-center justify-between overflow-hidden rounded-xl border p-5 shadow-sm transition-all duration-500',
-          'backdrop-blur-md', // Glass effect
-          isConnecting
-            ? 'border-zinc-200 bg-zinc-100/80 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-400'
-            : isOffline
-              ? 'border-red-200 bg-red-50/90 text-red-700 dark:border-red-900/30 dark:bg-red-900/20 dark:text-red-400'
-              : 'border-emerald-200 bg-emerald-50/90 text-emerald-700 dark:border-emerald-900/30 dark:bg-emerald-900/20 dark:text-emerald-400',
-        )}
-      >
-        {/* Background Gradient Glow */}
-        <div
-          className={clsx(
-            'absolute inset-0 opacity-10 blur-3xl transition-colors duration-500',
-            isConnecting ? 'bg-zinc-400' : isOffline ? 'bg-red-500' : 'bg-emerald-500',
-          )}
-        />
-
-        <div className="relative flex items-center gap-4">
-          {/* Status Indicator Ring */}
-          <div className="relative flex h-4 w-4 items-center justify-center">
-            <span
-              className={clsx(
-                'absolute inline-flex h-full w-full animate-ping rounded-full opacity-75',
-                isConnecting ? 'bg-zinc-400' : isOffline ? 'bg-red-400' : 'bg-emerald-400',
-              )}
-            />
-            <span
-              className={clsx(
-                'relative inline-flex h-3 w-3 rounded-full',
-                isConnecting ? 'bg-zinc-500' : isOffline ? 'bg-red-500' : 'bg-emerald-500',
-              )}
-            />
-          </div>
-
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold tracking-tight uppercase">{statusLabel}</span>
-            <span className="text-[10px] font-medium tracking-widest uppercase opacity-70">
-              {isOffline ? 'Verifique conexión WiFi/MQTT' : 'Sistema Operativo'}
-            </span>
-          </div>
-        </div>
-
-        <div className="relative flex flex-col items-end text-right">
-          <span className="text-[10px] font-bold tracking-widest uppercase opacity-50">
-            Dispositivo
-          </span>
-          <span className="font-mono text-xs font-medium">ESP32 Relay Module</span>
-        </div>
-      </div>
+      <SmartDeviceHeader
+        connectionState={connectionState}
+        deviceDescription="Control directo sobre los actuadores del orquideario. Utilice estas herramientas para mantenimiento, pruebas o correcciones puntuales del microclima."
+        deviceName="Control de Actuadores"
+        gridClassName="grid-cols-1 gap-4 tds-sm:grid-cols-2 tds-lg:grid-cols-4"
+        isLoadingStatus={isConnecting}
+        selectedZone="ZONA_A"
+        titleClassName="col-span-1 tds-sm:col-span-2 tds-lg:col-span-3"
+        zoneMapping={{ ZONA_A: 'Controlador' }}
+        zones={['ZONA_A']}
+      />
 
       {/* Grid de Control */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-4 grid grid-cols-1 gap-4">
         <ActuatorCard
           color="blue"
           icon={<IoWaterOutline />}
@@ -412,16 +318,33 @@ export function ControlPanel() {
           title="Fertirriego"
           onToggle={() => toggleZone('fertigation')}
         />
-      </div>
 
-      {/* Notificación Dinámica */}
-      <div className={notificationClass}>
-        {notification.type === 'error' ? (
-          <IoWarning className="shrink-0 text-xl text-red-500" />
-        ) : (
-          <IoWarning className="shrink-0 text-xl text-yellow-500" />
-        )}
-        <p>{notification.message}</p>
+        {/* Nota Estática de Seguridad (Spotlight & Gradient Border styling) */}
+        <div className="tds-sm:col-span-2 group relative col-span-1 overflow-hidden rounded-md p-px shadow-sm transition-all duration-300 hover:shadow-md">
+          {/* Border Gradient Line (Actúa como borde luminoso diagonal en la esquina superior derecha) */}
+          <div className="via-action/5 to-action/50 pointer-events-none absolute inset-0 bg-linear-to-tr from-transparent" />
+
+          {/* Background Card Color (Tapa el centro para dejar solo el borde de 1px) */}
+          <div className="bg-surface relative flex h-full w-full flex-col gap-2 rounded-md p-3">
+            {/* Inner Soft Glow (Spotlight efecto de expansión de luz en esquina) */}
+            <div className="bg-action/10 group-hover:bg-action/20 pointer-events-none absolute -top-12 -right-12 h-32 w-32 rounded-full blur-2xl transition-all duration-500 group-hover:blur-3xl" />
+
+            {/* Header: Title and Icon */}
+            <div className="relative z-10 flex items-center justify-start">
+              <h3 className="text-primary mr-2 text-sm font-semibold tracking-wide">Nota</h3>
+
+              <div className="bg-action/10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full">
+                <IoInformationCircleOutline className="text-action text-lg" />
+              </div>
+            </div>
+
+            {/* Body */}
+            <p className="text-secondary relative z-10 text-sm leading-relaxed">
+              El sistema se desactivará automáticamente tras{' '}
+              <strong className="text-primary font-semibold">10 minutos</strong> por seguridad.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   )

@@ -1,7 +1,7 @@
 // -----------------------------------------------------------------------------
 // ORCHIDIUM-PROJECT: MQTT Ingestion Service
 // Descripción: Servicio persistente que se suscribe a los tópicos MQTT del broker, procesa los datos y los almacena en InfluxDB
-// Versión: v0.8 - InfluxDBClient
+// Versión: v0.9 - Logger Unificado
 // Fecha: 29-11-2025
 // -----------------------------------------------------------------------------
 
@@ -24,27 +24,18 @@ const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || process.env.MQTT_BROKER_U
 const MQTT_USERNAME = process.env.MQTT_USERNAME || process.env.MQTT_USER_BACKEND || ''
 const MQTT_PASSWORD = process.env.MQTT_PASSWORD || process.env.MQTT_PASS_BACKEND || ''
 
-const MQTT_CLIENT_ID = process.env.MQTT_CLIENT_ID_INGEST || 'PristinoPlant-Ingest'
+const MQTT_CLIENT_ID = process.env.MQTT_CLIENT_ID || process.env.MQTT_CLIENT_ID_INGEST || 'Ingest'
 const BASE_TOPIC_PREFIX = 'PristinoPlant'
+
+// Service Status Topic for LWT and Heartbeat
+const SERVICE_STATUS_TOPIC = `PristinoPlant/Services/${MQTT_CLIENT_ID}/status`
 
 // ---- Configuración InfluxDB ----
 const INFLUX_URL = process.env.INFLUX_URL || process.env.INFLUX_URL_CLOUD || process.env.INFLUX_URL_LOCAL || ''
 const INFLUX_TOKEN = process.env.INFLUX_TOKEN || ''
 const INFLUX_BUCKET = process.env.INFLUX_BUCKET || 'telemetry'
 
-if (!INFLUX_TOKEN) {
-  console.error('❌ ERROR CRÍTICO: INFLUX_TOKEN no está definido.')
-  process.exit(1)
-}
-
-// Cliente InfluxDB v3
-const influxClient = new InfluxDBClient({
-  host: INFLUX_URL,
-  token: INFLUX_TOKEN,
-  database: INFLUX_BUCKET
-})
-
-// ---- colors for Logs ----
+// ---- Colores para Logs ----
 const colors = {
   reset: '\x1b[0m',
   bold: '\x1b[1m',
@@ -58,10 +49,13 @@ const colors = {
 
 // ---- Sistema de Logs ----
 const Logger = {
-  debug: (...args: any[]) => DEBUG && console.log(...args),
-  error: (...args: any[]) => console.error(...args),
-  warn: (...args: any[]) => console.warn(...args),
-  info: (...args: any[]) => console.log(...args)
+  mqtt: (msg: string) => console.log(`${colors.blue}📡 [ MQTT ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
+  info: (msg: string) => console.log(`${colors.blue}📡 [ INFO ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
+  success: (msg: string) => console.log(`${colors.green}✅ [ DONE ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
+  warn: (msg: string) => console.warn(`${colors.yellow}⚠️ [ WARN ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
+  error: (msg: string, err?: unknown) => console.error(`${colors.red}❌ [ ERROR ]${colors.reset}${colors.white} ${msg}${colors.reset}`, err || ''),
+  debug: (msg: string) => DEBUG && console.log(`${colors.green}🔎 [ DEBUG ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
+  influx: (msg: string) => DEBUG && console.log(`${colors.green}💾 [ INFLUX ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
 }
 
 // ---- Definición de tipo estándar  ----
@@ -98,9 +92,9 @@ function mapZoneSlugToZoneType(zoneSlug: string): ZoneType | undefined {
 async function writeToInflux(point: Point) {
   try {
     await influxClient.write(point)
-    Logger.debug(`${colors.green}💾 [INFLUX] ${colors.reset}${colors.white}Guardado: ${colors.reset}${colors.green}${point.toLineProtocol()}${colors.reset}`)
+    Logger.influx(`Guardado: ${point.toLineProtocol()}`)
   } catch (e) {
-    Logger.error(`${colors.red}❌ [INFLUX] ${colors.reset}${colors.white}Error al guardar: ${colors.reset}${colors.red}${e}${colors.reset}`)
+    Logger.error('Error al guardar en InfluxDB', e)
   }
 }
 
@@ -125,7 +119,7 @@ async function processEnvironmentPacket(source: string, zone: ZoneType, context:
     await writeToInflux(point)
 
   } catch (e) {
-    Logger.error(`${colors.red}❌ [ JSON ] ${colors.reset}${colors.white}ERROR procesando paquete de datos Ambientales: ${colors.reset}${colors.red}${e}${colors.reset}`)
+    Logger.error('Error procesando paquete de datos Ambientales', e)
   }
 }
 
@@ -143,10 +137,10 @@ async function processRainEventPacket(source: string, zone: ZoneType, context: s
 
     await writeToInflux(point)
 
-    Logger.info(`${colors.blue}🌧️ [LLUVIA] ${colors.reset}${colors.white}Evento registrado${colors.reset}`)
+    Logger.info('🌧️ Evento de lluvia registrado')
 
   } catch (e) {
-    Logger.error(`${colors.red}❌ [ JSON ] ${colors.reset}${colors.white}ERROR procesando paquete de datos de Rain Event: ${colors.reset}${colors.red}${e}${colors.reset}`)
+    Logger.error('Error procesando paquete de datos de Rain Event', e)
   }
 }
 
@@ -167,9 +161,20 @@ async function processZoneStateEvent(
   await writeToInflux(point)
 }
 
-Logger.info(
-  `\n${colors.blue}📡 [ MQTT ] ${colors.reset}${colors.white}Conectando a ${colors.reset}${colors.blue}${MQTT_BROKER_URL}${colors.reset}`,
-)
+// ---- Validación Crítica ----
+if (!INFLUX_TOKEN) {
+  Logger.error('INFLUX_TOKEN no está definido. Abortando.')
+  process.exit(1)
+}
+
+// Cliente InfluxDB v3
+const influxClient = new InfluxDBClient({
+  host: INFLUX_URL,
+  token: INFLUX_TOKEN,
+  database: INFLUX_BUCKET
+})
+
+Logger.mqtt(`Conectando a ${colors.blue}${MQTT_BROKER_URL}${colors.reset}`)
 
 // ---- Cliente MQTT ----
 const client = mqtt.connect(MQTT_BROKER_URL, {
@@ -181,24 +186,37 @@ const client = mqtt.connect(MQTT_BROKER_URL, {
   protocol: MQTT_BROKER_URL.startsWith('mqtts') ? 'mqtts' : 'mqtt',
   rejectUnauthorized: true,
   servername: new URL(MQTT_BROKER_URL).hostname, // SNI: Garantiza que se envíe el hostname correcto en el handshake TLS
+  will: {
+    topic: SERVICE_STATUS_TOPIC,
+    payload: Buffer.from('offline'),
+    qos: 1,
+    retain: true
+  }
 })
 
+let heartbeatInterval: NodeJS.Timeout | null = null
+
 client.on('connect', () => {
-  Logger.info(
-    `${colors.blue}📡 [ MQTT ] ${colors.reset}${colors.white}Conexión establecida${colors.reset}`,
-  )
+  Logger.success('Conectado a Broker MQTT')
+
+  // Publicar estado de vida apenas conectamos
+  client.publish(SERVICE_STATUS_TOPIC, 'online', { qos: 1, retain: true })
+
+  // ---- FRECUENCIA DE SEÑAL DE VIDA (HEARTBEAT) ----
+  // Define cada cuánto tiempo Node.js le cuenta al Frontend que sigue vivo
+  // Configurado a 5 minutos (300,000 ms) para evitar sobrecarga en la UI de React.
+  if (heartbeatInterval) clearInterval(heartbeatInterval)
+  heartbeatInterval = setInterval(() => {
+    client.publish(SERVICE_STATUS_TOPIC, 'online', { qos: 1, retain: true })
+  }, 300000)
+
   const topicToSubscribe = `${BASE_TOPIC_PREFIX}/#`
 
   client.subscribe(topicToSubscribe, (err) => {
     if (!err) {
-      Logger.debug(
-        `${colors.blue}📡 [ MQTT ] ${colors.reset}${colors.white}Suscrito al árbol de tópicos ${colors.reset}${colors.blue}${topicToSubscribe}${colors.reset}`,
-      )
-    }
-    else {
-      Logger.error(
-        `\n${colors.red}❌ [ MQTT ] ${colors.reset}${colors.white}Error de suscripción: ${colors.reset}${colors.red}${err}${colors.reset}`,
-      )
+      Logger.mqtt(`Suscrito al árbol de tópicos ${colors.blue}${topicToSubscribe}${colors.reset}`)
+    } else {
+      Logger.error(`Error de suscripción MQTT: ${err}`)
     }
   })
 })
@@ -213,7 +231,37 @@ client.on('message', async (topic, payload) => {
   // 'Environmental_Monitoring' o 'Actuator_Controller'
   const firmwareSource = topicParts[1]
 
-  if (firmwareSource === 'Actuator_Controller') return
+  // Registrar el status (online/offline) del Nodo Actuador en InfluxDB para auditoría.
+  // Los comandos y telemetría de riego son exclusivos del Scheduler — no se procesan aquí.
+  if (firmwareSource === 'Actuator_Controller') {
+    if (topic.endsWith('/status')) {
+      const point = Point.measurement('system_events')
+        .setTag('source', firmwareSource)
+        .setTag('context', 'status')
+        .setTag('event_type', 'Device_Status')
+        .setStringField('value', messageValue)
+
+      await writeToInflux(point)
+    }
+    return
+  }
+
+  // Registrar el status de los servicios backend (Scheduler, Ingest) para auditoría.
+  // Tópico: PristinoPlant/Services/{ServiceName}/status → "online"/"offline"
+  if (topicParts[1] === 'Services') {
+    if (topic.endsWith('/status')) {
+      const serviceName = topicParts[2] || 'Unknown'
+      const point = Point.measurement('system_events')
+        .setTag('source', 'Services')
+        .setTag('context', 'status')
+        .setTag('event_type', 'Service_Status')
+        .setTag('service_name', serviceName)
+        .setStringField('value', messageValue)
+
+      await writeToInflux(point)
+    }
+    return
+  }
 
   // Lógica para Sensores Ambientales
   if (firmwareSource === 'Environmental_Monitoring') {
@@ -221,7 +269,7 @@ client.on('message', async (topic, payload) => {
     const zone = mapZoneSlugToZoneType(zoneSlug)
 
     if (!zone) {
-      Logger.warn(`\n${colors.yellow}⚠️ [ JSON ] ${colors.reset}${colors.white}Zona desconocida: ${zoneSlug}${colors.reset}`)
+      Logger.warn(`Zona desconocida: ${zoneSlug}`)
       return
     }
 
@@ -236,19 +284,19 @@ client.on('message', async (topic, payload) => {
       await processor(firmwareSource, zone, context, messageValue)
 
     } else {
-      Logger.warn(`${colors.yellow}⚠️ [MQTT] ${colors.reset}${colors.white}No hay ruta definida para el tópico: ${colors.reset}${colors.yellow}${topic}${colors.reset}`)
+      Logger.warn(`No hay ruta definida para el tópico: ${topic}`)
     }
   }
 })
 
 client.on('error', (error) => {
-  Logger.error(
-    `\n${colors.red}❌ [ MQTT ] ${colors.reset}${colors.white}Error: ${colors.reset}${colors.red}${error}${colors.reset}`,
-  )
+  Logger.error('Error en el cliente MQTT', error)
 })
 
 client.on('close', () => {
-  Logger.info(
-    `\n${colors.yellow}⚠️ [ MQTT ] ${colors.reset}${colors.white}Conexión perdida${colors.reset}`,
-  )
+  Logger.warn('Conexión MQTT perdida')
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval)
+    heartbeatInterval = null
+  }
 })

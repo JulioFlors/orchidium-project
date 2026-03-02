@@ -8,10 +8,7 @@ import {
   IoImagesOutline,
   IoLeafOutline,
   IoListOutline,
-  IoPeopleOutline,
   IoPricetagsOutline,
-  IoServerOutline,
-  IoSettingsOutline,
   IoWarningOutline,
   IoWaterOutline,
 } from 'react-icons/io5'
@@ -178,26 +175,6 @@ export const adminRoutes: AdminRoute[] = [
         icon: <IoListOutline />,
         // Sin imagen, aparecerá solo texto o fallback en el grid
         description: 'Registro de ejecuciones pasadas',
-      },
-    ],
-  },
-  {
-    slug: 'admin',
-    name: 'Admin',
-    icon: <IoSettingsOutline size={20} />,
-    layout: 'informational',
-    items: [
-      {
-        name: 'Usuarios y Roles',
-        url: '/users',
-        icon: <IoPeopleOutline />,
-        description: 'Gestión de permisos y accesos',
-      },
-      {
-        name: 'Configuración Sistema',
-        url: '/system',
-        icon: <IoServerOutline />,
-        description: 'Ajustes globales y hardware IoT',
       },
     ],
   },
