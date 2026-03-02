@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server'
 
-import { getInfluxClient } from '@/lib/influxdb'
+import { influxClient } from '@/lib/influxdb'
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const range = searchParams.get('range') || '24h' // default to 24h
   const zone = searchParams.get('zone') || 'Orchidarium' // default zone
+
+  if (!influxClient) {
+    return NextResponse.json({ error: 'InfluxDB client not initialized' }, { status: 500 })
+  }
 
   let rangeString = '24h'
 
@@ -45,8 +49,7 @@ export async function GET(request: Request) {
   `
 
   try {
-    const client = getInfluxClient()
-    const reader = client.query(query)
+    const reader = influxClient.query(query)
     const data = []
 
     for await (const row of reader) {

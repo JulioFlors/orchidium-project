@@ -1,11 +1,15 @@
 import { NextResponse } from 'next/server'
 
-// import { getInfluxClient } from '@/lib/influxdb' // Deshabilitado: sensor de lluvia no activo
+import { influxClient } from '@/lib/influxdb'
 
 export async function GET(_request: Request) {
   // const { searchParams } = new URL(request.url)
   // const range = searchParams.get('range') || '24h'
   // const zone = searchParams.get('zone') || 'Orchidarium'
+
+  if (!influxClient) {
+    return NextResponse.json({ error: 'InfluxDB client not initialized' }, { status: 500 })
+  }
 
   /*
   let rangeString = '24h'

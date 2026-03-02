@@ -4,26 +4,22 @@ const INFLUX_URL =
   process.env.INFLUX_URL_CLOUD ||
   process.env.INFLUX_URL ||
   'https://us-east-1-1.aws.cloud2.influxdata.com'
+const INFLUX_TOKEN = process.env.INFLUX_TOKEN
 const INFLUX_BUCKET = process.env.INFLUX_BUCKET || 'telemetry'
 
-// Cliente singleton lazy: no se crea en build time (evita crash en Vercel cuando INFLUX_TOKEN no existe)
+if (!INFLUX_TOKEN) {
+  throw new Error('INFLUX_TOKEN is not defined in environment variables')
+}
+
+// Cliente singleton para evitar múltiples conexiones en hot-reload
 const globalForInflux = global as unknown as { influxClient: InfluxDBClient }
 
-export function getInfluxClient(): InfluxDBClient {
-  if (globalForInflux.influxClient) return globalForInflux.influxClient
-
-  const token = process.env.INFLUX_TOKEN
-  if (!token) {
-    throw new Error('INFLUX_TOKEN is not defined in environment variables')
-  }
-
-  const client = new InfluxDBClient({
+export const influxClient =
+  globalForInflux.influxClient ||
+  new InfluxDBClient({
     host: INFLUX_URL,
-    token,
+    token: INFLUX_TOKEN,
     database: INFLUX_BUCKET,
   })
 
-  if (process.env.NODE_ENV !== 'production') globalForInflux.influxClient = client
-
-  return client
-}
+if (process.env.NODE_ENV !== 'production') globalForInflux.influxClient = influxClient
