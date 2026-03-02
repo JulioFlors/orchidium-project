@@ -54,7 +54,10 @@
         "NEXT_PUBLIC_MQTT_PASSWORD",
         "NEXT_PUBLIC_MQTT_PORT",
         "NEXT_PUBLIC_MQTT_PROTOCOL",
-        "NEXT_PUBLIC_MQTT_USERNAME"
+        "NEXT_PUBLIC_MQTT_USERNAME",
+        "INFLUX_BUCKET",
+        "INFLUX_URL_CLOUD",
+        "INFLUX_TOKEN"
       ]
     },
     "lint": {

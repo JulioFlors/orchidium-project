@@ -1,14 +1,18 @@
 import { InfluxDBClient } from '@influxdata/influxdb3-client'
 
-const INFLUX_URL =
-  process.env.INFLUX_URL_CLOUD ||
-  process.env.INFLUX_URL ||
-  'https://us-east-1-1.aws.cloud2.influxdata.com'
+// El código SOLO busca la variable genérica. Nada de _CLOUD o _LOCAL.
+const INFLUX_URL = process.env.INFLUX_URL
 const INFLUX_TOKEN = process.env.INFLUX_TOKEN
 const INFLUX_BUCKET = process.env.INFLUX_BUCKET || 'telemetry'
 
+// Falla Rápido (Fail Fast). Si falta la URL o el Token, crashea la app.
+// Es mejor que la app no inicie, a que escriba datos en el lugar equivocado.
+if (!INFLUX_URL) {
+  throw new Error('❌ FATAL: INFLUX_URL no está definida en las variables de entorno.')
+}
+
 if (!INFLUX_TOKEN) {
-  throw new Error('INFLUX_TOKEN is not defined in environment variables')
+  throw new Error('❌ FATAL: INFLUX_TOKEN no está definida en las variables de entorno.')
 }
 
 // Cliente singleton para evitar múltiples conexiones en hot-reload
