@@ -17,20 +17,31 @@ export function handleAccessibility(
     setSidebarRoute(null)
   }
 
-  if (navRef.current) {
-    const focusableElements = navRef.current.querySelectorAll<HTMLElement>(
-      'a, button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-    )
+  let observer: MutationObserver | null = null
+  let cleanupKeydown = () => {}
 
-    focusableElements.forEach((el: HTMLElement) => {
-      if (isSidebarOpen && el !== document.activeElement) {
-        el.removeAttribute('tabindex')
-      } else {
-        el.setAttribute('tabindex', '-1')
-      }
-    })
+  if (isSidebarOpen && navRef.current) {
+    const attachTrap = () => {
+      cleanupKeydown()
 
-    if (isSidebarOpen) {
+      const currentNavRef = navRef.current
+
+      if (!currentNavRef) return
+
+      const focusableElements = Array.from(
+        currentNavRef.querySelectorAll<HTMLElement>(
+          'a, button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => !el.hasAttribute('disabled') && el.getAttribute('aria-hidden') !== 'true')
+
+      focusableElements.forEach((el: HTMLElement) => {
+        if (el !== document.activeElement) {
+          el.removeAttribute('tabindex')
+        }
+      })
+
+      if (focusableElements.length === 0) return
+
       const firstFocusable = focusableElements[0]
       const lastFocusable = focusableElements[focusableElements.length - 1]
 
@@ -42,7 +53,11 @@ export function handleAccessibility(
               lastFocusable.focus()
             }
           } else {
-            if (document.activeElement === lastFocusable) {
+            if (
+              document.activeElement === lastFocusable ||
+              !document.activeElement ||
+              !currentNavRef.contains(document.activeElement)
+            ) {
               e.preventDefault()
               firstFocusable.focus()
             }
@@ -50,18 +65,26 @@ export function handleAccessibility(
         }
       }
 
-      const currentNavRef = navRef.current
-
       currentNavRef.addEventListener('keydown', handleKeyDown)
-
-      return () => {
-        currentNavRef?.removeEventListener('keydown', handleKeyDown)
+      cleanupKeydown = () => {
+        currentNavRef.removeEventListener('keydown', handleKeyDown)
       }
     }
+
+    attachTrap()
+
+    // Escuchar cambios del DOM (ej. carga asíncrona de authClient)
+    observer = new MutationObserver(() => {
+      attachTrap()
+    })
+
+    observer.observe(navRef.current, { childList: true, subtree: true })
   }
 
-  // eslint-disable-next-line prettier/prettier
-  return () => { }
+  return () => {
+    cleanupKeydown()
+    observer?.disconnect()
+  }
 }
 
 export const motionProps: Variants = {

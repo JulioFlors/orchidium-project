@@ -1,8 +1,8 @@
 # -----------------------------------------------------------------------------
 # Sensors: Environmental Monitoring Firmware.
 # Descripción: Firmware dedicado al Monitoreo de las condiciones ambientales del Invernadero.
-# Versión: v0.4.5 - Fix: ERROR [-202] (Fallo Handshake SSL/Red) - Refactorizacion: force_disconnect_mqtt
-# Fecha: 05-02-2026
+# Versión: v0.4.6 - Configuración Resiliencia / Watchdog
+# Fecha: 09-02-2026
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib. 
@@ -26,12 +26,21 @@ MQTT_CONFIG = {
     # Intervalo para revisar mensajes MQTT entrantes.
     "CHECK_INTERVAL": 10, # seg
     # Intervalo para publicar datos de los sensores principales.
-    "PUBLISH_INTERVAL": 300, # 5 minutos
+    "PUBLISH_INTERVAL": 30, # 30 seg
     # tiempo máximo que (connect, check_msg, ping) esperará antes de fallar y lanzar una excepción.
-    "SOCKET_TIMEOUT": 60,
+    "SOCKET_TIMEOUT": 30,
     # tiempo máximo que el cliente esperará para que se complete un intercambio completo de mensajes MQTT(QoS) 1
-    "MESSAGE_TIMEOUT": 120
+    # [WDT Safety]: Debe ser MENOR que el Watchdog de Hardware (65s)
+    "MESSAGE_TIMEOUT": 60
 }
+
+# ---- Configuración Resiliencia / Watchdog ----
+# Tiempo máximo sin conexión WiFi antes de forzar un Hard Reset (5 minutos)
+MAX_OFFLINE_RESET_SEC = 300
+# Tiempo del Watchdog Timer (Hardware) en milisegundos (65 segundos (1m 5s))
+# [WDT Safety]: Debe ser mayor que MESSAGE_TIMEOUT (60s) para evitar reinicios durante operaciones lentas.
+WDT_TIMEOUT_MS = 65000 
+
 
 # ---- Tópicos MQTT ----
 BASE_TOPIC = b"PristinoPlant/Environmental_Monitoring/Zona_A"
@@ -84,6 +93,35 @@ def log(*args, **kwargs):
     """**Imprime solo si el modo DEBUG está activado.**"""
     if DEBUG:
         print(*args, **kwargs)
+
+# ---- Función Auxiliar: Uso del disco ----
+def log_disk_usage():
+    try:
+        import os
+        fs_stat = os.statvfs('/')
+        block_size = fs_stat[0]
+        total_blocks = fs_stat[2]
+        free_blocks = fs_stat[3]
+        total_kb = (total_blocks * block_size) // 1024
+        free_kb = (free_blocks * block_size) // 1024
+        used_kb = total_kb - free_kb
+        p = (used_kb / total_kb) * 100
+        log(f"\n💾  Flash Usage: {used_kb}KB / {total_kb}KB ({p:.1f}%) | Free: {free_kb}KB")
+    except Exception as e:
+        log(f"⚠️  Disk Stat Error: {e}")
+
+# ---- Función Auxiliar: Uso de la memoria RAM ----
+def log_ram_usage():
+    try:
+        from gc import mem_free, mem_alloc
+        free = mem_free()
+        alloc = mem_alloc()
+        total = free + alloc
+        used = total - free
+        p = (used / total) * 100
+        log(f"🧠  RAM Usage: {used/1024:.1f}KB / {total/1024:.1f}KB ({p:.1f}%) | Free: {free/1024:.1f}KB")
+    except Exception as e:
+        log(f"⚠️  RAM Stat Error: {e}")
 
 # ---- Importar configuración desde lib/secrets de forma segura ---- #
 try:
@@ -158,6 +196,8 @@ def log_mqtt_exception(context, e):
         if e.args and e.args[0] == 113: err_msg = "EHOSTUNREACH (Ruta al host inalcanzable)"
         if e.args and e.args[0] == 104: err_msg = "ECONNRESET (Conexión reseteada por par)"
         if e.args and e.args[0] == -202: err_msg = "MBEDTLS_ERR_NET_CONNECT_FAILED (Fallo Handshake SSL/Red)"
+        if e.args and e.args[0] == -17040: err_msg = "MBEDTLS_ERR_RSA_PUBLIC_FAILED (Fallo SSL: Memoria Insuficiente)"
+        if e.args and e.args[0] == -29312: err_msg = "MBEDTLS_ERR_SSL_CONN_EOF (El Broker cerró la conexión durante Handshake)"
         
         log(f"\n❌  {context}: {Colors.RED}[Red] {err_msg}{Colors.RESET}")
     
@@ -171,9 +211,9 @@ def setup_sensors():
 
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
-    from bh1750 import BH1750 # type: ignore
-    from dht import DHT22 # type: ignore
-    from machine import ADC, I2C, Pin, reset # type: ignore
+    from bh1750  import BH1750 # type: ignore
+    from dht     import DHT22  # type: ignore
+    from machine import ADC, I2C, Pin # type: ignore
 
     try:
         # Sensor de Temp/Humedad
@@ -220,8 +260,13 @@ def sub_callback(topic, msg, retained, dup):
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
     from ujson import dumps, loads #type: ignore
+    from gc    import collect
 
     try:
+        # El parsing de JSON y decodificación de strings fragmenta la memoria.
+        collect()
+
+        # ---- Parsing de Datos ----
         # Decodificamos los datos recibidos
         # (bytes) -> (strings)
         topic_str = topic.decode('utf-8')
@@ -264,12 +309,12 @@ def sub_callback(topic, msg, retained, dup):
                         client.publish(MQTT_TOPIC_STATUS, b"rebooting", retain=True, qos=1)
                 except: pass
 
-                log(f"\n🔄  {Colors.BLUE}Reiniciando sistema{Colors.RESET}")
+                log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo{Colors.RESET}")
 
                 # (Optimización de memoria RAM)
                 # Lazy Imports (Importación tardía)
                 from machine import reset #type: ignore
-                from utime import sleep #type: ignore
+                from utime   import sleep #type: ignore
                 # Pausamos para dar tiempo a que salga el mensaje MQTT
                 sleep(30)
                 reset()
@@ -306,7 +351,7 @@ def shutdown():
     """
 
     # Publicamos en MQTT (Solo si hay conexión)
-    if client and hasattr(client, 'sock') and client.sock and wlan and wlan.isconnected():
+    if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
         try:
             # Publicamos el LWT explícitamente para que el broker lo retenga.
             # El LWT para el cliente MQTT solo se envía si el cliente se desconecta inesperadamente. 
@@ -334,19 +379,33 @@ async def wifi_coro():
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
     from network import STA_IF, WLAN # type: ignore
-    from utime import time #type: ignore
+    from utime   import time         #type: ignore
 
     # Inicialización del objeto WLAN
     wlan = WLAN(STA_IF)
     wlan.active(True)
 
     connected_once = False # Conexión inicial.
+    wifi_disconnect_start = None # Marca de tiempo para calcular la duración de la desconexión
 
     while True:
         if not wlan.isconnected():
 
             if connected_once:
                 log(f"📡  WiFi {Colors.RED}Desconectado{Colors.RESET}\n")
+
+            # ---- Verificación Previa (Safety Check) ----
+            # Iniciamos el contador de desconexión por primera vez
+            if wifi_disconnect_start is None:
+                wifi_disconnect_start = time()
+
+            # Verificamos AQUI por si el bloque try falla repetidamente (la primera vez)
+            if (time() - wifi_disconnect_start > MAX_OFFLINE_RESET_SEC):
+                 from machine import reset
+                 log(f"\n💀  {Colors.RED}DEATH: El WiFi no se recuperó en {MAX_OFFLINE_RESET_SEC//60} minutos.{Colors.RESET}\n\n")
+                 log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo{Colors.RESET}\n\n")
+                 await asyncio.sleep(1) # Dar tiempo al print
+                 reset()
 
             try:
                 # fuerza a la capa de red a limpiar todos los estados internos, timers y handshakes pendientes antes de intentar una nueva conexion
@@ -359,25 +418,24 @@ async def wifi_coro():
                 
                 wlan.connect(WIFI_CONFIG['SSID'], WIFI_CONFIG['PASS'])
 
-                start_time = time()
                 while not wlan.isconnected():
+                    # ---- Verificación de falla crítica por tiempo ----
+                    # Si llevamos mucho tiempo intentando conectar (inicio de desconexión + tiempo actual)
+                    # Forzamos un reinicio para limpiar el stack TCP/IP / Hardware
+                    if wifi_disconnect_start and (time() - wifi_disconnect_start > MAX_OFFLINE_RESET_SEC):
+                        from machine import reset
+                        log(f"\n💀  {Colors.RED}DEATH: El WiFi no se recuperó en {MAX_OFFLINE_RESET_SEC//60} minutos.{Colors.RESET}\n\n")
+                        log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo{Colors.RESET}\n\n")
+                        await asyncio.sleep(1) # Dar tiempo al print
+                        reset()
+
                     log(f"{Colors.BLUE}.{Colors.RESET}", end="")
                     await asyncio.sleep(1)
-
-                duration = time() - start_time
                 
                 log(f"\n📡  Conexión WiFi Establecida {Colors.GREEN}| IP: {wlan.ifconfig()[0]}{Colors.RESET}")
-
-                # Formato de tiempo de reconexión condicional
-                if duration > 60 and duration < 3600:
-                    minutes = int(duration // 60)
-                    seconds = int(duration % 60)
-                    log(f"📡  Tiempo de reconexión: {Colors.MAGENTA}{minutes}:{seconds:02d}{Colors.RESET}")
-                elif duration >= 3600:
-                    hours = int(duration // 3600)
-                    minutes = int((duration % 3600) // 60)
-                    seconds = int(duration % 60)
-                    log(f"📡  Tiempo de reconexión: {Colors.MAGENTA}{hours}:{minutes:02d}:{seconds:02d}{Colors.RESET}")
+                
+                # Resetear contador de falla
+                wifi_disconnect_start = None
 
                 # Invalidamos el cliente MQTT forzando una reconexión completa.
                 force_disconnect_mqtt()
@@ -390,8 +448,25 @@ async def wifi_coro():
                 log(f"\n❌  No se pudo establecer la conexión WiFi: {Colors.RED}{e}{Colors.RESET}")
                 await asyncio.sleep(5)
         else:
+            # Conectado: Reseteamos contador
+            wifi_disconnect_start = None
             # Revisamos la conexion cada 20 segundos
             await asyncio.sleep(20)
+
+# ---- Función Auxiliar: Callback Timeout Conexión ----
+def _connection_timeout_handler(t):
+    """Callback del Timer de Hardware: Reinicia si la conexión se cuelga."""
+    # (Optimización de memoria RAM)
+    # Lazy Imports (Importación tardía)
+    from machine import reset # type: ignore
+    from utime   import sleep # type: ignore
+
+    if DEBUG:
+        log(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Timeout en conexión MQTT {Colors.RED}(Socket Bloqueado){Colors.RESET}")
+        log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo{Colors.RESET}\n\n")
+        sleep(1)
+
+    reset()
 
 # ---- CORUTINA: Gestión de Conexión MQTT (Sensors) ----
 async def mqtt_connector_task(client_id):
@@ -400,9 +475,13 @@ async def mqtt_connector_task(client_id):
 
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
-    from gc import collect
+    from gc      import collect
+    from machine import Timer
     from umqtt.simple2 import MQTTClient, MQTTException # type: ignore
-    from utime import ticks_ms, ticks_diff #type: ignore
+    from utime   import ticks_ms, ticks_diff #type: ignore
+
+    # Definimos el timeout (ms)
+    wd_timeout_ms = (MQTT_CONFIG["SOCKET_TIMEOUT"] + 1) * 1000
 
     while True:
         # Esperamos a que el WiFi esté conectado
@@ -414,6 +493,12 @@ async def mqtt_connector_task(client_id):
         # Gestionamos la (Re)conexión
         if client is None:
             try:
+                # [Optimización Crítica] Limpieza de RAM antes de SSL Handshake
+                # El handshake SSL requiere mucha RAM contigua para claves RSA.
+                collect()
+                log_disk_usage()
+                log_ram_usage()
+
                 log(f"\n📡  Conectando {Colors.BLUE}Broker MQTT{Colors.RESET}")
 
                 # Inicializa el Cliente MQTT
@@ -438,12 +523,19 @@ async def mqtt_connector_task(client_id):
                 # Configura el callback de estado
                 client.set_callback_status(sub_status_callback)
 
-                # Liberamos memoria antes del handshake SSL (Crítico para HiveMQ)
-                collect()
-
-                # Iniciamos en una sesión limpia.
-                # Sin persistencia
-                client.connect()
+                # [SEGURIDAD] Watchdog para conexión síncrona bloqueante
+                # Si client.connect() se cuelga por siempre (socket blocking), 
+                # el Timer nos reiniciará.
+                wd_timer = Timer(0)
+                wd_timer.init(period=wd_timeout_ms, mode=Timer.ONE_SHOT, callback=_connection_timeout_handler)
+                
+                try:
+                    # Iniciamos en una sesión limpia.
+                    # Sin persistencia
+                    client.connect()
+                finally:
+                    # SIEMPRE desactivamos el timer si la función retorna con éxito.
+                    wd_timer.deinit()
 
                 log(f"📡  Conexión MQTT {Colors.GREEN}Establecida{Colors.RESET}", end="\n")
 
@@ -456,10 +548,21 @@ async def mqtt_connector_task(client_id):
 
             except (MQTTException, OSError) as e:
                 log_mqtt_exception("Fallo la Conexión MQTT", e)
+
+                # [CRÍTICO] Si es Fallo SSL por Memoria (-17040), Reiniciamos.
+                # [CRÍTICO] Si es Fallo EWRITELEN (3) (Buffer lleno/Fragmentación), Reiniciamos.
+                # No tiene sentido reintentar si la RAM está fragmentada. Mejor reiniciar.
+                if isinstance(e, MQTTException) and e.args and (e.args[0] == 3 or e.args[0] == -17040):
+                    if DEBUG:
+                        log(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Memoria RAM Fragmentada")
+                        log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo.{Colors.RESET}\n")
+                    from machine import reset
+                    reset()
+
                 # Invalidamos el cliente MQTT forzando una reconexión completa.
                 force_disconnect_mqtt()
                 # Backoff para no saturar el BROKER
-                await asyncio.sleep(20)
+                await asyncio.sleep(5)
                 continue
 
         # Gestionamos la Conexión Activa
@@ -488,10 +591,21 @@ async def mqtt_connector_task(client_id):
 
             except (MQTTException, OSError) as e:
                 log_mqtt_exception("Error en Operación MQTT", e)
+
+                # [CRÍTICO] Si es Fallo SSL por Memoria (-17040), Reiniciamos.
+                # [CRÍTICO] Si es Fallo EWRITELEN (3) (Buffer lleno/Fragmentación), Reiniciamos.
+                # No tiene sentido reintentar si la RAM está fragmentada. Mejor reiniciar.
+                if isinstance(e, MQTTException) and e.args and (e.args[0] == 3 or e.args[0] == -17040):
+                    if DEBUG:
+                        log(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Memoria RAM Fragmentada")
+                        log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo.{Colors.RESET}\n")
+                    from machine import reset
+                    reset()
+
                 # Invalidamos el cliente MQTT forzando una reconexión completa.
                 force_disconnect_mqtt()
                 # Backoff para no saturar el BROKER
-                await asyncio.sleep(20)
+                await asyncio.sleep(5)
                 continue
 
         # Cede el control al planificador de asyncio
@@ -508,88 +622,85 @@ async def sensor_publish_task():
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
     from bh1750 import BH1750 #type: ignore
-    from ujson import dumps #type: ignore
+    from ujson  import dumps  #type: ignore
     from umqtt.simple2 import MQTTException # type: ignore
 
     while True:
-        # Si el cliente no existe O el WiFi no está conectado, NO intentamos publicar.
-        if client is None or not (wlan and wlan.isconnected()):
-            log(f"\n❌  Publicación omitida: {Colors.RED}Cliente/WiFi no disponible{Colors.RESET}")
-            continue 
+        if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
 
-        # ---- Lectura de Sensores ----#
-        # Reestablecemos en cada iteracion
-        temp, hum, lux = None, None, None
+            # ---- Lectura de Sensores ----#
+            # Reestablecemos en cada iteracion
+            temp, hum, lux = None, None, None
 
-        try:
-            # Leemos el sensor, guardamos su valor (o None si falla)
-            dht_sensor.measure()
-            temp_sensor = dht_sensor.temperature()
-            hum_sensor = dht_sensor.humidity()
+            try:
+                # Leemos el sensor, guardamos su valor (o None si falla)
+                dht_sensor.measure()
+                temp_sensor = dht_sensor.temperature()
+                hum_sensor = dht_sensor.humidity()
 
-            # Validar que la lectura sea un número (no solo 'True')
-            if (isinstance(temp_sensor, (int, float)) and isinstance(hum_sensor, (int, float))):
-                temp = round(temp_sensor, 1)
-                hum  = round(hum_sensor,  1)
+                # Validar que la lectura sea un número (no solo 'True')
+                if (isinstance(temp_sensor, (int, float)) and isinstance(hum_sensor, (int, float))):
+                    temp = round(temp_sensor, 1)
+                    hum  = round(hum_sensor,  1)
 
-                log(f"\n📡  Temp: {Colors.MAGENTA}{temp}°C{Colors.RESET}  Hum: {Colors.BLUE}{hum}%{Colors.RESET}", end="  ")
-            else:
-                raise ValueError("Lectura invalida o nula del DHT22")
+                    log(f"\n📡  Temp: {Colors.MAGENTA}{temp}°C{Colors.RESET}  Hum: {Colors.BLUE}{hum}%{Colors.RESET}", end="  ")
+                else:
+                    raise ValueError("Lectura invalida o nula del DHT22")
 
-        except Exception as e:
-            log(f"\n❌  ERROR de lectura del sensor DHT22: {Colors.RED}{e}{Colors.RESET}")
+            except Exception as e:
+                log(f"\n❌  ERROR de lectura del sensor DHT22: {Colors.RED}{e}{Colors.RESET}")
 
 
-        try:
-            # Leemos el sensor, guardamos su valor (o None si falla)
-            lux_sensor = light_sensor.luminance(BH1750.CONT_HIRES_1)
+            try:
+                # Leemos el sensor, guardamos su valor (o None si falla)
+                lux_sensor = light_sensor.luminance(BH1750.CONT_HIRES_1)
 
-            # Validar que la lectura sea un número (no solo 'True')
-            if isinstance(lux_sensor, (int, float)):
-                lux = round(lux_sensor, 1)
+                # Validar que la lectura sea un número (no solo 'True')
+                if isinstance(lux_sensor, (int, float)):
+                    lux = round(lux_sensor, 1)
 
-                log(f"Lux: {Colors.YELLOW}{lux}{Colors.RESET}")
-            else:
-                raise ValueError("Lectura invalida o nula del BH1750")
+                    log(f"Lux: {Colors.YELLOW}{lux}{Colors.RESET}")
+                else:
+                    raise ValueError("Lectura invalida o nula del BH1750")
 
-        except Exception as e:
-            log(f"\n❌  ERROR de lectura del sensor BH1750: {Colors.RED}{e}{Colors.RESET}")
+            except Exception as e:
+                log(f"\n❌  ERROR de lectura del sensor BH1750: {Colors.RED}{e}{Colors.RESET}")
 
-        # ---- Construccion del JSON ----#
-        data_payload = {}
-        # Incluimos en un diccionario los valores que NO son None
-        if temp is not None:
-            data_payload['temperature'] = temp
-        if hum is not None:
-            data_payload['humidity'] = hum
-        if lux is not None:
-            data_payload['light_intensity'] = lux
+            # ---- Construccion del JSON ----#
+            data_payload = {}
+            # Incluimos en un diccionario los valores que NO son None
+            if temp is not None:
+                data_payload['temperature'] = temp
+            if hum is not None:
+                data_payload['humidity'] = hum
+            if lux is not None:
+                data_payload['light_intensity'] = lux
 
-        if not data_payload:
-            log(f"\n❌  Publicación omitida: {Colors.RED}Todos los sensores fallaron{Colors.RESET}")
-            continue
+            if not data_payload:
+                log(f"\n❌  Publicación omitida: {Colors.RED}Todos los sensores fallaron{Colors.RESET}")
+                continue
 
-        # ---- Publicación Atómica de los datos ----#
-        try:
-            # Convertimos el diccionario a un string JSON
-            json_string = dumps(data_payload)
+            # ---- Publicación Atómica de los datos ----#
+            try:
+                # Convertimos el diccionario a un string JSON
+                json_string = dumps(data_payload)
 
-            # Publicamos el paquete JSON (qos=0, no bloqueante)
-            client.publish(MQTT_TOPIC_ENV_DATA, json_string.encode('utf-8'), retain=False, qos=0)
+                # Publicamos el paquete JSON (qos=0, no bloqueante)
+                client.publish(MQTT_TOPIC_ENV_DATA, json_string.encode('utf-8'), retain=False, qos=0)
 
-            # log(f"\n📡  Paquete de sensores publicado: {Colors.MAGENTA}{json_string}{Colors.RESET}")
+                # log(f"\n📡  Paquete de sensores publicado: {Colors.MAGENTA}{json_string}{Colors.RESET}")
 
-        # Este bloque captura unicamente errores de RED/MQTT
-        except (MQTTException, OSError) as e:
-            log_mqtt_exception("Publicación del paquete de datos ambientales omitida", e)
-            # Invalidamos el cliente MQTT forzando una reconexión completa.
-            force_disconnect_mqtt()
+            # Este bloque captura unicamente errores de RED/MQTT
+            except (MQTTException, OSError) as e:
+                log_mqtt_exception("Publicación del paquete de datos ambientales omitida", e)
+                # Invalidamos el cliente MQTT forzando una reconexión completa.
+                force_disconnect_mqtt()
 
-        except Exception as e:
-            log(f"\n❌  ERROR en sensor_publish_task(): {Colors.RED}{e}{Colors.RESET}")
+            except Exception as e:
+                log(f"\n❌  ERROR en sensor_publish_task(): {Colors.RED}{e}{Colors.RESET}")
 
-        # Esperamos el intervalo de publicación
-        await asyncio.sleep(MQTT_CONFIG["PUBLISH_INTERVAL"])
+            # Esperamos el intervalo de publicación
+            await asyncio.sleep(MQTT_CONFIG["PUBLISH_INTERVAL"])
 
 # ---- CORUTINA: Gestión del sensor de lluvia ----
 async def rain_monitor_task():
@@ -770,7 +881,8 @@ async def heartbeat_task():
     from umqtt.simple2 import MQTTException # type: ignore
 
     while True:
-        if client and wlan and wlan.isconnected():
+        # Verificamos client.sock para evitar Error 28 (Race condition durante conexión)
+        if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
             try:
                 # Reafirmamos que estamos vivos
                 client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=0)
@@ -787,9 +899,11 @@ async def heartbeat_task():
 async def main():
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
-    from gc import collect
-    from network import STA_IF, WLAN # type: ignore
-    from ubinascii import hexlify # type: ignore
+    from gc        import collect
+    from machine   import WDT
+    from network   import STA_IF, WLAN # type: ignore
+    from ubinascii import hexlify      # type: ignore
+    from utime     import localtime    # type: ignore
 
     # ---- Identificación unica del ESP32 ----
     # Obtenemos la MAC del dispositivo
@@ -808,17 +922,39 @@ async def main():
     # Gestión de la publicacion de sensores
     asyncio.create_task(sensor_publish_task())
     # Gestión del monitoreo de lluvia
-    asyncio.create_task(rain_monitor_task())
+    # asyncio.create_task(rain_monitor_task())
     # Gestion de la señal de vida del firmware
     asyncio.create_task(heartbeat_task())
     
+    # ---- Watchdog Timer ----
+    # Seguridad de hardware: Si el bucle principal se congela, el dispositivo se reinicia.
+    try:
+        wdt = WDT(timeout=WDT_TIMEOUT_MS)
+        log(f"🐕  Watchdog Activado: {Colors.MAGENTA}{WDT_TIMEOUT_MS//1000} segundos{Colors.RESET}")
+    except Exception as e:
+        log(f"⚠️  No se pudo iniciar el Watchdog: {e}")
+        wdt = None
+
     # ---- Bucle de Supervisión y Recolección de Basura ----
     while True:
+        # Alimentar al Watchdog
+        if wdt: wdt.feed()
+
         # Gestión de Memoria Proactiva
         collect()
 
         # El event loop cede control a todas las tareas asíncronas.
-        await asyncio.sleep(10)
+        # intentamos Alimentar al WDT (65s) 4 veces antes de que pueda fallar.
+        await asyncio.sleep(13)
+
+# ---- Función Auxiliar: Callback Timeout Conexión ----
+def stopped_program():
+    """
+    log para except KeyboardInterrupt. 
+    Se envuelve en una funcion debido a que el log crudo no es valido en el template de compile.py
+    """
+    if DEBUG:
+        log(f"\n\n📡  Programa {Colors.GREEN}Detenido{Colors.RESET}")
 
 # ---- Punto de Entrada ----
 if __name__ == '__main__':
@@ -826,9 +962,15 @@ if __name__ == '__main__':
         # Iniciar loop asíncrono
         asyncio.run(main())
     except KeyboardInterrupt:
-        log(f"\n\n📡  Programa {Colors.GREEN}Detenido{Colors.RESET}")
+        stopped_program()
     except Exception as e:
-        log(f"\n\n❌  Error fatal no capturado: {Colors.RED}{e}{Colors.RESET}\n\n")
+        if DEBUG:
+            log(f"\n\n❌  Error fatal no capturado: {Colors.RED}{e}{Colors.RESET}\n\n")
+        
+        # En caso de error fatal en el Loop principal, reiniciamos el dispositivo
+        # para intentar recuperar el funcionamiento normal.
+        from machine import reset
+        reset()
     finally:
         # Desconexión limpia 
         shutdown()

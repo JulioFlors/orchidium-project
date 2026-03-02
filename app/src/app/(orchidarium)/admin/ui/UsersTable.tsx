@@ -62,7 +62,9 @@ export function UsersTable({ users }: Props) {
       <Backdrop visible={loading}>
         <div className="flex flex-col items-center gap-4 p-8">
           <div className="text-primary h-12 w-12 animate-spin rounded-full border-4 border-current border-t-transparent" />
-          <span className="text-lg font-medium tracking-wide text-white">Procesando...</span>
+          <span className="animate-pulse text-lg font-medium tracking-wide text-white">
+            Procesando
+          </span>
         </div>
       </Backdrop>
 

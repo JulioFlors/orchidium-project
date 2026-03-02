@@ -1,4 +1,4 @@
-# 🌸 PristinoPlant | Orchidium Project
+# 🌸 PristinoPlant
 
 A continuación se proporciona un Sistema de Gestión de Invernaderos basado en Agricultura Inteligente para el Cultivo de Orquídeas. Este repositorio contiene todo el código fuente, firmware y configuración de infraestructura necesarios para el proyecto.
 
@@ -160,7 +160,7 @@ docker-compose --profile cloud up --build -d
 #### Detener todo
 
 ```bash
-docker-compose --profile local --profile cloud down
+docker-compose --profile cloud down
 ```
 
 > [!TIP]
@@ -220,3 +220,169 @@ Para desplegar correctamente el directorio `app`, configura el proyecto en Verce
 4. Habilita la opción **"Include files outside of the Root Directory in the Build Step"**. Esto es fundamental para que Turborepo pueda acceder a toda la estructura del monorepositorio durante el proceso de compilación.
 
 5. Habilita la opción **"Skip deployments when there are no changes to the root directory or its dependencies."**. Evita Despliegues innecesarios, configura Vercel para que omita una compilación si un commit no afecta a la aplicación web.
+
+## ☁️ Guía de Administración del Servidor (VPS)
+
+Esta sección documenta el proceso para gestionar el acceso, aprovisionar la infraestructura y mantener los servicios de Backend (**Ingest** y **Scheduler**) en el servidor de producción.
+
+### 🔑 Gestión de Acceso SSH
+
+El servidor utiliza autenticación exclusiva por llaves SSH para garantizar la seguridad. **No se permite el acceso por contraseña.**
+
+#### 1. Generar una nueva Llave SSH (Local)
+
+Si aún no tienes un par de llaves SSH en tu computadora, abre tu terminal y ejecuta:
+
+```bash
+ssh-keygen -t ed25519 -C "tu_email@ejemplo.com"
+```
+
+1. Presiona **Enter** para aceptar la ubicación predeterminada.
+2. Ingresa una contraseña para mayor seguridad.
+
+Esto generará dos archivos en tu carpeta `.ssh`:
+
+* `id_ed25519`: **Llave Privada** (NUNCA la compartas).
+* `id_ed25519.pub`: **Llave Pública** (Esta es la que se sube al servidor).
+
+Para ver y copiar tu llave pública:
+
+```bash
+# Linux / Mac
+cat ~/.ssh/id_ed25519.pub
+
+# Windows (PowerShell)
+Get-Content $env:USERPROFILE\.ssh\id_ed25519.pub
+```
+
+#### 2. Agregar Acceso a un Servidor Existente
+
+> ⚠️ **Nota:** Plataformas como Hetzner solo inyectan llaves al *crear* el servidor. Para agregar usuarios a un servidor activo, debes hacerlo manualmente.
+
+**Ingresa al servidor:** con una llave que ya tenga acceso (o pide al administrador que lo haga)
+
+```bash
+# El acceso se realiza mediante protocolo SSH utilizando llaves criptográficas (no contraseñas).
+ssh root@<IP_DEL_SERVIDOR>
+```
+
+**Edita el archivo de llaves autorizadas:**
+
+```bash
+nano ~/.ssh/authorized_keys
+```
+
+**Agrega la nueva llave:**
+
+* Ve al final del archivo usando las flechas.
+* Crea una **nueva línea** vacía.
+* Pega la **Llave Pública** del nuevo usuario (el texto largo que comienza con `ssh-ed25519...`).
+* *¡Cuidado! No borres las llaves existentes.*
+
+**Guarda los cambios:**
+
+* Presiona `Ctrl + O` y `Enter` para guardar.
+* Presiona `Ctrl + X` para salir.
+
+---
+
+### 🛠️ Aprovisionamiento e Instalación
+
+Pasos para preparar un servidor limpio (Ubuntu 24.04) para alojar el proyecto.
+
+#### 1. Instalar Docker Engine
+
+```bash
+# Actualizar el sistema
+apt update && apt upgrade -y
+
+# Instalar Docker (Script oficial)
+curl -fsSL https://get.docker.com -o get-docker.sh
+sh get-docker.sh
+
+# Eliminamos el instalador
+rm get-docker.sh
+```
+
+#### 2. Configuración del Proyecto (Setup Inicial)
+
+Clonamos el repositorio en la carpeta `pristinoplant` y configuramos las variables de entorno de producción.
+
+```bash
+# Clonar la rama main en una carpeta con el nombre del proyecto
+git clone -b main https://github.com/JulioFlors/orchidium-project.git pristinoplant
+cd pristinoplant
+```
+
+#### 3. Configuración de Secretos (.env)
+
+El archivo `.env` **no se sube al repositorio**. Debes crearlo manualmente en el servidor:
+
+```bash
+nano .env
+```
+
+Pega tus credenciales de producción (Neon DB, HiveMQ, Google Auth)
+
+**Guarda los cambios:**
+
+* Presiona `Ctrl + O` y `Enter` para guardar.
+* Presiona `Ctrl + X` para salir.
+
+> **Importante:** Asegúrate de incluir la variable `COMPOSE_PROFILES=cloud` al final del archivo para que Docker levante solo los servicios de producción conectados a Neon y HiveMQ.
+
+---
+
+### 🚀 Despliegue y Actualización
+
+Para facilitar las actualizaciones continuas, utilizamos un script bash que automatiza la descarga del código del repositorio y la reconstrucción de los contenedores.
+
+#### Script de Despliegue Automático (Deploy Script)
+
+Crea el archivo `deploy.sh` en la raíz del proyecto en el servidor:
+
+```bash
+nano deploy.sh
+```
+
+Contenido del script:
+
+```bash
+#!/bin/bash
+echo " "
+echo "📡 Bajando cambios de main"
+git pull origin main
+
+echo " "
+echo "🏗️  Reconstruyendo servicios Cloud"
+# Docker usará las variables del .env (COMPOSE_PROFILES=cloud)
+docker compose up -d --build
+
+echo " "
+echo "🧹 Limpiando imágenes antiguas"
+docker image prune -f
+
+echo " "
+echo "✅ ¡Despliegue completado con éxito!"
+echo " "
+```
+
+Dale permisos de ejecución:
+
+```bash
+chmod +x deploy.sh
+```
+
+#### Flujo de Trabajo (Actualizar Versión)
+
+Cada vez que realices un cambio en el código y lo fusiones a la rama `main`:
+
+1. Conéctate al VPS.
+2. Ejecuta el script de despliegue:
+
+```bash
+cd pristinoplant
+./deploy.sh
+```
+
+Este comando descargará la última versión, reconstruirá solo las capas necesarias y reiniciará los servicios `ingest-cloud` y `scheduler-cloud` sin tiempo de inactividad significativo.

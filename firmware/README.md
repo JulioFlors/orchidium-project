@@ -192,6 +192,7 @@ Se utiliza el comando fs rm para eliminar.
 mpremote rm :main.py
 mpremote rm :update_creds.py
 mpremote rm :manifest.json
+mpremote rm :recovery.json
 
 # Eliminar un archivo dentro de un subdirectorio (ej. el módulo simple.py)
 mpremote rm :lib/umqtt/simple.py
@@ -255,51 +256,169 @@ code $PROFILE
 #### 3. Añade la función `mprun`
 
 ```bash
-# Función para flashear, reiniciar y conectar al REPL de un ESP32 con mpremote
+# -----------------------------------------------------------------------------
+# Función mprun: Herramienta de Flasheo para ESP32/MicroPython
+# Uso: 
+#   mprun           -> Flashea carpeta actual
+#   mprun -b        -> Compila (src/compile.py) y flashea la carpeta build
+#   mprun -build    -> Igual que -b (Nativo de PowerShell)
+#   mprun --build   -> Igual que -b (Soporte estilo Unix)
+# -----------------------------------------------------------------------------
+
 function mprun {
     param(
- # La ruta del directorio que contiene el firmware. 
- # Por defecto es '.' (directorio actual).
- [string]$Path = ".",
-
- # El puerto a usar. Por defecto es 'auto'.
- [string]$Port = "auto"
+        [string]$Port = "auto",
+        [Alias("b")]
+        [switch]$Build
     )
 
-    # Validamos que la ruta exista
-    if (-not (Test-Path $Path)) {
- Write-Host "❌  Error: La ruta '$Path' no existe" -ForegroundColor Red
- return
+    # ---------------------------------------------------------
+    # TRUCO: Soporte para bandera Unix (--build)
+    # Si el usuario escribe "mprun --build", PowerShell asignará 
+    # "--build" a $Port. Aquí lo detectamos y lo corregimos.
+    # ---------------------------------------------------------
+    if ($Port -eq "--build") {
+        $Build = $true
+        $Port = "auto"
     }
 
-    # Guardamos la ubicación actual y nos movemos hacia la carpeta del firmware
-    Push-Location $Path
+    $CurrentPath = Get-Location
+    $TargetDir = $CurrentPath
 
+    if ($Build) {
+        $ProjectName = Split-Path $CurrentPath -Leaf
+        
+        # Suponemos que estamos en /firmware/relay_modules, entonces el root es ../
+        $FirmwareRoot = (Get-Item $CurrentPath).Parent.FullName
+        
+        # Buscamos compile.py en src/ respecto al root
+        $CompileScript = Join-Path $FirmwareRoot "src\compile.py"
+
+        # Validamos contexto
+        if (-not (Test-Path $CompileScript)) {
+            Write-Host "❌ Error: No se encontró '$CompileScript'" -ForegroundColor Red
+            Write-Host "   Asegúrate de estar dentro de una carpeta de proyecto (ej: firmware/relay_modules)." -ForegroundColor Gray
+            return
+        }
+
+        Write-Host "`n🔨 Compilando proyecto: $ProjectName" -ForegroundColor Cyan
+        
+        # 1. Compilación
+        python $CompileScript $ProjectName
+        if ($LASTEXITCODE -ne 0) { 
+            Write-Host "❌ Falló la compilación." -ForegroundColor Red
+            return 
+        }
+
+        # 2. Definir ruta de build esperada
+        $BuildDir = Join-Path $FirmwareRoot "build\$ProjectName"
+        
+        if (-not (Test-Path $BuildDir)) {
+            Write-Host "❌ Error: No se encontró la carpeta de build '$BuildDir'." -ForegroundColor Red
+            return
+        }
+        
+        $TargetDir = $BuildDir
+        Write-Host "🔥 Modo Build: Flasheando desde: $TargetDir" -ForegroundColor Yellow
+    }
+    else {
+        Write-Host "📂 Modo Directo: Flasheando desde: $TargetDir" -ForegroundColor DarkCyan
+    }
+
+    # 3. Flasheo y Conexión
+    Push-Location $TargetDir
     try {
- Write-Host "`n"
- Write-Host "$(Get-Location)" -ForegroundColor DarkBlue
- Write-Host "Subiendo contenido" -ForegroundColor DarkGreen
- Write-Host ""
- 
- # Copia recursiva de TODO lo que hay en la carpeta actual (.) a la raíz del ESP32 (:)
- mpremote connect $Port fs cp -r . : + reset + repl
- 
- # Write-Host ""
- # Write-Host "Reiniciando dispositivo" -ForegroundColor Yellow
- # mpremote connect $Port reset
-
- # Write-Host "Conectando REPL | Ctrl+C para detener | Ctrl+X para salir |" -ForegroundColor DarkBlue
- # mpremote connect $Port repl
-
+        # Subir todo, resetear y abrir REPL
+        mpremote connect $Port fs cp -r . : + reset + repl
     }
     catch {
- Write-Host "Error durante la ejecución: $_" -ForegroundColor Red
-    } finally {
- # Regresar siempre al directorio original, pase lo que pase
- Pop-Location
+        Write-Host "❌ Error mpremote: $_" -ForegroundColor Red
+    }
+    finally {
+        Pop-Location
+        Write-Host "`n✅ Proceso finalizado.`n" -ForegroundColor Green
     }
 }
 ```
+
+### 🩹 Parche de Estabilidad para `mpremote` (UnicodeDecodeError)
+
+Al desarrollar firmware resiliente, es común utilizar `machine.reset()` para recuperar el dispositivo ante fallos. Sin embargo, al reiniciarse, el BootROM del ESP32 emite logs a 74880 baudios.
+
+Como `mpremote` escucha a 115200 baudios, esta diferencia de velocidad genera "basura" en el puerto serial. Por defecto, `mpremote` intenta decodificar estrictamente todo como texto UTF-8; al encontrar bytes inválidos (ej. `0xae`), la herramienta crashea con un `UnicodeDecodeError`, cerrando la terminal abruptamente.
+
+Para solucionar esto y hacer que `mpremote` simplemente ignore los caracteres ilegibles (reemplazándolos con ``) sin cerrarse, debemos aplicar un pequeño parche a su código fuente local.
+
+**Solución Automática (Windows PowerShell):**
+
+Ejecuta el siguiente script en tu terminal para aplicar el parche automáticamente. Este comando busca el archivo `console.py` dentro de la instalación de `mpremote` y cambia el decodificador para que use el parámetro `'replace'`.
+
+```powershell
+$ConsolePath = "$env:APPDATA\Python\Python313\site-packages\mpremote\console.py"
+if (Test-Path $ConsolePath) {
+    $Content = Get-Content $ConsolePath -Raw
+    $FixedContent = $Content -replace 'buf\.decode\(\) if isinstance\(buf, bytes\) else buf', "buf.decode('utf-8', 'replace') if isinstance(buf, bytes) else buf"
+    Set-Content -Path $ConsolePath -Value $FixedContent
+    Write-Host "✅ mpremote parcheado exitosamente. Ya no se colgará con basura serial." -ForegroundColor Green
+} else {
+    Write-Host "❌ No se encontró console.py en la ruta esperada. Verifica tu versión de Python (ej. Python313)." -ForegroundColor Red
+}
+
+```
+
+*Nota: Si utilizas una versión diferente de Python (ej. 3.12), ajusta la ruta `$env:APPDATA\Python\Python312\...` en el script.*
+
+---
+
+## ⚡ Optimización y Compilación (.mpy)
+
+Para maximizar la **estabilidad** y optimizar el uso de **memoria RAM** en el ESP32, el proyecto soporta la compilación del código fuente Python (`.py`) a Bytecode MicroPython (`.mpy`) antes de subirlo al dispositivo.
+
+### ¿Por qué compilar?
+
+1. **Ahorro de RAM Crítica:** Cargar un archivo `.py` grande (como `main.py`) requiere que el intérprete de MicroPython analice el texto fuente en tiempo real, lo que consume una cantidad significativa de RAM. Al usar `.mpy`, el código ya está pre-procesado, liberando memoria para la lógica de la aplicación y buffers de red (SSL/MQTT).
+
+2. **Carga más Rápida:** El bytecode se carga casi instantáneamente.
+
+### Estructura de Archivos Compilados
+
+Cuando ejecutas la compilación, el script `src/compile.py` transforma la estructura de tu proyecto:
+
+1. **Compilación:** Tu archivo `main.py` original (lógica de negocio) se compila a un archivo binario **`app.mpy`**.
+
+2. **Bootstrap:** Se genera un **nuevo** `main.py` ligero (aprox. 15 líneas de código).
+
+#### El nuevo `main.py` (Bootstrap)
+
+Este archivo actúa como un lanzador seguro. Su única función es importar tu aplicación compilada y manejar errores fatales.
+
+```python
+# main.py (Generado automáticamente)
+import uasyncio
+import app  # Importa tu código compilado (app.mpy)
+
+if __name__ == '__main__':
+    try:
+        uasyncio.run(app.main())
+    except Exception as e:
+        import machine
+        print(f"FATAL ERROR: {e}")
+        machine.reset() # Reinicio de seguridad ante pánicos
+```
+
+### Uso con `mprun`
+
+No necesitas ejecutar scripts manuales. La herramienta `mprun` actualizada maneja todo el flujo:
+
+```powershell
+# Compila, genera el bootstrap, y sube todo al ESP32
+mprun -b 
+
+# O su forma larga:
+mprun -build
+```
+
+> **Nota:** `mprun` (sin argumentos) seguirá subiendo los archivos `.py` originales sin compilar, útil para depuración rápida de código pequeño.
 
 ---
 

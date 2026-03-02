@@ -118,7 +118,7 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
             ) : (
               // CASO: Disponible para comprar
               <button
-                className={`w-full transition-all duration-300 sm:w-[320px] lg:w-full xl:w-[320px] ${!selectedVariant && posted ? 'btn-primary' : 'btn-primary'} `}
+                className={`w-full cursor-pointer transition-all duration-300 sm:w-[320px] lg:w-full xl:w-[320px] ${!selectedVariant && posted ? 'btn-primary' : 'btn-primary'} `}
                 type="button"
                 onClick={addToCart}
               >

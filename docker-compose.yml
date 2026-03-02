@@ -84,7 +84,7 @@ services:
       MQTT_BROKER_URL: ${MQTT_BROKER_URL_LOCAL}
       INFLUX_URL: ${INFLUX_URL_LOCAL}
       
-      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID_INGEST}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID_INGEST}-LOCAL
       MQTT_USERNAME: ${MQTT_USER_BACKEND}
       MQTT_PASSWORD: ${MQTT_PASS_BACKEND}
       INFLUX_TOKEN: ${INFLUX_TOKEN}
@@ -118,7 +118,7 @@ services:
       MQTT_BROKER_URL: ${MQTT_BROKER_URL_LOCAL}
       INFLUX_URL: ${INFLUX_URL_LOCAL}
       
-      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID_SCHEDULER}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID_SCHEDULER}-LOCAL
       MQTT_USERNAME: ${MQTT_USER_BACKEND}
       MQTT_PASSWORD: ${MQTT_PASS_BACKEND}
       INFLUX_TOKEN: ${INFLUX_TOKEN}
@@ -135,19 +135,24 @@ services:
     build:
       context: . 
       dockerfile: services/ingest/Dockerfile
+      extra_hosts:
+        - "registry.npmjs.org:104.16.27.35"
     restart: always
     # No depende de Mosquitto/Postgres locales
     environment:
-      NODE_ENV: production
+      # TODO: Cuando se termine el desarrollo cambiar a NODE_ENV: production
+      NODE_ENV: development
+      NODE_OPTIONS: "--dns-result-order=ipv4first"
       DB_USER: ${DB_USER_CLOUD}
       DB_HOST: ${DB_HOST_CLOUD}
       
       # Variables Cloud
       DATABASE_URL: ${DATABASE_URL_CLOUD}
+      DATABASE_URL_UNPOOLED: ${DATABASE_URL_CLOUD_UNPOOLED}
       MQTT_BROKER_URL: ${MQTT_BROKER_URL_CLOUD}
       INFLUX_URL: ${INFLUX_URL_CLOUD}
       
-      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID_INGEST}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID_INGEST}-CLOUD
       MQTT_USERNAME: ${MQTT_USER_BACKEND}
       MQTT_PASSWORD: ${MQTT_PASS_BACKEND}
       INFLUX_TOKEN: ${INFLUX_TOKEN}
@@ -159,19 +164,30 @@ services:
     build:
       context: .
       dockerfile: services/scheduler/Dockerfile
+      extra_hosts:
+        - "registry.npmjs.org:104.16.27.35"
     restart: always
     environment:
-      NODE_ENV: production
+      # TODO: Cuando se termine el desarrollo cambiar a NODE_ENV: production
+      NODE_ENV: development
+      NODE_OPTIONS: "--dns-result-order=ipv4first"
       DB_USER: ${DB_USER_CLOUD}
       DB_HOST: ${DB_HOST_CLOUD}
       
       # Variables Cloud
       DATABASE_URL: ${DATABASE_URL_CLOUD}
+      DATABASE_URL_UNPOOLED: ${DATABASE_URL_CLOUD_UNPOOLED}
       MQTT_BROKER_URL: ${MQTT_BROKER_URL_CLOUD}
       INFLUX_URL: ${INFLUX_URL_CLOUD}
       
-      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID_SCHEDULER}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID_SCHEDULER}-CLOUD
       MQTT_USERNAME: ${MQTT_USER_BACKEND}
       MQTT_PASSWORD: ${MQTT_PASS_BACKEND}
       INFLUX_TOKEN: ${INFLUX_TOKEN}
       INFLUX_BUCKET: ${INFLUX_BUCKET}
+
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: 1350

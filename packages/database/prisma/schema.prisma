@@ -19,7 +19,7 @@ enum Role {
 }
 
 enum ZoneType {
-  ZONA_A // Zona de Pruebas
+  ZONA_A
   ZONA_B
   ZONA_C
   ZONA_D

@@ -71,7 +71,7 @@ export function CartView() {
 
               <Link
                 className="btn-secondary tds-lg:justify-center tds-lg:w-[320px] mt-4 inline-block w-full justify-items-start"
-                href="/category/plants"
+                href="/auth/login"
               >
                 Iniciar sesión
               </Link>

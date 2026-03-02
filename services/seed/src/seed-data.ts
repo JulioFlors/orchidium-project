@@ -901,7 +901,7 @@ export const initialData: SeedData = {
       description: 'Mantener humedad relativa',
       purpose: 'HUMIDIFICATION',
       // Cron: A las 16:00, todos los días
-      cronTrigger: '0 18 * * *',
+      cronTrigger: '0 16 * * *',
       durationMinutes: 10,
       zones: ['ZONA_A'],
       isEnabled: true

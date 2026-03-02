@@ -248,7 +248,7 @@ class OTAUpdater:
         # Validamos la respuesta
         if not response:
             self.log(f"\n❌  Error de conexión")
-            return
+            return False
         
         if response.status_code == 404:
             self.log(f"\n⚠️  {Colors.YELLOW}No se encontro{Colors.RESET} el archivo {Colors.YELLOW}{self.manifest_filename}{Colors.RESET} en el repositorio")
@@ -256,7 +256,7 @@ class OTAUpdater:
 
         if response.status_code != 200:
              self.log(f"\n❌ Error HTTP inesperado: {response.status_code}")
-             return # Falló la descarga
+             return False # Falló la descarga
 
         # Solo si es 200 OK intentamos parsear
         try:
@@ -287,13 +287,18 @@ class OTAUpdater:
                     machine.reset()
                 else:
                     self.log(f"\n❌  Actualización {Colors.RED}Abortada{Colors.RESET}")
+                    return False
 
             else:
                 self.log(f"\n✅  Firmware {Colors.GREEN}Actualizado{Colors.RESET}")
+                return True
 
         except Exception as e:
             self.log(f"\n❌  Error de actualización: {Colors.RED}{e}{Colors.RESET}")
             if 'response' in locals(): response.close()
+            return False
+            
+        return True
 
     def fetch_latest_code(self, remote_data):
         """Descarga todos los archivos. Retorna True si todo salió bien."""

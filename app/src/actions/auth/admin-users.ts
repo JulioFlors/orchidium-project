@@ -29,7 +29,7 @@ export const getPaginatedUsers = async () => {
   }
 }
 
-export const changeUserRole = async (userId: string, role: string) => {
+export const changeUserRole = async (userId: string, newRole: string) => {
   const session = await auth.api.getSession({
     headers: await headers(),
   })
@@ -39,7 +39,10 @@ export const changeUserRole = async (userId: string, role: string) => {
   }
 
   try {
-    const newRole = role === 'ADMIN' ? 'USER' : 'ADMIN'
+    // Verificamos que el rol sea válido
+    if (newRole !== 'ADMIN' && newRole !== 'USER') {
+      return { ok: false, message: 'Rol no válido' }
+    }
 
     await prisma.user.update({
       where: { id: userId },
