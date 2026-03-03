@@ -434,6 +434,16 @@ async def wifi_coro():
                 
                 log(f"\n📡  Conexión WiFi Establecida {Colors.GREEN}| IP: {wlan.ifconfig()[0]}{Colors.RESET}")
                 
+                # =========================================================
+                # 🔥 INYECCIÓN DE DNS PERSONALIZADO (BYPASS CANTV) 🔥
+                try:
+                    ip, subnet, gateway, dns_actual = wlan.ifconfig()
+                    wlan.ifconfig((ip, subnet, gateway, '8.8.4.4'))
+                    log(f"🌍  DNS: {Colors.CYAN}8.8.4.4{Colors.RESET} (Original: {dns_actual})")
+                except Exception as e:
+                    log(f"⚠️  Error forzando DNS en Main: {e}")
+                # =========================================================
+
                 # Resetear contador de falla
                 wifi_disconnect_start = None
 
@@ -467,6 +477,27 @@ def _connection_timeout_handler(t):
         sleep(1)
 
     reset()
+
+# ---- CORUTINA: Manejo centralizado de Errores Críticos MQTT ----
+async def check_critical_mqtt_errors(e):
+    """Evalúa si la excepción es crítica y requiere un reinicio por HW/SW."""
+    from umqtt.simple2 import MQTTException # type: ignore
+    
+    # [CRÍTICO] Si es Fallo SSL por Memoria (-17040) o Handshake/Red (-202), Reiniciamos.
+    if isinstance(e, OSError) and e.args and e.args[0] in [-17040, -202]:
+        if DEBUG:
+            log(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Fallo crítico de SSL/Red ({e.args[0]}).")
+            log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo.{Colors.RESET}\n")
+        import machine
+        machine.reset()
+
+    # [CRÍTICO] Si es Fallo EWRITELEN (3) (Buffer lleno/Fragmentación), Reiniciamos.
+    if isinstance(e, MQTTException) and e.args and e.args[0] == 3:
+         if DEBUG:
+             log(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Buffer de escritura lleno (Fragmentación RAM).")
+             log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo...{Colors.RESET}\n")
+         import machine
+         machine.reset()
 
 # ---- CORUTINA: Gestión de Conexión MQTT (Sensors) ----
 async def mqtt_connector_task(client_id):
@@ -549,15 +580,7 @@ async def mqtt_connector_task(client_id):
             except (MQTTException, OSError) as e:
                 log_mqtt_exception("Fallo la Conexión MQTT", e)
 
-                # [CRÍTICO] Si es Fallo SSL por Memoria (-17040), Reiniciamos.
-                # [CRÍTICO] Si es Fallo EWRITELEN (3) (Buffer lleno/Fragmentación), Reiniciamos.
-                # No tiene sentido reintentar si la RAM está fragmentada. Mejor reiniciar.
-                if isinstance(e, MQTTException) and e.args and (e.args[0] == 3 or e.args[0] == -17040):
-                    if DEBUG:
-                        log(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Memoria RAM Fragmentada")
-                        log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo.{Colors.RESET}\n")
-                    from machine import reset
-                    reset()
+                await check_critical_mqtt_errors(e)
 
                 # Invalidamos el cliente MQTT forzando una reconexión completa.
                 force_disconnect_mqtt()
@@ -592,15 +615,7 @@ async def mqtt_connector_task(client_id):
             except (MQTTException, OSError) as e:
                 log_mqtt_exception("Error en Operación MQTT", e)
 
-                # [CRÍTICO] Si es Fallo SSL por Memoria (-17040), Reiniciamos.
-                # [CRÍTICO] Si es Fallo EWRITELEN (3) (Buffer lleno/Fragmentación), Reiniciamos.
-                # No tiene sentido reintentar si la RAM está fragmentada. Mejor reiniciar.
-                if isinstance(e, MQTTException) and e.args and (e.args[0] == 3 or e.args[0] == -17040):
-                    if DEBUG:
-                        log(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Memoria RAM Fragmentada")
-                        log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo.{Colors.RESET}\n")
-                    from machine import reset
-                    reset()
+                await check_critical_mqtt_errors(e)
 
                 # Invalidamos el cliente MQTT forzando una reconexión completa.
                 force_disconnect_mqtt()

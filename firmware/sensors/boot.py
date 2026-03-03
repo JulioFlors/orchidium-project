@@ -21,6 +21,7 @@ class Colors:
     YELLOW = '\x1b[93m'
     BLUE = '\x1b[94m'
     MAGENTA = '\x1b[95m'
+    CYAN = '\x1b[96m'
     WHITE = '\x1b[97m'
 
 # ---- Función Auxiliar: Logs de Desarrollo ----
@@ -74,6 +75,18 @@ def connect_wifi_sync():
     if wlan.isconnected():
         if DEBUG:
             log(f"\n📡  Conexión WiFi Establecida {Colors.GREEN}| IP: {wlan.ifconfig()[0]}{Colors.RESET}")
+            
+        # =========================================================
+        # 🔥 INYECCIÓN DE DNS PERSONALIZADO (BYPASS CANTV) 🔥
+        try:
+            ip, subnet, gateway, dns_actual = wlan.ifconfig()
+            wlan.ifconfig((ip, subnet, gateway, '8.8.4.4'))
+            if DEBUG:
+                log(f"🌍  DNS: {Colors.CYAN}8.8.4.4{Colors.RESET} (Original: {dns_actual})")
+        except Exception as e:
+            if DEBUG: log(f"⚠️  Error forzando DNS en Boot: {e}")
+        # =========================================================
+
         return True
     
     if DEBUG:

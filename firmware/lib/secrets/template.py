@@ -24,5 +24,5 @@ MQTT_CONFIG = {
 #     "PASS": "password_hivemq",
 #     "PORT": 8883,
 #     "SSL": True,
-#     "SSL_PARAMS": {"server_hostname": "cluster.url.hivemq.cloud"}
+#     "SSL_PARAMS": {"server_hostname": "cluster.url.hivemq.cloud", "cert_reqs": 0}
 # }

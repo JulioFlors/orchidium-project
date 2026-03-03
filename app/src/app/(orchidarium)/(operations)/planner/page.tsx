@@ -151,9 +151,7 @@ export default function PlannerPage() {
   } = useForm<PlannerFormInputs>({
     resolver: zodResolver(plannerSchema),
     defaultValues: {
-      purpose: 'IRRIGATION',
       zone: 'ZONA_A',
-      duration: 10,
       scheduledAt: '',
       notes: '',
     },
@@ -234,7 +232,7 @@ export default function PlannerPage() {
             <form className="flex flex-col gap-5" onSubmit={handleSubmit(onSubmit)}>
               <div className="flex flex-col gap-1.5">
                 <label className="text-secondary text-sm font-medium" htmlFor="purpose">
-                  Acción
+                  Circuito Hidráulico
                 </label>
                 <Controller
                   control={control}
@@ -285,7 +283,7 @@ export default function PlannerPage() {
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-secondary text-sm font-medium" htmlFor="duration">
-                  Duración (Minutos)
+                  Duración
                 </label>
                 <input
                   className={clsx(
@@ -329,12 +327,11 @@ export default function PlannerPage() {
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-secondary text-sm font-medium" htmlFor="notes">
-                  Notas (opcional)
+                  Notas
                 </label>
                 <textarea
                   className="focus-input border-input-outline resize-none border text-sm"
                   id="notes"
-                  placeholder="Ej: Riego extra por altas temperaturas"
                   rows={2}
                   {...register('notes')}
                 />

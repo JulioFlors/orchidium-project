@@ -152,9 +152,9 @@ export default function HistoryPage() {
               <thead className="bg-hover-overlay text-secondary border-input-outline border-b text-xs uppercase">
                 <tr>
                   <th className="px-6 py-4 font-semibold">Estado</th>
-                  <th className="px-6 py-4 font-semibold">Acción</th>
+                  <th className="px-6 py-4 font-semibold">Circuito Hidráulico</th>
                   <th className="px-6 py-4 font-semibold">Zonas</th>
-                  <th className="px-6 py-4 font-semibold">Programado para</th>
+                  <th className="px-6 py-4 font-semibold">Fecha</th>
                   <th className="px-6 py-4 font-semibold">Duración</th>
                   <th className="px-6 py-4 font-semibold">Notas</th>
                 </tr>
