@@ -15,7 +15,7 @@ import uasyncio as asyncio # type: ignore
 
 # ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
-DEBUG = True
+DEBUG = False
 
 # ---- Configuración MQTT ----
 MQTT_CONFIG = {
@@ -770,7 +770,7 @@ def sub_callback(topic, msg, retained, dup):
                     import ujson
                     content = NVSManager.load_tasks()
                     payload = ujson.dumps(content)
-                    
+
                     if client and wlan and wlan.isconnected():
                         # Publicamos en el tópico de debug
                         client.publish(MQTT_TOPIC_DEBUG_NVS, payload, retain=False, qos=0)
@@ -1055,6 +1055,16 @@ async def wifi_coro():
 
                 log(f"\n📡  Conexión WiFi Establecida {Colors.GREEN}| IP: {wlan.ifconfig()[0]}{Colors.RESET}")
 
+                # =========================================================
+                # 🔥 INYECCIÓN DE DNS PERSONALIZADO (BYPASS CANTV) 🔥
+                try:
+                    ip, subnet, gateway, dns_actual = wlan.ifconfig()
+                    wlan.ifconfig((ip, subnet, gateway, '8.8.4.4'))
+                    log(f"🌍  DNS: {Colors.CYAN}8.8.4.4{Colors.RESET} (Original: {dns_actual})")
+                except Exception as e:
+                    log(f"⚠️  Error forzando DNS en Main: {e}")
+                # =========================================================
+
                 # Resetear contador de falla
                 wifi_disconnect_start = None
 
@@ -1085,6 +1095,28 @@ def _connection_timeout_handler(t):
         sleep(1)
 
     safe_reset()
+
+# ---- CORUTINA: Manejo centralizado de Errores Críticos MQTT ----
+async def check_critical_mqtt_errors(e):
+    """Evalúa si la excepción es crítica y requiere un reinicio por HW/SW."""
+    from umqtt.simple2 import MQTTException # type: ignore
+    
+    # [CRÍTICO] Si es Fallo SSL por Memoria (-17040) o Handshake/Red (-202), Reiniciamos.
+    # No tiene sentido reintentar en un bucle infinito si el socket o la RAM fallan repetidamente.
+    if isinstance(e, OSError) and e.args and e.args[0] in [-17040, -202]:
+         log(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Fallo crítico de SSL/Red ({e.args[0]}).")
+         log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo para recuperar red/memoria...{Colors.RESET}\n")
+         import uasyncio as asyncio
+         await asyncio.sleep(5)
+         safe_reset()
+    
+    # [CRÍTICO] Si es Fallo EWRITELEN (3) (Buffer lleno/Fragmentación), Reiniciamos.
+    if isinstance(e, MQTTException) and e.args and e.args[0] == 3:
+         log(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Buffer de escritura lleno (Fragmentación RAM).")
+         log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo...{Colors.RESET}\n")
+         import uasyncio as asyncio
+         await asyncio.sleep(5)
+         safe_reset()
 
 # ---- CORUTINA: Gestión de Conexión MQTT (Relay Modules) ----
 async def mqtt_connector_task(client_id):
@@ -1183,20 +1215,7 @@ async def mqtt_connector_task(client_id):
             except (MQTTException, OSError) as e:
                 log_mqtt_exception("Fallo la Conexión MQTT", e)
                 
-                # [CRÍTICO] Si es Fallo SSL por Memoria (-17040), Reiniciamos.
-                # No tiene sentido reintentar si la RAM está fragmentada. Mejor reiniciar.
-                if isinstance(e, OSError) and e.args and e.args[0] == -17040:
-                     log(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Memoria insuficiente para SSL.")
-                     log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo para desfragmentar RAM...{Colors.RESET}\n")
-                     await asyncio.sleep(5)
-                     safe_reset()
-                
-                # [CRÍTICO] Si es Fallo EWRITELEN (3) (Buffer lleno/Fragmentación), Reiniciamos.
-                if isinstance(e, MQTTException) and e.args and e.args[0] == 3:
-                     log(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Buffer de escritura lleno (Fragmentación RAM).")
-                     log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo...{Colors.RESET}\n")
-                     await asyncio.sleep(5)
-                     safe_reset()
+                await check_critical_mqtt_errors(e)
 
                 # Invalidamos el cliente MQTT forzando una reconexión completa.
                 force_disconnect_mqtt()
@@ -1231,12 +1250,7 @@ async def mqtt_connector_task(client_id):
             except (MQTTException, OSError) as e:
                 log_mqtt_exception("Error en Operación MQTT", e)
 
-                # [CRÍTICO] Si es Fallo EWRITELEN (3) (Buffer lleno/Fragmentación) en operación, Reiniciamos.
-                if isinstance(e, MQTTException) and e.args and e.args[0] == 3:
-                     log(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Buffer de escritura lleno (Fragmentación RAM).")
-                     log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo...{Colors.RESET}\n")
-                     await asyncio.sleep(5)
-                     safe_reset()
+                await check_critical_mqtt_errors(e)
 
                 # Invalidamos el cliente MQTT forzando una reconexión completa.
                 force_disconnect_mqtt()

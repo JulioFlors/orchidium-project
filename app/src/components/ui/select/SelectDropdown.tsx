@@ -39,7 +39,7 @@ export function SelectDropdown({
   options,
   value,
   onChange,
-  placeholder = 'Seleccionar...',
+  placeholder = 'Seleccionar',
   disabled = false,
   className,
   buttonClassName,

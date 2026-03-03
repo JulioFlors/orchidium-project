@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma, TaskStatus } from '@package/database'
+import { Cron } from 'croner'
 
 export async function GET() {
   try {
@@ -36,23 +37,14 @@ export async function GET() {
     const routineTasks = schedules
       .map((schedule) => {
         try {
-          // Extraer la hora deseada usando RegExp: "0 18 * * *" -> 18, "0 6 * * 1" -> 6
-          const match = schedule.cronTrigger.match(/^(\d+|\*)\s+(\d+)\s+/)
+          // Parse using Croner with the correct Caracas timezone (matches backend)
+          const job = new Cron(schedule.cronTrigger, {
+            timezone: 'America/Caracas',
+          })
 
-          if (!match) throw new Error(`Cron inválido: ${schedule.cronTrigger}`)
+          const nextDate = job.nextRun()
 
-          const scheduledHour = parseInt(match[2], 10)
-
-          // Calcular la proxima ejecucion en hora local
-          const now = new Date()
-          const nextDate = new Date()
-
-          // Si la hora programada ya pasó hoy, se programa para mañana
-          if (now.getHours() >= scheduledHour) {
-            nextDate.setDate(now.getDate() + 1)
-          }
-
-          nextDate.setHours(scheduledHour, 0, 0, 0)
+          if (!nextDate) return null // Por si el cron es inválido o no tiene próxima ejecución
 
           return {
             id: `routine-${schedule.id}`,
