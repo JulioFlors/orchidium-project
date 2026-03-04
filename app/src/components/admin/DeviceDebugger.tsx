@@ -37,13 +37,13 @@ const DEVICES: DeviceConfig[] = [
     hasMaskNvs: true,
   },
   {
-    name: 'Service: Ingestion (Cloud)',
-    baseTopic: 'PristinoPlant/Services/Ingest-CLOUD',
+    name: 'Service: Ingest',
+    baseTopic: 'PristinoPlant/Services/Ingest',
     hasMaskNvs: true,
   },
   {
-    name: 'Service: Scheduler (Cloud)',
-    baseTopic: 'PristinoPlant/Services/Scheduler-CLOUD',
+    name: 'Service: Scheduler',
+    baseTopic: 'PristinoPlant/Services/Scheduler',
     hasMaskNvs: true,
   },
 ]

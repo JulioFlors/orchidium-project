@@ -135,6 +135,9 @@ const mqttClient = mqtt.connect(MQTT_BROKER_URL, {
 
 let heartbeatInterval: NodeJS.Timeout | null = null
 
+// ---- Memoria de Estado para evitar Logs repetitivos ----
+let lastActuatorState = 'unknown'
+
 mqttClient.on('connect', () => {
   Logger.success('Conectado a Broker MQTT')
 
@@ -170,11 +173,19 @@ mqttClient.on('message', async (topic, payload) => {
   try {
     const message = payload.toString().trim()
 
-    // 1. El Nodo Actuador se desconectó y perdimos control
+    // 1. Monitoreo de Conexión del Nodo Actuador (Con filtro de estado)
     if (topic === 'PristinoPlant/Actuator_Controller/status') {
-      if (message === 'offline') {
+      
+      if (message === 'online' && lastActuatorState !== 'online') {
+        lastActuatorState = 'online'
+        Logger.success('El Nodo Actuador está ONLINE y listo para operar.')
+      } 
+      else if (message === 'offline' && lastActuatorState !== 'offline') {
+        lastActuatorState = 'offline'
         Logger.warn('El Nodo Actuador entró en estado OFFLINE.')
-        // Fallar tareas confirmadas / En Progreso ya que cortarán abruptamente y se perderá track.
+        
+        // Fallar tareas confirmadas / En Progreso ya que cortarán abruptamente.
+        // El ESP32 las retomará solo si revive dentro de la ventana de gracia.
         const affectedTasks = await prisma.taskLog.updateMany({
           where: {
             status: { in: [TaskStatus.CONFIRMED, TaskStatus.IN_PROGRESS] }
@@ -207,10 +218,12 @@ mqttClient.on('message', async (topic, payload) => {
     // 3. Telemetría Funcional Física (Los relés del Circuito Hidráulico cambiaron de estado)
     if (topic.startsWith('PristinoPlant/Actuator_Controller/irrigation/state/')) {
       // La telemetría física no devuelve el taskId, porque los relés son tontos.
-      // Debemos buscar si hay alguna tarea CONFIRMADA que esté operando para cambiarla a IN_PROGRESS
+      // Debemos buscar si hay alguna tarea CONFIRMADA o FAILED (recuperada por el hardware) que esté operando
       if (message === 'ON') {
         await prisma.taskLog.updateMany({
-          where: { status: TaskStatus.CONFIRMED },
+          where: { 
+            status: { in: [TaskStatus.CONFIRMED, TaskStatus.FAILED] } 
+          },
           data: { status: TaskStatus.IN_PROGRESS, notes: 'Circuito Hidráulico activado. Actuadores en operación.' }
         })
       }
@@ -348,7 +361,7 @@ async function processTaskLog(taskLog: any) {
     // Activar Secuencia del Circuito Hidráulico (Despachar)
     executeSequence(taskLog.purpose, taskLog.duration, taskLog.id)
 
-    // Marcar como CONFIRMED para sacarlo del polling (que solo busca PENDING/FAILED)
+    // Marcar como CONFIRMED para sacarlo del polling (que solo busca PENDING)
     // El ACK del hardware sobreescribirá con notas específicas vía MQTT
     await prisma.taskLog.update({
       where: { id: taskLog.id },
@@ -405,18 +418,16 @@ async function runTask(scheduleId: string) {
   }
 }
 
-// ---- Motor de Polling para Tareas Diferidas (PENDING) y Recuperación (FAILED) ----
+// ---- Motor de Polling para Tareas Diferidas (PENDING) ----
 async function checkPendingTasks() {
   try {
     const now = new Date()
     const graceWindow = new Date(Date.now() - 15 * 60000)
 
-    // 1. Ejecutar tareas dentro de la ventana de gracia (últimos 15 min)
+    // 1. Ejecutar tareas PENDING dentro de la ventana de gracia (últimos 15 min)
     const activeTasks = await prisma.taskLog.findMany({
       where: {
-        status: {
-          in: [TaskStatus.PENDING, TaskStatus.FAILED]
-        },
+        status: TaskStatus.PENDING, // 🔴 Se elimina TaskStatus.FAILED para evitar bucles
         scheduledAt: {
           lte: now,
           gte: graceWindow
@@ -432,12 +443,10 @@ async function checkPendingTasks() {
       await processTaskLog(task)
     }
 
-    // 2. Auto-cancelar tareas expiradas (fuera de la ventana de gracia)
+    // 2. Auto-cancelar tareas PENDING expiradas (fuera de la ventana de gracia)
     const expired = await prisma.taskLog.updateMany({
       where: {
-        status: {
-          in: [TaskStatus.PENDING, TaskStatus.FAILED]
-        },
+        status: TaskStatus.PENDING, // 🔴 Se elimina TaskStatus.FAILED
         scheduledAt: {
           lt: graceWindow
         }
