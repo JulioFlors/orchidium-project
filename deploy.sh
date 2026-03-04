@@ -1,50 +1,78 @@
 #!/bin/bash
-# deploy.sh - Script de despliegue para VPS (PristinoPlant)
+# deploy.sh - Script de despliegue para VPS-Sparrow
 
-# Detener el script si CUALQUIER comando falla
 set -e
 
-echo " "
-echo "🌵 PristinoPlant | Iniciando Despliegue"
-echo "--------------------------------------"
+# ---- Colores ----
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+RESET='\033[0m'
 
-# 1. Forzar limpieza local para evitar conflictos de merge
-echo "🧹 Limpiando cambios locales en el VPS para evitar conflictos..."
-git reset --hard HEAD
-git clean -fd
+# Evitar que pnpm pida confirmaciones interactivas
+export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
-# 2. Bajar cambios (con validación extra)
-echo "📡 Bajando cambios de main..."
-if git pull origin main; then
-    echo "✅ Cambios descargados con éxito."
+confirm() {
+    echo ""
+    read -p "$(echo -e "${YELLOW}⚡ $1 [s/N]: ${RESET}")" choice
+    case "$choice" in
+        s|S|si|SI|Si ) return 0 ;;
+        * ) return 1 ;;
+    esac
+}
+
+echo -e "${GREEN}🌵 PristinoPlant | Deploy${RESET}"
+
+# ================================================================
+# PASO 1: SiRESETronizar (Protegiendo infraestructura local)
+# ================================================================
+echo -e "${CYAN}📡 [1/5] SiRESETronizando con origin/main...${RESET}"
+
+git fetch origin main
+# PROTECCIÓN: Resetear el código pero sin tocar la carpeta de certificados y logs
+git reset --hard origin/main
+
+echo -e "${GREEN}   ✅ Código siRESETronizado correctamente.${RESET}"
+
+# ================================================================
+# PASO 2: Construir imágenes
+# ================================================================
+echo -e "${CYAN}🏗️  [2/5] Construyendo imágenes cloud...${RESET}"
+docker compose --profile cloud build
+echo -e "${GREEN}   ✅ Imágenes construidas.${RESET}"
+
+# ================================================================
+# PASO 3: Migraciones (CON FILTRO)
+# ================================================================
+if confirm "¿Ejecutar migraciones de base de datos (prisma db:deploy)?"; then
+    echo -e "${CYAN}📦 [3/5] Aplicando migraciones...${RESET}"
+    # Usamos el filtro para eRESETontrar el comando db:deploy en el paquete correcto
+    docker compose --profile cloud run --rm scheduler pnpm --filter @package/database db:deploy
+    echo -e "${GREEN}   ✅ Migraciones aplicadas.${RESET}"
 else
-    echo "❌ Error: No se pudieron descargar los cambios de GitHub."
-    exit 1
+    echo -e "${YELLOW}   ⏭  Migraciones omitidas.${RESET}"
 fi
 
-# 3. Construir imágenes
-echo " "
-echo "🏗️  Construyendo servicios (Profiles: cloud)"
-# Construimos solo los servicios de la app (ingest y scheduler)
-docker compose --profile cloud build
+# ================================================================
+# PASO 4: Levantar servicios
+# ================================================================
+echo -e "${CYAN}🚀 [4/5] Levantando servicios cloud...${RESET}"
+docker compose --profile cloud up -d --remove-orphans
+echo -e "${GREEN}   ✅ Servicios cloud levantados.${RESET}"
 
-# 4. Ejecutar Migraciones (Paso Crítico)
-# Nota: Usamos 'scheduler' (nombre nuevo) y el perfil 'cloud'
-echo " "
-echo "📦 Aplicando migraciones de base de datos..."
-docker compose --profile cloud run --rm scheduler pnpm db:deploy
+if confirm "¿Levantar/Reiniciar Mosquitto (perfil vps)?"; then
+    echo -e "${CYAN}   Levantando Mosquitto...${RESET}"
+    docker compose --profile vps up -d
+    echo -e "${GREEN}   ✅ Mosquitto levantado.${RESET}"
+fi
 
-# 5. Levantar Servicios
-echo " "
-echo "🚀 Levantando servicios (Infrastructure + App)"
-# Esto levantará Mosquitto (vps) y los servicios de backend (cloud)
-docker compose --profile vps --profile cloud up -d --remove-orphans
-
-# 6. Limpieza de imágenes huérfanas
-echo " "
-echo "🧹 Limpiando imágenes antiguas para ahorrar espacio..."
+# ================================================================
+# PASO 5: Limpieza
+# ================================================================
+echo -e "${CYAN}🧹 [5/5] Limpiando imágenes antiguas...${RESET}"
 docker image prune -f
 
-echo " "
-echo "✅ ¡Despliegue completado con éxito!"
-echo "--------------------------------------"
+echo -e "${GREEN}✅ ¡Despliegue completado con éxito!${RESET}"
+echo ""
+docker compose --profile cloud --profile vps ps
