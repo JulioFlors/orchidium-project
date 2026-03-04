@@ -75,17 +75,17 @@ def connect_wifi_sync():
     if wlan.isconnected():
         if DEBUG:
             log(f"\n📡  Conexión WiFi Establecida {Colors.GREEN}| IP: {wlan.ifconfig()[0]}{Colors.RESET}")
-            
-        # =========================================================
-        # 🔥 INYECCIÓN DE DNS PERSONALIZADO (BYPASS CANTV) 🔥
+
+        # Inyección de DNS
         try:
-            ip, subnet, gateway, dns_actual = wlan.ifconfig()
-            wlan.ifconfig((ip, subnet, gateway, '8.8.4.4'))
+            # google_dns = "8.8.4.4"
+            cloudflare_dns = "1.1.1.1"
+            ip, subnet, gateway, dns = wlan.ifconfig()
+            wlan.ifconfig((ip, subnet, gateway, cloudflare_dns))
             if DEBUG:
-                log(f"🌍  DNS: {Colors.CYAN}8.8.4.4{Colors.RESET} (Original: {dns_actual})")
+                log(f"\n🌍  DNS: {Colors.CYAN}{cloudflare_dns}{Colors.RESET}")
         except Exception as e:
             if DEBUG: log(f"⚠️  Error forzando DNS en Boot: {e}")
-        # =========================================================
 
         return True
     

@@ -37,6 +37,7 @@
 		"login": "Secure",
 		"migrations": "Prisma",
 		"mosquitto": "Server",
+		"mosquitto-local": "Server",
 		"mqtt": "Aws",
 		"new-account": "Secure",
 		"orchidarium": "Layout",

@@ -22,14 +22,14 @@ interface MqttState {
 }
 
 // Configuración desde variables de entorno
-const MQTT_PROTOCOL = process.env.NEXT_PUBLIC_MQTT_PROTOCOL || 'ws'
+const MQTT_PROTOCOL = process.env.NEXT_PUBLIC_MQTT_PROTOCOL
 const MQTT_BROKER = process.env.NEXT_PUBLIC_MQTT_BROKER
 const MQTT_PORT = process.env.NEXT_PUBLIC_MQTT_PORT
 
 // Validamos si la configuración es válida para intentar conectar
 const IS_CONFIG_VALID = Boolean(MQTT_BROKER && MQTT_PORT)
 
-const BROKER_URL = IS_CONFIG_VALID ? `${MQTT_PROTOCOL}://${MQTT_BROKER}:${MQTT_PORT}/mqtt` : ''
+const BROKER_URL = IS_CONFIG_VALID ? `${MQTT_PROTOCOL}://${MQTT_BROKER}:${MQTT_PORT}` : ''
 
 const OPTIONS: IClientOptions = {
   // Deshabilitamos el keepalive explícito para evitar el error "Keepalive timeout" en consola
@@ -37,7 +37,7 @@ const OPTIONS: IClientOptions = {
   keepalive: 0,
   clientId: `Orchidium-Web-${Math.random().toString(16).substring(2, 8)}`,
   protocolId: 'MQTT',
-  protocolVersion: 4,
+  protocolVersion: 5,
   clean: true,
   // Aumentamos el periodo de reconexión para no saturar en caso de fallo
   reconnectPeriod: 5000,
