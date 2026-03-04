@@ -331,6 +331,23 @@ Pega tus credenciales de producción (Neon DB, HiveMQ, Google Auth)
 
 > **Importante:** Asegúrate de incluir la variable `COMPOSE_PROFILES=cloud` al final del archivo para que Docker levante solo los servicios de producción conectados a Neon y HiveMQ.
 
+#### 4. Generación de Certificados SSL (Mosquitto Cloud)
+
+Para que el frontend (Vercel) y los ESP32 puedan conectarse de forma segura al broker MQTT en el VPS, es obligatorio generar certificados SSL válidos utilizando Let's Encrypt.
+
+Para mantener el sistema anfitrión limpio, ejecutamos Certbot de forma efímera a través de Docker. Esto creará los certificados y los guardará directamente en la carpeta del proyecto.
+
+> **Requisito previo:** Asegúrate de que los subdominios (ej. `vps.tudominio.com`) ya estén apuntando a la IP del VPS y que el puerto 80 del servidor esté libre.
+
+Ejecuta el siguiente comando en la raíz del proyecto (`pristinoplant`):
+
+```bash
+cd pristinoplant
+sudo docker run -it --rm -p 80:80 \
+  -v $(pwd)/infrastructure/certs:/etc/letsencrypt \
+  certbot/certbot certonly --standalone \
+  -d vps.midominio.com -d mqtt.midominio.com
+
 ---
 
 ### 🚀 Despliegue y Actualización

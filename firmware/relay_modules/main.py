@@ -15,7 +15,7 @@ import uasyncio as asyncio # type: ignore
 
 # ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
-DEBUG = False
+DEBUG = True
 
 # ---- Configuración MQTT ----
 MQTT_CONFIG = {
@@ -1055,15 +1055,16 @@ async def wifi_coro():
 
                 log(f"\n📡  Conexión WiFi Establecida {Colors.GREEN}| IP: {wlan.ifconfig()[0]}{Colors.RESET}")
 
-                # =========================================================
-                # 🔥 INYECCIÓN DE DNS PERSONALIZADO (BYPASS CANTV) 🔥
+                # Inyección de DNS
                 try:
-                    ip, subnet, gateway, dns_actual = wlan.ifconfig()
-                    wlan.ifconfig((ip, subnet, gateway, '8.8.4.4'))
-                    log(f"🌍  DNS: {Colors.CYAN}8.8.4.4{Colors.RESET} (Original: {dns_actual})")
+                    # google_dns = "8.8.4.4"
+                    cloudflare_dns = "1.1.1.1"
+                    ip, subnet, gateway, dns = wlan.ifconfig()
+                    wlan.ifconfig((ip, subnet, gateway, cloudflare_dns))
+                    if DEBUG:
+                        log(f"\n🌍  DNS: {Colors.CYAN}{cloudflare_dns}{Colors.RESET}")
                 except Exception as e:
-                    log(f"⚠️  Error forzando DNS en Main: {e}")
-                # =========================================================
+                    if DEBUG: log(f"⚠️  Error forzando DNS en Boot: {e}")
 
                 # Resetear contador de falla
                 wifi_disconnect_start = None
@@ -1143,13 +1144,7 @@ async def mqtt_connector_task(client_id):
         # Gestionamos la (Re)conexión
         if client is None:
             try:
-                # [Optimización Crítica] Limpieza de RAM antes de SSL Handshake
-                # El handshake SSL requiere mucha RAM contigua para claves RSA.
                 collect()
-                log_disk_usage()
-                log_ram_usage()
-                
-                log(f"\n📡  Conectando {Colors.BLUE}Broker MQTT{Colors.RESET}")
 
                 # Inicializa el Cliente MQTT
                 client = MQTTClient(
@@ -1180,10 +1175,18 @@ async def mqtt_connector_task(client_id):
                 wd_timer = Timer(0)
                 wd_timer.init(period=wd_timeout_ms, mode=Timer.ONE_SHOT, callback=_connection_timeout_handler)
 
+                # [Optimización Crítica] Limpieza de RAM antes de SSL Handshake
+                # El handshake SSL requiere mucha RAM contigua para claves RSA.
+                collect()
+                log_disk_usage()
+                log_ram_usage()
+                
+                log(f"\n📡  Conectando {Colors.BLUE}Broker MQTT{Colors.RESET}")
+
                 try:
-                    # Iniciamos en una sesión limpia.
-                    # Sin persistencia
-                    client.connect()
+                    # Para persistencia, clean_session debe ser False. 
+                    # Esto permite que el Broker guarde las suscripciones y mensajes QOS 1 mientras estás offline.
+                    client.connect(clean_session=False)
                 finally:
                     # SIEMPRE desactivamos el timer si la función retorna con éxito.
                     wd_timer.deinit()
@@ -1191,15 +1194,17 @@ async def mqtt_connector_task(client_id):
                 log(f"📡  Conexión MQTT {Colors.GREEN}Establecida{Colors.RESET}", end="\n")
 
                 # Publica que el ESP32 esta ONLINE
+                # retain=True: El último estado se queda en el Broker para nuevos suscriptores
+                # qos=1: Asegura que el mensaje llegue al menos una vez
                 client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=1)
 
                 # Suscripción a tópicos
+                # Al usar clean_session=False, si el ESP32 se desconecta un momento, 
+                # no perderá las órdenes enviadas a "irrigation/cmd" y "cmd/" durante ese tiempo.
                 # cmd/
                 client.subscribe(MQTT_TOPIC_CMD, qos=1)
                 # irrigation/cmd
                 client.subscribe(MQTT_TOPIC_IRRIGATION_CMD, qos=1)
-
-                # Con sesión reanudada, el broker enviará los mensajes pendientes.
 
                 # Resincronizamos los estados de los actuadores.
                 for relay_info in relays.values():

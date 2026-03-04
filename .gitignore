@@ -36,7 +36,8 @@
 # Contiene los archivos de la base de datos local.
 # Son datos, no código, y pueden ser muy grandes.
 **/data
-infrastructure/mosquitto/config/passwd
+**/passwd
+**/log
 
 # ---- Artefactos de Build y Caché de la Aplicación Next.js ----
 # Especificamos la ruta para ser precisos.
