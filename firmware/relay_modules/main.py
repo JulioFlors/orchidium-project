@@ -15,7 +15,7 @@ import uasyncio as asyncio # type: ignore
 
 # ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
-DEBUG = True
+DEBUG = False
 
 # ---- Configuración MQTT ----
 MQTT_CONFIG = {
@@ -28,10 +28,10 @@ MQTT_CONFIG = {
     # Intervalo para publicar el estado `online` para confirmar conectividad
     "PUBLISH_INTERVAL": 30, # 30 seg
     # tiempo máximo que (connect, check_msg, ping) esperará antes de fallar y lanzar una excepción.
-    "SOCKET_TIMEOUT": 30,
+    "SOCKET_TIMEOUT": 60,
     # tiempo máximo que el cliente esperará para que se complete un intercambio completo de mensajes MQTT(QoS) 1
     # [WDT Safety]: Debe ser MENOR que el Watchdog de Hardware (65s)
-    "MESSAGE_TIMEOUT": 60,
+    "MESSAGE_TIMEOUT": 90,
 }
 
 # ---- Configuración Resiliencia / Watchdog ----
@@ -39,7 +39,7 @@ MQTT_CONFIG = {
 MAX_OFFLINE_RESET_SEC = 300
 # Tiempo del Watchdog Timer (Hardware) en milisegundos (65 segundos (1m 5s))
 # [WDT Safety]: Debe ser mayor que MESSAGE_TIMEOUT (60s) para evitar reinicios durante operaciones lentas.
-WDT_TIMEOUT_MS = 65000
+WDT_TIMEOUT_MS = 100000
 
 # ---- Tópicos MQTT ----
 BASE_TOPIC = b"PristinoPlant/Actuator_Controller"
@@ -1110,14 +1110,6 @@ async def check_critical_mqtt_errors(e):
          import uasyncio as asyncio
          await asyncio.sleep(5)
          safe_reset()
-    
-    # [CRÍTICO] Si es Fallo EWRITELEN (3) (Buffer lleno/Fragmentación), Reiniciamos.
-    if isinstance(e, MQTTException) and e.args and e.args[0] == 3:
-         log(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Buffer de escritura lleno (Fragmentación RAM).")
-         log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo...{Colors.RESET}\n")
-         import uasyncio as asyncio
-         await asyncio.sleep(5)
-         safe_reset()
 
 # ---- CORUTINA: Gestión de Conexión MQTT (Relay Modules) ----
 async def mqtt_connector_task(client_id):
@@ -1130,6 +1122,32 @@ async def mqtt_connector_task(client_id):
     from machine import Timer
     from umqtt.simple2 import MQTTClient, MQTTException # type: ignore
     from utime   import ticks_ms, ticks_diff #type: ignore
+
+    # 🩹 PARCHE MAESTRO SSL: Sobreescribimos el _write de la librería
+    def _robust_write(self, bytes_wr, length=-1):
+        """Asegura que todos los bytes se envíen, incluso si el socket está ocupado."""
+        data = bytes_wr if length == -1 else bytes_wr[:length]
+        total_written = 0
+        
+        while total_written < len(data):
+            self._sock_timeout(self.poller_w, self.socket_timeout)
+            try:
+                # Intentamos escribir el pedazo que falta
+                written = self.sock.write(data[total_written:])
+            except AttributeError:
+                raise MQTTException(8)
+            
+            if written is None:
+                continue # El socket está ocupado procesando, reintentamos
+            if written == 0:
+                raise MQTTException(3) # Conexión cerrada
+                
+            total_written += written
+            
+        return total_written
+
+    # Aplicamos el parche a la clase antes de instanciarla
+    MQTTClient._write = _robust_write
 
     # Definimos el timeout (ms)
     wd_timeout_ms = (MQTT_CONFIG["SOCKET_TIMEOUT"] + 1) * 1000
@@ -1186,7 +1204,7 @@ async def mqtt_connector_task(client_id):
                 try:
                     # Para persistencia, clean_session debe ser False. 
                     # Esto permite que el Broker guarde las suscripciones y mensajes QOS 1 mientras estás offline.
-                    client.connect(clean_session=False)
+                    client.connect(clean_session=True)
                 finally:
                     # SIEMPRE desactivamos el timer si la función retorna con éxito.
                     wd_timer.deinit()

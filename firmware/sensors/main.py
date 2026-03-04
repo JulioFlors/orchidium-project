@@ -566,7 +566,7 @@ async def mqtt_connector_task(client_id):
                 try:
                     # Para persistencia, clean_session debe ser False. 
                     # Esto permite que el Broker guarde las suscripciones y mensajes QOS 1 mientras estás offline.
-                    client.connect(clean_session=False)
+                    client.connect(clean_session=True)
                 finally:
                     # SIEMPRE desactivamos el timer si la función retorna con éxito.
                     wd_timer.deinit()
