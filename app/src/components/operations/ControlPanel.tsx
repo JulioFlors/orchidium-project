@@ -30,26 +30,24 @@ const TOPIC_STATE_FERTIGATION = `${TOPIC_PREFIX}/irrigation/state/valve/fertigat
 const TOPIC_STATE_MAIN_WATER = `${TOPIC_PREFIX}/irrigation/state/valve/main_water`
 const TOPIC_STATE_AGROCHEMICAL = `${TOPIC_PREFIX}/irrigation/state/valve/agrochemical`
 
-// IDs de Hardware (Sincronizados con firmware/relay_modules/main.py)
-const HARDWARE = {
-  PUMP: 'pump',
-  VALVES: {
-    MAIN_SOURCE: 'main_water',
-    AGROCHEMICAL: 'agrochemical',
-    FOGGERS: 'fogger',
-    FERTIGATION: 'fertigation',
-    SPRINKLERS: 'sprinkler',
-    SOIL_WET: 'soil_wet',
-  },
+// Mapa de Circuitos de Riego → Nombres del firmware
+const CIRCUIT_MAP: Record<string, string | string[]> = {
+  irrigation: 'IRRIGATION',
+  humidification: 'HUMIDIFICATION',
+  soilWet: 'SOIL_WETTING',
+  fertigation: ['FERTIGATION', 'FUMIGATION'],
 }
+
+// Duración por defecto para activación manual (10 minutos)
+const DEFAULT_DURATION_SEC = 600
 
 export function ControlPanel() {
   const { connect, status, publish, subscribe, messages } = useMqttStore()
 
   // --- Estados Visuales ---
-  const [loadingZones, setLoadingZones] = useState<Record<string, boolean>>({})
+  const [loadingCircuits, setLoadingCircuits] = useState<Record<string, boolean>>({})
 
-  // Nivel de Notificación removido, render estático  // Flag de "Listo" (Sincronizado con MQTT)
+  // Flag de "Listo" (Sincronizado con MQTT)
   const [isReady, setIsReady] = useState(false)
 
   // Referencias para Timeouts de Comandos (120s)
@@ -74,8 +72,8 @@ export function ControlPanel() {
     }
   }, [status, subscribe])
 
-  // --- 2. Helper de Estado Activo ---
-  const isZoneActive = (valveTopic: string) => {
+  // --- 2. Helper de Estado de Actuador ---
+  const isActuatorActive = (valveTopic: string) => {
     if (!isReady) return false
     const valveState = String(messages[valveTopic]?.payload || 'OFF').replace(/['"]+/g, '')
 
@@ -83,17 +81,17 @@ export function ControlPanel() {
   }
 
   // Mapeo Directo (Sin timers locales, solo verdad del firmware)
-  // [MODIFICACIÓN] Estado Estricto: Solo activo si TODOS los componentes están ON
-  const isMainWaterOn = isZoneActive(TOPIC_STATE_MAIN_WATER)
-  const isAgroOn = isZoneActive(TOPIC_STATE_AGROCHEMICAL)
+  // Estado Estricto: Solo activo si TODOS los componentes están ON
+  const isMainWaterOn = isActuatorActive(TOPIC_STATE_MAIN_WATER)
+  const isAgroOn = isActuatorActive(TOPIC_STATE_AGROCHEMICAL)
 
-  // [MODIFICACIÓN] Estado "Activo": Válvula de Zona + Válvula Principal (Ignoramos Bomba por el delay)
+  // Estado "Activo": Válvula de Línea + Válvula Fuente (Ignoramos Bomba por el delay)
   // Esto da feedback inmediato al usuario mientras la bomba arranca en background (10s después)
-  const activeZones = {
-    irrigation: isZoneActive(TOPIC_STATE_SPRINKLER) && isMainWaterOn,
-    humidification: isZoneActive(TOPIC_STATE_FOGGER) && isMainWaterOn,
-    soilWet: isZoneActive(TOPIC_STATE_SOIL_WET) && isMainWaterOn,
-    fertigation: isZoneActive(TOPIC_STATE_FERTIGATION) && isAgroOn, // Aquí Ferti + Agro (No Main)
+  const activeCircuits = {
+    irrigation: isActuatorActive(TOPIC_STATE_SPRINKLER) && isMainWaterOn,
+    humidification: isActuatorActive(TOPIC_STATE_FOGGER) && isMainWaterOn,
+    soilWet: isActuatorActive(TOPIC_STATE_SOIL_WET) && isMainWaterOn,
+    fertigation: isActuatorActive(TOPIC_STATE_FERTIGATION) && isAgroOn, // Aquí Ferti + Agro (No Main)
   }
 
   // --- 3. Monitoreo de Resiliencia (Limpieza de Timeouts) ---
@@ -108,22 +106,22 @@ export function ControlPanel() {
       })
 
       // Desbloquear UI inmediatamente (Async para evitar linter warning)
-      setTimeout(() => setLoadingZones({}), 0)
+      setTimeout(() => setLoadingCircuits({}), 0)
     }
   }, [isDeviceOnline, isReady])
 
   // Stable stopLoading function
-  const stopLoading = useCallback((zone: string) => {
-    if (commandTimeouts.current[zone]) {
-      clearTimeout(commandTimeouts.current[zone])
-      delete commandTimeouts.current[zone]
+  const stopLoading = useCallback((circuit: string) => {
+    if (commandTimeouts.current[circuit]) {
+      clearTimeout(commandTimeouts.current[circuit])
+      delete commandTimeouts.current[circuit]
     }
     // Async update
     setTimeout(() => {
-      setLoadingZones((prev) => {
+      setLoadingCircuits((prev) => {
         const next = { ...prev }
 
-        delete next[zone]
+        delete next[circuit]
 
         return next
       })
@@ -131,128 +129,83 @@ export function ControlPanel() {
   }, []) // Empty deps is fine as ref and setState are stable
 
   // B) Si el estado cambia a lo esperado -> ÉXITO (Limpiar Timeout)
-  // Usamos useEffect para analizar cambios. Si activeZones cambia,
-  // verificamos si estábamos esperando esa zona (timeout activo).
+  // Usamos useEffect para analizar cambios. Si activeCircuits cambia,
+  // verificamos si estábamos esperando ese circuito (timeout activo).
   useEffect(() => {
     if (commandTimeouts.current['irrigation']) {
       setTimeout(() => stopLoading('irrigation'), 0)
     }
-  }, [activeZones.irrigation, stopLoading])
+  }, [activeCircuits.irrigation, stopLoading])
 
   useEffect(() => {
     if (commandTimeouts.current['humidification']) {
       setTimeout(() => stopLoading('humidification'), 0)
     }
-  }, [activeZones.humidification, stopLoading])
+  }, [activeCircuits.humidification, stopLoading])
 
   useEffect(() => {
     if (commandTimeouts.current['soilWet']) {
       setTimeout(() => stopLoading('soilWet'), 0)
     }
-  }, [activeZones.soilWet, stopLoading])
+  }, [activeCircuits.soilWet, stopLoading])
 
   useEffect(() => {
     if (commandTimeouts.current['fertigation']) {
       setTimeout(() => stopLoading('fertigation'), 0)
     }
-  }, [activeZones.fertigation, stopLoading])
+  }, [activeCircuits.fertigation, stopLoading])
 
   // --- 4. Timeout Handler (Fallo) ---
-  const handleCommandTimeout = (zone: string) => {
+  const handleCommandTimeout = (circuit: string) => {
     // 1. Limpiar ref por si acaso
-    if (commandTimeouts.current[zone]) {
-      delete commandTimeouts.current[zone]
+    if (commandTimeouts.current[circuit]) {
+      delete commandTimeouts.current[circuit]
     }
 
     // 2. Quitar loading (Desbloquear UI)
-    setLoadingZones((prev) => {
+    setLoadingCircuits((prev) => {
       const next = { ...prev }
 
-      delete next[zone]
+      delete next[circuit]
 
       return next
     })
   }
 
   // Mutua Exclusión (Si hay loading o offline)
-  // Pero permitimos 'resetear' si hay error? No, el timeout ya resetea.
   const isSystemBusy =
-    Object.values(activeZones).some(Boolean) || Object.keys(loadingZones).length > 0
+    Object.values(activeCircuits).some(Boolean) || Object.keys(loadingCircuits).length > 0
 
-  // Helper MQTT
-  const sendActuatorCommand = (id: string, state: 'ON' | 'OFF', duration = 0, delay = 0) => {
-    const payload: IrrigationCommand = { actuator: id, state }
-
-    if (state === 'ON') {
-      if (duration > 0) payload.duration = duration
-      if (delay > 0) payload.start_delay = delay
-    }
-    publish(TOPIC_COMMAND, payload)
-  }
-
-  // Action Handler
-  const toggleZone = (zone: keyof typeof activeZones) => {
+  // Action Handler — Envía un solo JSON con circuit al ESP32
+  const toggleCircuit = (circuit: keyof typeof activeCircuits) => {
     if (!isDeviceOnline) return
 
-    const isTurningOn = !activeZones[zone]
+    const isTurningOn = !activeCircuits[circuit]
 
     if (isTurningOn && isSystemBusy) return
 
     // 1. Set Loading
-    setLoadingZones((prev) => ({ ...prev, [zone]: true }))
+    setLoadingCircuits((prev) => ({ ...prev, [circuit]: true }))
 
-    // 3. Start Safety Timeout (120s)
-    // Limpiar previo si existiera
-    if (commandTimeouts.current[zone]) clearTimeout(commandTimeouts.current[zone])
+    // 2. Start Safety Timeout (120s)
+    if (commandTimeouts.current[circuit]) clearTimeout(commandTimeouts.current[circuit])
 
-    commandTimeouts.current[zone] = setTimeout(() => {
-      handleCommandTimeout(zone)
-    }, 120000) // 120 seconds
+    commandTimeouts.current[circuit] = setTimeout(() => {
+      handleCommandTimeout(circuit)
+    }, 120000)
 
-    // 4. Send Command
-    const DURATION_SEC = 600
-    const PUMP_DELAY = 10
-    const VALVE_DURATION = DURATION_SEC + PUMP_DELAY
+    // 3. Enviar un solo comando de Circuito de Riego
+    const mapped = CIRCUIT_MAP[circuit]
+    const circuitName = Array.isArray(mapped) ? mapped[0] : mapped
     const state = isTurningOn ? 'ON' : 'OFF'
 
-    // Definimos hardware targets según zona
-    if (zone === 'irrigation') {
-      sendActuatorCommand(HARDWARE.VALVES.MAIN_SOURCE, state, isTurningOn ? VALVE_DURATION : 0)
-      sendActuatorCommand(HARDWARE.VALVES.SPRINKLERS, state, isTurningOn ? VALVE_DURATION : 0)
-      sendActuatorCommand(
-        HARDWARE.PUMP,
-        state,
-        isTurningOn ? DURATION_SEC : 0,
-        isTurningOn ? PUMP_DELAY : 0,
-      )
-    } else if (zone === 'humidification') {
-      sendActuatorCommand(HARDWARE.VALVES.MAIN_SOURCE, state, isTurningOn ? VALVE_DURATION : 0)
-      sendActuatorCommand(HARDWARE.VALVES.FOGGERS, state, isTurningOn ? VALVE_DURATION : 0)
-      sendActuatorCommand(
-        HARDWARE.PUMP,
-        state,
-        isTurningOn ? DURATION_SEC : 0,
-        isTurningOn ? PUMP_DELAY : 0,
-      )
-    } else if (zone === 'soilWet') {
-      sendActuatorCommand(HARDWARE.VALVES.MAIN_SOURCE, state, isTurningOn ? VALVE_DURATION : 0)
-      sendActuatorCommand(HARDWARE.VALVES.SOIL_WET, state, isTurningOn ? VALVE_DURATION : 0)
-      sendActuatorCommand(
-        HARDWARE.PUMP,
-        state,
-        isTurningOn ? DURATION_SEC : 0,
-        isTurningOn ? PUMP_DELAY : 0,
-      )
-    } else if (zone === 'fertigation') {
-      sendActuatorCommand(HARDWARE.VALVES.AGROCHEMICAL, state, isTurningOn ? VALVE_DURATION : 0)
-      sendActuatorCommand(HARDWARE.VALVES.FERTIGATION, state, isTurningOn ? VALVE_DURATION : 0)
-      sendActuatorCommand(
-        HARDWARE.PUMP,
-        state,
-        isTurningOn ? DURATION_SEC : 0,
-        isTurningOn ? PUMP_DELAY : 0,
-      )
+    const payload: IrrigationCommand = {
+      circuit: circuitName,
+      state,
+      ...(isTurningOn && { duration: DEFAULT_DURATION_SEC }),
     }
+
+    publish(TOPIC_COMMAND, payload)
   }
 
   // Estado Visual
@@ -278,45 +231,45 @@ export function ControlPanel() {
         <ActuatorCard
           color="blue"
           icon={<IoWaterOutline />}
-          isActive={activeZones.irrigation}
+          isActive={activeCircuits.irrigation}
           isDeviceOnline={isDeviceOnline}
-          isDisabled={isConnecting || isOffline || (isSystemBusy && !activeZones.irrigation)}
-          isLoading={loadingZones['irrigation']}
+          isDisabled={isConnecting || isOffline || (isSystemBusy && !activeCircuits.irrigation)}
+          isLoading={loadingCircuits['irrigation']}
           title="Regar"
-          onToggle={() => toggleZone('irrigation')}
+          onToggle={() => toggleCircuit('irrigation')}
         />
 
         <ActuatorCard
           color="purple"
           icon={<PiSprayBottle />}
-          isActive={activeZones.humidification}
+          isActive={activeCircuits.humidification}
           isDeviceOnline={isDeviceOnline}
-          isDisabled={isConnecting || isOffline || (isSystemBusy && !activeZones.humidification)}
-          isLoading={loadingZones['humidification']}
+          isDisabled={isConnecting || isOffline || (isSystemBusy && !activeCircuits.humidification)}
+          isLoading={loadingCircuits['humidification']}
           title="Nebulizar"
-          onToggle={() => toggleZone('humidification')}
+          onToggle={() => toggleCircuit('humidification')}
         />
 
         <ActuatorCard
           color="cyan"
           icon={<MdDewPoint />}
-          isActive={activeZones.soilWet}
+          isActive={activeCircuits.soilWet}
           isDeviceOnline={isDeviceOnline}
-          isDisabled={isConnecting || isOffline || (isSystemBusy && !activeZones.soilWet)}
-          isLoading={loadingZones['soilWet']}
+          isDisabled={isConnecting || isOffline || (isSystemBusy && !activeCircuits.soilWet)}
+          isLoading={loadingCircuits['soilWet']}
           title="Humedecer Suelo"
-          onToggle={() => toggleZone('soilWet')}
+          onToggle={() => toggleCircuit('soilWet')}
         />
 
         <ActuatorCard
           color="amber"
           icon={<IoFlaskOutline />}
-          isActive={activeZones.fertigation}
+          isActive={activeCircuits.fertigation}
           isDeviceOnline={isDeviceOnline}
-          isDisabled={isConnecting || isOffline || (isSystemBusy && !activeZones.fertigation)}
-          isLoading={loadingZones['fertigation']}
+          isDisabled={isConnecting || isOffline || (isSystemBusy && !activeCircuits.fertigation)}
+          isLoading={loadingCircuits['fertigation']}
           title="Fertirriego"
-          onToggle={() => toggleZone('fertigation')}
+          onToggle={() => toggleCircuit('fertigation')}
         />
 
         {/* Nota Estática de Seguridad (Spotlight & Gradient Border styling) */}

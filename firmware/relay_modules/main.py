@@ -15,7 +15,7 @@ import uasyncio as asyncio # type: ignore
 
 # ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
-DEBUG = False
+DEBUG = True
 
 # ---- Configuración MQTT ----
 MQTT_CONFIG = {
@@ -65,6 +65,23 @@ MQTT_TOPIC_DEBUG_NVS = BASE_TOPIC + b"/debug/nvs"
 # ---- Parámetros LWT (Last Will and Testament) ----
 LWT_TOPIC = MQTT_TOPIC_STATUS
 LWT_MESSAGE = b"offline"
+
+# ---- Topología del Circuito de Riego (Edge Computing) ----
+# Delay de cebado de la bomba (segundos). La bomba se enciende
+# después de que las válvulas ya estén abiertas para evitar
+# presurizar tuberías vacías.
+PUMP_PRIME_DELAY = 10
+
+# Mapa de circuitos: cada propósito de riego se descompone en
+# una válvula fuente (source) y una línea de distribución (line).
+# La bomba (pump) es implícita y se activa siempre.
+IRRIGATION_CIRCUITS = {
+    "IRRIGATION":     {"source": "main_water",   "line": "sprinkler"},
+    "FERTIGATION":    {"source": "agrochemical",  "line": "fertigation"},
+    "FUMIGATION":     {"source": "agrochemical",  "line": "fertigation"},
+    "HUMIDIFICATION": {"source": "main_water",   "line": "fogger"},
+    "SOIL_WETTING":   {"source": "main_water",   "line": "soil_wet"},
+}
 
 # ---- Colors for logs ----
 class Colors:
@@ -792,132 +809,196 @@ def sub_callback(topic, msg, retained, dup):
 
                 # ---- Procesamos los datos del JSON ----
                 data = parsed_json
-
-                actuator_ref = data.get('actuator')
                 state = data.get('state', '').strip().upper()
-                duration = data.get('duration', 0) # Default 0
-                start_delay = data.get('start_delay', 0) # Default 0
 
-                # Identificamos el Relé (Por ID int o Nombre str)
-                target_relay, actuator_id = None, None
-
-                # Si actuator_ref es un número
-                if isinstance(actuator_ref, int) and actuator_ref in relays:
-                    target_relay, actuator_id = relays[actuator_ref], actuator_ref
-                # Si actuator_ref es un string
-                elif isinstance(actuator_ref, str):
-                    for id, info in relays.items():
-                        if info['name'] == actuator_ref.lower():
-                            target_relay, actuator_id = info, id
-                            break
-
-                # Validamos que el mensaje es correcto
-                if target_relay is None or state not in ["ON", "OFF"]:
-                    log(f"    └─ Error: {Colors.RED}Comando inválido (Actuador/Estado){Colors.RESET}")
-
+                if state not in ["ON", "OFF"]:
+                    log(f"    └─ Error: {Colors.RED}Estado inválido: '{state}'{Colors.RESET}")
                     return
 
-                # 🔥 Lógica de Control 🔥
-                # ---- Override: Cancelamos cualquier inicio diferido pendiente ----
-                if actuator_id in pending_start_tasks:
-                    pending_start_tasks[actuator_id].cancel()
-                    # Limpiamos NVS de la tarea diferida
-                    NVSManager.clear_task(actuator_id)
+                # ---- 🔀 BIFURCACIÓN: circuit (macro) vs actuator (individual) ----
+                circuit_name = data.get('circuit')
+                actuator_ref = data.get('actuator')
 
-                    log(f"    ├─ Info: Encendido diferido pendiente cancelado: {Colors.YELLOW}{target_relay['name']}{Colors.RESET}")
+                # ---- Lista de comandos a ejecutar ----
+                commands_to_execute = []
 
+                if circuit_name:
+                    # ---- MODO CIRCUITO (Macro) ----
+                    circuit_name = circuit_name.strip().upper()
+                    circuit_def = IRRIGATION_CIRCUITS.get(circuit_name)
+
+                    if not circuit_def:
+                        log(f"    └─ Error: {Colors.RED}Circuito desconocido: '{circuit_name}'{Colors.RESET}")
+                        return
+
+                    duration = data.get('duration', 0) # Default 0
+                    task_id = data.get('task_id', '') # Default ''
+
+                    log(f"    ├─ Modo: {Colors.CYAN}CIRCUITO{Colors.RESET} → {Colors.YELLOW}{circuit_name}{Colors.RESET}")
+
+                    # Las válvulas duran: duration + cebado
+                    valve_duration = duration + PUMP_PRIME_DELAY
+
+                    # 1. Válvula Fuente
+                    commands_to_execute.append({
+                        'actuator': circuit_def['source'],
+                        'state': state,
+                        'duration': valve_duration if state == 'ON' else 0,
+                        'start_delay': 0
+                    })
+
+                    # 2. Válvula de Línea
+                    commands_to_execute.append({
+                        'actuator': circuit_def['line'],
+                        'state': state,
+                        'duration': valve_duration if state == 'ON' else 0,
+                        'start_delay': 0
+                    })
+
+                    # 3. Bomba (con delay de cebado al encender)
+                    commands_to_execute.append({
+                        'actuator': 'pump',
+                        'state': state,
+                        'duration': duration if state == 'ON' else 0,
+                        'start_delay': PUMP_PRIME_DELAY if state == 'ON' else 0
+                    })
+
+                elif actuator_ref:
+                    # ---- MODO INDIVIDUAL (Legado/Mantenimiento) ----
+                    log(f"    ├─ Modo: {Colors.MAGENTA}INDIVIDUAL{Colors.RESET}")
+                    commands_to_execute.append({
+                        'actuator': actuator_ref,
+                        'state': state,
+                        'duration': data.get('duration', 0),
+                        'start_delay': data.get('start_delay', 0)
+                    })
+                else:
+                    log(f"    └─ Error: {Colors.RED}JSON sin 'circuit' ni 'actuator'{Colors.RESET}")
                     return
 
-                # ---- Encendido diferido ----
-                if state == "ON" and start_delay > 0:
+                # ---- 🔄 PROCESAMIENTO SECUENCIAL DE COMANDOS ----
+                for cmd in commands_to_execute:
+                    cmd_actuator = cmd['actuator']
+                    cmd_state = cmd['state']
+                    cmd_duration = cmd['duration']
+                    cmd_delay = cmd['start_delay']
+
+                    # Resolvemos el Relé (Por ID int o Nombre str)
+                    target_relay, actuator_id = None, None
+
+                    # Si actuator_ref es un número
+                    if isinstance(cmd_actuator, int) and cmd_actuator in relays:
+                        target_relay, actuator_id = relays[cmd_actuator], cmd_actuator
+                    # Si actuator_ref es un string
+                    elif isinstance(cmd_actuator, str):
+                        for id, info in relays.items():
+                            if info['name'] == cmd_actuator.lower():
+                                target_relay, actuator_id = info, id
+                                break
+
+                    # Validamos que el actuador existe
+                    if target_relay is None:
+                        log(f"    ├─ ⚠️  Actuador no encontrado: {Colors.RED}{cmd_actuator}{Colors.RESET}")
+                        continue
+
+                    # ---- Override: Cancelamos cualquier inicio diferido pendiente ----
+                    if actuator_id in pending_start_tasks:
+                        pending_start_tasks[actuator_id].cancel()
+                        # Limpiamos NVS de la tarea diferida
+                        NVSManager.clear_task(actuator_id)
+                        log(f"    ├─ Info: Encendido diferido cancelado: {Colors.YELLOW}{target_relay['name']}{Colors.RESET}")
+                        # En modo circuito no retornamos, continuamos procesando
+                        if not circuit_name:
+                            return
+
+                    # ---- Encendido diferido ----
                     # Guardamos la intención EN DISCO Inmediatamente (Persistencia)
                     # Usamos una key especial: "{id}_pending"
-                    try:
+                    if cmd_state == "ON" and cmd_delay > 0:
+                        try:
+                            from utime import time #type: ignore
+                            target_start = time() + cmd_delay
+                            task_data = {
+                                "actuator_id": actuator_id,
+                                "key": f"{actuator_id}_pending",
+                                "target_start_epoch": target_start,
+                                "type": "delayed_start",
+                                "start_delay_original": cmd_delay,
+                                "duration": cmd_duration
+                            }
+                            NVSManager.save_task(task_data)
+                        except Exception as e:
+                            log(f"⚠️  Error guardando diferido NVS: {e}")
+
+                        # Creamos la tarea asíncrona para encender en el futuro
+                        # Pasamos target_relay y actuator_id ya resueltos
+                        task = asyncio.create_task(
+                            delayed_start_task(target_relay, actuator_id, cmd_delay, cmd_duration)
+                        )
+
+                        # Guardamos referencia para poder cancelarla si llega otro comando
+                        pending_start_tasks[actuator_id] = task
+
+                        log(f"    ├─ Acción: {Colors.CYAN}Encendido diferido → {target_relay['name']} en {cmd_delay}s{Colors.RESET}")
+                        log(f"    ├─ 💾  Persistido en NVS")
+                        continue
+
+                    # ---- Accionamos físicamente el relay ----
+                    relay_value = 1 if cmd_state == "ON" else 0
+
+                    if target_relay['state'] != cmd_state:
+                        target_relay['pin'].value(relay_value)
+                        target_relay['state'] = cmd_state
+
+                        log(f"    ├─ Acción: Relay {target_relay['name']} ➜  {Colors.MAGENTA}{cmd_state}{Colors.RESET}")
+
+                    # [STRICT NVS] Si apagamos, limpiamos NVS y Timers
+                    if cmd_state == "OFF":
+                        NVSManager.clear_task(actuator_id)
+
+                        # Gestión de variables globales
+                        global active_irrigation_timers
+                        # Cancelar Timer (Sacarlo de la lista)
+                        active_irrigation_timers = [
+                            (id, t) for id, t in active_irrigation_timers if id != actuator_id
+                        ]
+
+                        log(f"    ├─ 🛑  Tarea Finalizada (NVS Limpio): {target_relay['name']}")
+
+                    # ---- Gestionamos el temporizador (Auto-Apagado) ----
+                    if cmd_state == "ON" and isinstance(cmd_duration, int) and cmd_duration > 0:
+                        # (Optimización de memoria RAM)
+                        # Lazy Imports (Importación tardía)
                         from utime import time #type: ignore
-                        target_start = time() + start_delay
-                        task_data = {
-                            "actuator_id": actuator_id,
-                            "key": f"{actuator_id}_pending", # Key especial
-                            "target_start_epoch": target_start,
-                            "type": "delayed_start",
-                            "start_delay_original": start_delay,
-                            "duration": duration
-                        }
-                        NVSManager.save_task(task_data)
-                    except Exception as e:
-                        log(f"⚠️  Error guardando diferido NVS: {e}")
 
-                    # Creamos la tarea asíncrona para encender en el futuro
-                    # Pasamos target_relay y actuator_id ya resueltos
-                    task = asyncio.create_task(
-                        delayed_start_task(target_relay, actuator_id, start_delay, duration)
-                    )
+                        end_time = time() + cmd_duration
 
-                    # Guardamos referencia para poder cancelarla si llega otro comando
-                    pending_start_tasks[actuator_id] = task
+                        # Gestión de variables globales
+                        global active_irrigation_timers
+                        # Limpiamos el timer anterior para este actuador
+                        active_irrigation_timers = [
+                            (id, t) for id, t in active_irrigation_timers if id != actuator_id
+                        ]
+                        active_irrigation_timers.append((actuator_id, end_time))
 
-                    log(f"    ├─ Acción: {Colors.CYAN}Encendido diferido programado para {target_relay['name']} en {start_delay}s{Colors.RESET}")
-                    log(f"    └─ 💾  Persistido en NVS")
+                        # ---- BITÁCORA (NVS) ----
+                        # Guardamos la intención de la tarea inmediata
+                        try:
+                            task_data = {
+                                "actuator_id": actuator_id,
+                                "start_epoch": time(),
+                                "duration": cmd_duration,
+                                "type": "irrigation_run"
+                            }
+                            NVSManager.save_task(task_data)
+                        except Exception as e:
+                            log(f"    ├─ ⚠️  Error guardando bitácora: {e}")
 
-                    return
+                        log(f"    ├─ Timer:  Apagar {target_relay['name']} en {Colors.CYAN}{cmd_duration}s{Colors.RESET}")
 
-                # ---- Accionamos físicamente el relay ----
-                relay_value = 1 if state == "ON" else 0
-
-                if target_relay['state'] != state:
-                    target_relay['pin'].value(relay_value)
-                    target_relay['state'] = state
-
-                    log(f"    └─ Acción: Relay {target_relay['name']} ➜  {Colors.MAGENTA}{state}{Colors.RESET}")
-
-                    # Despertamos al publisher
-                    state_changed.set() 
-                
-                # [STRICT NVS] Si apagamos manualmente, DEBEMOS limpiar NVS y Timers inmediatamente
-                if state == "OFF":
-                    # 1. Limpiar NVS
-                    NVSManager.clear_task(actuator_id)
-                    
-                    # 2. Cancelar Timer (Sacarlo de la lista)
-                    global active_irrigation_timers
-                    active_irrigation_timers = [
-                        (id, t) for id, t in active_irrigation_timers if id != actuator_id
-                    ]
-                    log(f"    └─ 🛑  Tarea Finalizada Manualmente (NVS Limpio)")
- 
-
-                # ---- Gestionamos el temporizador (Auto-Apagado) ----
-                if state == "ON" and isinstance(duration, int) and duration > 0:
-                    # (Optimización de memoria RAM)
-                    # Lazy Imports (Importación tardía)
-                    from utime import time #type: ignore
-
-                    end_time = time() + duration
-
-                    # Limpiamos el timer anterior para este actuador
-                    global active_irrigation_timers
-                    active_irrigation_timers = [
-                        (id, t) for id, t in active_irrigation_timers if id != actuator_id
-                    ]
-
-                    active_irrigation_timers.append((actuator_id, end_time))
-                    
-                    # ---- BITÁCORA DE VUELO (NVS) ----
-                    # Guardamos la intención de la tarea inmediata
-                    try:                        
-                        task_data = {
-                            "actuator_id": actuator_id,
-                            "start_epoch": time(),
-                            "duration": duration,
-                            "type": "irrigation_run"
-                        }
-                        NVSManager.save_task(task_data)
-                    except Exception as e:
-                        log(f"    └─ ⚠️  Error guardando bitácora: {e}")
-
-                    log(f"    └─ Timer:  Apagar en {Colors.CYAN}{duration}s{Colors.RESET}")
-
-                    return
+                # ---- Publicación agrupada de estados ----
+                # Un solo set() al final para emitir una ráfaga con todo el circuito
+                state_changed.set()
 
             except (ValueError, KeyError, TypeError) as e:
                 log(f"    └─ {Colors.RED}Error procesando Riego: {e}{Colors.RESET}")
@@ -1123,27 +1204,34 @@ async def mqtt_connector_task(client_id):
     from umqtt.simple2 import MQTTClient, MQTTException # type: ignore
     from utime   import ticks_ms, ticks_diff #type: ignore
 
-    # 🩹 PARCHE MAESTRO SSL: Sobreescribimos el _write de la librería
+    # 🩹 PARCHE SSL: Sobreescribimos el _write de la librería umqtt.simple2
     def _robust_write(self, bytes_wr, length=-1):
         """Asegura que todos los bytes se envíen, incluso si el socket está ocupado."""
+        from utime import sleep_ms
+
         data = bytes_wr if length == -1 else bytes_wr[:length]
-        total_written = 0
+        total_written = 0 # bytes transferidos
         
         while total_written < len(data):
             self._sock_timeout(self.poller_w, self.socket_timeout)
             try:
+                # Le damos la data sobrante al socket SSL
                 # Intentamos escribir el pedazo que falta
                 written = self.sock.write(data[total_written:])
             except AttributeError:
                 raise MQTTException(8)
             
             if written is None:
-                continue # El socket está ocupado procesando, reintentamos
+                # El búfer del WiFi está LLENO
+                # Congelamos este hilo 15ms antes de reintentar
+                # para que el WiFi envíe los paquetes físicos
+                sleep_ms(15)
+                continue
             if written == 0:
                 raise MQTTException(3) # Conexión cerrada
-                
+
             total_written += written
-            
+
         return total_written
 
     # Aplicamos el parche a la clase antes de instanciarla
@@ -1268,7 +1356,7 @@ async def mqtt_connector_task(client_id):
                     log(f"\n💀  Conexión {Colors.RED} ZOMBIE {Colors.RESET}detectada")
 
                     # Lanzamos una excepción a propósito para ser capturados
-                    raise OSError("Se ha excedido el TIMEOUT del broker MQTT, disconnecting")
+                    raise OSError("Se ha excedido el TIMEOUT del broker MQTT")
 
             except (MQTTException, OSError) as e:
                 log_mqtt_exception("Error en Operación MQTT", e)
@@ -1299,7 +1387,7 @@ async def delayed_start_task(target_relay, actuator_id, delay, duration):
     from utime import time #type: ignore
 
     try:
-        log(f"    └─ ⏳ {Colors.YELLOW}Inicio Diferido:{Colors.RESET} Esperando {delay}s para {target_relay['name']}")
+        log(f"    └─ 🕒 {Colors.YELLOW}Inicio Diferido:{Colors.RESET} Esperando {delay}s para {target_relay['name']}")
 
         # Esperamos el tiempo previsto
         await asyncio.sleep(delay)
@@ -1347,7 +1435,6 @@ async def delayed_start_task(target_relay, actuator_id, delay, duration):
 
             # Gestión de variables globales
             global active_irrigation_timers
-
             # Limpiamos timers anteriores de este actuador
             active_irrigation_timers = [
                 (id, t) for id, t in active_irrigation_timers if id != actuator_id
@@ -1378,6 +1465,7 @@ async def timer_manager_task():
 
     Revisa cada segundo si algún actuador debe apagarse.
     """
+    # Gestión de variables globales
     global active_irrigation_timers
 
     # (Optimización de memoria RAM)

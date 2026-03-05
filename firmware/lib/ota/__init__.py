@@ -55,14 +55,14 @@ class OTAUpdater:
         import ntptime #type: ignore
         import utime #type: ignore
         
-        self.log(f"\n⌚  Sincronizando ", end="")
+        self.log(f"\n🕒  Sincronizando ", end="")
 
         max_retries = 10
         for attempt in range(1, max_retries + 1):
             # Sincronizar hora (Crítico para SSL)
             try: 
                 ntptime.settime()
-                self.log(f"\n⌚  Hora del sistema {Colors.GREEN}sincronizada{Colors.RESET}")
+                self.log(f"\n🕒  Hora del sistema {Colors.GREEN}sincronizada{Colors.RESET}")
                 return True
             except: 
                 self.log(f"{Colors.BLUE}.{Colors.RESET}", end="")

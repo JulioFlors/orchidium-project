@@ -512,6 +512,39 @@ async def mqtt_connector_task(client_id):
     from umqtt.simple2 import MQTTClient, MQTTException # type: ignore
     from utime   import ticks_ms, ticks_diff #type: ignore
 
+    # 🩹 PARCHE SSL: Sobreescribimos el _write de la librería umqtt.simple2
+    def _robust_write(self, bytes_wr, length=-1):
+        """Asegura que todos los bytes se envíen, incluso si el socket está ocupado."""
+        from utime import sleep_ms
+
+        data = bytes_wr if length == -1 else bytes_wr[:length]
+        total_written = 0 # bytes transferidos
+        
+        while total_written < len(data):
+            self._sock_timeout(self.poller_w, self.socket_timeout)
+            try:
+                # Le damos la data sobrante al socket SSL
+                # Intentamos escribir el pedazo que falta
+                written = self.sock.write(data[total_written:])
+            except AttributeError:
+                raise MQTTException(8)
+            
+            if written is None:
+                # El búfer del WiFi está LLENO
+                # Congelamos este hilo 15ms antes de reintentar
+                # para que el WiFi envíe los paquetes físicos
+                sleep_ms(15)
+                continue
+            if written == 0:
+                raise MQTTException(3) # Conexión cerrada
+
+            total_written += written
+
+        return total_written
+
+    # Aplicamos el parche a la clase antes de instanciarla
+    MQTTClient._write = _robust_write
+
     # Definimos el timeout (ms)
     wd_timeout_ms = (MQTT_CONFIG["SOCKET_TIMEOUT"] + 1) * 1000
 

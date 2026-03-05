@@ -30,53 +30,6 @@ const INFLUX_BUCKET = process.env.INFLUX_BUCKET || 'telemetry'
 
 // ---- Configuración de Reglas ----
 const RAIN_THRESHOLD_SECONDS = 1800 // 30 minutos de lluvia acumulada cancelan el riego
-const PUMP_PRIME_DELAY_SECONDS = 10 // Tiempo de cebado de bomba
-
-// ---- IDs del Nodo Actuador (Hardware) ----
-// Alineados con el firmware /app/src/interfaces/mqtt.interface.ts 
-const PUMP = 'pump'      // Bomba de agua
-const VALVES = {
-  SOURCE: {
-    MAIN: 'main_water',        // Entrada de agua principal
-    TANK: 'agrochemical'         // Entrada de agua del tanque
-  },
-  LINE: {
-    FOGGERS: 'fogger',     // Salida para Nebulizadores
-    FERTIGATION: 'fertigation', // Salida para Fertirriego
-    SPRINKLERS: 'sprinkler',  // Salida para Aspersores
-    SOIL: 'soil_wet'         // Salida para regar el suelo
-  }
-}
-
-// ---- Topología del Circuito Hidráulico (Lógica) ----
-interface IrrigationCircuit {
-  sourceId: string; // Agua de Entrada
-  lineId: string;   // Línea de distribución
-}
-
-// ---- Mapa de Orquestación (Configuración) ----
-const TASK_CIRCUITS: Record<TaskPurpose, IrrigationCircuit> = {
-  IRRIGATION: {
-    sourceId: VALVES.SOURCE.MAIN,
-    lineId: VALVES.LINE.SPRINKLERS
-  },
-  FERTIGATION: {
-    sourceId: VALVES.SOURCE.TANK,
-    lineId: VALVES.LINE.FERTIGATION
-  },
-  FUMIGATION: {
-    sourceId: VALVES.SOURCE.TANK,
-    lineId: VALVES.LINE.FERTIGATION
-  },
-  HUMIDIFICATION: {
-    sourceId: VALVES.SOURCE.MAIN,
-    lineId: VALVES.LINE.FOGGERS
-  },
-  SOIL_WETTING: {
-    sourceId: VALVES.SOURCE.MAIN,
-    lineId: VALVES.LINE.SOIL
-  }
-}
 
 // ---- colors for Logs ----
 const colors = {
@@ -178,11 +131,11 @@ mqttClient.on('message', async (topic, payload) => {
       
       if (message === 'online' && lastActuatorState !== 'online') {
         lastActuatorState = 'online'
-        Logger.success('El Nodo Actuador está ONLINE y listo para operar.')
+        Logger.success('Nodo Actuador: ONLINE')
       } 
       else if (message === 'offline' && lastActuatorState !== 'offline') {
         lastActuatorState = 'offline'
-        Logger.warn('El Nodo Actuador entró en estado OFFLINE.')
+        Logger.warn('Nodo Actuador: OFFLINE')
         
         // Fallar tareas confirmadas / En Progreso ya que cortarán abruptamente.
         // El ESP32 las retomará solo si revive dentro de la ventana de gracia.
@@ -215,7 +168,7 @@ mqttClient.on('message', async (topic, payload) => {
       return
     }
 
-    // 3. Telemetría Funcional Física (Los relés del Circuito Hidráulico cambiaron de estado)
+    // 3. Telemetría Funcional Física (Los relés del Circuito de Riego cambiaron de estado)
     if (topic.startsWith('PristinoPlant/Actuator_Controller/irrigation/state/')) {
       // La telemetría física no devuelve el taskId, porque los relés son tontos.
       // Debemos buscar si hay alguna tarea CONFIRMADA o FAILED (recuperada por el hardware) que esté operando
@@ -224,16 +177,16 @@ mqttClient.on('message', async (topic, payload) => {
           where: { 
             status: { in: [TaskStatus.CONFIRMED, TaskStatus.FAILED] } 
           },
-          data: { status: TaskStatus.IN_PROGRESS, notes: 'Circuito Hidráulico activado. Actuadores en operación.' }
+          data: { status: TaskStatus.IN_PROGRESS, notes: 'Circuito de Riego abierto.' }
         })
       }
       else if (message === 'OFF') {
-        // Si la bomba se apagó (fin del Circuito Hidráulico)
+        // Si la bomba se apagó (fin del Circuito de Riego)
         // es porque finalizó exitosamente el Timer interno del Nodo Actuador.
         if (topic.endsWith('/pump')) {
           const finished = await prisma.taskLog.updateMany({
             where: { status: TaskStatus.IN_PROGRESS },
-            data: { status: TaskStatus.COMPLETED, notes: 'Circuito Hidráulico cerrado correctamente.' }
+            data: { status: TaskStatus.COMPLETED, notes: 'Circuito de Riego cerrado.' }
           })
           if (finished.count > 0) Logger.success('Tareas catalogadas con éxito rotundo (COMPLETED)')
         }
@@ -289,18 +242,18 @@ async function checkRainCondition(zone: ZoneType): Promise<{ shouldCancel: boole
 }
 
 /**
- * Envía un comando al Nodo Actuador
+ * Envía un comando de circuito al Nodo Actuador.
+ * Un solo JSON con la clave `circuit` que el ESP32 desglosará
+ * en las acciones individuales de cada relé.
  */
-function sendCommand(actuatorId: string, state: 'ON' | 'OFF', durationSeconds: number = 0, startDelay: number = 0, taskId?: string) {
-  const payload: any = {
-    actuator: actuatorId,
-    state: state,
-    duration: durationSeconds,
-    start_delay: startDelay
-  }
+function executeSequence(purpose: TaskPurpose, durationMinutes: number, taskId: string) {
+  const durationSec = durationMinutes * 60
 
-  if (taskId) {
-    payload.task_id = taskId
+  const payload = {
+    circuit: purpose,
+    state: 'ON',
+    duration: durationSec,
+    task_id: taskId
   }
 
   const message = JSON.stringify(payload)
@@ -309,32 +262,10 @@ function sendCommand(actuatorId: string, state: 'ON' | 'OFF', durationSeconds: n
     properties: {
       messageExpiryInterval: 300
     }
-  });
-  Logger.debug(`MQTT TX ➜ ${message}`)
-}
-
-/**
- * Activa la secuencia de encendido del Circuito Hidráulico definido.
- */
-function executeSequence(purpose: TaskPurpose, durationMinutes: number, taskId: string) {
-  const circuit = TASK_CIRCUITS[purpose]
-
-  if (!circuit) {
-    Logger.warn(`No existe Circuito Hidráulico definido para: ${purpose}`)
-    return
-  }
+  })
 
   Logger.info(`Despachando Circuito: ${purpose} (${durationMinutes} min) [Task: ${taskId.slice(0, 8)}]`)
-
-  const durationSec = durationMinutes * 60
-  const valvesDuration = durationSec + PUMP_PRIME_DELAY_SECONDS
-
-  // Configurar Válvulas (Fuente + Línea)
-  sendCommand(circuit.sourceId, 'ON', valvesDuration, 0, taskId)
-  sendCommand(circuit.lineId, 'ON', valvesDuration, 0, taskId)
-
-  // Encender Bomba (Con delay de cebado)
-  sendCommand(PUMP, 'ON', durationSec, PUMP_PRIME_DELAY_SECONDS, taskId)
+  Logger.debug(`MQTT TX ➜ ${message}`)
 }
 
 // ---- Ejecutor atómico de una Tarea (TaskLog) ----
@@ -358,7 +289,7 @@ async function processTaskLog(taskLog: any) {
       }
     }
 
-    // Activar Secuencia del Circuito Hidráulico (Despachar)
+    // Activar Secuencia del Circuito de Riego (Despachar)
     executeSequence(taskLog.purpose, taskLog.duration, taskLog.id)
 
     // Marcar como CONFIRMED para sacarlo del polling (que solo busca PENDING)
@@ -367,7 +298,7 @@ async function processTaskLog(taskLog: any) {
       where: { id: taskLog.id },
       data: {
         status: TaskStatus.CONFIRMED,
-        notes: 'Comandos del Circuito Hidráulico despachados vía MQTT. Esperando confirmación del Nodo Actuador.',
+        notes: 'Comandos del Circuito de Riego despachados vía MQTT. Esperando confirmación del Nodo Actuador.',
         executedAt: new Date()
       }
     })
@@ -439,7 +370,7 @@ async function checkPendingTasks() {
     if (activeTasks.length > 0) Logger.info(`🔍 Polling: Encontradas ${activeTasks.length} tareas pendientes.`);
 
     for (const task of activeTasks) {
-      Logger.info(`⌛ Iniciando Tarea Diferida (ID: ${task.id.slice(0, 8)})`)
+      Logger.info(`🕒 Iniciando Tarea Diferida (ID: ${task.id.slice(0, 8)})`)
       await processTaskLog(task)
     }
 
@@ -453,7 +384,7 @@ async function checkPendingTasks() {
       },
       data: {
         status: TaskStatus.CANCELLED,
-        notes: 'Cancelada automáticamente: ventana de ejecución expirada.'
+        notes: 'Cancelada: ventana de ejecución expirada.'
       }
     })
 
