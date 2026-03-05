@@ -6,7 +6,7 @@ from utime import sleep #type: ignore
 
 # ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
-DEBUG = False
+DEBUG = True
 
 # ---- Configuración OTA ----
 OTA_CONFIG = {

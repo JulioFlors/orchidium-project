@@ -888,11 +888,21 @@ export const initialData: SeedData = {
     // ---- RIEGOS DIARIOS/INTERDIARIOS (Agua) ----
     {
       name: 'Riego Interdiario (6:00)',
-      description: 'Riego Interdiario a las 6:00 AM',
+      description: 'Riego con aspersores los Lunes, Miércoles y Viernes a las 6:00 AM',
       purpose: 'IRRIGATION',
-      // Cron: A las 06:00, todos los días. (El service/scheduler decide si toca según intervalo)
-      cronTrigger: '0 6 * * *',
-      durationMinutes: 20,
+      // Cron: A las 06:00, Lunes, Miércoles y Viernes
+      cronTrigger: '0 6 * * 1,3,5',
+      durationMinutes: 15,
+      zones: ['ZONA_A'],
+      isEnabled: true
+    },
+    {
+      name: 'Nebulización Dominical (6:00)',
+      description: 'Nebulización matutina los Domingos a las 6:00 AM',
+      purpose: 'HUMIDIFICATION',
+      // Cron: A las 06:00, cada Domingo
+      cronTrigger: '0 6 * * 0',
+      durationMinutes: 10,
       zones: ['ZONA_A'],
       isEnabled: true
     },
