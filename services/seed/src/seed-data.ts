@@ -120,7 +120,13 @@ export const initialData: SeedData = {
       name: 'Julio Flores',
       password: process.env.ADMIN_PASSWORD || '12345678',
       role: 'ADMIN'
-    }
+    },
+    {
+      email: 'chesare.floresg@gmail.com',
+      name: 'Cesar Flores',
+      password: process.env.ADMIN_PASSWORD || '12345678',
+      role: 'ADMIN'
+    },
   ],
   genus: [
     { name: 'Cattleya', type: 'ORCHID' },

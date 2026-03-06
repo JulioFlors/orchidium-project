@@ -1,8 +1,8 @@
 # -----------------------------------------------------------------------------
 # Sensors: Environmental Monitoring Firmware.
 # Descripción: Firmware dedicado al Monitoreo de las condiciones ambientales del Invernadero.
-# Versión: v0.4.6 - Configuración Resiliencia / Watchdog
-# Fecha: 09-02-2026
+# Versión: v0.5.0 - Parche de la libreria umqtt.simple2
+# Fecha: 05-03-2026
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib. 

@@ -1,9 +1,9 @@
 {
   "name": "Relay Modules",
   "description": "Actuator Controller Firmware",
-  "version": "0.4.6",
-  "date": "09-02-2026",
-  "notes_release": "Configuración Resiliencia / Watchdog",
+  "version": "0.5.0",
+  "date": "05-03-2026",
+  "notes_release": "parche de la libreria umqtt.simple2",
   "files": [
     "main.py"
   ]

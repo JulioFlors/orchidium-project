@@ -1,4 +1,3 @@
-
 import os
 import shutil
 import subprocess
@@ -22,43 +21,52 @@ IGNORE_PATTERNS = [
     "build" # Evitar recursividad
 ]
 
-def log(msg, color=""):
-    print(f"{color}[Build] {msg}\033[0m")
+# ---- Paleta Minimalista ----
+COLOR_INFO = "\033[36m"  # Cyan oscuro
+COLOR_OK = "\033[92m"    # Verde brillante
+COLOR_ERR = "\033[91m"   # Rojo
+COLOR_DIM = "\033[90m"   # Gris (dim)
+COLOR_RESET = "\033[0m"
+
+def log_step(step, detail=""):
+    """Formateo unificado para los pasos de compilación"""
+    if detail:
+        print(f" {COLOR_INFO}│{COLOR_RESET} {step:<25} {COLOR_DIM}{detail}{COLOR_RESET}")
+    else:
+        print(f" {COLOR_INFO}│{COLOR_RESET} {step}")
 
 def clean_build_target(target_build_path):
     if target_build_path.exists():
-        log(f"Limpiando {target_build_path.name}...", "\033[93m")
+        log_step("Limpiando  build anterior", f"({target_build_path.name})")
         shutil.rmtree(target_build_path)
-    # create parent if needed
+    
+    log_step("Preparando directorios", "Creando estructura")
     target_build_path.parent.mkdir(parents=True, exist_ok=True)
 
 def copy_project(source_path, dest_path):
-    log(f"Copiando {source_path.name} -> {dest_path.name}...", "\033[94m")
+    log_step("Clonando   código fuente", "Aplicando .ignore")
     try:
         shutil.copytree(source_path, dest_path, 
-                       ignore=shutil.ignore_patterns(*IGNORE_PATTERNS),
-                       dirs_exist_ok=True)
+                        ignore=shutil.ignore_patterns(*IGNORE_PATTERNS),
+                        dirs_exist_ok=True)
     except Exception as e:
-        log(f"Error copiando: {e}", "\033[91m")
+        print(f"\n {COLOR_ERR}❌ Error copiando: {e}{COLOR_RESET}")
         sys.exit(1)
 
 def compile_main(target_build_path):
     py_file = target_build_path / "main.py"
-    mpy_file = target_build_path / "app.mpy" # Renombrado para evitar conflicto
+    mpy_file = target_build_path / "app.mpy" 
     
     if not py_file.exists():
-        log(f"⚠️  No se encontró main.py en {target_build_path.name}. Saltando compilación.", "\033[93m")
+        log_step("Omitiendo compilación", "No se encontró main.py")
         return
 
-    log(f"Compilando main.py -> app.mpy...", "\033[96m")
-    
+    log_step("Compilando binario", "main.py ➔  app.mpy")
     cmd = [MPY_CROSS_CMD, str(py_file), "-o", str(mpy_file)]
     
     try:
         res = subprocess.run(cmd, capture_output=True, text=True)
         if res.returncode == 0:
-            log(f"✅ Éxito: main.py -> app.mpy", "\033[92m")
-            # Borrar fuente original
             py_file.unlink() 
             
             # Crear Bootstrap main.py
@@ -76,8 +84,6 @@ if __name__ == '__main__':
         print(f"Error fatal no capturado: {e}")
         machine.reset()
     finally:
-        # Garantizar que el apago seguro se ejecute
-        # (Desconectar WiFi, MQTT, pines OFF)
         try:
             app.shutdown()
         except:
@@ -85,40 +91,38 @@ if __name__ == '__main__':
 """
             with open(py_file, "w") as f:
                 f.write(bootstrap_code)
-            log(f"✅ Bootstrap main.py creado.", "\033[92m")
+            log_step("Inyectando Bootstrap", "main.py regenerado")
             
         else:
-            log(f"❌ Error compilando main.py: {res.stderr}", "\033[91m")
-            # No borramos si falla
+            print(f"\n {COLOR_ERR}❌ Error mpy-cross: {res.stderr}{COLOR_RESET}")
     except FileNotFoundError:
-        log("❌ Error: 'mpy-cross' no encontrado en PATH.", "\033[91m")
+        print(f"\n {COLOR_ERR}❌ Error crítico: 'mpy-cross' no está instalado o en el PATH.{COLOR_RESET}")
         sys.exit(1)
 
 def main():
     if len(sys.argv) < 2:
-        log("Uso: python compile.py <carpeta_proyecto>", "\033[93m")
-        log("Proyectos disponibles:", "\033[97m")
-        for d in ROOT_DIR.iterdir():
-            if d.is_dir() and d.name not in ["build", "lib", "shared", ".git", ".vscode"]:
-                 print(f" - {d.name}")
+        print(f"\n {COLOR_ERR}❌ Faltan argumentos.{COLOR_RESET}")
+        print(f" Uso: python compile.py <carpeta_proyecto>")
         sys.exit(1)
 
     project_name = sys.argv[1]
     source_path = ROOT_DIR / project_name
     
     if not source_path.exists() or not source_path.is_dir():
-        log(f"❌ Error: El proyecto '{project_name}' no existe.", "\033[91m")
+        print(f"\n {COLOR_ERR}❌ El proyecto '{project_name}' no existe en {ROOT_DIR}.{COLOR_RESET}")
         sys.exit(1)
 
     target_build_path = BUILD_ROOT_DIR / project_name
 
-    log(f"Iniciando Build para: {project_name}", "\033[97m")
+    print(f"\n {COLOR_INFO}⚙️ Construyendo: {project_name}{COLOR_RESET}")
+    print(f" {COLOR_INFO}┌─────────────────────────────────────────────┐{COLOR_RESET}")
     
     clean_build_target(target_build_path)
     copy_project(source_path, target_build_path)
     compile_main(target_build_path)
     
-    log(f"Build Finalizado: {target_build_path}", "\033[92m")
+    print(f" {COLOR_INFO}└─────────────────────────────────────────────┘{COLOR_RESET}")
+    print(f" {COLOR_OK}✅ Build finalizado exitosamente.{COLOR_RESET}\n")
 
 if __name__ == "__main__":
     main()
