@@ -34,6 +34,8 @@ type TaskStatus =
   | 'SKIPPED'
   | 'WAITING_CONFIRMATION'
 
+type TaskSource = 'MANUAL' | 'DEFERRED' | 'ROUTINE'
+
 interface HistoryTask {
   id: string
   purpose: TaskPurpose
@@ -42,6 +44,7 @@ interface HistoryTask {
   scheduledAt: string
   executedAt: string | null
   status: TaskStatus
+  source: TaskSource
   notes: string | null
 }
 
@@ -51,6 +54,12 @@ const ACTION_MAP: Record<TaskPurpose, string> = {
   SOIL_WETTING: 'Humectación Suelo',
   FERTIGATION: 'Fertirriego',
   FUMIGATION: 'Fumigación',
+}
+
+const SOURCE_MAP: Record<TaskSource, string> = {
+  MANUAL: 'Manual',
+  DEFERRED: 'Diferido',
+  ROUTINE: 'Rutina',
 }
 
 const STATUS_CONFIG: Record<
@@ -153,6 +162,7 @@ export default function HistoryPage() {
                 <tr>
                   <th className="px-6 py-4 font-semibold">Estado</th>
                   <th className="px-6 py-4 font-semibold">Circuito de Riego</th>
+                  <th className="px-6 py-4 font-semibold">Origen</th>
                   <th className="px-6 py-4 font-semibold">Zonas</th>
                   <th className="px-6 py-4 font-semibold">Fecha</th>
                   <th className="px-6 py-4 font-semibold">Duración</th>
@@ -175,6 +185,9 @@ export default function HistoryPage() {
                         </span>
                       </td>
                       <td className="text-primary px-6 py-4 font-medium">{actionLabel}</td>
+                      <td className="text-secondary px-6 py-4 font-medium">
+                        {SOURCE_MAP[task.source]}
+                      </td>
                       <td className="px-6 py-4">
                         <span className="text-secondary rounded-full bg-black/5 px-2.5 py-1 text-[10px] font-bold tracking-wider uppercase dark:bg-white/10">
                           {task.zones.join(', ')}

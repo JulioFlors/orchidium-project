@@ -45,6 +45,7 @@ export async function POST(request: Request) {
         purpose,
         zones,
         status: TaskStatus.PENDING,
+        source: 'DEFERRED',
         scheduledAt: new Date(scheduledAt),
         duration: durationMinutes,
         notes: notes || null,

@@ -5,10 +5,11 @@ import prisma, { type TaskPurpose, type ZoneType, CollisionGuard } from '@packag
 
 // Mapeo inverso de Frontend -> Backend
 const CIRCUIT_TO_PURPOSE: Record<string, TaskPurpose> = {
-  irrigation: 'IRRIGATION',
-  humidification: 'HUMIDIFICATION',
-  soilWet: 'SOIL_WETTING',
-  fertigation: 'FERTIGATION',
+  IRRIGATION: 'IRRIGATION',
+  HUMIDIFICATION: 'HUMIDIFICATION',
+  SOIL_WETTING: 'SOIL_WETTING',
+  FERTIGATION: 'FERTIGATION',
+  FUMIGATION: 'FUMIGATION',
 }
 
 /**
@@ -40,10 +41,11 @@ export async function createManualTask(
       data: {
         purpose,
         status: 'CONFIRMED', // Confirmado implícitamente por el usuario manual
+        source: 'MANUAL',
         scheduledAt: new Date(),
         duration: durationMinutes,
         zones: [zone],
-        notes: 'Ejecución manual desde Control Panel',
+        notes: 'Ejecución manual desde el Panel de Control',
       },
     })
 

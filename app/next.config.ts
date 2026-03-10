@@ -25,7 +25,7 @@ const nextConfig: NextConfig = {
     // Desactiva la API de Vercel para evitar imágenes rotas por límite de cuota
     // (Consumo masivo el 8 de marzo provocado por Crawler externo)
     // ------------------------------------------------------------------------
-    // unoptimized: true,
+    unoptimized: true,
 
     // 1 mes de cache TTL para reducir transformaciones y escrituras (Recomendación Vercel)
     minimumCacheTTL: 2678400,

@@ -202,26 +202,28 @@ mqttClient.on('message', async (topic, payload) => {
         }
       }
       else if (state === 'OFF') {
-        // La bomba es el último eslabón en apagarse, certifica el fin del circuito.
-        if (topic.endsWith('/pump')) {
-          if (taskId) {
-            const finished = await prisma.taskLog.updateMany({
-              where: { id: taskId, status: TaskStatus.IN_PROGRESS },
-              data: { status: TaskStatus.COMPLETED, notes: 'Circuito de Riego cerrado.' }
-            })
-            if (finished.count > 0) Logger.success(`Tarea ${taskId.slice(0, 8)} COMPLETED`)
-          } else {
-            // Soporte Legado
-            const hoursAgo = new Date(Date.now() - 2 * 3600000)
-            const finished = await prisma.taskLog.updateMany({
-              where: { 
-                status: TaskStatus.IN_PROGRESS,
-                scheduledAt: { gte: hoursAgo }
-              },
-              data: { status: TaskStatus.COMPLETED, notes: 'Circuito de Riego cerrado (Legado).' }
-            })
-            if (finished.count > 0) Logger.success('Tareas catalogadas con éxito (Legado)')
-          }
+        // Si viene un taskId explícito, sabemos exactamente qué tarea finalizó 
+        // y no dependemos de si es la bomba de agua o no (ej nebulizadores / suelo).
+        if (taskId) {
+           const finished = await prisma.taskLog.updateMany({
+             where: { id: taskId, status: TaskStatus.IN_PROGRESS },
+             data: { status: TaskStatus.COMPLETED, notes: 'Circuito de Riego cerrado.' }
+           })
+           if (finished.count > 0) Logger.success(`Tarea ${taskId.slice(0, 8)} COMPLETED`)
+        } else {
+           // Soporte Legado: La bomba es el último eslabón en apagarse, certifica el fin del circuito.
+           // Ocurre solamente si el ESP32 no manda Task ID.
+           if (topic.endsWith('/pump')) {
+             const hoursAgo = new Date(Date.now() - 2 * 3600000)
+             const finished = await prisma.taskLog.updateMany({
+               where: { 
+                 status: TaskStatus.IN_PROGRESS,
+                 scheduledAt: { gte: hoursAgo }
+               },
+               data: { status: TaskStatus.COMPLETED, notes: 'Circuito de Riego cerrado (Legado).' }
+             })
+             if (finished.count > 0) Logger.success('Tareas catalogadas con éxito (Legado)')
+           }
         }
       }
       return
@@ -385,6 +387,7 @@ async function runTask(scheduleId: string) {
         purpose: schedule.purpose,
         zones: schedule.zones,
         status: initialStatus,
+        source: 'ROUTINE',
         scheduledAt: new Date(),
         duration: schedule.durationMinutes,
         ...(cancelReason ? { cancellationReason: cancelReason } : {})

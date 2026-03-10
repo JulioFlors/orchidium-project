@@ -4,18 +4,21 @@
 set -e
 
 # ---- Colores ----
-RESET='\033[0m'
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
+RESET='\x1b[0m'
+RED='\x1b[91m'
+GREEN='\x1b[92m'
+YELLOW='\x1b[93m'
+BLUE='\x1b[94m'
+MAGENTA='\x1b[95m'
+CYAN='\x1b[96m'
+WHITE='\x1b[97m'
 
 # Evitar que pnpm pida confirmaciones interactivas
 export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
 confirm() {
     echo ""
-    read -p "$(echo -e "${YELLOW}⚡ $1 [s/N]: ${RESET}")" choice
+    read -p "$(echo -e "${YELLOW}⚡ $1 [s/N]:${RESET}")" choice
     case "$choice" in
         s|S|si|SI|Si ) return 0 ;;
         * ) return 1 ;;
@@ -26,25 +29,25 @@ echo -e "${GREEN}🌵 PristinoPlant | Deploy${RESET}"
 echo ""
 
 # ================================================================
-# PASO 1: Sicronizar (Protegiendo infraestructura local)
+# PASO 1: Sincronizar (Protegiendo infraestructura local)
 # ================================================================
-echo -e "${CYAN}📡 [1/5] Sicronizando con origin/main${RESET}"
+echo -e "${CYAN}📡 [1/5] Sincronizando con origin/main${RESET}"
 echo ""
 git fetch origin main
 # PROTECCIÓN: Resetear el código pero sin tocar la carpeta de certificados y logs
 git reset --hard origin/main
 
 echo ""
-echo -e "${GREEN}   ✅ Repositorio Sicronizado${RESET}"
+echo -e "${GREEN}✅ Repositorio Sincronizado${RESET}"
 
 # ================================================================
 # PASO 2: Construir imágenes
 # ================================================================
 echo ""
-echo -e "${CYAN}🏗️  [2/5] Construyendo imágenes${RESET}"
+echo -e "${CYAN}🏗️ [2/5] Construyendo imágenes${RESET}"
 docker compose --profile cloud build
 echo ""
-echo -e "${GREEN}   ✅ Imágenes construidas${RESET}"
+echo -e "${GREEN}✅ Imágenes construidas${RESET}"
 echo ""
 
 # ================================================================
@@ -53,15 +56,14 @@ echo ""
 if confirm "¿Ejecutar migraciones de base de datos (prisma db:deploy)?"; then
     echo ""
     echo -e "${CYAN}📦 [3/5] Aplicando migraciones${RESET}"
-    # Usamos el filtro para eRESETontrar el comando db:deploy en el paquete correcto
+    # Usamos el filtro para encontrar el comando db:deploy en el paquete correcto
     docker compose --profile cloud run --rm scheduler pnpm --filter @package/database db:deploy
     echo ""
-    echo -e "${GREEN}   ✅ Migraciones aplicadas${RESET}"
+    echo -e "${GREEN}✅ Migraciones aplicadas${RESET}"
     echo ""
 else
     echo ""
-    echo -e "${YELLOW}   ⏭️  Migraciones omitidas${RESET}"
-    echo ""
+    echo -e "${YELLOW}⏭️ Migraciones omitidas${RESET}"
 fi
 
 # ================================================================
@@ -76,7 +78,7 @@ echo ""
 
 if confirm "¿Levantar/Reiniciar Mosquitto (perfil vps)?"; then
     echo ""
-    echo -e "${CYAN}   Levantando Mosquitto${RESET}"
+    echo -e "${CYAN}🚀 Levantando Mosquitto${RESET}"
     echo ""
     docker compose --profile vps up -d
     echo ""
@@ -92,6 +94,6 @@ echo -e "${CYAN}🧹 [5/5] Limpiando imágenes antiguas${RESET}"
 docker image prune -f
 
 echo ""
-echo -e "${GREEN}✅ ok{RESET}"
+echo -e "${GREEN}✅ Deploy Finalizado${RESET}"
 echo ""
 docker compose --profile cloud --profile vps ps

@@ -399,16 +399,16 @@ git fetch origin main
 git reset --hard origin/main
 
 echo ""
-echo -e "${GREEN}   ✅ Repositorio Sincronizado${RESET}"
+echo -e "${GREEN}✅ Repositorio Sincronizado${RESET}"
 
 # ================================================================
 # PASO 2: Construir imágenes
 # ================================================================
 echo ""
-echo -e "${CYAN}🏗️  [2/5] Construyendo imágenes${RESET}"
+echo -e "${CYAN}🏗️ [2/5] Construyendo imágenes${RESET}"
 docker compose --profile cloud build
 echo ""
-echo -e "${GREEN}   ✅ Imágenes construidas${RESET}"
+echo -e "${GREEN}✅ Imágenes construidas${RESET}"
 echo ""
 
 # ================================================================
@@ -420,12 +420,11 @@ if confirm "¿Ejecutar migraciones de base de datos (prisma db:deploy)?"; then
     # Usamos el filtro para encontrar el comando db:deploy en el paquete correcto
     docker compose --profile cloud run --rm scheduler pnpm --filter @package/database db:deploy
     echo ""
-    echo -e "${GREEN}   ✅ Migraciones aplicadas${RESET}"
+    echo -e "${GREEN}✅ Migraciones aplicadas${RESET}"
     echo ""
 else
     echo ""
-    echo -e "${YELLOW}   ⏭️  Migraciones omitidas${RESET}"
-    echo ""
+    echo -e "${YELLOW}⏭️ Migraciones omitidas${RESET}"
 fi
 
 # ================================================================
@@ -440,7 +439,7 @@ echo ""
 
 if confirm "¿Levantar/Reiniciar Mosquitto (perfil vps)?"; then
     echo ""
-    echo -e "${CYAN}   Levantando Mosquitto${RESET}"
+    echo -e "${CYAN}🚀 Levantando Mosquitto${RESET}"
     echo ""
     docker compose --profile vps up -d
     echo ""
@@ -459,7 +458,6 @@ echo ""
 echo -e "${GREEN}✅ Deploy Finalizado${RESET}"
 echo ""
 docker compose --profile cloud --profile vps ps
-
 ```
 
 #### 2. Otorgar Permisos de Ejecución Permanentes (Entorno Local)

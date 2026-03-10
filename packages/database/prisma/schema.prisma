@@ -65,6 +65,12 @@ enum TaskStatus {
   WAITING_CONFIRMATION // Esperando que el usuario llene el tanque de agrochemicals
 }
 
+enum TaskSource {
+  MANUAL
+  DEFERRED
+  ROUTINE
+}
+
 enum TaskPurpose {
   IRRIGATION // Aspersores
   FERTIGATION // Fertirriego (Agua + Nutrientes)
@@ -341,6 +347,7 @@ model TaskLog {
   scheduledAt DateTime
   executedAt  DateTime    @default(now())
   status      TaskStatus  @default(PENDING)
+  source      TaskSource  @default(MANUAL)
   purpose     TaskPurpose
   zones       ZoneType[]
   duration    Int
