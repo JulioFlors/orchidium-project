@@ -102,6 +102,7 @@ export function ShopSidebar({ suggestions = [] }: Props) {
                   <div className="relative aspect-video h-42 w-full">
                     <Image
                       fill
+                      unoptimized
                       alt={cat.name}
                       className="rounded object-cover"
                       sizes="(max-width: 414px) calc(100vw * 0.823 - 16px), 414px"

@@ -89,6 +89,7 @@ export function Slideshow({ isAvailable, className, images, title }: Props) {
             <SwiperSlide key={`thumb-${image}`} className="aspect-square">
               <Image
                 priority
+                unoptimized
                 alt={`${title} thumbnail`}
                 className="rounded object-cover"
                 height={1000}

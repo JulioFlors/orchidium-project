@@ -1,6 +1,6 @@
 import { InfluxDBClient } from '@influxdata/influxdb3-client'
-import { prisma, TaskPurpose, TaskStatus, ZoneType } from '@package/database'
-import cron from 'node-cron'
+import { prisma, TaskPurpose, TaskStatus, ZoneType, CollisionGuard } from '@package/database'
+import { Cron } from 'croner'
 import mqtt from 'mqtt'
 
 // ---- Cargar variables de entorno ----
@@ -145,7 +145,7 @@ mqttClient.on('message', async (topic, payload) => {
           },
           data: {
             status: TaskStatus.FAILED,
-            notes: 'Fallo Crítico: El Nodo Actuador perdió conexión durante una ventana crítica.'
+            notes: 'El Nodo Actuador perdió conexión durante una ventana crítica.'
           }
         })
         if (affectedTasks.count > 0) Logger.warn(`Se cancelaron ${affectedTasks.count} tareas debido al corte.`)
@@ -170,25 +170,58 @@ mqttClient.on('message', async (topic, payload) => {
 
     // 3. Telemetría Funcional Física (Los relés del Circuito de Riego cambiaron de estado)
     if (topic.startsWith('PristinoPlant/Actuator_Controller/irrigation/state/')) {
-      // La telemetría física no devuelve el taskId, porque los relés son tontos.
-      // Debemos buscar si hay alguna tarea CONFIRMADA o FAILED (recuperada por el hardware) que esté operando
-      if (message === 'ON') {
-        await prisma.taskLog.updateMany({
-          where: { 
-            status: { in: [TaskStatus.CONFIRMED, TaskStatus.FAILED] } 
-          },
-          data: { status: TaskStatus.IN_PROGRESS, notes: 'Circuito de Riego abierto.' }
-        })
+      let state = message
+      let taskId = ''
+
+      // Intentamos parsear por si es JSON nuevo (Sincronía Transaccional)
+      try {
+        const parsed = JSON.parse(message)
+        state = parsed.state || message
+        taskId = parsed.task_id || ''
+      } catch {
+        // Formato legado de texto plano
       }
-      else if (message === 'OFF') {
-        // Si la bomba se apagó (fin del Circuito de Riego)
-        // es porque finalizó exitosamente el Timer interno del Nodo Actuador.
+
+      if (state === 'ON') {
+        if (taskId) {
+           // Actualización Atómica Exacta
+           await prisma.taskLog.updateMany({
+             where: { id: taskId, status: { in: [TaskStatus.CONFIRMED, TaskStatus.FAILED] } },
+             data: { status: TaskStatus.IN_PROGRESS, notes: 'Circuito de Riego abierto.' }
+           })
+        } else {
+           // Soporte Legado
+           const graceWindow = new Date(Date.now() - 20 * 60000)
+           await prisma.taskLog.updateMany({
+             where: { 
+               status: { in: [TaskStatus.CONFIRMED, TaskStatus.FAILED] },
+               scheduledAt: { gte: graceWindow }
+             },
+             data: { status: TaskStatus.IN_PROGRESS, notes: 'Circuito de Riego abierto (Legado).' }
+           })
+        }
+      }
+      else if (state === 'OFF') {
+        // La bomba es el último eslabón en apagarse, certifica el fin del circuito.
         if (topic.endsWith('/pump')) {
-          const finished = await prisma.taskLog.updateMany({
-            where: { status: TaskStatus.IN_PROGRESS },
-            data: { status: TaskStatus.COMPLETED, notes: 'Circuito de Riego cerrado.' }
-          })
-          if (finished.count > 0) Logger.success('Tareas catalogadas con éxito rotundo (COMPLETED)')
+          if (taskId) {
+            const finished = await prisma.taskLog.updateMany({
+              where: { id: taskId, status: TaskStatus.IN_PROGRESS },
+              data: { status: TaskStatus.COMPLETED, notes: 'Circuito de Riego cerrado.' }
+            })
+            if (finished.count > 0) Logger.success(`Tarea ${taskId.slice(0, 8)} COMPLETED`)
+          } else {
+            // Soporte Legado
+            const hoursAgo = new Date(Date.now() - 2 * 3600000)
+            const finished = await prisma.taskLog.updateMany({
+              where: { 
+                status: TaskStatus.IN_PROGRESS,
+                scheduledAt: { gte: hoursAgo }
+              },
+              data: { status: TaskStatus.COMPLETED, notes: 'Circuito de Riego cerrado (Legado).' }
+            })
+            if (finished.count > 0) Logger.success('Tareas catalogadas con éxito (Legado)')
+          }
         }
       }
       return
@@ -331,16 +364,39 @@ async function runTask(scheduleId: string) {
       return
     }
 
+    const requiresConfirmation = schedule.purpose === 'FERTIGATION' || schedule.purpose === 'FUMIGATION'
+
+    // Validar si choca con alguna rutina diferida o cronjob activo en la ventana de tiempo
+    const collisionCheck = await CollisionGuard.checkTimeWindow(new Date(), schedule.durationMinutes)
+
+    let initialStatus: TaskStatus = requiresConfirmation ? TaskStatus.WAITING_CONFIRMATION : TaskStatus.PENDING
+    let cancelReason: string | null = null
+
+    if (collisionCheck.hasCollision) {
+      initialStatus = TaskStatus.CANCELLED
+      const conflictIds = collisionCheck.conflictingTasks.map(t => t.id.split('-')[0]).join(', ')
+      cancelReason = `Cancelada por CollisionGuard: solapamiento hidráulico con tarea(s): ${conflictIds}`
+      Logger.warn(`⚠️ Rutina Programada Cancelada por Colisión (ID: ${scheduleId.split('-')[0]})`)
+    }
+
     const taskLog = await prisma.taskLog.create({
       data: {
         scheduleId: schedule.id,
         purpose: schedule.purpose,
         zones: schedule.zones,
-        status: TaskStatus.IN_PROGRESS,
+        status: initialStatus,
         scheduledAt: new Date(),
-        duration: schedule.durationMinutes
+        duration: schedule.durationMinutes,
+        ...(cancelReason ? { cancellationReason: cancelReason } : {})
       }
     })
+
+    if (collisionCheck.hasCollision) return // Salida temprana si hubo colisión
+
+    if (requiresConfirmation) {
+      Logger.warn(`⏸️ Rutina de Agroquímicos (${schedule.purpose}) en pausa WAITING_CONFIRMATION. El usuario debe liberar desde la Central.`)
+      return
+    }
 
     await processTaskLog(taskLog)
 
@@ -390,6 +446,35 @@ async function checkPendingTasks() {
 
     if (expired.count > 0) Logger.warn(`🗑️ ${expired.count} tarea(s) expirada(s) auto-canceladas.`)
 
+    // 3. Auto-limpieza (Garbage Collector) con Cálculo Dinámico
+    // Busca tareas CONFIRMED o IN_PROGRESS y valida `scheduledAt + duration + graceWindow`
+    const potentiallyStuck = await prisma.taskLog.findMany({
+      where: {
+        status: { in: [TaskStatus.CONFIRMED, TaskStatus.IN_PROGRESS] }
+      }
+    })
+
+    let stuckCount = 0
+    const nowMs = Date.now()
+
+    for (const task of potentiallyStuck) {
+      // 20 minutos de gracia adicionales a la duración de la tarea
+      const expirationTime = task.scheduledAt.getTime() + (task.duration * 60000) + (20 * 60000)
+      
+      if (nowMs > expirationTime) {
+        await prisma.taskLog.update({
+          where: { id: task.id },
+          data: {
+            status: TaskStatus.FAILED,
+            notes: 'Tarea atascada: no se recibió telemetría de finalización a tiempo.'
+          }
+        })
+        stuckCount++
+      }
+    }
+
+    if (stuckCount > 0) Logger.warn(`🧹 ${stuckCount} tarea(s) atascada(s) pasadas a FAILED.`)
+
   } catch (error) {
     Logger.error('Error durante el Polling de tareas pendientes', error)
   }
@@ -408,21 +493,20 @@ async function initScheduler() {
   }
 
   schedules.forEach(schedule => {
-    if (!cron.validate(schedule.cronTrigger)) {
+    try {
+      const job = new Cron(schedule.cronTrigger, { timezone: "America/Caracas" })
+      
+      Logger.info(`Programando: "${schedule.name}" ➜ [${schedule.cronTrigger}]`)
+
+      job.schedule(() => {
+        runTask(schedule.id)
+      })
+    } catch (e) {
       Logger.error(`Cron inválido para ${schedule.name}: ${schedule.cronTrigger}`)
-      return
     }
-
-    Logger.info(`Programando: "${schedule.name}" ➜ [${schedule.cronTrigger}]`)
-
-    cron.schedule(schedule.cronTrigger, () => {
-      runTask(schedule.id)
-    }, {
-      timezone: "America/Caracas"
-    })
   })
 
-  cron.schedule('* * * * *', () => {
+  new Cron('* * * * *', { timezone: "America/Caracas" }, () => {
     checkPendingTasks()
   })
 }

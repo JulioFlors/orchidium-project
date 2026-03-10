@@ -33,7 +33,8 @@ export function PageNotFound({ title }: Props) {
         <Image
           fill
           priority
-          alt="Ilustración decorativa de Ponyta"
+          unoptimized
+          alt="Ponyta Illustration"
           className="object-contain"
           src="/imgs/ponyta.webp"
         />

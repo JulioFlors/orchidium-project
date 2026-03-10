@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 
 import { ProductVariant, Species } from '@/interfaces/'
 import { StockLabel } from '@/components'
+import { useImageColor } from '@/hooks/useImageColor'
 
 interface Props {
   product: Species
@@ -47,33 +47,48 @@ const getProductDisplayInfo = (variants: ProductVariant[]) => {
 }
 
 export function ProductGridItem({ product, index }: Props) {
-  const [displayImage, setDisplayImage] = useState(product.images[0])
   const { priceLabel, hasStock } = getProductDisplayInfo(product.variants)
+
+  // Obtenemos dinámicamente el color dominante vibrante de la primera imagen
+  const { color } = useImageColor(`/plants/${product.images[0]}`)
+
+  // Color RGB para el background del glow
+  const glowColor = color ? `rgb(${color.r}, ${color.g}, ${color.b})` : 'rgb(128, 128, 128)'
 
   return (
     <div
-      className="fade-in mb-6 flex flex-col overflow-hidden px-1 pt-1"
+      className="fade-in group relative mb-4 flex flex-col px-1 pt-1"
       data-product-index={index}
       id={`product--${product.slug}`}
     >
-      <div id={`${product.slug}__container-image`}>
-        <div className="relative aspect-square w-full" id={`${product.slug}__main-image`}>
+      {/* === AMBIENT GLOW === Fondo sólido de color que cubre TODA la card */}
+      <div
+        aria-hidden="true"
+        className="ambient-glow pointer-events-none absolute"
+        style={{
+          background: glowColor,
+          zIndex: 0,
+        }}
+      />
+
+      {/* Contenido de la card (z-5 para estar por encima del glow) */}
+      <div className="focus-product-card relative z-5" id={`${product.slug}__container-image`}>
+        <div
+          className="relative aspect-square w-full overflow-hidden rounded-xl"
+          id={`${product.slug}__main-image`}
+        >
           <Link
             aria-label={`Ver detalles de ${product.name}`}
-            className="focus-product relative block h-full w-full"
+            className="relative block h-full w-full outline-none"
             href={`/product/${product.slug}`}
           >
             <Image
               fill
               alt={product.name}
-              className="rounded object-cover"
-              sizes="(min - width: 2000px)"
-              src={`/plants/${displayImage}`}
+              className="rounded-xl object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+              sizes="(min-width: 1280px) 25vw, (min-width: 640px) 33vw, 50vw"
+              src={`/plants/${product.images[0]}`}
               title={product.name}
-              onMouseEnter={() =>
-                setDisplayImage(product.images[1] ? product.images[1] : product.images[0])
-              }
-              onMouseLeave={() => setDisplayImage(product.images[0])}
               {...(index <= 5 ? { priority: true } : {})}
             />
           </Link>
@@ -83,21 +98,21 @@ export function ProductGridItem({ product, index }: Props) {
         </div>
       </div>
 
-      <div className="flex flex-row justify-between" id={`${product.slug}__container-details`}>
-        <div
-          className="mt-1 flex flex-col font-bold antialiased"
-          id={`${product.slug}__main-details`}
-        >
+      <div
+        className="relative z-5 flex flex-row justify-between pt-2 pb-1"
+        id={`${product.slug}__container-details`}
+      >
+        <div className="flex flex-col font-bold antialiased" id={`${product.slug}__main-details`}>
           <Link
-            className="product-name text-primary tracking-tight text-balance transition-all duration-300"
+            className="text-primary tracking-tight text-balance"
             href={`/product/${product.slug}`}
             id={`${product.slug}__link`}
-            tabIndex={-1} // Evita que reciba focus al navegar con Tab
+            tabIndex={-1}
           >
             {product.name}
           </Link>
 
-          {/* Muestramos el precio o el rango calculado */}
+          {/* Mostramos el precio o el rango calculado */}
           <span className="text-secondary font-semibold tracking-wide">{priceLabel}</span>
         </div>
         <div />

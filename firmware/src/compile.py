@@ -22,7 +22,7 @@ IGNORE_PATTERNS = [
 ]
 
 # ---- Paleta Minimalista ----
-COLOR_INFO = "\033[36m"  # Cyan oscuro
+COLOR_INFO = "\033[96m"  # Cyan oscuro
 COLOR_OK = "\033[92m"    # Verde brillante
 COLOR_ERR = "\033[91m"   # Rojo
 COLOR_DIM = "\033[90m"   # Gris (dim)
@@ -31,9 +31,9 @@ COLOR_RESET = "\033[0m"
 def log_step(step, detail=""):
     """Formateo unificado para los pasos de compilación"""
     if detail:
-        print(f" {COLOR_INFO}│{COLOR_RESET} {step:<25} {COLOR_DIM}{detail}{COLOR_RESET}")
+        print(f"{COLOR_INFO}  │{COLOR_RESET} {step:<26} {COLOR_DIM}{detail}{COLOR_RESET}")
     else:
-        print(f" {COLOR_INFO}│{COLOR_RESET} {step}")
+        print(f"{COLOR_INFO}  │{COLOR_RESET} {step}")
 
 def clean_build_target(target_build_path):
     if target_build_path.exists():
@@ -50,7 +50,7 @@ def copy_project(source_path, dest_path):
                         ignore=shutil.ignore_patterns(*IGNORE_PATTERNS),
                         dirs_exist_ok=True)
     except Exception as e:
-        print(f"\n {COLOR_ERR}❌ Error copiando: {e}{COLOR_RESET}")
+        print(f"\n{COLOR_ERR}❌  Error copiando: {e}{COLOR_RESET}")
         sys.exit(1)
 
 def compile_main(target_build_path):
@@ -94,35 +94,35 @@ if __name__ == '__main__':
             log_step("Inyectando Bootstrap", "main.py regenerado")
             
         else:
-            print(f"\n {COLOR_ERR}❌ Error mpy-cross: {res.stderr}{COLOR_RESET}")
+            print(f"\n{COLOR_ERR}❌  Error mpy-cross: {res.stderr}{COLOR_RESET}")
     except FileNotFoundError:
-        print(f"\n {COLOR_ERR}❌ Error crítico: 'mpy-cross' no está instalado o en el PATH.{COLOR_RESET}")
+        print(f"\n{COLOR_ERR}❌  Error crítico: 'mpy-cross' no está instalado o en el PATH.{COLOR_RESET}")
         sys.exit(1)
 
 def main():
     if len(sys.argv) < 2:
-        print(f"\n {COLOR_ERR}❌ Faltan argumentos.{COLOR_RESET}")
-        print(f" Uso: python compile.py <carpeta_proyecto>")
+        print(f"\n{COLOR_ERR}❌  Faltan argumentos.{COLOR_RESET}")
+        print(f"Uso: python compile.py <carpeta_proyecto>")
         sys.exit(1)
 
     project_name = sys.argv[1]
     source_path = ROOT_DIR / project_name
     
     if not source_path.exists() or not source_path.is_dir():
-        print(f"\n {COLOR_ERR}❌ El proyecto '{project_name}' no existe en {ROOT_DIR}.{COLOR_RESET}")
+        print(f"\n{COLOR_ERR}❌  El proyecto '{project_name}' no existe en {ROOT_DIR}.{COLOR_RESET}")
         sys.exit(1)
 
     target_build_path = BUILD_ROOT_DIR / project_name
 
-    print(f"\n {COLOR_INFO}⚙️ Construyendo: {project_name}{COLOR_RESET}")
-    print(f" {COLOR_INFO}┌─────────────────────────────────────────────┐{COLOR_RESET}")
+    print(f"\n{COLOR_INFO}⚙️  Construyendo: {project_name}{COLOR_RESET}")
+    print(f"{COLOR_INFO}  ┌─────────────────────────────────────────────────┐{COLOR_RESET}")
     
     clean_build_target(target_build_path)
     copy_project(source_path, target_build_path)
     compile_main(target_build_path)
     
-    print(f" {COLOR_INFO}└─────────────────────────────────────────────┘{COLOR_RESET}")
-    print(f" {COLOR_OK}✅ Build finalizado exitosamente.{COLOR_RESET}\n")
+    print(f"{COLOR_INFO}  └─────────────────────────────────────────────────┘{COLOR_RESET}")
+    print(f"{COLOR_INFO}☑️  Build Completado.{COLOR_RESET}\n")
 
 if __name__ == "__main__":
     main()

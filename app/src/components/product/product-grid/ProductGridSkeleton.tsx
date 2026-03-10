@@ -19,7 +19,7 @@ export function ProductGridSkeleton({ count = 6 }: Props) {
   return (
     <div
       aria-label="Cargando productos..."
-      className="mt-10 grid animate-pulse grid-cols-2 gap-x-[4%] gap-y-6 sm:grid-cols-3 2xl:gap-x-[4.5%]"
+      className="tds-sm:grid-cols-2 tds-lg:grid-cols-3 tds-2xl:grid-cols-4 mt-10 grid animate-pulse grid-cols-1 gap-x-4 gap-y-2"
     >
       {/* Genera un array del tamaño 'count' y mapea para renderizar los skeletons */}
       {Array.from({ length: count }).map((_, index) => (

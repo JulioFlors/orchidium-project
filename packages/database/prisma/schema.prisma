@@ -345,6 +345,7 @@ model TaskLog {
   zones       ZoneType[]
   duration    Int
   notes       String?
+  cancellationReason String?
 
   agrochemical   Agrochemical? @relation(fields: [agrochemicalId], references: [id])
   agrochemicalId String?

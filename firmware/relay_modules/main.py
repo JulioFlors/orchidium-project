@@ -11,14 +11,11 @@
 import sys
 sys.path.reverse()
 
-from gc    import collect
-from ujson import dump, dumps, load, loads
-from utime import localtime, sleep_ms, sleep, ticks_diff, ticks_ms, time
 import uasyncio as asyncio
 
 # ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
-DEBUG = True
+DEBUG = False
 
 # ---- Configuración MQTT ----
 MQTT_CONFIG = {
@@ -38,7 +35,7 @@ MQTT_CONFIG = {
 }
 
 # ---- Configuración Resiliencia / Watchdog ----
-# Tiempo máximo sin conexión WiFi antes de forzar un Hard Reset (5 minutos)
+# Tiempo máximo sin conexión MQTT/WiFi antes de forzar un Hard Reset (5 minutos)
 MAX_OFFLINE_RESET_SEC = 300
 # Tiempo del Watchdog Timer (Hardware) en milisegundos (65 segundos (1m 5s))
 # [WDT Safety]: Debe ser mayor que MESSAGE_TIMEOUT (60s) para evitar reinicios durante operaciones lentas.
@@ -141,12 +138,6 @@ class Colors:
     CYAN = '\x1b[96m'
     WHITE = '\x1b[97m'
 
-# ---- Función Auxiliar: Logs de Desarrollo ----
-def log(*args, **kwargs):
-    """**Imprime solo si el modo DEBUG está activado.**"""
-    if DEBUG:
-        print(*args, **kwargs)
-
 # ---- Función Auxiliar: Uso del disco ----
 def log_disk_usage():
     try:
@@ -159,9 +150,9 @@ def log_disk_usage():
         free_kb = (free_blocks * block_size) // 1024
         used_kb = total_kb - free_kb
         p = (used_kb / total_kb) * 100
-        log(f"\n💾  Flash Usage: {used_kb}KB / {total_kb}KB ({p:.1f}%) | Free: {free_kb}KB")
+        print(f"\n💾  Flash Usage: {used_kb}KB / {total_kb}KB ({p:.1f}%) | Free: {free_kb}KB")
     except Exception as e:
-        log(f"⚠️  Disk Stat Error: {e}")
+        print(f"⚠️  Disk Stat Error: {e}")
 
 # ---- Función Auxiliar: Uso de la memoria RAM ----
 def log_ram_usage():
@@ -172,9 +163,9 @@ def log_ram_usage():
         total = free + alloc
         used = total - free
         p = (used / total) * 100
-        log(f"🧠  RAM Usage: {used/1024:.1f}KB / {total/1024:.1f}KB ({p:.1f}%) | Free: {free/1024:.1f}KB")
+        print(f"🧠  RAM Usage: {used/1024:.1f}KB / {total/1024:.1f}KB ({p:.1f}%) | Free: {free/1024:.1f}KB")
     except Exception as e:
-        log(f"⚠️  RAM Stat Error: {e}")
+        print(f"⚠️  RAM Stat Error: {e}")
 
 # ---- Importar configuración desde lib/secrets de forma segura ---- #
 try:
@@ -183,7 +174,8 @@ try:
     # Si la importación tiene éxito, actualizamos los valores por defecto.
     MQTT_CONFIG.update(SECRETS_MQTT)
 except ImportError:
-    log(f"\n\n❌  Error: {Colors.RED}No se encontró{Colors.RESET} lib/secrets")
+    if DEBUG:
+        print(f"\n\n❌  Error: {Colors.RED}No se encontró{Colors.RESET} lib/secrets")
     # Evitamos que el código crashee, aunque no conectará
     WIFI_CONFIG = {"SSID": "", "PASS": ""}
     MQTT_CONFIG = {"SERVER": "", "USER": "", "PASS": "", "PORT": 1883, "SSL": False, "SSL_PARAMS": {}}
@@ -202,14 +194,16 @@ class NVSManager:
             try:
                 # (Optimización de memoria RAM)
                 # Lazy Imports (Importación tardía)
-                from os import listdir
+                from os    import listdir # type: ignore
+                from ujson import load    # type: ignore
                 if cls.FILE_PATH in listdir():
                     with open(cls.FILE_PATH, "r") as f:
                         cls._cache = load(f)
                 else:
                     cls._cache = {}
             except Exception as e:
-                log(f"\n⚠️  Error leyendo NVS: {e}")
+                if DEBUG:
+                    print(f"\n⚠️  Error leyendo NVS: {e}")
                 cls._cache = {}
 
     @classmethod
@@ -225,7 +219,8 @@ class NVSManager:
         key = task_data.get('key', str(task_data['actuator_id']))
         cls._cache[key] = task_data
         cls._dirty = True # Hay cambios pendientes de guardar a disco
-        # log(f"    ├─ Caché NVS: Tarea {key} encolada.") # 🔇 Comentado
+        # if DEBUG:
+            # print(f"    ├─ Caché NVS: Tarea {key} encolada.") # 🔇 Comentado
 
     @classmethod
     def clear_task(cls, actuator_id=None):
@@ -250,7 +245,8 @@ class NVSManager:
         
         if modified:
             cls._dirty = True
-            # log(f"    ├─ Caché NVS: Tarea {str_id} removida.") # 🔇 Comentado
+            # if DEBUG:
+                # print(f"    ├─ Caché NVS: Tarea {str_id} removida.") # 🔇 Comentado
 
     @classmethod
     def delete_key(cls, key):
@@ -267,22 +263,26 @@ class NVSManager:
             return # Ahorramos un ciclo de escritura física en disco
 
         try:
-            from os import remove # type: ignore
+            from os    import remove # type: ignore
+            from ujson import dump   # type: ignore
             if not cls._cache:
                 # Si la caché quedó vacía, borramos el archivo físico para ahorrar espacio
                 try: remove(cls.FILE_PATH)
                 except: pass
-                # log(f"    └─ 📁 File NVS {Colors.GREEN}Eliminado (Vacío){Colors.RESET}") # 🔇 Comentado
+                # if DEBUG:
+                    # print(f"    └─ 📁 File NVS {Colors.GREEN}Eliminado (Vacío){Colors.RESET}") # 🔇 Comentado
             else:
                 # Escribimos el diccionario consolidado de una sola vez
                 with open(cls.FILE_PATH, "w") as f:
                     dump(cls._cache, f)
-                # log(f"    └─ 💾 NVS Flush: {len(cls._cache)} tareas consolidadas en Flash.") # 🔇 Comentado
+                # if DEBUG:
+                    # print(f"    └─ 💾 NVS Flush: {len(cls._cache)} tareas consolidadas en Flash.") # 🔇 Comentado
             
             # Limpiamos la bandera ya que estamos sincronizados con el disco
             cls._dirty = False
         except Exception as e:
-            log(f"\n⚠️  Error en Flush NVS: {e}")
+            if DEBUG:
+                print(f"\n⚠️  Error en Flush NVS: {e}")
 
     @classmethod
     def prepare_reset_backup(cls):
@@ -291,6 +291,10 @@ class NVSManager:
         global active_irrigation_timers
 
         if not active_irrigation_timers: return
+
+        # (Optimización de memoria RAM)
+        # Lazy Imports (Importación tardía)
+        from utime import time # type: ignore
 
         current_time = time()
         
@@ -309,7 +313,8 @@ class NVSManager:
                     task['saved_at_epoch'] = int(current_time)
                     cls._cache[str_id] = task
                     cls._dirty = True
-                    # log(f"💾  Backup Creado: ID:{actuator_id} Restan:{int(remaining)}s") # 🔇 Comentado
+                    # if DEBUG:
+                        # print(f"💾  Backup Creado: ID:{actuator_id} Restan:{int(remaining)}s") # 🔇 Comentado
         
         # Forzamos la escritura física inmediatamente porque el sistema está muriendo
         cls.flush()
@@ -330,12 +335,18 @@ async def boot_recovery_check():
     Restaura el estado solo si está dentro de la ventana de oportunidad.
     """
 
-    log(f"\n🔍  {Colors.BLUE}Verificando Tareas{Colors.RESET}")
+    # (Optimización de memoria RAM)
+    # Lazy Imports (Importación tardía)
+    from utime import localtime, time # type: ignore
+
+    if DEBUG:
+        print(f"\n🔍  {Colors.BLUE}Verificando Tareas{Colors.RESET}")
     
     all_tasks = NVSManager.load_tasks()
 
     if not all_tasks:
-        log(f"    └─ Estado: {Colors.GREEN}No hay tareas pendientes{Colors.RESET}")
+        if DEBUG:
+            print(f"    └─ Estado: {Colors.GREEN}No hay tareas pendientes{Colors.RESET}")
         return
 
     # Validamos que tengamos hora válida (Año > 2025)
@@ -344,8 +355,9 @@ async def boot_recovery_check():
     current_year = localtime()[0]
 
     if current_year < 2026:
-        log(f"    └─ ⚠️  Error: {Colors.RED}No se pudo sincronizar la Hora del Sistema{Colors.RESET}.")
-        log(f"        └─ Cancelando recuperación por seguridad.")
+        if DEBUG:
+            print(f"    └─ ⚠️  Error: {Colors.RED}No se pudo sincronizar la Hora del Sistema{Colors.RESET}.")
+            print(f"        └─ Cancelando recuperación por seguridad.")
         NVSManager.clear_task()
         return
     
@@ -359,6 +371,7 @@ async def boot_recovery_check():
         start_epoch = task_data.get("start_epoch", 0)
         duration = task_data.get("duration", 0)
         actuator_id = task_data.get("actuator_id")
+        task_id = task_data.get("task_id", "")
         
         # ---- Caso C: Tarea Pendiente (Diferida) ----
         if "_pending" in str(actuator_id) or task_data.get("type") == "delayed_start":
@@ -367,38 +380,41 @@ async def boot_recovery_check():
             delay_remaining = target_start - current_time
             
             if delay_remaining > 0:
-                 log(f"    ├─ {Colors.CYAN}RESTAURANDO DIFERIDO{Colors.RESET} ID:{real_actuator_id}")
-                 log(f"    │   └─ Esperar: {delay_remaining}s")
-                 
-                 if real_actuator_id in relays:
+                if DEBUG:
+                    print(f"    ├─ {Colors.CYAN}RESTAURANDO DIFERIDO{Colors.RESET} ID:{real_actuator_id}")
+                    print(f"    │   └─ Esperar: {delay_remaining}s")
+
+                if real_actuator_id in relays:
                     target_relay = relays[real_actuator_id]
                     duration = task_data.get("duration", 0)
                     
                     # Relanzamos la tarea diferida
                     task = asyncio.create_task(
-                        delayed_start_task(target_relay, real_actuator_id, delay_remaining, duration)
+                        delayed_start_task(target_relay, real_actuator_id, delay_remaining, duration, task_id)
                     )
                     pending_start_tasks[real_actuator_id] = task
-                 else:
+                else:
                     NVSManager.clear_task(real_actuator_id)
             else:
-                 # Si ya pasó el tiempo de espera... ¿Debería arrancar?
-                 # Asumimos que si expiró hace poco (dentro de ventana), arranca YA.
-                 # Si expiró hace horas, se ignora.
-                 time_failed_start = current_time - target_start
-                 if time_failed_start < RECOVERY_WINDOW:
-                      log(f"    ├─ {Colors.GREEN}EJECUTANDO DIFERIDO ATRASADO{Colors.RESET} ID:{real_actuator_id}")
-                      if real_actuator_id in relays:
+                # Si ya pasó el tiempo de espera... ¿Debería arrancar?
+                # Asumimos que si expiró hace poco (dentro de ventana), arranca YA.
+                # Si expiró hace horas, se ignora.
+                time_failed_start = current_time - target_start
+                if time_failed_start < RECOVERY_WINDOW:
+                    if DEBUG:
+                        print(f"    ├─ {Colors.GREEN}EJECUTANDO DIFERIDO ATRASADO{Colors.RESET} ID:{real_actuator_id}")
+                    if real_actuator_id in relays:
                         target_relay = relays[real_actuator_id]
                         duration = task_data.get("duration", 0)
                         # Arrancamos inmediatamente (delay=0)
                         task = asyncio.create_task(
-                            delayed_start_task(target_relay, real_actuator_id, 0, duration)
+                            delayed_start_task(target_relay, real_actuator_id, 0, duration, task_id)
                         )
                         pending_start_tasks[real_actuator_id] = task
-                 else:
-                      log(f"    └─ 🗑️  {Colors.YELLOW}Diferido Vencido{Colors.RESET} ID:{real_actuator_id}")
-                      NVSManager.clear_task(real_actuator_id)
+                else:
+                    if DEBUG:
+                        print(f"    └─ 🗑️  {Colors.YELLOW}Diferido Vencido{Colors.RESET} ID{real_actuator_id}")
+                    NVSManager.clear_task(real_actuator_id)
 
             continue
 
@@ -414,27 +430,31 @@ async def boot_recovery_check():
             saved_at_epoch = task_data.get('saved_at_epoch', 0)
             
             if saved_at_epoch > 0:
-                 elapsed_offline = current_time - saved_at_epoch
+                elapsed_offline = current_time - saved_at_epoch
                  
-                 # Si estuvo apagado demasiado tiempo (más de 15 min), se cancela.
-                 if elapsed_offline > RECOVERY_WINDOW:
-                      log(f"    └─ 🗑️  {Colors.YELLOW}Tarea Pausada (Vencida){Colors.RESET} ID:{actuator_id} (Offline: {elapsed_offline}s)")
-                      NVSManager.clear_task(actuator_id)
-                      continue
+                # Si estuvo apagado demasiado tiempo (más de 15 min), se cancela.
+                if elapsed_offline > RECOVERY_WINDOW:
+                    if DEBUG:
+                        print(f"    └─ 🗑️  {Colors.YELLOW}Tarea Pausada (Vencida){Colors.RESET} ID:{actuator_id} (Offline: {elapsed_offline}s)")
+                    NVSManager.clear_task(actuator_id)
+                    continue
             
-            log(f"    ├─ {Colors.GREEN}REANUDANDO PAUSA{Colors.RESET} ID:{actuator_id}")
-            log(f"    │   └─ Restante: {duration}s")
+            if DEBUG:
+                print(f"    ├─ {Colors.GREEN}REANUDANDO PAUSA{Colors.RESET} ID:{actuator_id}")
+                print(f"    │   └─ Restante: {duration}s")
             
             # Restaurar Relé
             if actuator_id in relays:
                 target_relay = relays[actuator_id]
                 target_relay['pin'].value(1) # ON
                 target_relay['state'] = 'ON'
+                target_relay['task_id'] = task_id
                 state_changed.set()
                 
                 # Reprogramar Timer (Ahora + Duración guardada)
                 active_irrigation_timers.append((actuator_id, current_time + duration))
-                log(f"    └─ Actuador: {target_relay['name']} -> ON")
+                if DEBUG:
+                    print(f"    └─ Actuador: {target_relay['name']} -> ON")
                 
                 # ACTUALIZAMOS NVS con el nuevo tiempo real para que si se corta la luz AHORA,
                 # la lógica normal funcione (Caso A).
@@ -450,26 +470,31 @@ async def boot_recovery_check():
 
         # Caso A: A tiempo (Aún debería estar regando)
         if remaining_time > 0:
-            log(f"    ├─ {Colors.GREEN}RECUPERANDO{Colors.RESET} ID:{actuator_id}")
-            log(f"    │   └─ Faltan: {remaining_time}s")
+            if DEBUG:
+                print(f"    ├─ {Colors.GREEN}RECUPERANDO{Colors.RESET} ID:{actuator_id}")
+                print(f"    │   └─ Faltan: {remaining_time}s")
             
             # Restaurar Relé
             if actuator_id in relays:
                 target_relay = relays[actuator_id]
                 target_relay['pin'].value(1) # ON
                 target_relay['state'] = 'ON'
+                target_relay['task_id'] = task_id
                 state_changed.set()
                 
                 # Reprogramar Timer
                 active_irrigation_timers.append((actuator_id, current_time + remaining_time))
-                log(f"    └─ Actuador: {target_relay['name']} -> ON")
+                if DEBUG:
+                    print(f"    └─ Actuador: {target_relay['name']} -> ON")
             else:
-                log(f"    └─ ⚠️  Error: Actuador {actuator_id} no encontrado.")
+                if DEBUG:
+                    print(f"    └─ ⚠️  Error: Actuador {actuator_id} no encontrado.")
                 NVSManager.clear_task(actuator_id) # Borramos solo esta mala
 
         # Caso B: Tarea Expirada
         else:
-            log(f"    └─ 🗑️  {Colors.YELLOW}Tarea Vencida{Colors.RESET} ID:{actuator_id} (No reanudar)")
+            if DEBUG:
+                print(f"    └─ 🗑️  {Colors.YELLOW}Tarea Vencida{Colors.RESET} ID:{actuator_id} (No reanudar)")
             NVSManager.clear_task(actuator_id)
 
     # ---- Escritura Física en Disco ----
@@ -488,26 +513,27 @@ def log_mqtt_exception(context, e):
         
         # Buscamos en el diccionario global instantáneo
         msg = MQTT_ERROR_MAP.get(code, f"Código de Error MQTT no documentado ({code})")
-        log(f"\n❌  {context}: {Colors.RED}[MQTT-{code}] {msg}{Colors.RESET}")
+        print(f"\n❌  {context}: {Colors.RED}[MQTT-{code}] {msg}{Colors.RESET}")
     
     # Si es OSError (Problemas de TCP/IP base, DNS, WiFi caído)
     elif isinstance(e, OSError):
         err_msg = str(e)
         code = e.args[0] if e.args else 0
         
-        # Identificación rápida por enteros (Mucho más veloz que instanciar variables)
+        # Identificación rápida por enteros
         if code == 110: err_msg = "ETIMEDOUT (Conexión lenta o caída)"
         elif code == 113: err_msg = "EHOSTUNREACH (Ruta al host inalcanzable)"
         elif code == 104: err_msg = "ECONNRESET (Conexión reseteada por el par)"
+        elif code == 12:  err_msg = "ENOMEM (Memoria RAM Insuficiente)"
         elif code == -202: err_msg = "MBEDTLS_ERR_NET_CONNECT_FAILED (Fallo Handshake SSL)"
         elif code == -17040: err_msg = "MBEDTLS_ERR_RSA_PUBLIC_FAILED (Fallo SSL: RAM Insuficiente)"
         elif code == -29312: err_msg = "MBEDTLS_ERR_SSL_CONN_EOF (Broker cerró handshake)"
         
-        log(f"\n❌  {context}: {Colors.RED}[Red-{code}] {err_msg}{Colors.RESET}")
+        print(f"\n❌  {context}: {Colors.RED}[Red-{code}] {err_msg}{Colors.RESET}")
     
     # Cualquier otra excepción fatal (Python bugs, MemoryError)
     else:
-        log(f"\n❌  {context}: {Colors.RED}{type(e).__name__}: {e}{Colors.RESET}")
+        print(f"\n❌  {context}: {Colors.RED}{type(e).__name__}: {e}{Colors.RESET}")
 
 # ---- Función Auxiliar: Inicializar Hardware ----
 def setup_relays():
@@ -526,6 +552,7 @@ def setup_relays():
             'pin':   Pin(13, Pin.OUT, value=0),
             'state': 'OFF',
             'last_published_state': 'OFF',
+            'task_id': '',
             'topic': MQTT_STATE_BASE + b"valve/main_water"
         },
         2: {
@@ -533,6 +560,7 @@ def setup_relays():
             'pin':   Pin(14, Pin.OUT, value=0),
             'state': 'OFF',
             'last_published_state': 'OFF',
+            'task_id': '',
             'topic': MQTT_STATE_BASE + b"valve/agrochemical"
         },
         3: {
@@ -540,6 +568,7 @@ def setup_relays():
             'pin':   Pin(27, Pin.OUT, value=0),
             'state': 'OFF',
             'last_published_state': 'OFF',
+            'task_id': '',
             'topic': MQTT_STATE_BASE + b"pump"
         },
         4: {
@@ -547,6 +576,7 @@ def setup_relays():
             'pin':   Pin(26, Pin.OUT, value=0),
             'state': 'OFF',
             'last_published_state': 'OFF',
+            'task_id': '',
             'topic': MQTT_STATE_BASE + b"valve/fogger"
         },
 
@@ -555,6 +585,7 @@ def setup_relays():
             'pin':   Pin(25, Pin.OUT, value=0),
             'state': 'OFF',
             'last_published_state': 'OFF',
+            'task_id': '',
             'topic': MQTT_STATE_BASE + b"valve/fertigation"
         },
 
@@ -563,6 +594,7 @@ def setup_relays():
             'pin':   Pin(33, Pin.OUT, value=0),
             'state': 'OFF',
             'last_published_state': 'OFF',
+            'task_id': '',
             'topic': MQTT_STATE_BASE + b"valve/sprinkler"
         },
 
@@ -571,6 +603,7 @@ def setup_relays():
             'pin':   Pin(32, Pin.OUT, value=0),
             'state': 'OFF',
             'last_published_state': 'OFF',
+            'task_id': '',
             'topic': MQTT_STATE_BASE + b"valve/soil_wet"
         },
     }
@@ -590,16 +623,23 @@ def sub_status_callback(pid, status):
         return
 
     if status == umqtt_errno.STIMEOUT:
-        log(f"\n⚠️  {Colors.YELLOW}Timeout de entrega{Colors.RESET} (PID: {pid}): El broker no confirmó.")
+        if DEBUG:
+            print(f"\n⚠️  {Colors.YELLOW}Timeout de entrega{Colors.RESET} (PID: {pid}): El broker no confirmó.")
         return
 
     if status == umqtt_errno.SUNKNOWNPID:
-        log(f"\n❌  {Colors.RED}PID Desconocido{Colors.RESET} (PID: {pid}): Respuesta inesperada del broker.")
+        if DEBUG:
+            print(f"\n❌  {Colors.RED}PID Desconocido{Colors.RESET} (PID: {pid}): Respuesta inesperada del broker.")
         return
 
 # ---- Función Auxiliar: Callback MQTT ----
 def sub_callback(topic, msg, retained, dup):
     """**Callback SÍNCRONO que se ejecuta al recibir mensajes.**"""
+
+    # (Optimización de memoria RAM)
+    # Lazy Imports (Importación tardía)
+    from gc    import collect
+    from ujson import dumps, loads # type: ignore
 
     try:
         # El parsing de JSON y decodificación de strings fragmenta la memoria.
@@ -632,15 +672,17 @@ def sub_callback(topic, msg, retained, dup):
         if dup:
             header += f" {Colors.MAGENTA}[Duplicate]{Colors.RESET}"
 
-        log(header)
-        log(f"    ├─ Tópico: {Colors.GREEN}{topic_str}{Colors.RESET}")
-        log(f"    ├─ {type_label}:   {Colors.BLUE}{clean_payload}{Colors.RESET}")
+        if DEBUG:
+            print(header)
+            print(f"    ├─ Tópico: {Colors.GREEN}{topic_str}{Colors.RESET}")
+            print(f"    ├─ {type_label}:   {Colors.BLUE}{clean_payload}{Colors.RESET}")
 
         # ---- 🛡️ Lógica del Sistema de Comandos (/cmd) ----
         if topic == MQTT_TOPIC_CMD:
             # Comando: RESET
             if msg_str.lower() == "reset":
-                log(f"    └─ Acción: {Colors.CYAN}Reboot the Device{Colors.RESET}")
+                if DEBUG:
+                    print(f"    └─ Acción: {Colors.CYAN}Reboot the Device{Colors.RESET}")
                 
                 # Confirmamos recepción publicando un estado antes de morir
                 try:
@@ -648,14 +690,19 @@ def sub_callback(topic, msg, retained, dup):
                         client.publish(MQTT_TOPIC_STATUS, b"rebooting", retain=True, qos=1)
                 except: pass
 
-                log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo{Colors.RESET}")
+                if DEBUG:
+                    print(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo{Colors.RESET}")
 
+                # (Optimización de memoria RAM)
+                # Lazy Imports (Importación tardía)
+                from utime import sleep # type: ignore
                 sleep(30)
                 safe_reset()
 
             # Comando: GET_NVS (Dump recovery.json)
             elif msg_str.lower() == "get_nvs":
-                log(f"    └─ Acción: {Colors.CYAN}Dump NVS Content{Colors.RESET}")
+                if DEBUG:
+                    print(f"    └─ Acción: {Colors.CYAN}Dump NVS Content{Colors.RESET}")
                 try:
                     # Leemos el contenido raw del archivo
                     content = NVSManager.load_tasks()
@@ -664,9 +711,11 @@ def sub_callback(topic, msg, retained, dup):
                     if client and wlan and wlan.isconnected():
                         # Publicamos en el tópico de debug
                         client.publish(MQTT_TOPIC_DEBUG_NVS, payload, retain=False, qos=0)
-                        log(f"    └─ 📡  Publicado en {Colors.BLUE}/debug/nvs{Colors.RESET}")
+                        if DEBUG:
+                            print(f"    └─ 📡  Publicado en {Colors.BLUE}/debug/nvs{Colors.RESET}")
                 except Exception as e:
-                    log(f"    └─ ⚠️  Error reading NVS: {e}")
+                    if DEBUG:
+                        print(f"    └─ ⚠️  Error reading NVS: {e}")
 
         # ---- 💦 Lógica de Riego (irrigation/cmd) ----
         if topic == MQTT_TOPIC_IRRIGATION_CMD:
@@ -676,7 +725,8 @@ def sub_callback(topic, msg, retained, dup):
                 try:
                     if client and wlan and wlan.isconnected():
                         client.publish(MQTT_TOPIC_CMD_RECEIVED, msg, qos=1)
-                        log(f"    ├─ Ok:     {Colors.GREEN}Comando Registrado{Colors.RESET}")
+                        if DEBUG:
+                            print(f"    ├─ Ok:     {Colors.GREEN}Comando Registrado{Colors.RESET}")
                 except: pass
 
                 # ---- Procesamos los datos del JSON ----
@@ -684,7 +734,8 @@ def sub_callback(topic, msg, retained, dup):
                 state = data.get('state', '').strip().upper()
 
                 if state not in ["ON", "OFF"]:
-                    log(f"    └─ Error:  {Colors.RED}Estado inválido: '{state}'{Colors.RESET}")
+                    if DEBUG:
+                        print(f"    └─ Error:  {Colors.RED}Estado inválido: '{state}'{Colors.RESET}")
                     return
 
                 # ---- 🔀 BIFURCACIÓN: circuit (macro) vs actuator (individual) ----
@@ -700,13 +751,15 @@ def sub_callback(topic, msg, retained, dup):
                     circuit_def = IRRIGATION_CIRCUITS.get(circuit_name)
 
                     if not circuit_def:
-                        log(f"    └─ Error: {Colors.RED}Circuito desconocido: '{circuit_name}'{Colors.RESET}")
+                        if DEBUG:
+                            print(f"    └─ Error: {Colors.RED}Circuito desconocido: '{circuit_name}'{Colors.RESET}")
                         return
 
                     duration = data.get('duration', 0) # Default 0
                     task_id = data.get('task_id', '') # Default ''
 
-                    log(f"    ├─ Modo:   {Colors.CYAN}Circuito{Colors.RESET} ➜  {Colors.YELLOW}{circuit_name}{Colors.RESET}")
+                    if DEBUG:
+                        print(f"    ├─ Modo:   {Colors.CYAN}Circuito{Colors.RESET} ➜  {Colors.YELLOW}{circuit_name}{Colors.RESET}")
 
                     # Las válvulas duran: duration + cebado
                     valve_duration = duration + PUMP_PRIME_DELAY
@@ -716,7 +769,8 @@ def sub_callback(topic, msg, retained, dup):
                         'actuator': circuit_def['source'],
                         'state': state,
                         'duration': valve_duration if state == 'ON' else 0,
-                        'start_delay': 0
+                        'start_delay': 0,
+                        'task_id': task_id
                     })
 
                     # 2. Válvula de Línea
@@ -724,7 +778,8 @@ def sub_callback(topic, msg, retained, dup):
                         'actuator': circuit_def['line'],
                         'state': state,
                         'duration': valve_duration if state == 'ON' else 0,
-                        'start_delay': 0
+                        'start_delay': 0,
+                        'task_id': task_id
                     })
 
                     # 3. Bomba (con delay de cebado al encender)
@@ -732,20 +787,24 @@ def sub_callback(topic, msg, retained, dup):
                         'actuator': 'pump',
                         'state': state,
                         'duration': duration if state == 'ON' else 0,
-                        'start_delay': PUMP_PRIME_DELAY if state == 'ON' else 0
+                        'start_delay': PUMP_PRIME_DELAY if state == 'ON' else 0,
+                        'task_id': task_id
                     })
 
                 elif actuator_ref:
                     # ---- MODO INDIVIDUAL (Legado/Mantenimiento) ----
-                    log(f"    ├─ Modo:   {Colors.MAGENTA}Individual{Colors.RESET}")
+                    if DEBUG:
+                        print(f"    ├─ Modo:   {Colors.MAGENTA}Individual{Colors.RESET}")
                     commands_to_execute.append({
                         'actuator': actuator_ref,
                         'state': state,
                         'duration': data.get('duration', 0),
-                        'start_delay': data.get('start_delay', 0)
+                        'start_delay': data.get('start_delay', 0),
+                        'task_id': data.get('task_id', '')
                     })
                 else:
-                    log(f"    └─ Error: {Colors.RED}JSON sin 'circuit' ni 'actuator'{Colors.RESET}")
+                    if DEBUG:
+                        print(f"    └─ Error: {Colors.RED}JSON sin 'circuit' ni 'actuator'{Colors.RESET}")
                     return
 
                 # ---- 🔄 PROCESAMIENTO SECUENCIAL DE COMANDOS ----
@@ -754,6 +813,7 @@ def sub_callback(topic, msg, retained, dup):
                     cmd_state = cmd['state']
                     cmd_duration = cmd['duration']
                     cmd_delay = cmd['start_delay']
+                    cmd_task_id = cmd['task_id']
 
                     # Resolvemos el Relé (Por ID int o Nombre str)
                     target_relay, actuator_id = None, None
@@ -773,7 +833,8 @@ def sub_callback(topic, msg, retained, dup):
 
                     # Validamos que el actuador existe
                     if target_relay is None:
-                        log(f"    ├─ ⚠️  Actuador no encontrado: {Colors.RED}{cmd_actuator}{Colors.RESET}")
+                        if DEBUG:
+                            print(f"    ├─ ⚠️  Actuador no encontrado: {Colors.RED}{cmd_actuator}{Colors.RESET}")
                         continue
 
                     # ---- Override: Cancelamos cualquier inicio diferido pendiente ----
@@ -781,7 +842,8 @@ def sub_callback(topic, msg, retained, dup):
                         pending_start_tasks[actuator_id].cancel()
                         # Limpiamos NVS de la tarea diferida
                         NVSManager.clear_task(actuator_id)
-                        log(f"    ├─ Info: Encendido diferido cancelado: {Colors.YELLOW}{target_relay['name']}{Colors.RESET}")
+                        if DEBUG:
+                            print(f"    ├─ Info: Encendido diferido cancelado: {Colors.YELLOW}{target_relay['name']}{Colors.RESET}")
                         # En modo circuito no retornamos, continuamos procesando
                         if not circuit_name:
                             return
@@ -791,6 +853,9 @@ def sub_callback(topic, msg, retained, dup):
                     # Usamos una key especial: "{id}_pending"
                     if cmd_state == "ON" and cmd_delay > 0:
                         try:
+                            # (Optimización de memoria RAM)
+                            # Lazy Imports (Importación tardía)
+                            from utime import time # type: ignore
                             target_start = time() + cmd_delay
                             task_data = {
                                 "actuator_id": actuator_id,
@@ -798,23 +863,26 @@ def sub_callback(topic, msg, retained, dup):
                                 "target_start_epoch": target_start,
                                 "type": "delayed_start",
                                 "start_delay_original": cmd_delay,
-                                "duration": cmd_duration
+                                "duration": cmd_duration,
+                                "task_id": cmd_task_id
                             }
                             NVSManager.save_task(task_data)
                         except Exception as e:
-                            log(f"⚠️  Error guardando diferido NVS: {e}")
+                            if DEBUG:
+                                print(f"⚠️  Error guardando diferido NVS: {e}")
 
                         # Creamos la tarea asíncrona para encender en el futuro
                         # Pasamos target_relay y actuator_id ya resueltos
                         task = asyncio.create_task(
-                            delayed_start_task(target_relay, actuator_id, cmd_delay, cmd_duration)
+                            delayed_start_task(target_relay, actuator_id, cmd_delay, cmd_duration, cmd_task_id)
                         )
 
                         # Guardamos referencia para poder cancelarla si llega otro comando
                         pending_start_tasks[actuator_id] = task
 
-                        log(f"    ├─ Acción: {Colors.CYAN}Encendido diferido ➜  {target_relay['name']} en {cmd_delay}s{Colors.RESET}")
-                        # log(f"    ├─ NVS:    Guardada Acción en Diferido") # 🔇 Comentado
+                        if DEBUG:
+                            print(f"    ├─ Acción: {Colors.CYAN}Encendido diferido ➜  {target_relay['name']} en {cmd_delay}s{Colors.RESET}")
+                            # print(f"    ├─ NVS:    Guardada Acción en Diferido") # 🔇 Comentado
                         continue
 
                     # ---- Accionamos físicamente el relay ----
@@ -823,8 +891,10 @@ def sub_callback(topic, msg, retained, dup):
                     if target_relay['state'] != cmd_state:
                         target_relay['pin'].value(relay_value)
                         target_relay['state'] = cmd_state
+                        target_relay['task_id'] = cmd_task_id
 
-                        log(f"    ├─ Acción: Relay {target_relay['name']} ➜  {Colors.MAGENTA}{cmd_state}{Colors.RESET}")
+                        if DEBUG:
+                            print(f"    ├─ Acción: Relay {target_relay['name']} ➜  {Colors.MAGENTA}{cmd_state}{Colors.RESET}")
 
                     # [STRICT NVS] Si apagamos, limpiamos NVS y Timers
                     if cmd_state == "OFF":
@@ -839,6 +909,10 @@ def sub_callback(topic, msg, retained, dup):
 
                     # ---- Gestionamos el temporizador (Auto-Apagado) ----
                     if cmd_state == "ON" and isinstance(cmd_duration, int) and cmd_duration > 0:
+                        # (Optimización de memoria RAM)
+                        # Lazy Imports (Importación tardía)
+                        from utime import time # type: ignore
+
                         end_time = time() + cmd_duration
 
                         # Gestión de variables globales
@@ -856,13 +930,16 @@ def sub_callback(topic, msg, retained, dup):
                                 "actuator_id": actuator_id,
                                 "start_epoch": time(),
                                 "duration": cmd_duration,
-                                "type": "irrigation_run"
+                                "type": "irrigation_run",
+                                "task_id": cmd_task_id
                             }
                             NVSManager.save_task(task_data)
                         except Exception as e:
-                            log(f"    ├─ ⚠️  Error guardando bitácora: {e}")
+                            if DEBUG:
+                                print(f"    ├─ ⚠️  Error guardando bitácora: {e}")
 
-                        log(f"    ├─ Timer:  Apagar {target_relay['name']} en {Colors.CYAN}{cmd_duration}s{Colors.RESET}")
+                        if DEBUG:
+                            print(f"    ├─ Timer:  Apagar {target_relay['name']} en {Colors.CYAN}{cmd_duration}s{Colors.RESET}")
 
                 # ---- Publicación agrupada de estados ----
                 # Un solo set() al final para emitir una ráfaga con todo el circuito
@@ -873,10 +950,12 @@ def sub_callback(topic, msg, retained, dup):
                 NVSManager.flush()
 
             except (ValueError, KeyError, TypeError) as e:
-                log(f"    └─ {Colors.RED}Error procesando Riego: {e}{Colors.RESET}")
+                if DEBUG:
+                    print(f"    └─ {Colors.RED}Error procesando Riego: {e}{Colors.RESET}")
 
     except Exception as e:
-        log(f"\n❌  Error en sub_callback(): {Colors.RED}{e}{Colors.RESET}")
+        if DEBUG:
+            print(f"\n❌  Error en sub_callback(): {Colors.RED}{e}{Colors.RESET}")
 
 # ---- Función Auxiliar: Desconecta/Invalida Cliente MQTT ----
 def force_disconnect_mqtt():
@@ -896,7 +975,7 @@ def force_disconnect_mqtt():
         pass
     finally:
         client = None
-        log(f"📡  Cliente  {Colors.GREEN}Desconectado{Colors.RESET}")
+        print(f"📡  Cliente  {Colors.GREEN}Desconectado{Colors.RESET}")
 
 # ---- FUNCIÓN AUXILIAR: Gestión de desconexión (Graceful Shutdown - Relay Modules) ----
 def shutdown():
@@ -938,7 +1017,8 @@ def shutdown():
     if wlan and wlan.isconnected():
         try:
             wlan.disconnect()
-            log(f"📡  WiFi     {Colors.GREEN}Desconectado{Colors.RESET}\n")
+            if DEBUG:
+                print(f"📡  WiFi     {Colors.GREEN}Desconectado{Colors.RESET}\n")
         except Exception:
             pass # Ignoramos errores de hardware al apagar
 
@@ -950,6 +1030,7 @@ async def wifi_coro():
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
     from network import STA_IF, WLAN # type: ignore
+    from utime   import time         # type: ignore
 
     # Inicialización del objeto WLAN
     wlan = WLAN(STA_IF)
@@ -962,7 +1043,7 @@ async def wifi_coro():
         if not wlan.isconnected():
 
             if connected_once:
-                log(f"📡  WiFi {Colors.RED}Desconectado{Colors.RESET}\n")
+                print(f"📡  WiFi {Colors.RED}Desconectado{Colors.RESET}\n")
 
             # ---- Verificación Previa (Safety Check) ----
             # Iniciamos el contador de desconexión por primera vez
@@ -971,10 +1052,10 @@ async def wifi_coro():
 
             # Verificamos AQUI por si el bloque try falla repetidamente (la primera vez)
             if (time() - wifi_disconnect_start > MAX_OFFLINE_RESET_SEC):
-                 log(f"\n💀  {Colors.RED}DEATH: El WiFi no se recuperó en {MAX_OFFLINE_RESET_SEC//60} minutos.{Colors.RESET}\n\n")
-                 log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo{Colors.RESET}\n\n")
-                 await asyncio.sleep(1)
-                 safe_reset()
+                print(f"\n💀  {Colors.RED}DEATH: El WiFi no se recuperó en {MAX_OFFLINE_RESET_SEC//60} minutos.{Colors.RESET}\n\n")
+                print(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo{Colors.RESET}\n\n")
+                await asyncio.sleep(1)
+                safe_reset()
 
             try:
                 # fuerza a la capa de red a limpiar todos los estados internos, timers y handshakes pendientes antes de intentar una nueva conexión
@@ -983,7 +1064,7 @@ async def wifi_coro():
                 await asyncio.sleep(1)
                 wlan.active(True)
 
-                log(f"\n\n📡  Conectándose a {Colors.BLUE}{WIFI_CONFIG['SSID']}{Colors.RESET}", end="")
+                print(f"\n\n📡  Conectándose a {Colors.BLUE}{WIFI_CONFIG['SSID']}{Colors.RESET}", end="")
                 
                 wlan.connect(WIFI_CONFIG['SSID'], WIFI_CONFIG['PASS'])
 
@@ -992,15 +1073,16 @@ async def wifi_coro():
                     # Si llevamos mucho tiempo intentando conectar (inicio de desconexión + tiempo actual)
                     # Forzamos un reinicio para limpiar el stack TCP/IP / Hardware
                     if wifi_disconnect_start and (time() - wifi_disconnect_start > MAX_OFFLINE_RESET_SEC):
-                        log(f"\n💀  {Colors.RED}DEATH: El WiFi no se recuperó en {MAX_OFFLINE_RESET_SEC//60} minutos.{Colors.RESET}\n\n")
-                        log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo{Colors.RESET}\n\n")
+                        print(f"\n💀  {Colors.RED}DEATH: El WiFi no se recuperó en {MAX_OFFLINE_RESET_SEC//60} minutos.{Colors.RESET}\n\n")
+                        print(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo{Colors.RESET}\n\n")
                         await asyncio.sleep(1)
                         safe_reset()
 
-                    log(f"{Colors.BLUE}.{Colors.RESET}", end="")
+                    if DEBUG:
+                        print(f"{Colors.BLUE}.{Colors.RESET}", end="")
                     await asyncio.sleep(1)
 
-                log(f"\n📡  Conexión WiFi Establecida {Colors.GREEN}| IP: {wlan.ifconfig()[0]}{Colors.RESET}")
+                print(f"\n📡  Conexión WiFi Establecida {Colors.GREEN}| IP: {wlan.ifconfig()[0]}{Colors.RESET}")
 
                 # Inyección de DNS
                 try:
@@ -1009,9 +1091,10 @@ async def wifi_coro():
                     ip, subnet, gateway, dns = wlan.ifconfig()
                     wlan.ifconfig((ip, subnet, gateway, cloudflare_dns))
                     if DEBUG:
-                        log(f"\n🌍  DNS: {Colors.CYAN}{cloudflare_dns}{Colors.RESET}")
+                        print(f"\n🌍  DNS: {Colors.CYAN}{cloudflare_dns}{Colors.RESET}")
                 except Exception as e:
-                    if DEBUG: log(f"⚠️  Error forzando DNS en Boot: {e}")
+                    if DEBUG: 
+                        print(f"⚠️  Error forzando DNS en Boot: {e}")
 
                 # Resetear contador de falla
                 wifi_disconnect_start = None
@@ -1024,7 +1107,8 @@ async def wifi_coro():
 
             except Exception as e:
                 # OSErrors durante la conexión WiFi (ej: hardware no disponible, fallo de IP)
-                log(f"\n❌  No se pudo establecer la conexión WiFi: {Colors.RED}{e}{Colors.RESET}")
+                if DEBUG:
+                    print(f"\n❌  No se pudo establecer la conexión WiFi: {Colors.RED}{e}{Colors.RESET}")
                 await asyncio.sleep(5)
         else:
             # Conectado: Reseteamos contador
@@ -1036,9 +1120,13 @@ async def wifi_coro():
 def _connection_timeout_handler(t):
     """Callback del Timer de Hardware: Reinicia si la conexión se cuelga."""
 
+    # (Optimización de memoria RAM)
+    # Lazy Imports (Importación tardía)
+    from utime import sleep # type: ignore
+
     if DEBUG:
-        log(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Timeout en conexión MQTT {Colors.RED}(Socket Bloqueado){Colors.RESET}")
-        log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo{Colors.RESET}\n\n")
+        print(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Timeout en conexión MQTT {Colors.RED}(Socket Bloqueado){Colors.RESET}")
+        print(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo{Colors.RESET}\n\n")
         sleep(1)
 
     safe_reset()
@@ -1048,14 +1136,13 @@ async def check_critical_mqtt_errors(e):
     """Evalúa si la excepción es crítica y requiere un reinicio por HW/SW."""
     from umqtt.simple2 import MQTTException # type: ignore
     
-    # [CRÍTICO] Si es Fallo SSL por Memoria (-17040) o Handshake/Red (-202), Reiniciamos.
-    # No tiene sentido reintentar en un bucle infinito si el socket o la RAM fallan repetidamente.
-    if isinstance(e, OSError) and e.args and e.args[0] in [-17040, -202]:
-         log(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Fallo crítico de SSL/Red ({e.args[0]}).")
-         log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo para recuperar red/memoria...{Colors.RESET}\n")
-         import uasyncio as asyncio
-         await asyncio.sleep(5)
-         safe_reset()
+    # [CRÍTICO] Si es Fallo SSL (-17040), Handshake/Red (-202) o Memoria (12)
+    # No tiene sentido reintentar en bucle si el socket o la RAM fallan físicamente.
+    if isinstance(e, OSError) and e.args and e.args[0] in [-17040, -202, 12]:
+        print(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Fallo crítico de SSL/Red/RAM ({e.args[0]}).")
+        print(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo{Colors.RESET}\n")
+        await asyncio.sleep(5)
+        safe_reset()
 
 # ---- CORUTINA: Gestión de Conexión MQTT (Relay Modules) ----
 async def mqtt_connector_task(client_id):
@@ -1064,12 +1151,17 @@ async def mqtt_connector_task(client_id):
 
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
+    from gc      import collect
     from machine import Timer
     from umqtt.simple2 import MQTTClient, MQTTException # type: ignore
+    from utime   import ticks_ms, ticks_diff, time       # type: ignore
 
     # 🩹 PARCHE SSL: Sobreescribimos el _write de la librería umqtt.simple2
     def _robust_write(self, bytes_wr, length=-1):
         """Asegura que todos los bytes se envíen, incluso si el socket está ocupado."""
+        # (Optimización de memoria RAM)
+        # Lazy Imports (Importación tardía)
+        from utime import sleep_ms # type: ignore
 
         data = bytes_wr if length == -1 else bytes_wr[:length]
         total_written = 0 # bytes transferidos
@@ -1102,6 +1194,9 @@ async def mqtt_connector_task(client_id):
     # Definimos el timeout (ms)
     wd_timeout_ms = (MQTT_CONFIG["SOCKET_TIMEOUT"] + 1) * 1000
 
+    # Cronómetro de fallas de conexión MQTT
+    mqtt_disconnect_start = None
+
     while True:
         # Esperamos a que el WiFi esté conectado
         if wlan is None or not wlan.isconnected():
@@ -1111,6 +1206,18 @@ async def mqtt_connector_task(client_id):
 
         # 🔄 Gestionamos la (Re)conexión
         if client is None:
+
+            # Verificación de falla crítica por tiempo (5 Minutos)
+            if mqtt_disconnect_start is None:
+                mqtt_disconnect_start = time()
+            
+            if (time() - mqtt_disconnect_start > MAX_OFFLINE_RESET_SEC):
+                if DEBUG:
+                    print(f"\n💀  {Colors.RED}DEATH: El MQTT no conectó en {MAX_OFFLINE_RESET_SEC//60} minutos.{Colors.RESET}")
+                    print(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo{Colors.RESET}\n\n")
+                await asyncio.sleep(1)
+                safe_reset()
+
             try:
                 collect()
 
@@ -1149,17 +1256,21 @@ async def mqtt_connector_task(client_id):
                 log_disk_usage()
                 log_ram_usage()
                 
-                log(f"\n📡  Conectando {Colors.BLUE}Broker MQTT{Colors.RESET}")
+                print(f"\n📡  Conectando {Colors.BLUE}Broker MQTT{Colors.RESET}")
 
                 try:
                     # Para persistencia, clean_session debe ser False. 
                     # Esto permite que el Broker guarde las suscripciones y mensajes QOS 1 mientras estemos offline.
                     client.connect(clean_session=True)
                 finally:
-                    # SIEMPRE desactivamos el timer si la función retorna con éxito.
+                    # SI la función retorna con éxito.
+                    # desactivamos el timer.
                     wd_timer.deinit()
 
-                log(f"📡  Conexión MQTT {Colors.GREEN}Establecida{Colors.RESET}", end="\n")
+                    # Reseteamos cronómetro.
+                    mqtt_disconnect_start = None
+
+                print(f"📡  Conexión MQTT {Colors.GREEN}Establecida{Colors.RESET}", end="\n")
 
                 # Publicamos que estamos ONLINE
                 # retain=True: El último estado se queda en el Broker para nuevos suscriptores
@@ -1217,7 +1328,8 @@ async def mqtt_connector_task(client_id):
                 # Comprobamos si ha pasado demasiado tiempo desde que OÍMOS al broker
                 # Damos un margen de 1.5x el KEEPALIVE
                 elif ticks_diff(now_ms, client.last_cpacket) > MQTT_CONFIG['KEEPALIVE'] * 1500:
-                    log(f"\n💀  Conexión {Colors.RED} ZOMBIE {Colors.RESET}detectada")
+                    if DEBUG:
+                        print(f"\n💀  Conexión {Colors.RED} ZOMBIE {Colors.RESET}detectada")
 
                     # Lanzamos una excepción a propósito para ser capturados
                     raise OSError("Se ha excedido el TIMEOUT del broker MQTT")
@@ -1237,17 +1349,23 @@ async def mqtt_connector_task(client_id):
         await asyncio.sleep(MQTT_CONFIG['CHECK_INTERVAL'])
 
 # ---- CORUTINA: Gestión de tareas diferidas ----
-async def delayed_start_task(target_relay, actuator_id, delay, duration):
+async def delayed_start_task(target_relay, actuator_id, delay, duration, task_id=""):
     """
     **Activa un actuador después de un retraso especificado.**
 
     * `actuator_ref`: Puede ser el ID (int) o el Nombre (str) del actuador.
     * `delay`: Tiempo de espera antes de encender (segundos).
     * `duration`: Tiempo que permanecerá encendido (segundos). `0 = indefinido`.
+    * `task_id`: Identificador original del JSON para telemetría state.
     """
 
+    # (Optimización de memoria RAM)
+    # Lazy Imports (Importación tardía)
+    from utime import time # type: ignore
+
     try:
-        log(f"    └─ 🕒 {Colors.YELLOW}Inicio Diferido:{Colors.RESET} Esperando {delay}s para {target_relay['name']}")
+        if DEBUG:
+            print(f"    └─ 🕒 {Colors.YELLOW}Inicio Diferido:{Colors.RESET} Esperando {delay}s para {target_relay['name']}")
 
         # Esperamos el tiempo previsto
         await asyncio.sleep(delay)
@@ -1266,18 +1384,21 @@ async def delayed_start_task(target_relay, actuator_id, delay, duration):
                     "actuator_id": actuator_id,
                     "start_epoch": time(),
                     "duration": duration,
-                    "type": "irrigation_run"
+                    "type": "irrigation_run",
+                    "task_id": task_id
                 }
                 NVSManager.save_task(task_data)
                 
             except Exception as e:
-                log(f"⚠️  Error guardando bitácora de vuelo: {e}")
+                if DEBUG:
+                    print(f"⚠️  Error guardando bitácora de vuelo: {e}")
 
         # ---- Accionamos el Relé (ENCENDIDO)----
         # Enciende el relé | active-HIGH
         target_relay['pin'].value(1)
         # Establece el state en el Diccionario de Relays
         target_relay['state'] = 'ON'
+        target_relay['task_id'] = task_id
         # Notifica el cambio de estado
         state_changed.set() 
 
@@ -1286,8 +1407,9 @@ async def delayed_start_task(target_relay, actuator_id, delay, duration):
         is_intermediate = (duration > 0)
         tree_char = "├─" if is_intermediate else "└─"
     
-        log(f"\n🚀  Ejecución {Colors.GREEN}Diferida{Colors.RESET}")
-        log(f"    {tree_char} Actuador: {Colors.MAGENTA}{target_relay['name']}{Colors.RESET} -> ON")
+        if DEBUG:
+            print(f"\n🚀  Ejecución {Colors.GREEN}Diferida{Colors.RESET}")
+            print(f"    {tree_char} Actuador: {Colors.MAGENTA}{target_relay['name']}{Colors.RESET} -> ON")
         
         # ---- Orquestar Apagado Automático (Si aplica) ----
         if duration > 0:
@@ -1302,14 +1424,16 @@ async def delayed_start_task(target_relay, actuator_id, delay, duration):
 
             active_irrigation_timers.append((actuator_id, end_time))
 
-            log(f"    └─ Timer:    Apagar en {Colors.CYAN}{duration}s{Colors.RESET}")
+            if DEBUG:
+                print(f"    └─ Timer:    Apagar en {Colors.CYAN}{duration}s{Colors.RESET}")
 
         # ---- Escritura Física en Disco ----
         # Consolidamos la ejecución diferida
         NVSManager.flush()
 
     except asyncio.CancelledError:
-        log(f"    └─ Info: {Colors.YELLOW}Tarea diferida cancelada durante la espera.{Colors.RESET}")
+        if DEBUG:
+            print(f"    └─ Info: {Colors.YELLOW}Tarea diferida cancelada durante la espera.{Colors.RESET}")
         raise # Re-lanzamos para limpieza interna de asyncio si es necesario
 
     finally:
@@ -1332,6 +1456,10 @@ async def timer_manager_task():
     # Gestión de variables globales
     global active_irrigation_timers
 
+    # (Optimización de memoria RAM)
+    # Lazy Imports (Importación tardía)
+    from utime import time # type: ignore
+
     while True:
         # Cede el control al planificador de asyncio
         await asyncio.sleep(1)
@@ -1339,6 +1467,9 @@ async def timer_manager_task():
         # Si no hay temporizadores, no hacemos nada.
         if not active_irrigation_timers:
             continue
+
+        # Debounce (Anti-Rebotes): Pausa para agrupar múltiples cambios simultáneos
+        await asyncio.sleep_ms(50)
 
         current_time = time() # tiempo actual
         timers_to_keep = [] # lista auxiliar
@@ -1356,8 +1487,9 @@ async def timer_manager_task():
                     state_changed.set() # Notifica el cambio de estado
 
                     # Log del evento automático
-                    log(f"\n⏰  {Colors.YELLOW}Temporizador Finalizado{Colors.RESET}")
-                    log(f"    └─ Acción: Apagando {Colors.MAGENTA}{target_relay['name']}{Colors.RESET}")
+                    if DEBUG:
+                        print(f"\n⏰  {Colors.YELLOW}Temporizador Finalizado{Colors.RESET}")
+                        print(f"    └─ Acción: Apagando {Colors.MAGENTA}{target_relay['name']}{Colors.RESET}")
                     
                     # ---- Limpieza de Bitácora (NVS) ----
                     # La tarea terminó exitosamente, borramos el registro ESPECÍFICO.
@@ -1383,6 +1515,7 @@ async def state_publisher_task():
 
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
+    from ujson import dumps # type: ignore
     from umqtt.simple2 import MQTTException # type: ignore
 
     while True:
@@ -1398,7 +1531,8 @@ async def state_publisher_task():
         # Validación de Conectividad (Evitar Error 28)
         # Verificamos client, wlan y el socket interno antes de intentar publicar
         if client is None or getattr(client, 'sock', None) is None or not (wlan and wlan.isconnected()):
-            log(f"\n❌  Publicación omitida: {Colors.RED}Cliente/WiFi no disponible{Colors.RESET}")
+            if DEBUG:
+                print(f"\n❌  Publicación omitida: {Colors.RED}Cliente/WiFi no disponible{Colors.RESET}")
             continue
 
         # Filtramos los cambios
@@ -1413,7 +1547,8 @@ async def state_publisher_task():
             continue
         
         # Si Hay actualizaciones -> Imprimimos encabezado
-        log(f"\n📡  Sincronizando {Colors.BLUE}Relays{Colors.RESET}")
+        if DEBUG:
+            print(f"\n📡  Sincronizando {Colors.BLUE}Relays{Colors.RESET}")
 
         # Obtenemos el numero de actualizaciones para estilizar el log
         total_updates = len(updates_pending)
@@ -1421,6 +1556,7 @@ async def state_publisher_task():
         # Recorremos los relés pendientes por actualizar.
         for i, relay_info in enumerate(updates_pending):
             current_state = relay_info['state']
+            current_task_id = relay_info.get('task_id', '')
 
             # ---- Lógica Visual de Árbol ----
             # Si es el último elemento de la lista (índice == total - 1), usamos "└─"
@@ -1432,13 +1568,19 @@ async def state_publisher_task():
                 async with mqtt_lock:
                     # Intentamos publicar el nuevo estado
                     # Usamos qos=0 (no bloqueante) y retain=True (importante)
-                    client.publish(relay_info['topic'], current_state.encode('utf-8'), retain=True, qos=0)
+                    payload = dumps({
+                        "state": current_state,
+                        "task_id": current_task_id,
+                        "actuator": relay_info["name"]
+                    })
+                    client.publish(relay_info['topic'], payload.encode('utf-8'), retain=True, qos=0)
 
                 # Sincroniza con el último estado publicado.
                 relay_info['last_published_state'] = current_state
 
                 # Log con el carácter dinámico
-                log(f"    {tree_char} {relay_info['name']}: {Colors.MAGENTA}{current_state}{Colors.RESET}")
+                if DEBUG:
+                    print(f"    {tree_char} {relay_info['name']}: {Colors.MAGENTA}{current_state}{Colors.RESET}")
                 
                 # Evita saturar el socket/broker con ráfagas
                 await asyncio.sleep_ms(200)
@@ -1481,6 +1623,7 @@ async def heartbeat_task():
 async def main():
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
+    from gc        import collect
     from machine   import WDT
     from network   import STA_IF, WLAN # type: ignore
     from ubinascii import hexlify      # type: ignore
@@ -1510,9 +1653,11 @@ async def main():
     # Seguridad de hardware: Si el bucle principal se congela, el dispositivo se reinicia.
     try:
         wdt = WDT(timeout=WDT_TIMEOUT_MS)
-        log(f"🐕  Watchdog Activado: {Colors.MAGENTA}{WDT_TIMEOUT_MS//1000} segundos{Colors.RESET}")
+        if DEBUG:
+            print(f"🐕  Watchdog: {Colors.YELLOW}{WDT_TIMEOUT_MS//1000} segundos{Colors.RESET}")
     except Exception as e:
-        log(f"⚠️  No se pudo iniciar el Watchdog: {e}")
+        if DEBUG:
+            print(f"⚠️  No se pudo iniciar el Watchdog: {e}")
         wdt = None
     
     # ---- Boot Recovery Check ----
@@ -1539,7 +1684,7 @@ def stopped_program():
     Se envuelve en una funcion debido a que el log crudo no es valido en el template de compile.py
     """
     if DEBUG:
-        log(f"\n\n📡  Programa {Colors.GREEN}Detenido{Colors.RESET}")
+        print(f"\n\n📡  Programa {Colors.GREEN}Detenido{Colors.RESET}")
 
 # ---- Punto de Entrada ----
 if __name__ == '__main__':
@@ -1550,8 +1695,7 @@ if __name__ == '__main__':
         stopped_program()
     except Exception as e:
         if DEBUG:
-            log(f"\n\n❌  Error fatal no capturado: {Colors.RED}{e}{Colors.RESET}\n\n")
-        
+            print(f"\n\n❌  Error fatal no capturado: {Colors.RED}{e}{Colors.RESET}\n\n")
         # En caso de error fatal en el Loop principal, reiniciamos el dispositivo
         safe_reset()
     finally:

@@ -120,8 +120,8 @@ export function Sidebar({ suggestions = [] }: Props) {
                 `${sidebarRoute ? 'my-2' : ''}`,
               )}
             >
+              {/* IZQUIERDA: Botón Volver (con ancho fijo para balancear flex) */}
               <AnimatePresence mode="wait">
-                {/* IZQUIERDA: Botón Volver (con ancho fijo para balancear flex) */}
                 <motion.div
                   key={sidebarRoute ? 'back-btn' : 'empty-btn'}
                   animate={{ opacity: 1 }}
@@ -145,8 +145,10 @@ export function Sidebar({ suggestions = [] }: Props) {
                     <div className="h-8 w-8" />
                   )}
                 </motion.div>
+              </AnimatePresence>
 
-                {/* CENTRO: Título de Sección */}
+              {/* CENTRO: Título de Sección */}
+              <AnimatePresence mode="wait">
                 <motion.div
                   key={currentTitle || 'empty-title'}
                   animate={{ opacity: 1 }}

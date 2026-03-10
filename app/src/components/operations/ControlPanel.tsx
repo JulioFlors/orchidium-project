@@ -6,7 +6,13 @@ import { PiSprayBottle } from 'react-icons/pi'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { ActuatorCard } from './ActuatorCard'
+import { FertigationModal } from './FertigationModal'
 
+import {
+  createManualTask,
+  getWaitingAgrochemicalTasks,
+  confirmWaitingTasks,
+} from '@/actions/control/control-actions'
 import { useMqttStore } from '@/store'
 import { IrrigationCommand } from '@/interfaces'
 import { useDeviceHeartbeat } from '@/hooks'
@@ -38,14 +44,26 @@ const CIRCUIT_MAP: Record<string, string | string[]> = {
   fertigation: ['FERTIGATION', 'FUMIGATION'],
 }
 
-// Duración por defecto para activación manual (10 minutos)
-const DEFAULT_DURATION_SEC = 600
+// Duración por defecto para activación manual (5 minutos)
+const DEFAULT_DURATION_SEC = 300
+
+interface WaitingTask {
+  id: string
+  purpose: string
+  scheduledAt: Date | string
+  schedule?: { name: string } | null
+}
 
 export function ControlPanel() {
   const { connect, status, publish, subscribe, messages } = useMqttStore()
 
   // --- Estados Visuales ---
   const [loadingCircuits, setLoadingCircuits] = useState<Record<string, boolean>>({})
+
+  // Estados para Modal de Agroquímicos
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [waitingTasks, setWaitingTasks] = useState<WaitingTask[]>([])
+  const [isSubmittingModal, setIsSubmittingModal] = useState(false)
 
   // Flag de "Listo" (Sincronizado con MQTT)
   const [isReady, setIsReady] = useState(false)
@@ -177,13 +195,50 @@ export function ControlPanel() {
     Object.values(activeCircuits).some(Boolean) || Object.keys(loadingCircuits).length > 0
 
   // Action Handler — Envía un solo JSON con circuit al ESP32
-  const toggleCircuit = (circuit: keyof typeof activeCircuits) => {
+  const toggleCircuit = async (circuit: keyof typeof activeCircuits) => {
     if (!isDeviceOnline) return
 
     const isTurningOn = !activeCircuits[circuit]
 
     if (isTurningOn && isSystemBusy) return
 
+    // Si trata de encender agroquímicos, abrimos modal y pausamos el flujo directo.
+    if (isTurningOn && circuit === 'fertigation') {
+      try {
+        setLoadingCircuits((prev) => ({ ...prev, [circuit]: true }))
+        const res = await getWaitingAgrochemicalTasks()
+
+        if (res.success && res.data) {
+          setWaitingTasks(res.data)
+        }
+        setIsModalOpen(true)
+        setLoadingCircuits((prev) => {
+          const next = { ...prev }
+
+          delete next[circuit]
+
+          return next
+        })
+      } catch {
+        setLoadingCircuits((prev) => {
+          const next = { ...prev }
+
+          delete next[circuit]
+
+          return next
+        })
+      }
+
+      return
+    }
+
+    await executeCircuitCommand(circuit, isTurningOn)
+  }
+
+  const executeCircuitCommand = async (
+    circuit: keyof typeof activeCircuits,
+    isTurningOn: boolean,
+  ) => {
     // 1. Set Loading
     setLoadingCircuits((prev) => ({ ...prev, [circuit]: true }))
 
@@ -194,18 +249,54 @@ export function ControlPanel() {
       handleCommandTimeout(circuit)
     }, 120000)
 
-    // 3. Enviar un solo comando de Circuito de Riego
+    // 3. Crear tarea oficial en Backend y obtener UUID si estamos encendiendo manualmente
     const mapped = CIRCUIT_MAP[circuit]
     const circuitName = Array.isArray(mapped) ? mapped[0] : mapped
     const state = isTurningOn ? 'ON' : 'OFF'
+
+    let taskId = ''
+
+    if (isTurningOn) {
+      const dbRes = await createManualTask(circuitName, Math.floor(DEFAULT_DURATION_SEC / 60))
+
+      if (dbRes.success && dbRes.taskId) {
+        taskId = dbRes.taskId
+      } else {
+        // En caso de error (e.g. colisión predictible detectada por CollisionGuard)
+        handleCommandTimeout(circuit) // Restaura UI (quita loader)
+        alert(dbRes.error || 'Error desconocido al iniciar tarea manual.')
+
+        return // Interrumpe y no envía el mensaje MQTT
+      }
+    }
 
     const payload: IrrigationCommand = {
       circuit: circuitName,
       state,
       ...(isTurningOn && { duration: DEFAULT_DURATION_SEC }),
+      ...(taskId && { task_id: taskId }),
     }
 
     publish(TOPIC_COMMAND, payload)
+  }
+
+  // --- Manejadores del Modal de Fertirriego ---
+  const handleConfirmManualFertigation = async () => {
+    setIsSubmittingModal(true)
+    await executeCircuitCommand('fertigation', true)
+    setIsSubmittingModal(false)
+    setIsModalOpen(false)
+  }
+
+  const handleConfirmReleaseTasks = async (taskIds: string[]) => {
+    setIsSubmittingModal(true)
+    const res = await confirmWaitingTasks(taskIds)
+
+    if (res.success) {
+      // Tareas liberadas exitosamente
+    }
+    setIsSubmittingModal(false)
+    setIsModalOpen(false)
   }
 
   // Estado Visual
@@ -294,11 +385,20 @@ export function ControlPanel() {
             {/* Body */}
             <p className="text-secondary relative z-10 text-sm leading-relaxed">
               El sistema se desactivará automáticamente tras{' '}
-              <strong className="text-primary font-semibold">10 minutos</strong> por seguridad.
+              <strong className="text-primary font-semibold">5 minutos</strong> por seguridad.
             </p>
           </div>
         </div>
       </div>
+
+      <FertigationModal
+        isOpen={isModalOpen}
+        isSubmitting={isSubmittingModal}
+        waitingTasks={waitingTasks}
+        onClose={() => setIsModalOpen(false)}
+        onConfirmManual={handleConfirmManualFertigation}
+        onConfirmRelease={handleConfirmReleaseTasks}
+      />
     </div>
   )
 }

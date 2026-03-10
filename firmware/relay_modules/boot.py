@@ -6,7 +6,7 @@ from utime import sleep #type: ignore
 
 # ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
-DEBUG = True
+DEBUG = False
 
 # ---- Configuración OTA ----
 OTA_CONFIG = {
@@ -24,12 +24,6 @@ class Colors:
     CYAN = '\x1b[96m'
     WHITE = '\x1b[97m'
 
-# ---- Función Auxiliar: Logs de Desarrollo ----
-def log(*args, **kwargs):
-    """**Imprime solo si el modo DEBUG está activado.**"""
-    if DEBUG:
-        print(*args, **kwargs)
-
 # ---- Actualización de Credenciales ----
 try:
     import update_creds #type: ignore
@@ -37,7 +31,7 @@ try:
     # Borramos el archivo del ESP32
     remove('update_creds.py')
     if DEBUG:
-        log(f"📡  Credenciales {Colors.GREEN}Actualizadas{Colors.RESET}")
+        print(f"📡  Credenciales {Colors.GREEN}Actualizadas{Colors.RESET}")
     sleep(1)
     reset()
 except ImportError:
@@ -48,7 +42,7 @@ try:
     from secrets import WIFI_CONFIG
 except ImportError:
     if DEBUG:
-        log(f"\n\n❌  Error: {Colors.RED}No se encontró{Colors.RESET} lib/secrets")
+        print(f"\n\n❌  Error: {Colors.RED}No se encontró{Colors.RESET} lib/secrets")
     # Evitamos que el código crashee, aunque no conectará
     WIFI_CONFIG = {"SSID": "", "PASS": ""}
 
@@ -61,20 +55,18 @@ def connect_wifi_sync():
     wlan.active(True)
     
     if not wlan.isconnected():
-        if DEBUG:
-            log(f"\n\n📡  Conectándose a {Colors.BLUE}{WIFI_CONFIG['SSID']}{Colors.RESET}", end="")
+        print(f"\n\n📡  Conectándose a {Colors.BLUE}{WIFI_CONFIG['SSID']}{Colors.RESET}", end="")
         wlan.connect(WIFI_CONFIG['SSID'], WIFI_CONFIG['PASS'])
 
         timeout = 60
         while not wlan.isconnected() and timeout > 0:
             if DEBUG:
-                log(f"{Colors.BLUE}.{Colors.RESET}", end="")
+                print(f"{Colors.BLUE}.{Colors.RESET}", end="")
             sleep(1)
             timeout -= 1
             
     if wlan.isconnected():
-        if DEBUG:
-            log(f"\n📡  Conexión WiFi Establecida {Colors.GREEN}| IP: {wlan.ifconfig()[0]}{Colors.RESET}")
+        print(f"\n📡  Conexión WiFi Establecida {Colors.GREEN}| IP: {wlan.ifconfig()[0]}{Colors.RESET}")
 
         # Inyección de DNS
         try:
@@ -83,14 +75,13 @@ def connect_wifi_sync():
             ip, subnet, gateway, dns = wlan.ifconfig()
             wlan.ifconfig((ip, subnet, gateway, cloudflare_dns))
             if DEBUG:
-                log(f"\n🌍  DNS: {Colors.CYAN}{cloudflare_dns}{Colors.RESET}")
+                print(f"\n🌍  DNS: {Colors.CYAN}{cloudflare_dns}{Colors.RESET}")
         except Exception as e:
-            if DEBUG: log(f"⚠️  Error forzando DNS en Boot: {e}")
+            if DEBUG: print(f"⚠️  Error forzando DNS en Boot: {e}")
 
         return True
     
-    if DEBUG:
-        log(f"\n❌  No se pudo establecer la conexión WiFi {Colors.RED}(Timeout){Colors.RESET}.")
+    print(f"\n❌  No se pudo establecer la conexión WiFi {Colors.RED}(Timeout){Colors.RESET}.")
     return False
 
 # ---- Comprobar/Actualizar firmware via OTA ----
@@ -105,15 +96,13 @@ if connect_wifi_sync():
         
         # Si falla la verificación (DNS/Red), reiniciamos para reintentar limpio.
         if not ota.check_for_updates():
-            if DEBUG:
-                log(f"\n💀  {Colors.RED}DEATH: Fallo Crítico de Red en Boot.{Colors.RESET}")
-                log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo{Colors.RESET}\n\n")
+            print(f"\n💀  {Colors.RED}DEATH: Fallo Crítico de Red en Boot.{Colors.RESET}")
+            print(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo{Colors.RESET}\n\n")
             sleep(1)
             reset()
 
     except Exception as e:
-        if DEBUG:
-            log(f"🔥 Error en proceso OTA: {Colors.RED}{e}{Colors.RESET}")
+        print(f"🔥 Error en proceso OTA: {Colors.RED}{e}{Colors.RESET}")
 
     finally:
         # (Liberar RAM Realmente)

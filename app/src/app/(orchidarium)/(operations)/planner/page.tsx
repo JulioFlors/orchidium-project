@@ -13,6 +13,8 @@ import * as z from 'zod'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 
+import { SchedulesTab } from './ui/SchedulesTab'
+
 import { SelectDropdown } from '@/components'
 
 const fetcher = async (url: string) => {
@@ -132,6 +134,19 @@ function TaskStatusBadge({ status, isPast }: { status: string; isPast: boolean }
 }
 
 export default function PlannerPage() {
+  const [activeTab, setActiveTab] = useState<'QUEUE' | 'ROUTINES'>('QUEUE')
+
+  const TABS = {
+    QUEUE: {
+      title: 'Cola de Ejecución',
+      description: 'Vista detallada de la línea de tiempo de tareas únicas bajo observación.',
+    },
+    ROUTINES: {
+      title: 'Programas Automáticos',
+      description: 'Configura y ajusta las pautas diarias recurrentes de irrigación automatizada.',
+    },
+  }
+
   // 1. Fetch Pendientes con SWR (Polling Inteligente cada 5 segundos)
   const {
     data: tasks = [],
@@ -212,243 +227,271 @@ export default function PlannerPage() {
 
   return (
     <div className="mx-auto mt-9 flex w-full max-w-7xl flex-col gap-8 pb-12">
-      {/* HEADER */}
+      {/* TABS NAVEGACIÓN (CHIPS Estilo YouTube) */}
+      <div className="scrollbar-hide flex w-full gap-3 overflow-x-auto pb-1">
+        <button
+          className={clsx(
+            'shrink-0 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors',
+            activeTab === 'QUEUE'
+              ? 'bg-black text-white dark:bg-white dark:text-black'
+              : 'text-secondary bg-black/5 hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10',
+          )}
+          type="button"
+          onClick={() => setActiveTab('QUEUE')}
+        >
+          Cola de Ejecución
+        </button>
+        <button
+          className={clsx(
+            'shrink-0 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors',
+            activeTab === 'ROUTINES'
+              ? 'bg-black text-white dark:bg-white dark:text-black'
+              : 'text-secondary bg-black/5 hover:bg-black/10 dark:bg-white/5 dark:hover:bg-white/10',
+          )}
+          type="button"
+          onClick={() => setActiveTab('ROUTINES')}
+        >
+          Programas Automáticos
+        </button>
+      </div>
+
+      {/* HEADER DINÁMICO */}
       <div>
         <h1 className="text-primary text-2xl font-bold tracking-tight antialiased">
-          Planificador de Tareas
+          {TABS[activeTab].title}
         </h1>
-        <p className="text-secondary mt-1 text-sm">
-          Programa riegos, fertilizaciones y otros eventos futuros automatizados
-        </p>
+        <p className="text-secondary mt-1 text-sm">{TABS[activeTab].description}</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-        {/* COLUMNA 1: FORMULARIO (sticky) */}
-        <div className="lg:col-span-1">
-          <div className="border-input-outline bg-surface sticky top-24 rounded-xl border p-6 shadow-sm">
-            <h2 className="text-primary mb-4 flex items-center gap-2 text-lg font-semibold">
-              <MdOutlineHistoryToggleOff className="h-5 w-5" /> Nueva Tarea
-            </h2>
-            <form className="flex flex-col gap-5" onSubmit={handleSubmit(onSubmit)}>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-secondary text-sm font-medium" htmlFor="purpose">
-                  Circuito de Riego
-                </label>
-                <Controller
-                  control={control}
-                  name="purpose"
-                  render={({ field: { value, onChange, ...rest } }) => (
-                    <SelectDropdown
-                      {...rest}
-                      id="purpose"
-                      options={Object.entries(ACTION_MAP).map(([val, act]) => ({
-                        value: val,
-                        label: act.label,
-                      }))}
-                      value={value}
-                      onChange={onChange}
-                    />
-                  )}
-                />
-                {errors.purpose && (
-                  <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
-                    {errors.purpose.message}
-                  </span>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-secondary text-sm font-medium" htmlFor="zone">
-                  Zonas
-                </label>
-                <Controller
-                  control={control}
-                  name="zone"
-                  render={({ field: { value, onChange, ...rest } }) => (
-                    <SelectDropdown
-                      {...rest}
-                      id="zone"
-                      options={[{ label: 'ZONA A', value: 'ZONA_A' }]}
-                      value={value}
-                      onChange={onChange}
-                    />
-                  )}
-                />
-                {errors.zone && (
-                  <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
-                    {errors.zone.message}
-                  </span>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-secondary text-sm font-medium" htmlFor="duration">
-                  Duración
-                </label>
-                <input
-                  className={clsx(
-                    'focus-input border text-sm',
-                    errors.duration
-                      ? 'border-transparent outline -outline-offset-1 outline-red-800/75 dark:outline-red-400/75'
-                      : 'border-input-outline',
-                  )}
-                  id="duration"
-                  type="text"
-                  {...register('duration')}
-                />
-                {errors.duration && (
-                  <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
-                    {errors.duration.message}
-                  </span>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-secondary text-sm font-medium" htmlFor="scheduledAt">
-                  Fecha y Hora
-                </label>
-                <input
-                  className={clsx(
-                    'focus-input border text-sm',
-                    errors.scheduledAt
-                      ? 'border-transparent outline -outline-offset-1 outline-red-800/75 dark:outline-red-400/75'
-                      : 'border-input-outline',
-                  )}
-                  id="scheduledAt"
-                  type="datetime-local"
-                  {...register('scheduledAt')}
-                />
-                {errors.scheduledAt && (
-                  <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
-                    {errors.scheduledAt.message}
-                  </span>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label className="text-secondary text-sm font-medium" htmlFor="notes">
-                  Notas
-                </label>
-                <textarea
-                  className="focus-input border-input-outline resize-none border text-sm"
-                  id="notes"
-                  rows={2}
-                  {...register('notes')}
-                />
-                {errors.notes && (
-                  <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
-                    {errors.notes.message}
-                  </span>
-                )}
-              </div>
-
-              <button
-                className="bg-action hover:bg-action/90 focus-visible:ring-accessibility mt-2 w-full rounded-md px-4 py-2.5 text-sm font-medium text-white transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-                type="submit"
-              >
-                Agendar Tarea
-              </button>
-            </form>
-          </div>
-        </div>
-
-        {/* COLUMNA 2: LISTA DE PENDIENTES */}
-        <div className="flex flex-col gap-4 lg:col-span-2">
-          <h2 className="text-primary mb-2 flex items-center gap-2 text-lg font-semibold">
-            Cola de Ejecución ({tasks.length})
-          </h2>
-
-          {isLoading && tasks.length === 0 ? (
-            <div className="border-input-outline flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed p-8">
-              <div className="text-primary h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              <span className="text-primary animate-pulse text-sm font-medium tracking-wide">
-                Cargando tareas
-              </span>
-            </div>
-          ) : tasks.length === 0 ? (
-            <div className="border-input-outline bg-surface/50 flex flex-col items-center justify-center rounded-xl border border-dashed p-8">
-              <MdOutlineHistoryToggleOff className="text-secondary/30 mb-2 h-10 w-10" />
-              <p className="text-secondary text-sm">No hay tareas programadas para el futuro.</p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {tasks.map((task) => {
-                const action = ACTION_MAP[task.purpose] || ACTION_MAP.IRRIGATION
-                const dateObj = new Date(task.scheduledAt)
-                const isPast = dateObj < new Date()
-                const isCancellable = task.status === 'PENDING' && !task.isRoutine
-
-                return (
-                  <div
-                    key={task.id}
-                    className={clsx(
-                      'bg-surface border-input-outline flex flex-col justify-between gap-4 rounded-xl border p-4 shadow-sm transition-all sm:flex-row sm:items-center',
-                      task.status === 'IN_PROGRESS' && 'border-amber-500/30 bg-amber-500/5',
-                      task.status === 'CONFIRMED' && 'border-blue-500/30 bg-blue-500/5',
-                      task.status === 'PENDING' &&
-                        isPast &&
-                        !task.isRoutine &&
-                        'border-yellow-500/20 bg-yellow-500/5',
-                    )}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={clsx(
-                          'bg-hover-overlay flex h-10 w-10 items-center justify-center rounded-full',
-                          action.color,
-                        )}
-                      >
-                        {action.icon}
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-primary flex items-center gap-2 text-sm font-medium">
-                          {action.label}
-                          <span className="text-secondary rounded-full bg-black/5 px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase dark:bg-white/10">
-                            {task.zones.join(', ')}
-                          </span>
-                          <TaskStatusBadge isPast={isPast} status={task.status} />
-                        </span>
-                        <div className="text-secondary mt-1 flex items-center gap-2 text-xs">
-                          <span>Duración: {task.duration} min</span>
-                          <span>•</span>
-                          <span>
-                            {dateObj.toLocaleString('es-VE', {
-                              weekday: 'short',
-                              month: 'short',
-                              day: 'numeric',
-                              hour: 'numeric',
-                              minute: '2-digit',
-                              hour12: true,
-                            })}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {task.isRoutine && (
-                      <div className="text-secondary flex items-center gap-2 rounded-md bg-black/5 px-3 py-1.5 text-xs font-semibold dark:bg-white/5">
-                        <MdOutlineHistoryToggleOff className="h-4 w-4" />
-                        {task.routineName}
-                      </div>
-                    )}
-
-                    {isCancellable && (
-                      <TaskOptionsMenu
-                        onCancel={() =>
-                          setCancelTarget({
-                            id: task.id,
-                            label: action.label,
-                          })
-                        }
+      {activeTab === 'QUEUE' ? (
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+          {/* COLUMNA 1: FORMULARIO (sticky) */}
+          <div className="lg:col-span-1">
+            <div className="border-input-outline bg-surface sticky top-24 rounded-xl border p-6 shadow-sm">
+              <h2 className="text-primary mb-4 flex items-center gap-2 text-lg font-semibold">
+                <MdOutlineHistoryToggleOff className="h-5 w-5" /> Nueva Tarea
+              </h2>
+              <form className="flex flex-col gap-5" onSubmit={handleSubmit(onSubmit)}>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-secondary text-sm font-medium" htmlFor="purpose">
+                    Circuito de Riego
+                  </label>
+                  <Controller
+                    control={control}
+                    name="purpose"
+                    render={({ field: { value, onChange, ...rest } }) => (
+                      <SelectDropdown
+                        {...rest}
+                        id="purpose"
+                        options={Object.entries(ACTION_MAP).map(([val, act]) => ({
+                          value: val,
+                          label: act.label,
+                        }))}
+                        value={value}
+                        onChange={onChange}
                       />
                     )}
-                  </div>
-                )
-              })}
+                  />
+                  {errors.purpose && (
+                    <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
+                      {errors.purpose.message}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-secondary text-sm font-medium" htmlFor="zone">
+                    Zonas
+                  </label>
+                  <Controller
+                    control={control}
+                    name="zone"
+                    render={({ field: { value, onChange, ...rest } }) => (
+                      <SelectDropdown
+                        {...rest}
+                        id="zone"
+                        options={[{ label: 'ZONA A', value: 'ZONA_A' }]}
+                        value={value}
+                        onChange={onChange}
+                      />
+                    )}
+                  />
+                  {errors.zone && (
+                    <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
+                      {errors.zone.message}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-secondary text-sm font-medium" htmlFor="duration">
+                    Duración
+                  </label>
+                  <input
+                    className={clsx(
+                      'focus-input border text-sm',
+                      errors.duration
+                        ? 'border-transparent outline -outline-offset-1 outline-red-800/75 dark:outline-red-400/75'
+                        : 'border-input-outline',
+                    )}
+                    id="duration"
+                    type="text"
+                    {...register('duration')}
+                  />
+                  {errors.duration && (
+                    <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
+                      {errors.duration.message}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-secondary text-sm font-medium" htmlFor="scheduledAt">
+                    Fecha y Hora
+                  </label>
+                  <input
+                    className={clsx(
+                      'focus-input border text-sm',
+                      errors.scheduledAt
+                        ? 'border-transparent outline -outline-offset-1 outline-red-800/75 dark:outline-red-400/75'
+                        : 'border-input-outline',
+                    )}
+                    id="scheduledAt"
+                    type="datetime-local"
+                    {...register('scheduledAt')}
+                  />
+                  {errors.scheduledAt && (
+                    <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
+                      {errors.scheduledAt.message}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-secondary text-sm font-medium" htmlFor="notes">
+                    Notas
+                  </label>
+                  <textarea
+                    className="focus-input border-input-outline resize-none border text-sm"
+                    id="notes"
+                    rows={2}
+                    {...register('notes')}
+                  />
+                  {errors.notes && (
+                    <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
+                      {errors.notes.message}
+                    </span>
+                  )}
+                </div>
+
+                <button
+                  className="bg-action hover:bg-action/90 focus-visible:ring-accessibility mt-2 w-full rounded-md px-4 py-2.5 text-sm font-medium text-white transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+                  type="submit"
+                >
+                  Agendar Tarea
+                </button>
+              </form>
             </div>
-          )}
+          </div>
+
+          {/* COLUMNA 2: LISTA DE PENDIENTES */}
+          <div className="flex flex-col gap-4 lg:col-span-2">
+            {isLoading && tasks.length === 0 ? (
+              <div className="border-input-outline flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed p-8">
+                <div className="text-primary h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                <span className="text-primary animate-pulse text-sm font-medium tracking-wide">
+                  Cargando tareas
+                </span>
+              </div>
+            ) : tasks.length === 0 ? (
+              <div className="border-input-outline bg-surface/50 flex flex-col items-center justify-center rounded-xl border border-dashed p-8">
+                <MdOutlineHistoryToggleOff className="text-secondary/30 mb-2 h-10 w-10" />
+                <p className="text-secondary text-sm">No hay tareas programadas para el futuro.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {tasks.map((task) => {
+                  const action = ACTION_MAP[task.purpose] || ACTION_MAP.IRRIGATION
+                  const dateObj = new Date(task.scheduledAt)
+                  const isPast = dateObj < new Date()
+                  const isCancellable = task.status === 'PENDING' && !task.isRoutine
+
+                  return (
+                    <div
+                      key={task.id}
+                      className={clsx(
+                        'bg-surface border-input-outline flex flex-col justify-between gap-4 rounded-xl border p-4 shadow-sm transition-all sm:flex-row sm:items-center',
+                        task.status === 'IN_PROGRESS' && 'border-amber-500/30 bg-amber-500/5',
+                        task.status === 'CONFIRMED' && 'border-blue-500/30 bg-blue-500/5',
+                        task.status === 'PENDING' &&
+                          isPast &&
+                          !task.isRoutine &&
+                          'border-yellow-500/20 bg-yellow-500/5',
+                      )}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div
+                          className={clsx(
+                            'bg-hover-overlay flex h-10 w-10 items-center justify-center rounded-full',
+                            action.color,
+                          )}
+                        >
+                          {action.icon}
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-primary flex items-center gap-2 text-sm font-medium">
+                            {action.label}
+                            <span className="text-secondary rounded-full bg-black/5 px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase dark:bg-white/10">
+                              {task.zones.join(', ')}
+                            </span>
+                            <TaskStatusBadge isPast={isPast} status={task.status} />
+                          </span>
+                          <div className="text-secondary mt-1 flex items-center gap-2 text-xs">
+                            <span>Duración: {task.duration} min</span>
+                            <span>•</span>
+                            <span>
+                              {dateObj.toLocaleString('es-VE', {
+                                weekday: 'short',
+                                month: 'short',
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                hour12: true,
+                              })}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {task.isRoutine && (
+                        <div className="text-secondary flex items-center gap-2 rounded-md bg-black/5 px-3 py-1.5 text-xs font-semibold dark:bg-white/5">
+                          <MdOutlineHistoryToggleOff className="h-4 w-4" />
+                          {task.routineName}
+                        </div>
+                      )}
+
+                      {isCancellable && (
+                        <TaskOptionsMenu
+                          onCancel={() =>
+                            setCancelTarget({
+                              id: task.id,
+                              label: action.label,
+                            })
+                          }
+                        />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="w-full">
+          <SchedulesTab />
+        </div>
+      )}
 
       {/* Modal de Confirmación de Cancelación */}
       <AnimatePresence>

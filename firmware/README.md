@@ -261,30 +261,94 @@ code $PROFILE
 # Uso: 
 #   mprun           -> Flashea carpeta actual
 #   mprun -b        -> Compila (src/compile.py) y flashea la carpeta build
-#   mprun -build    -> Igual que -b (Nativo de PowerShell)
-#   mprun --build   -> Igual que -b (Soporte estilo Unix)
+#   mprun -l        -> Limpia e instala librerías según manifest.json
+#   mprun -b -l     -> Compila, flashea y reinstala librerías
 # -----------------------------------------------------------------------------
 
 function mprun {
     param(
         [string]$Port = "auto",
         [Alias("b")]
-        [switch]$Build
+        [switch]$Build,
+        [Alias("l")]
+        [switch]$Lib
     )
 
     # ---------------------------------------------------------
-    # TRUCO: Soporte para bandera Unix (--build)
+    # TRUCO: Soporte para banderas Unix (--build, --lib)
     # Si el usuario escribe "mprun --build", PowerShell asignará 
     # "--build" a $Port. Aquí lo detectamos y lo corregimos.
     # ---------------------------------------------------------
-    if ($Port -eq "--build") {
+    if ($Port -eq "--build" -or $Port -eq "--b") {
         $Build = $true
         $Port = "auto"
     }
+    if ($Port -eq "--lib" -or $Port -eq "--l") {
+        $Lib = $true
+        $Port = "auto"
+    }
+
+    # 🛡️ VALIDACIÓN: Si el puerto sigue empezando con '--', es un error de tipeo del usuario.
+    if ($Port -match "^--") {
+        Write-Host "`n❌  Error: Bandera no reconocida o mal escrita '$Port'" -ForegroundColor Red
+        Write-Host "    Usa -b, --build, -l, --lib, o especifica un puerto válido (COM6).`n" -ForegroundColor Gray
+        return
+    }
 
     $CurrentPath = Get-Location
+    $FirmwareRoot = (Get-Item $CurrentPath).Parent.FullName
     $TargetDir = $CurrentPath
 
+    # ---------------------------------------------------------
+    # FLAG -l: Instalación de librerías desde manifest.json
+    # ---------------------------------------------------------
+    if ($Lib) {
+        $ManifestPath = Join-Path $CurrentPath "manifest.json"
+
+        if (-not (Test-Path $ManifestPath)) {
+            Write-Host "`n❌  No se encontró manifest.json en '$CurrentPath'" -ForegroundColor Red
+            return
+        }
+
+        $Manifest = Get-Content $ManifestPath -Raw | ConvertFrom-Json
+        $Libs = $Manifest.libs
+
+        if (-not $Libs -or $Libs.Count -eq 0) {
+            Write-Host "`n❌  No hay 'libs' declaradas en manifest.json" -ForegroundColor Red
+            return
+        }
+
+        Write-Host "`n📚  Librerías: $($Libs -join ', ')" -ForegroundColor Yellow
+        Write-Host "`n🧹  Limpiando :/lib del ESP32 `n" -ForegroundColor Yellow
+
+        mpremote connect $Port fs rm -r :lib 2>$null
+        mpremote connect $Port fs mkdir :lib
+
+        $LibRoot = Join-Path $FirmwareRoot "lib"
+
+        foreach ($libName in $Libs) {
+            $LibPath = Join-Path $LibRoot $libName
+
+            if (-not (Test-Path $LibPath)) {
+                Write-Host "⚠️  Librería no encontrada: $libName" -ForegroundColor Red
+                continue
+            }
+
+            # Copiar librería al ESP32
+            mpremote connect $Port fs cp -r $LibPath :lib/
+
+            # Excluir template.py del dispositivo
+            mpremote connect $Port fs rm ":lib/$libName/template.py" 2>$null
+
+            Write-Host "✅  $libName" -ForegroundColor Green
+        }
+
+        Write-Host ""
+    }
+
+    # ---------------------------------------------------------
+    # FLAG -b: Compilación del proyecto
+    # ---------------------------------------------------------
     if ($Build) {
         $ProjectName = Split-Path $CurrentPath -Leaf
         
@@ -296,17 +360,17 @@ function mprun {
 
         # Validamos contexto
         if (-not (Test-Path $CompileScript)) {
-            Write-Host "❌ Error: No se encontró '$CompileScript'" -ForegroundColor Red
-            Write-Host "   Asegúrate de estar dentro de una carpeta de proyecto (ej: firmware/relay_modules)." -ForegroundColor Gray
+            Write-Host "❌  Error: No se encontró '$CompileScript'" -ForegroundColor Red
+            Write-Host "    Asegúrate de estar dentro de una carpeta de proyecto (ej: firmware/relay_modules)." -ForegroundColor Gray
             return
         }
 
-        Write-Host "`n🔨 Compilando proyecto: $ProjectName" -ForegroundColor Cyan
+        # Write-Host "`n⚙️ Compilando proyecto: $ProjectName" -ForegroundColor Cyan
         
         # 1. Compilación
         python $CompileScript $ProjectName
         if ($LASTEXITCODE -ne 0) { 
-            Write-Host "❌ Falló la compilación." -ForegroundColor Red
+            Write-Host "❌  Falló la compilación." -ForegroundColor Red
             return 
         }
 
@@ -314,29 +378,31 @@ function mprun {
         $BuildDir = Join-Path $FirmwareRoot "build\$ProjectName"
         
         if (-not (Test-Path $BuildDir)) {
-            Write-Host "❌ Error: No se encontró la carpeta de build '$BuildDir'." -ForegroundColor Red
+            Write-Host "❌  Error: No se encontró la carpeta de build '$BuildDir'." -ForegroundColor Red
             return
         }
         
         $TargetDir = $BuildDir
-        Write-Host "🔥 Modo Build: Flasheando desde: $TargetDir" -ForegroundColor Yellow
+        Write-Host "📂  Flasheando desde: $TargetDir`n" -ForegroundColor Yellow
     }
     else {
-        Write-Host "📂 Modo Directo: Flasheando desde: $TargetDir" -ForegroundColor DarkCyan
+        Write-Host "`n📂  Flasheando desde: $TargetDir`n" -ForegroundColor Yellow
     }
 
+    # ---------------------------------------------------------
     # 3. Flasheo y Conexión
+    # ---------------------------------------------------------
     Push-Location $TargetDir
     try {
         # Subir todo, resetear y abrir REPL
         mpremote connect $Port fs cp -r . : + reset + repl
     }
     catch {
-        Write-Host "❌ Error mpremote: $_" -ForegroundColor Red
+        Write-Host "❌  Error mpremote: $_" -ForegroundColor Red
     }
     finally {
         Pop-Location
-        Write-Host "`n✅ Proceso finalizado.`n" -ForegroundColor Green
+        Write-Host "`n`n✅  mprun finalizado.`n" -ForegroundColor Green
     }
 }
 ```

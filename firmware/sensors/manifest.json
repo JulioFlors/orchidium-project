@@ -6,5 +6,11 @@
   "notes_release": "parche de la libreria umqtt.simple2",
   "files": [
     "main.py"
+  ],
+  "libs": [
+    "umqtt",
+    "ota",
+    "secrets",
+    "bh1750"
   ]
 }

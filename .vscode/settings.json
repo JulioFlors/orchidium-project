@@ -55,4 +55,6 @@
 		"store": "Store",
 		"umqtt": "Aws",
 	},
+	"search.useGlobalIgnoreFiles": true,
+	"search.useParentIgnoreFiles": true,
 }

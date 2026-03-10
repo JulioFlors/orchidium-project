@@ -130,10 +130,12 @@
   /* 60rem; 960px */
   /* 60.0625rem; 961px*/
   /* 75rem; 1200px */
+  /* 112.5rem; 1800px */
   --breakpoint-tds-xs: 23.1875rem;
   --breakpoint-tds-sm: 40.0625rem;
   --breakpoint-tds-lg: 60.0625rem;
   --breakpoint-tds-xl: 75rem;
+  --breakpoint-tds-2xl: 112.5rem;
 
   --color-light: oklch(0.9491 0 0);
   --color-dark: oklch(0.3211 0 0);
@@ -204,12 +206,22 @@
     @apply outline-none border-b-2 border-orange-600;
   }
 
-  .product-name:hover {
-    @apply bg-linear-to-r from-red-400 to-rose-400 bg-clip-text text-transparent
+  /* ---- Ambient Glow (estilo YouTube Home) ---- */
+  /* Fondo sólido de color que crece desde dentro de la card hacia afuera */
+  .ambient-glow {
+    inset: 8px;
+    opacity: 0;
+    border-radius: 1rem;
+    transition: inset 300ms ease-out, opacity 300ms ease-out;
   }
 
-  .product-name:focus {
-    @apply bg-linear-to-r from-red-400 to-rose-400 bg-clip-text text-transparent
+  .group:hover .ambient-glow {
+    inset: -8px;
+    opacity: 0.12;
+  }
+
+  :is(.dark .group:hover .ambient-glow) {
+    opacity: 0.2;
   }
 
   .search-results {
@@ -257,8 +269,18 @@
     @apply outline-none border-none ring-input-outline ring-1;
   }
 
-  .focus-product:focus-visible {
-    @apply bg-canvas border-none outline-none ring-accessibility ring-2 ring-offset-2 ring-offset-canvas rounded;
+  /* Focus accesible para las cards de producto.
+     Se aplica al contenedor externo de la imagen (sin overflow-hidden)
+     usando :focus-within para responder al focus del Link interno. */
+  .focus-product-card {
+    outline: 2px solid transparent;
+    outline-offset: 3px;
+    border-radius: 0.75rem;
+    transition: outline-color 300ms ease;
+  }
+
+  .focus-product-card:has(:focus-visible) {
+    outline-color: var(--color-accessibility);
   }
 
   .focus-dashed:focus {

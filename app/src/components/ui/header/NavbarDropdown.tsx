@@ -78,6 +78,7 @@ export function NavbarDropdown({ activeItem, onClose, plantsNavData }: Props) {
                   <Image
                     fill
                     priority
+                    unoptimized
                     alt={children.featuredItem.name}
                     className="object-cover"
                     src={children.featuredItem.image}
@@ -112,6 +113,7 @@ export function NavbarDropdown({ activeItem, onClose, plantsNavData }: Props) {
                 {item.image ? (
                   <Image
                     fill
+                    unoptimized
                     alt={item.name}
                     className="object-cover transition-transform duration-500 group-hover:scale-105"
                     src={item.image}
