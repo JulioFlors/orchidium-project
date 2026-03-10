@@ -516,3 +516,34 @@ cd pristinoplant
 ```
 
 El script interactivo se encargará de descargar la última versión, reconstruir exclusivamente las capas modificadas y reiniciar los servicios (como `ingest` y `scheduler`) minimizando cualquier tiempo de inactividad.
+
+#### 5. Mantenimiento de Datos y Reglas del Scheduler
+
+Durante la administración de PristinoPlant en el servidor, frecuentemente surgirán dudas respecto a cómo interactuar con los comandos de Prisma y el ciclo de vida del contenedor Scheduler. Aquí tienes la guía definitiva:
+
+* **¿Cuándo aplicar migraciones (`db:deploy`) en el script `./deploy.sh`?**
+  Sólo cuando un desarrollador haya alterado o creado **nuevas columnas o tablas** en el archivo `schema.prisma`. Agregar plantas, usuarios, o cambiar la configuración desde la página web NO requiere migración.
+
+* **Diferencia entre cambios por código y por UI**
+  Si editas una rutina de riego desde la interfaz web (cambias la hora o la apagas), el Scheduler reacciona solo, limpiando su RAM y programando el nuevo Cron al vuelo sin tocar Docker. Pero, si haces un cambio forzoso por terminal, la plataforma queda desfasada temporalmente.
+
+* **Semillas y Borrado Forzado (`db:seed` / `db:push --force-reset`)**
+  Si en algún punto necesitas formatear la base de datos por terminal, las rutinas de la base de datos obtendrán nuevos identificadores UUID únicos. Dado que el Scheduler mantiene los CronJobs orquestados en la RAM atados a identificadores viejos, debes notificarle para que recargue y se vuelva a enlazar:
+
+  ```bash
+  # Tras hacer un db:seed o reset, ejecuta siempre:
+  docker compose --profile cloud restart scheduler
+  ```
+
+  *(No hace falta volver a ejecutar un "build" de la imagen).*
+
+* **Error P3005 al Desplegar (Desincronización de Migraciones)**
+  Si hiciste un borrado/reseteo forzado, la tabla interna `_prisma_migrations` se perdió. Cuando ejecutes `./deploy.sh` y respondas "SÍ" a las migraciones, Prisma intentará correrlas desde cero y chocará con las tablas que ya existen, arrojando el Error P3005. Tu BD no está rota.
+  Para arreglar esto y decirle a Prisma "acepta que la BD ya tiene esta estructura", debes resolver (baseline) la migración conflictiva que lance el error:
+
+  ```bash
+  # Ejecuta esto en el VPS sustituyendo el nombre exacto de la carpeta de la migración que falló
+  docker compose --profile cloud run --rm scheduler pnpm --filter @package/database exec npx prisma migrate resolve --applied 20240316123000_init
+  ```
+
+  Una vez resuelto, podrás usar `db:deploy` normalmente en los despliegues futuros.

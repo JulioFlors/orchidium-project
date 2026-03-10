@@ -7,6 +7,9 @@ WORKDIR /app
 # Habilita pnpm en la imagen
 RUN corepack enable
 
+# 🛡️ Evita que corepack pida confirmaciones interactivas al descargar pnpm
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+
 # ---- Builder: Instala, compila y genera ----
 FROM base AS builder
 ENV NODE_OPTIONS="--dns-result-order=ipv4first"
