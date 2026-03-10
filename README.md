@@ -347,22 +347,19 @@ sudo docker run -it --rm -p 80:80 \
   -v $(pwd)/infrastructure/certs:/etc/letsencrypt \
   certbot/certbot certonly --standalone \
   -d vps.midominio.com -d mqtt.midominio.com
+```
+
+> **Nota:** Siempre que quieras actualizar los certificados, ejecuta el comando anterior.
 
 ---
 
-### 🚀 Despliegue y Actualización
+### 🚀 Despliegue y Actualización Continua
 
-Para facilitar las actualizaciones continuas, utilizamos un script bash que automatiza la descarga del código del repositorio y la reconstrucción de los contenedores.
+Para garantizar un flujo de trabajo ágil y seguro en el entorno de producción (VPS), utilizamos un script de automatización. Este script se encarga de descargar la última versión del código, aplicar migraciones de base de datos interactivamente y reconstruir los contenedores de Docker de forma controlada.
 
-#### Script de Despliegue Automático (Deploy Script)
+#### 1. Configuración del Script de Despliegue (`deploy.sh`)
 
-Crea el archivo `deploy.sh` en la raíz del proyecto en el servidor:
-
-```bash
-nano deploy.sh
-```
-
-Contenido del script:
+Crea el archivo `deploy.sh` en la raíz del proyecto. Su contenido está diseñado para proteger los archivos generados localmente en el servidor (como certificados o logs) mientras sincroniza el código fuente:
 
 ```bash
 #!/bin/bash
@@ -393,16 +390,16 @@ echo -e "${GREEN}🌵 PristinoPlant | Deploy${RESET}"
 echo ""
 
 # ================================================================
-# PASO 1: Sicronizar (Protegiendo infraestructura local)
+# PASO 1: Sincronizar (Protegiendo infraestructura local)
 # ================================================================
-echo -e "${CYAN}📡 [1/5] Sicronizando con origin/main${RESET}"
+echo -e "${CYAN}📡 [1/5] Sincronizando con origin/main${RESET}"
 echo ""
 git fetch origin main
 # PROTECCIÓN: Resetear el código pero sin tocar la carpeta de certificados y logs
 git reset --hard origin/main
 
 echo ""
-echo -e "${GREEN}   ✅ Repositorio Sicronizado${RESET}"
+echo -e "${GREEN}   ✅ Repositorio Sincronizado${RESET}"
 
 # ================================================================
 # PASO 2: Construir imágenes
@@ -420,7 +417,7 @@ echo ""
 if confirm "¿Ejecutar migraciones de base de datos (prisma db:deploy)?"; then
     echo ""
     echo -e "${CYAN}📦 [3/5] Aplicando migraciones${RESET}"
-    # Usamos el filtro para eRESETontrar el comando db:deploy en el paquete correcto
+    # Usamos el filtro para encontrar el comando db:deploy en el paquete correcto
     docker compose --profile cloud run --rm scheduler pnpm --filter @package/database db:deploy
     echo ""
     echo -e "${GREEN}   ✅ Migraciones aplicadas${RESET}"
@@ -459,28 +456,59 @@ echo -e "${CYAN}🧹 [5/5] Limpiando imágenes antiguas${RESET}"
 docker image prune -f
 
 echo ""
-echo -e "${GREEN}✅ ok{RESET}"
+echo -e "${GREEN}✅ Deploy Finalizado${RESET}"
 echo ""
 docker compose --profile cloud --profile vps ps
 
 ```
 
-Dale permisos de ejecución:
+#### 2. Otorgar Permisos de Ejecución Permanentes (Entorno Local)
+
+Para evitar que el VPS bloquee la ejecución del script con un error de `Permission denied`, es fundamental registrar los permisos de ejecución (`+x`) directamente en el historial de Git desde tu computadora local.
+
+Ejecuta este flujo de trabajo en tu entorno local (estando en la rama `Dev`):
 
 ```bash
-chmod +x deploy.sh
+# 1. Registrar el permiso de ejecución de forma permanente en Git
+git update-index --chmod=+x deploy.sh
+
+# 2. Guardar el cambio
+git commit -m "⚙️ chore: otorgar permisos de ejecución permanentes a deploy.sh"
+
+# 3. Subir el cambio a la rama Dev
+git push
+
 ```
 
-#### Flujo de Trabajo (Actualizar Versión)
+#### 3. Sincronización hacia Producción (`main`)
 
-Cada vez que realices un cambio en el código y lo fusiones a la rama `main`:
+Para que estos cambios (y cualquier código nuevo) lleguen al servidor, debes completar el ciclo de integración hacia la rama principal:
 
-1. Conéctate al VPS.
-2. Ejecuta el script de despliegue:
+```bash
+# 1. Cambiar a la rama de producción
+git checkout main
+
+# 2. Actualizar para evitar conflictos
+git pull origin main
+
+# 3. Fusionar los cambios desde Dev
+git merge Dev
+
+# 4. Subir la versión final a GitHub
+git push origin main
+
+# 5. Volver al entorno de desarrollo
+git checkout Dev
+
+```
+
+#### 4. Flujo de Trabajo Habitual (Actualizar el Servidor)
+
+Una vez configurado lo anterior, el proceso para actualizar la plataforma en el futuro se reduce a dos simples pasos. Cada vez que fusiones código nuevo a la rama `main`, ingresa a tu VPS y ejecuta:
 
 ```bash
 cd pristinoplant
 ./deploy.sh
 ```
 
-Este comando descargará la última versión, reconstruirá solo las capas necesarias y reiniciará los servicios `ingest-cloud` y `scheduler-cloud` sin tiempo de inactividad significativo.
+El script interactivo se encargará de descargar la última versión, reconstruir exclusivamente las capas modificadas y reiniciar los servicios (como `ingest` y `scheduler`) minimizando cualquier tiempo de inactividad.
