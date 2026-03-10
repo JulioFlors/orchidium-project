@@ -483,19 +483,25 @@ git push
 Para que estos cambios (y cualquier código nuevo) lleguen al servidor, debes completar el ciclo de integración hacia la rama principal:
 
 ```bash
-# 1. Cambiar a la rama de producción
+# 1. Verificar que estamos en Dev
+git checkout Dev
+
+# 2. Subimos los cambios a la rama Dev
+git push
+
+# 3. Cambiar a la rama de producción
 git checkout main
 
-# 2. Actualizar para evitar conflictos
+# 4. Actualizar para evitar conflictos
 git pull origin main
 
-# 3. Fusionar los cambios desde Dev
+# 5. Fusionar los cambios desde Dev
 git merge Dev
 
-# 4. Subir la versión final a GitHub
+# 6. Subir la versión final a GitHub
 git push origin main
 
-# 5. Volver al entorno de desarrollo
+# 7. Volver al entorno de desarrollo
 git checkout Dev
 
 ```
