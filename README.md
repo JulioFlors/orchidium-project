@@ -467,13 +467,16 @@ Para evitar que el VPS bloquee la ejecución del script con un error de `Permiss
 Ejecuta este flujo de trabajo en tu entorno local (estando en la rama `Dev`):
 
 ```bash
-# 1. Registrar el permiso de ejecución de forma permanente en Git
+# 1. Verificar que estamos en Dev
+git checkout Dev
+
+# 2. Registrar el permiso de ejecución de forma permanente en Git
 git update-index --chmod=+x deploy.sh
 
-# 2. Guardar el cambio
+# 3. Guardar el cambio
 git commit -m "⚙️ chore: otorgar permisos de ejecución permanentes a deploy.sh"
 
-# 3. Subir el cambio a la rama Dev
+# 4. Subir el cambio a la rama Dev
 git push
 
 ```
@@ -483,25 +486,31 @@ git push
 Para que estos cambios (y cualquier código nuevo) lleguen al servidor, debes completar el ciclo de integración hacia la rama principal:
 
 ```bash
-# 1. Verificar que estamos en Dev
-git checkout Dev
+# 1. Preparar el commit
+git add .
 
-# 2. Subimos los cambios a la rama Dev
+# 2. Cargar el commit desde un archivo
+git commit -F commit.txt
+
+# 3. Eliminar el archivo
+rm commit.txt
+
+# 4 Subir los cambios a la rama Dev
 git push
 
-# 3. Cambiar a la rama de producción
+# 5. Cambiar a la rama de producción
 git checkout main
 
-# 4. Actualizar para evitar conflictos
+# 6. Actualizar para evitar conflictos
 git pull origin main
 
-# 5. Fusionar los cambios desde Dev
+# 7. Fusionar los cambios desde Dev
 git merge Dev
 
-# 6. Subir la versión final a GitHub
+# 8. Subir la versión final a GitHub
 git push origin main
 
-# 7. Volver al entorno de desarrollo
+# 9. Volver al entorno de desarrollo
 git checkout Dev
 
 ```
@@ -547,3 +556,44 @@ Durante la administración de PristinoPlant en el servidor, frecuentemente surgi
   ```
 
   Una vez resuelto, podrás usar `db:deploy` normalmente en los despliegues futuros.
+
+#### 6. Operaciones Diarias y Monitoreo (Docker)
+
+El orquestador en el VPS de producción utiliza Docker Compose bajo la red cloud. Para el monitoreo y manipulación manual rápida de los servicios scheduler, ingest o la web, aquí tienes los comandos fundamentales que debes ejecutar siempre dentro de la carpeta /pristinoplant:
+
+* **Ver estado de los servicios (Encendido/Stop)**
+
+  ```bash
+  docker compose --profile cloud ps
+  ```
+
+* **Reiniciar un servicio específico (ej: Scheduler)**
+
+  ```bash
+  # Útil tras semillas o cambios forzados de BBDD
+  docker compose --profile cloud restart scheduler
+  `
+
+* **Apagar o Encender un servicio individual**
+
+  ```bash
+  docker compose --profile cloud stop scheduler
+  docker compose --profile cloud start scheduler
+  ```
+
+* **Leer en vivo los Logs de un microservicio**
+
+  ```bash
+  # El flag -f mantiene la terminal escuchando los nuevos logs en tiempo real (Ctrl+C para salir)
+  docker logs -f scheduler
+  ```
+
+* **Filtrar Logs (Para evitar saturar la terminal con días de historial)**
+
+  ```bash
+  # Imprime solamente las últimas 50 líneas y se queda escuchando
+  docker logs -f --tail 50 scheduler
+
+  # Imprime logs de las últimas 2 horas
+  docker logs --since 2h scheduler
+  ```

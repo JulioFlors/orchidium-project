@@ -14,30 +14,80 @@ CREATE TYPE "PlantType" AS ENUM ('ADENIUM_OBESUM', 'BROMELIAD', 'CACTUS', 'ORCHI
 CREATE TYPE "PotSize" AS ENUM ('NRO_5', 'NRO_7', 'NRO_10', 'NRO_14');
 
 -- CreateEnum
-CREATE TYPE "TaskStatus" AS ENUM ('PENDING', 'COMPLETED', 'CANCELLED', 'FAILED', 'SKIPPED');
+CREATE TYPE "PlantStatus" AS ENUM ('AVAILABLE', 'MOTHER');
 
 -- CreateEnum
-CREATE TYPE "TaskPurpose" AS ENUM ('IRRIGATION', 'FERTIGATION', 'FUMIGATION', 'HUMIDIFICATION');
+CREATE TYPE "TaskStatus" AS ENUM ('CANCELLED', 'COMPLETED', 'CONFIRMED', 'FAILED', 'IN_PROGRESS', 'PENDING', 'SKIPPED', 'WAITING_CONFIRMATION');
+
+-- CreateEnum
+CREATE TYPE "TaskSource" AS ENUM ('MANUAL', 'DEFERRED', 'ROUTINE');
+
+-- CreateEnum
+CREATE TYPE "TaskPurpose" AS ENUM ('IRRIGATION', 'FERTIGATION', 'FUMIGATION', 'HUMIDIFICATION', 'SOIL_WETTING');
 
 -- CreateEnum
 CREATE TYPE "AgrochemicalType" AS ENUM ('FERTILIZANTE', 'FITOSANITARIO');
 
 -- CreateEnum
-CREATE TYPE "AgrochemicalPorpose" AS ENUM ('DESARROLLO', 'FLORACION', 'MANTENIMIENTO', 'ACARICIDA', 'BACTERICIDA', 'FUNGICIDA', 'INSECTICIDA');
+CREATE TYPE "AgrochemicalPurpose" AS ENUM ('DESARROLLO', 'FLORACION', 'MANTENIMIENTO', 'ACARICIDA', 'BACTERICIDA', 'FUNGICIDA', 'INSECTICIDA');
 
 -- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "email" TEXT NOT NULL,
-    "emailVerified" TIMESTAMP(3),
+    "emailVerified" BOOLEAN NOT NULL DEFAULT false,
     "image" TEXT,
-    "password" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
     "role" "Role" NOT NULL DEFAULT 'USER',
+
+    CONSTRAINT "User_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Session" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "token" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "ipAddress" TEXT,
+    "userAgent" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "User_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "Session_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Account" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "providerId" TEXT NOT NULL,
+    "accessToken" TEXT,
+    "refreshToken" TEXT,
+    "accessTokenExpiresAt" TIMESTAMP(3),
+    "refreshTokenExpiresAt" TIMESTAMP(3),
+    "scope" TEXT,
+    "idToken" TEXT,
+    "password" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Account_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Verification" (
+    "id" TEXT NOT NULL,
+    "identifier" TEXT NOT NULL,
+    "value" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Verification_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -54,10 +104,8 @@ CREATE TABLE "Species" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "slug" TEXT NOT NULL,
-    "price" INTEGER NOT NULL DEFAULT 0,
     "description" TEXT,
     "genusId" TEXT NOT NULL,
-    "stockId" TEXT NOT NULL,
 
     CONSTRAINT "Species_pkey" PRIMARY KEY ("id")
 );
@@ -74,15 +122,6 @@ CREATE TABLE "ProductVariant" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "ProductVariant_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "Stock" (
-    "id" TEXT NOT NULL,
-    "quantity" INTEGER NOT NULL DEFAULT 0,
-    "available" BOOLEAN NOT NULL DEFAULT false,
-
-    CONSTRAINT "Stock_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -119,6 +158,8 @@ CREATE TABLE "FloweringEvent" (
 CREATE TABLE "Plant" (
     "id" TEXT NOT NULL,
     "pottingDate" TIMESTAMP(3),
+    "currentSize" "PotSize" NOT NULL,
+    "status" "PlantStatus" NOT NULL DEFAULT 'AVAILABLE',
     "speciesId" TEXT NOT NULL,
     "locationId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -133,7 +174,7 @@ CREATE TABLE "Agrochemical" (
     "name" TEXT NOT NULL,
     "description" TEXT NOT NULL,
     "type" "AgrochemicalType" NOT NULL,
-    "porpose" "AgrochemicalPorpose" NOT NULL,
+    "purpose" "AgrochemicalPurpose" NOT NULL,
     "preparation" TEXT NOT NULL,
 
     CONSTRAINT "Agrochemical_pkey" PRIMARY KEY ("id")
@@ -184,11 +225,12 @@ CREATE TABLE "AutomationSchedule" (
     "description" TEXT,
     "isEnabled" BOOLEAN NOT NULL DEFAULT true,
     "purpose" "TaskPurpose" NOT NULL,
-    "cronSchedule" TEXT NOT NULL,
+    "cronTrigger" TEXT NOT NULL,
+    "intervalDays" INTEGER NOT NULL DEFAULT 1,
     "durationMinutes" INTEGER NOT NULL DEFAULT 10,
     "zones" "ZoneType"[],
     "fertilizationProgramId" TEXT,
-    "phytosanitaryProgramId" TEXT,
+    "phytosanetaryProgramId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -201,10 +243,12 @@ CREATE TABLE "TaskLog" (
     "scheduledAt" TIMESTAMP(3) NOT NULL,
     "executedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "status" "TaskStatus" NOT NULL DEFAULT 'PENDING',
+    "source" "TaskSource" NOT NULL DEFAULT 'MANUAL',
     "purpose" "TaskPurpose" NOT NULL,
     "zones" "ZoneType"[],
     "duration" INTEGER NOT NULL,
     "notes" TEXT,
+    "cancellationReason" TEXT,
     "agrochemicalId" TEXT,
     "scheduleId" TEXT,
 
@@ -235,6 +279,18 @@ CREATE TABLE "DailyEnvironmentStat" (
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "Session_token_key" ON "Session"("token");
+
+-- CreateIndex
+CREATE INDEX "Session_userId_idx" ON "Session"("userId");
+
+-- CreateIndex
+CREATE INDEX "Account_userId_idx" ON "Account"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Account_providerId_accountId_key" ON "Account"("providerId", "accountId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Genus_name_key" ON "Genus"("name");
 
 -- CreateIndex
@@ -245,9 +301,6 @@ CREATE UNIQUE INDEX "Species_slug_key" ON "Species"("slug");
 
 -- CreateIndex
 CREATE INDEX "Species_genusId_idx" ON "Species"("genusId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "Species_genusId_stockId_key" ON "Species"("genusId", "stockId");
 
 -- CreateIndex
 CREATE INDEX "ProductVariant_speciesId_idx" ON "ProductVariant"("speciesId");
@@ -272,6 +325,9 @@ CREATE INDEX "Plant_speciesId_idx" ON "Plant"("speciesId");
 
 -- CreateIndex
 CREATE INDEX "Plant_locationId_idx" ON "Plant"("locationId");
+
+-- CreateIndex
+CREATE INDEX "Plant_status_idx" ON "Plant"("status");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Agrochemical_name_key" ON "Agrochemical"("name");
@@ -304,10 +360,13 @@ CREATE INDEX "DailyEnvironmentStat_date_idx" ON "DailyEnvironmentStat"("date");
 CREATE UNIQUE INDEX "DailyEnvironmentStat_date_zone_key" ON "DailyEnvironmentStat"("date", "zone");
 
 -- AddForeignKey
-ALTER TABLE "Species" ADD CONSTRAINT "Species_genusId_fkey" FOREIGN KEY ("genusId") REFERENCES "Genus"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Session" ADD CONSTRAINT "Session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Species" ADD CONSTRAINT "Species_stockId_fkey" FOREIGN KEY ("stockId") REFERENCES "Stock"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Account" ADD CONSTRAINT "Account_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Species" ADD CONSTRAINT "Species_genusId_fkey" FOREIGN KEY ("genusId") REFERENCES "Genus"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "ProductVariant" ADD CONSTRAINT "ProductVariant_speciesId_fkey" FOREIGN KEY ("speciesId") REFERENCES "Species"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -340,7 +399,7 @@ ALTER TABLE "PhytosanitaryCycle" ADD CONSTRAINT "PhytosanitaryCycle_programId_fk
 ALTER TABLE "AutomationSchedule" ADD CONSTRAINT "AutomationSchedule_fertilizationProgramId_fkey" FOREIGN KEY ("fertilizationProgramId") REFERENCES "FertilizationProgram"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "AutomationSchedule" ADD CONSTRAINT "AutomationSchedule_phytosanitaryProgramId_fkey" FOREIGN KEY ("phytosanitaryProgramId") REFERENCES "PhytosanitaryProgram"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "AutomationSchedule" ADD CONSTRAINT "AutomationSchedule_phytosanetaryProgramId_fkey" FOREIGN KEY ("phytosanetaryProgramId") REFERENCES "PhytosanitaryProgram"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "TaskLog" ADD CONSTRAINT "TaskLog_agrochemicalId_fkey" FOREIGN KEY ("agrochemicalId") REFERENCES "Agrochemical"("id") ON DELETE SET NULL ON UPDATE CASCADE;
