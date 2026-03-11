@@ -591,7 +591,6 @@ docker logs -f scheduler
 
 ```
 
-
 * **Filtrar Logs (Para evitar saturar la terminal con días de historial)**
 
 ```bash

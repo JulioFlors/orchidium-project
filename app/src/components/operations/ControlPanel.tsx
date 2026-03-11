@@ -48,6 +48,11 @@ const CIRCUIT_MAP: Record<string, string | string[]> = {
 // Duración por defecto para activación manual (5 minutos)
 const DEFAULT_DURATION_SEC = 300
 
+interface ActuatorPayload {
+  state?: string | number | boolean
+  task_id?: string | null
+}
+
 interface WaitingTask {
   id: string
   purpose: string
@@ -94,14 +99,24 @@ export function ControlPanel() {
   // --- 2. Helper de Estado de Actuador (Soporta JSON y Legacy) ---
   const getActuatorPayload = (valveTopic: string) => {
     if (!isReady) return { state: 'OFF', taskId: null }
-    const rawPayload = String(messages[valveTopic]?.payload || 'OFF')
 
-    // Intentamos parsear por si es JSON nuevo (Sincronía Transaccional)
+    const payload = messages[valveTopic]?.payload
+
+    // Si el store ya lo parseó como Object
+    if (typeof payload === 'object' && payload !== null) {
+      const parsed = payload as ActuatorPayload
+
+      return { state: String(parsed.state || 'OFF'), taskId: parsed.task_id || null }
+    }
+
+    // Fallback legado (Texto plano o string stringificado)
+    const rawPayload = String(payload || 'OFF')
+
     try {
       if (rawPayload.startsWith('{')) {
-        const parsed = JSON.parse(rawPayload)
+        const parsed = JSON.parse(rawPayload) as ActuatorPayload
 
-        return { state: parsed.state || 'OFF', taskId: parsed.task_id || null }
+        return { state: String(parsed.state || 'OFF'), taskId: parsed.task_id || null }
       }
     } catch {
       // Si falla el parseo, caemos al fallback
@@ -369,7 +384,7 @@ export function ControlPanel() {
           isDeviceOnline={isDeviceOnline}
           isDisabled={isConnecting || isOffline || (isSystemBusy && !activeCircuits.irrigation)}
           isLoading={loadingCircuits['irrigation']}
-          title="Regar"
+          title="Riego por Aspersión"
           onToggle={() => toggleCircuit('irrigation')}
         />
 
@@ -380,7 +395,7 @@ export function ControlPanel() {
           isDeviceOnline={isDeviceOnline}
           isDisabled={isConnecting || isOffline || (isSystemBusy && !activeCircuits.humidification)}
           isLoading={loadingCircuits['humidification']}
-          title="Nebulizar"
+          title="Nebulización"
           onToggle={() => toggleCircuit('humidification')}
         />
 
@@ -391,7 +406,7 @@ export function ControlPanel() {
           isDeviceOnline={isDeviceOnline}
           isDisabled={isConnecting || isOffline || (isSystemBusy && !activeCircuits.soilWet)}
           isLoading={loadingCircuits['soilWet']}
-          title="Humedecer Suelo"
+          title="Humectación del Suelo"
           onToggle={() => toggleCircuit('soilWet')}
         />
 

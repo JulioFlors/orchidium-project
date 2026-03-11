@@ -1,21 +1,18 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import clsx from 'clsx'
 import useSWR from 'swr'
 import { IoWaterOutline, IoFlaskOutline, IoCloseOutline, IoEllipsisVertical } from 'react-icons/io5'
 import { PiSprayBottle } from 'react-icons/pi'
 import { MdDewPoint, MdOutlineHistoryToggleOff } from 'react-icons/md'
 import { LuRadioTower } from 'react-icons/lu'
 import { HiOutlineCog } from 'react-icons/hi'
-import { motion, AnimatePresence } from 'motion/react'
-import clsx from 'clsx'
-import * as z from 'zod'
-import { useForm, Controller } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
 
 import { SchedulesTab } from './ui/SchedulesTab'
+import { DeferredTaskModal, PlannerFormInputs } from './ui/DeferredTaskModal'
 
-import { SelectDropdown } from '@/components'
+import { TaskPurposeLabels } from '@/config/mappings'
 
 const fetcher = async (url: string) => {
   const res = await fetch(url)
@@ -30,41 +27,6 @@ const fetcher = async (url: string) => {
 type TaskPurpose = 'IRRIGATION' | 'FERTIGATION' | 'FUMIGATION' | 'HUMIDIFICATION' | 'SOIL_WETTING'
 type ZoneType = 'ZONA_A' | 'ZONA_B' | 'ZONA_C' | 'ZONA_D'
 
-// ---- Configuración Zod ----
-const plannerSchema = z.object({
-  purpose: z.enum([
-    'IRRIGATION',
-    'FERTIGATION',
-    'FUMIGATION',
-    'HUMIDIFICATION',
-    'SOIL_WETTING',
-  ] as const),
-  zone: z.literal('ZONA_A', {
-    errorMap: () => ({ message: 'La única zona habilitada es la ZONA A' }),
-  }),
-  duration: z.coerce
-    .number({ invalid_type_error: 'Debe ser un número válido' })
-    .min(5, 'Mínimo 5 minutos')
-    .max(20, 'Máximo 20 minutos'),
-  scheduledAt: z
-    .string()
-    .min(1, 'Debes seleccionar fecha y hora')
-    .refine(
-      (val) => {
-        const selectedDate = new Date(val).getTime()
-        const now = new Date().getTime()
-
-        return selectedDate > now
-      },
-      {
-        message: 'No puedes programar tareas en el pasado',
-      },
-    ),
-  notes: z.string().max(200, 'Máximo 200 caracteres').optional(),
-})
-
-type PlannerFormInputs = z.infer<typeof plannerSchema>
-
 interface PendingTask {
   id: string
   purpose: TaskPurpose
@@ -78,27 +40,27 @@ interface PendingTask {
 
 const ACTION_MAP: Record<TaskPurpose, { label: string; icon: React.ReactNode; color: string }> = {
   IRRIGATION: {
-    label: 'Regar',
+    label: TaskPurposeLabels.IRRIGATION,
     icon: <IoWaterOutline className="h-5 w-5" />,
     color: 'text-blue-500',
   },
   HUMIDIFICATION: {
-    label: 'Nebulizar',
+    label: TaskPurposeLabels.HUMIDIFICATION,
     icon: <PiSprayBottle className="h-5 w-5" />,
     color: 'text-cyan-500',
   },
   SOIL_WETTING: {
-    label: 'Humedecer Suelo',
+    label: TaskPurposeLabels.SOIL_WETTING,
     icon: <MdDewPoint className="h-5 w-5" />,
     color: 'text-emerald-500',
   },
   FERTIGATION: {
-    label: 'Fertirriego',
+    label: TaskPurposeLabels.FERTIGATION,
     icon: <IoFlaskOutline className="h-5 w-5" />,
     color: 'text-purple-500',
   },
   FUMIGATION: {
-    label: 'Fumigación',
+    label: TaskPurposeLabels.FUMIGATION,
     icon: <IoFlaskOutline className="h-5 w-5" />,
     color: 'text-orange-500',
   },
@@ -135,8 +97,9 @@ function TaskStatusBadge({ status, isPast }: { status: string; isPast: boolean }
 
 export default function PlannerPage() {
   const [activeTab, setActiveTab] = useState<'QUEUE' | 'ROUTINES'>('QUEUE')
+  const [isDeferredModalOpen, setIsDeferredModalOpen] = useState(false)
 
-  const TABS = {
+  const TABS: Record<'QUEUE' | 'ROUTINES', { title: string; description: string }> = {
     QUEUE: {
       title: 'Cola de Ejecución',
       description: 'Vista detallada de la línea de tiempo de tareas únicas bajo observación.',
@@ -156,22 +119,6 @@ export default function PlannerPage() {
     refreshInterval: 5000,
   })
 
-  // Form State via Zod + RHF
-  const {
-    control,
-    handleSubmit,
-    reset,
-    register,
-    formState: { errors },
-  } = useForm<PlannerFormInputs>({
-    resolver: zodResolver(plannerSchema),
-    defaultValues: {
-      zone: 'ZONA_A',
-      scheduledAt: '',
-      notes: '',
-    },
-  })
-
   // 2. Submit Nueva Tarea
   const onSubmit = async (data: PlannerFormInputs) => {
     try {
@@ -188,7 +135,6 @@ export default function PlannerPage() {
       })
 
       if (res.ok) {
-        reset() // Limpia el form entero a los valores por defecto
         mutate() // SWR revalidación instantánea
       } else {
         alert('Error al agendar la tarea')
@@ -255,147 +201,34 @@ export default function PlannerPage() {
         </button>
       </div>
 
-      {/* HEADER DINÁMICO */}
-      <div>
-        <h1 className="text-primary text-2xl font-bold tracking-tight antialiased">
-          {TABS[activeTab].title}
-        </h1>
-        <p className="text-secondary mt-1 text-sm">{TABS[activeTab].description}</p>
-      </div>
-
       {activeTab === 'QUEUE' ? (
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-          {/* COLUMNA 1: FORMULARIO (sticky) */}
-          <div className="lg:col-span-1">
-            <div className="border-input-outline bg-surface sticky top-24 rounded-xl border p-6 shadow-sm">
-              <h2 className="text-primary mb-4 flex items-center gap-2 text-lg font-semibold">
-                <MdOutlineHistoryToggleOff className="h-5 w-5" /> Nueva Tarea
-              </h2>
-              <form className="flex flex-col gap-5" onSubmit={handleSubmit(onSubmit)}>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-secondary text-sm font-medium" htmlFor="purpose">
-                    Circuito de Riego
-                  </label>
-                  <Controller
-                    control={control}
-                    name="purpose"
-                    render={({ field: { value, onChange, ...rest } }) => (
-                      <SelectDropdown
-                        {...rest}
-                        id="purpose"
-                        options={Object.entries(ACTION_MAP).map(([val, act]) => ({
-                          value: val,
-                          label: act.label,
-                        }))}
-                        value={value}
-                        onChange={onChange}
-                      />
-                    )}
-                  />
-                  {errors.purpose && (
-                    <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
-                      {errors.purpose.message}
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-secondary text-sm font-medium" htmlFor="zone">
-                    Zonas
-                  </label>
-                  <Controller
-                    control={control}
-                    name="zone"
-                    render={({ field: { value, onChange, ...rest } }) => (
-                      <SelectDropdown
-                        {...rest}
-                        id="zone"
-                        options={[{ label: 'ZONA A', value: 'ZONA_A' }]}
-                        value={value}
-                        onChange={onChange}
-                      />
-                    )}
-                  />
-                  {errors.zone && (
-                    <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
-                      {errors.zone.message}
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-secondary text-sm font-medium" htmlFor="duration">
-                    Duración
-                  </label>
-                  <input
-                    className={clsx(
-                      'focus-input border text-sm',
-                      errors.duration
-                        ? 'border-transparent outline -outline-offset-1 outline-red-800/75 dark:outline-red-400/75'
-                        : 'border-input-outline',
-                    )}
-                    id="duration"
-                    type="text"
-                    {...register('duration')}
-                  />
-                  {errors.duration && (
-                    <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
-                      {errors.duration.message}
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-secondary text-sm font-medium" htmlFor="scheduledAt">
-                    Fecha y Hora
-                  </label>
-                  <input
-                    className={clsx(
-                      'focus-input border text-sm',
-                      errors.scheduledAt
-                        ? 'border-transparent outline -outline-offset-1 outline-red-800/75 dark:outline-red-400/75'
-                        : 'border-input-outline',
-                    )}
-                    id="scheduledAt"
-                    type="datetime-local"
-                    {...register('scheduledAt')}
-                  />
-                  {errors.scheduledAt && (
-                    <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
-                      {errors.scheduledAt.message}
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-secondary text-sm font-medium" htmlFor="notes">
-                    Notas
-                  </label>
-                  <textarea
-                    className="focus-input border-input-outline resize-none border text-sm"
-                    id="notes"
-                    rows={2}
-                    {...register('notes')}
-                  />
-                  {errors.notes && (
-                    <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
-                      {errors.notes.message}
-                    </span>
-                  )}
-                </div>
-
-                <button
-                  className="bg-action hover:bg-action/90 focus-visible:ring-accessibility mt-2 w-full rounded-md px-4 py-2.5 text-sm font-medium text-white transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-                  type="submit"
-                >
-                  Agendar Tarea
-                </button>
-              </form>
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h1 className="text-primary text-2xl font-bold tracking-tight antialiased">
+                {TABS.QUEUE.title}
+              </h1>
+              <p className="text-secondary mt-1 text-sm">{TABS.QUEUE.description}</p>
+            </div>
+            <div className="w-full shrink-0 sm:w-auto">
+              <button
+                className="bg-action hover:bg-action/90 focus-visible:ring-accessibility flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium text-white transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none sm:w-auto sm:py-2"
+                type="button"
+                onClick={() => setIsDeferredModalOpen(true)}
+              >
+                <MdOutlineHistoryToggleOff className="h-5 w-5" /> Nueva Tarea Diferida
+              </button>
             </div>
           </div>
 
-          {/* COLUMNA 2: LISTA DE PENDIENTES */}
-          <div className="flex flex-col gap-4 lg:col-span-2">
+          <DeferredTaskModal
+            isOpen={isDeferredModalOpen}
+            onClose={() => setIsDeferredModalOpen(false)}
+            onSubmitSuccess={onSubmit}
+          />
+
+          {/* LISTA DE PENDIENTES */}
+          <div className="flex w-full flex-col gap-4">
             {isLoading && tasks.length === 0 ? (
               <div className="border-input-outline flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed p-8">
                 <div className="text-primary h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
@@ -494,69 +327,59 @@ export default function PlannerPage() {
       )}
 
       {/* Modal de Confirmación de Cancelación */}
-      <AnimatePresence>
-        {cancelTarget && (
-          <motion.div
-            key="cancel-overlay"
-            animate={{ opacity: 1 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-            exit={{ opacity: 0 }}
-            initial={{ opacity: 0 }}
-            onClick={() => setCancelTarget(null)}
+      {cancelTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-[2px]"
+          onClick={() => setCancelTarget(null)}
+        >
+          <div
+            className="border-input-outline bg-surface mx-4 w-full max-w-md rounded-xl border p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
           >
-            <motion.div
-              key="cancel-modal"
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              className="bg-surface border-input-outline mx-4 w-full max-w-md rounded-xl border p-6 shadow-xl"
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              onClick={(e) => e.stopPropagation()}
+            <h3 className="text-primary text-base font-semibold">Cancelar tarea</h3>
+            <p className="text-secondary mt-1 text-sm">
+              Estás a punto de cancelar la tarea de{' '}
+              <span className="text-primary font-medium">{cancelTarget.label}</span>.
+            </p>
+
+            <label
+              className="text-secondary mt-4 block text-sm font-medium"
+              htmlFor="cancel-reason"
             >
-              <h3 className="text-primary text-base font-semibold">Cancelar tarea</h3>
-              <p className="text-secondary mt-1 text-sm">
-                Estás a punto de cancelar la tarea de{' '}
-                <span className="text-primary font-medium">{cancelTarget.label}</span>.
-              </p>
+              Motivo de cancelación
+            </label>
+            <textarea
+              className="focus-input border-input-outline mt-1.5 w-full resize-none border text-sm"
+              id="cancel-reason"
+              placeholder="Ej: Cambio de prioridades, clima adverso..."
+              rows={3}
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+            />
 
-              <label
-                className="text-secondary mt-4 block text-sm font-medium"
-                htmlFor="cancel-reason"
+            <div className="mt-4 flex justify-end gap-3">
+              <button
+                className="focus-visible:ring-accessibility rounded-md px-4 py-2 text-sm font-medium transition-colors hover:bg-black/5 focus-visible:ring-2 focus-visible:outline-none dark:hover:bg-white/5"
+                type="button"
+                onClick={() => {
+                  setCancelTarget(null)
+                  setCancelReason('')
+                }}
               >
-                Motivo de cancelación
-              </label>
-              <textarea
-                className="focus-input border-input-outline mt-1.5 w-full resize-none border text-sm"
-                id="cancel-reason"
-                placeholder="Ej: Cambio de prioridades, clima adverso..."
-                rows={3}
-                value={cancelReason}
-                onChange={(e) => setCancelReason(e.target.value)}
-              />
-
-              <div className="mt-4 flex justify-end gap-3">
-                <button
-                  className="focus-visible:ring-accessibility rounded-md px-4 py-2 text-sm font-medium transition-colors hover:bg-black/5 focus-visible:ring-2 focus-visible:outline-none dark:hover:bg-white/5"
-                  type="button"
-                  onClick={() => {
-                    setCancelTarget(null)
-                    setCancelReason('')
-                  }}
-                >
-                  Volver
-                </button>
-                <button
-                  className="focus-visible:ring-accessibility rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-600 focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50"
-                  disabled={!cancelReason.trim()}
-                  type="button"
-                  onClick={handleCancelConfirm}
-                >
-                  Confirmar cancelación
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+                Volver
+              </button>
+              <button
+                className="focus-visible:ring-accessibility rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-600 focus-visible:ring-2 focus-visible:outline-none disabled:opacity-50"
+                disabled={!cancelReason.trim()}
+                type="button"
+                onClick={handleCancelConfirm}
+              >
+                Confirmar cancelación
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -588,36 +411,30 @@ function TaskOptionsMenu({ onCancel }: { onCancel: () => void }) {
         aria-label="Opciones de tarea"
         className="focus-visible:ring-accessibility text-secondary hover:text-primary flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:bg-black/5 focus-visible:ring-2 focus-visible:outline-none dark:hover:bg-white/10"
         type="button"
-        onClick={() => setIsOpen((prev) => !prev)}
+        onClick={() => setIsOpen((prev: boolean) => !prev)}
       >
         <IoEllipsisVertical className="h-4 w-4" />
       </button>
 
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <motion.div
-            key="task-options-dropdown"
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="border-input-outline bg-surface absolute top-9 right-0 z-10 w-44 rounded-lg border py-1 shadow-lg"
-            exit={{ opacity: 0, scale: 0.95, y: -6 }}
-            initial={{ opacity: 0, scale: 0.95, y: -6 }}
-            role="menu"
+      {isOpen && (
+        <div
+          className="border-input-outline bg-surface absolute top-9 right-0 z-10 w-44 rounded-lg border py-1 shadow-lg"
+          role="menu"
+        >
+          <button
+            className="hover:bg-hover-overlay flex w-full items-center gap-2 px-3 py-2 text-sm text-red-500 transition-colors"
+            role="menuitem"
+            type="button"
+            onClick={() => {
+              close()
+              onCancel()
+            }}
           >
-            <button
-              className="hover:bg-hover-overlay flex w-full items-center gap-2 px-3 py-2 text-sm text-red-500 transition-colors"
-              role="menuitem"
-              type="button"
-              onClick={() => {
-                close()
-                onCancel()
-              }}
-            >
-              <IoCloseOutline className="h-4 w-4" />
-              Cancelar tarea
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            <IoCloseOutline className="h-4 w-4" />
+            Cancelar tarea
+          </button>
+        </div>
+      )}
     </div>
   )
 }

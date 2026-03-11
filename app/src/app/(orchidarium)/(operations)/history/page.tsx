@@ -13,6 +13,8 @@ import { MdOutlineHistoryToggleOff } from 'react-icons/md'
 import { LuRadioTower } from 'react-icons/lu'
 import { HiOutlineCog } from 'react-icons/hi'
 
+import { TaskPurposeLabels } from '@/config/mappings'
+
 const fetcher = async (url: string) => {
   const res = await fetch(url)
   const json = await res.json()
@@ -49,11 +51,11 @@ interface HistoryTask {
 }
 
 const ACTION_MAP: Record<TaskPurpose, string> = {
-  IRRIGATION: 'Riego',
-  HUMIDIFICATION: 'Nebulización',
-  SOIL_WETTING: 'Humectación Suelo',
-  FERTIGATION: 'Fertirriego',
-  FUMIGATION: 'Fumigación',
+  IRRIGATION: TaskPurposeLabels.IRRIGATION,
+  HUMIDIFICATION: TaskPurposeLabels.HUMIDIFICATION,
+  SOIL_WETTING: TaskPurposeLabels.SOIL_WETTING,
+  FERTIGATION: TaskPurposeLabels.FERTIGATION,
+  FUMIGATION: TaskPurposeLabels.FUMIGATION,
 }
 
 const SOURCE_MAP: Record<TaskSource, string> = {

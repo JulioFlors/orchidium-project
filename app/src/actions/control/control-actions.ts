@@ -120,7 +120,7 @@ export async function cancelManualTask(
     const updated = await prisma.taskLog.updateMany({
       where: { id: taskId, status: { in: ['IN_PROGRESS', 'CONFIRMED'] } },
       data: {
-        status: 'COMPLETED',
+        status: 'CANCELLED',
         notes: notes,
       },
     })

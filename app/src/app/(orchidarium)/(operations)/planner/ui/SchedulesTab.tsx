@@ -16,30 +16,31 @@ import clsx from 'clsx'
 import { ScheduleFormModal } from './ScheduleFormModal'
 
 import { getSchedules, toggleSchedule, deleteSchedule } from '@/actions/planner/schedule-actions'
+import { TaskPurposeLabels } from '@/config/mappings'
 
 const ACTION_MAP: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
   IRRIGATION: {
-    label: 'Riego',
+    label: TaskPurposeLabels.IRRIGATION,
     icon: <IoWaterOutline className="h-5 w-5" />,
     color: 'text-blue-500',
   },
   HUMIDIFICATION: {
-    label: 'Nebulización',
+    label: TaskPurposeLabels.HUMIDIFICATION,
     icon: <PiSprayBottle className="h-5 w-5" />,
     color: 'text-cyan-500',
   },
   SOIL_WETTING: {
-    label: 'Humedecer Suelo',
+    label: TaskPurposeLabels.SOIL_WETTING,
     icon: <MdDewPoint className="h-5 w-5" />,
     color: 'text-emerald-500',
   },
   FERTIGATION: {
-    label: 'Fertirriego',
+    label: TaskPurposeLabels.FERTIGATION,
     icon: <IoFlaskOutline className="h-5 w-5" />,
     color: 'text-purple-500',
   },
   FUMIGATION: {
-    label: 'Fumigación',
+    label: TaskPurposeLabels.FUMIGATION,
     icon: <IoFlaskOutline className="h-5 w-5" />,
     color: 'text-orange-500',
   },
@@ -109,14 +110,24 @@ export function SchedulesTab() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex w-full justify-end">
-        <button
-          className="bg-action hover:bg-action/90 focus-visible:ring-accessibility flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium text-white transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
-          type="button"
-          onClick={openNewModal}
-        >
-          <IoAddOutline className="h-5 w-5" /> Nueva Rutina
-        </button>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-primary text-2xl font-bold tracking-tight antialiased">
+            Programas Automáticos
+          </h1>
+          <p className="text-secondary mt-1 text-sm">
+            Configura y ajusta las pautas diarias recurrentes de irrigación automatizada.
+          </p>
+        </div>
+        <div className="w-full shrink-0 sm:w-auto">
+          <button
+            className="bg-action hover:bg-action/90 focus-visible:ring-accessibility flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium text-white transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none sm:w-auto sm:py-2"
+            type="button"
+            onClick={openNewModal}
+          >
+            <IoAddOutline className="h-5 w-5" /> Nueva Rutina
+          </button>
+        </div>
       </div>
 
       {isLoading ? (

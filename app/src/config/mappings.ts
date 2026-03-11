@@ -82,9 +82,9 @@ export const TaskStatusLabels: Record<TaskStatus, string> = {
 }
 
 export const TaskPurposeLabels: Record<TaskPurpose, string> = {
-  [TaskPurpose.IRRIGATION]: 'Riego',
+  [TaskPurpose.IRRIGATION]: 'Riego por Aspersión',
+  [TaskPurpose.HUMIDIFICATION]: 'Nebulización',
+  [TaskPurpose.SOIL_WETTING]: 'Humectación del Suelo',
   [TaskPurpose.FERTIGATION]: 'Fertirriego',
-  [TaskPurpose.FUMIGATION]: 'Fumigación',
-  [TaskPurpose.HUMIDIFICATION]: 'Humidificación',
-  [TaskPurpose.SOIL_WETTING]: 'Humedecer Suelo',
+  [TaskPurpose.FUMIGATION]: 'Control Fitosanitario',
 }
