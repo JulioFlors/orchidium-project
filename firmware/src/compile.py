@@ -31,9 +31,9 @@ COLOR_RESET = "\033[0m"
 def log_step(step, detail=""):
     """Formateo unificado para los pasos de compilación"""
     if detail:
-        print(f"{COLOR_INFO}  │{COLOR_RESET} {step:<26} {COLOR_DIM}{detail}{COLOR_RESET}")
+        print(f"{COLOR_INFO}    │{COLOR_RESET} {step:<26} {COLOR_DIM}{detail}{COLOR_RESET}")
     else:
-        print(f"{COLOR_INFO}  │{COLOR_RESET} {step}")
+        print(f"{COLOR_INFO}    │{COLOR_RESET} {step}")
 
 def clean_build_target(target_build_path):
     if target_build_path.exists():
@@ -115,13 +115,13 @@ def main():
     target_build_path = BUILD_ROOT_DIR / project_name
 
     print(f"\n{COLOR_INFO}⚙️  Construyendo: {project_name}{COLOR_RESET}")
-    print(f"{COLOR_INFO}  ┌─────────────────────────────────────────────────┐{COLOR_RESET}")
+    print(f"{COLOR_INFO}    ┌─────────────────────────────────────────────────┐{COLOR_RESET}")
     
     clean_build_target(target_build_path)
     copy_project(source_path, target_build_path)
     compile_main(target_build_path)
     
-    print(f"{COLOR_INFO}  └─────────────────────────────────────────────────┘{COLOR_RESET}")
+    print(f"{COLOR_INFO}    └─────────────────────────────────────────────────┘{COLOR_RESET}")
     print(f"{COLOR_INFO}☑️  Build Completado.{COLOR_RESET}\n")
 
 if __name__ == "__main__":

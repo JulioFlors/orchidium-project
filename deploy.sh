@@ -48,7 +48,6 @@ echo -e "${CYAN}🏗️ [2/5] Construyendo imágenes${RESET}"
 docker compose --profile cloud build
 echo ""
 echo -e "${GREEN}✅ Imágenes construidas${RESET}"
-echo ""
 
 # ================================================================
 # PASO 3: Migraciones (CON FILTRO)

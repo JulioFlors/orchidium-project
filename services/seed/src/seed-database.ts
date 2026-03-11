@@ -141,7 +141,10 @@ async function main() {
   // ---- Insertar Users ----
 
   for (const user of users) {
+    let targetUserId: string | undefined
+
     try {
+      // Intentamos crearlo
       const res = await auth.api.signUpEmail({
         body: {
           email: user.email,
@@ -149,19 +152,31 @@ async function main() {
           name: user.name,
         },
       })
+      if (res?.user) targetUserId = res.user.id
+    } catch (error: any) {
+      // Si el correo ya existía en BD (por ejemplo, remanentes no borrados), lo buscamos
+      if (error?.message?.includes('already exists') || error?.status === 400 || error?.status === 409) {
+         const existingUser = await prisma.user.findUnique({ where: { email: user.email } })
+         if (existingUser) targetUserId = existingUser.id
+      } else {
+        console.error(`Error creando usuario ${user.email}:`, error)
+      }
+    }
 
-      if (res?.user) {
-        // Actualizar rol, ya que signUp no permite establecerlo directamente por seguridad
+    // Forzar el ROL requerido por Prisma (Superpone a BetterAuth)
+    if (targetUserId) {
+      try {
         await prisma.user.update({
-          where: { id: res.user.id },
+          where: { id: targetUserId },
           data: {
-            role: user.role === 'ADMIN' ? 'ADMIN' : 'USER',
+            role: user.role, // Forzamos el Rol exacto que dice seed-data.ts (ADMIN/USER)
             emailVerified: true
           },
         })
+        console.log(`✅ Usuario ${user.email} asegurado con rol ${user.role}`)
+      } catch (err) {
+        console.error(`Error forzando rol al usuario ${user.email}:`, err)
       }
-    } catch (error) {
-      console.error(`Error creando usuario ${user.email}:`, error)
     }
   }
 

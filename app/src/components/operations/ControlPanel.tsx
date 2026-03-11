@@ -10,6 +10,7 @@ import { FertigationModal } from './FertigationModal'
 
 import {
   createManualTask,
+  cancelManualTask,
   getWaitingAgrochemicalTasks,
   confirmWaitingTasks,
 } from '@/actions/control/control-actions'
@@ -90,12 +91,42 @@ export function ControlPanel() {
     }
   }, [status, subscribe])
 
-  // --- 2. Helper de Estado de Actuador ---
-  const isActuatorActive = (valveTopic: string) => {
-    if (!isReady) return false
-    const valveState = String(messages[valveTopic]?.payload || 'OFF').replace(/['"]+/g, '')
+  // --- 2. Helper de Estado de Actuador (Soporta JSON y Legacy) ---
+  const getActuatorPayload = (valveTopic: string) => {
+    if (!isReady) return { state: 'OFF', taskId: null }
+    const rawPayload = String(messages[valveTopic]?.payload || 'OFF')
 
-    return valveState === 'ON'
+    // Intentamos parsear por si es JSON nuevo (Sincronía Transaccional)
+    try {
+      if (rawPayload.startsWith('{')) {
+        const parsed = JSON.parse(rawPayload)
+
+        return { state: parsed.state || 'OFF', taskId: parsed.task_id || null }
+      }
+    } catch {
+      // Si falla el parseo, caemos al fallback
+    }
+
+    // Fallback legado (Texto plano o string stringificado)
+    return { state: rawPayload.replace(/['"]+/g, ''), taskId: null }
+  }
+
+  const isActuatorActive = (valveTopic: string) => getActuatorPayload(valveTopic).state === 'ON'
+
+  // Helper para recuperar el UUID de la tarea amarrada al circuito activo
+  const getCircuitActiveTaskId = (circuit: keyof typeof activeCircuits): string | null => {
+    switch (circuit) {
+      case 'irrigation':
+        return getActuatorPayload(TOPIC_STATE_SPRINKLER).taskId
+      case 'humidification':
+        return getActuatorPayload(TOPIC_STATE_FOGGER).taskId
+      case 'soilWet':
+        return getActuatorPayload(TOPIC_STATE_SOIL_WET).taskId
+      case 'fertigation':
+        return getActuatorPayload(TOPIC_STATE_FERTIGATION).taskId
+      default:
+        return null
+    }
   }
 
   // Mapeo Directo (Sin timers locales, solo verdad del firmware)
@@ -267,6 +298,18 @@ export function ControlPanel() {
         alert(dbRes.error || 'Error desconocido al iniciar tarea manual.')
 
         return // Interrumpe y no envía el mensaje MQTT
+      }
+    } else {
+      // Apagado Manual Transaccional
+      const activeTaskId = getCircuitActiveTaskId(circuit)
+
+      if (activeTaskId) {
+        // Cancelamos formalmente inyectando el motivo
+        await cancelManualTask(
+          activeTaskId,
+          'El usuario cerró el circuito manualmente desde la web.',
+        )
+        taskId = activeTaskId // Retornamos el mismo ID al ESP32 para su limpieza local
       }
     }
 

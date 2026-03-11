@@ -108,3 +108,32 @@ export async function confirmWaitingTasks(taskIds: string[]) {
     return { success: false, error: 'Error confirmando tareas programadas.' }
   }
 }
+
+/**
+ * Cierra manualmente un circuito y registra en el historial la intervención del usuario.
+ */
+export async function cancelManualTask(
+  taskId: string,
+  notes: string = 'El usuario cerró el circuito manualmente desde la web.',
+) {
+  try {
+    const updated = await prisma.taskLog.updateMany({
+      where: { id: taskId, status: { in: ['IN_PROGRESS', 'CONFIRMED'] } },
+      data: {
+        status: 'COMPLETED',
+        notes: notes,
+      },
+    })
+
+    // Forzamos revalidar historial
+    revalidatePath('/control')
+
+    return { success: true, count: updated.count }
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      return { success: false, error: 'Error cancelando tarea manual: ' + error.message }
+    }
+
+    return { success: false, error: 'Error cancelando tarea manual.' }
+  }
+}

@@ -409,7 +409,6 @@ echo -e "${CYAN}🏗️ [2/5] Construyendo imágenes${RESET}"
 docker compose --profile cloud build
 echo ""
 echo -e "${GREEN}✅ Imágenes construidas${RESET}"
-echo ""
 
 # ================================================================
 # PASO 3: Migraciones (CON FILTRO)
@@ -540,7 +539,7 @@ Durante la administración de PristinoPlant en el servidor, frecuentemente surgi
   Si en algún punto necesitas formatear la base de datos por terminal, las rutinas de la base de datos obtendrán nuevos identificadores UUID únicos. Dado que el Scheduler mantiene los CronJobs orquestados en la RAM atados a identificadores viejos, debes notificarle para que recargue y se vuelva a enlazar:
 
   ```bash
-  # Tras hacer un db:seed o reset, ejecuta siempre:
+  # reiniciar contenerdor tras hacer un db:seed o reset para cargar los nuevos datos.
   docker compose --profile cloud restart scheduler
   ```
 
@@ -565,35 +564,51 @@ El orquestador en el VPS de producción utiliza Docker Compose bajo la red cloud
 
   ```bash
   docker compose --profile cloud ps
+
   ```
 
 * **Reiniciar un servicio específico (ej: Scheduler)**
 
-  ```bash
-  # Útil tras semillas o cambios forzados de BBDD
-  docker compose --profile cloud restart scheduler
-  `
+```bash
+# Útil tras semillas o cambios forzados de BBDD
+docker compose --profile cloud restart scheduler
+
+```
 
 * **Apagar o Encender un servicio individual**
 
-  ```bash
-  docker compose --profile cloud stop scheduler
-  docker compose --profile cloud start scheduler
-  ```
+```bash
+docker compose --profile cloud stop scheduler
+docker compose --profile cloud start scheduler
+
+```
 
 * **Leer en vivo los Logs de un microservicio**
 
-  ```bash
-  # El flag -f mantiene la terminal escuchando los nuevos logs en tiempo real (Ctrl+C para salir)
-  docker logs -f scheduler
-  ```
+```bash
+# El flag -f mantiene la terminal escuchando los nuevos logs en tiempo real (Ctrl+C para salir)
+docker logs -f scheduler
+
+```
+
 
 * **Filtrar Logs (Para evitar saturar la terminal con días de historial)**
 
-  ```bash
-  # Imprime solamente las últimas 50 líneas y se queda escuchando
-  docker logs -f --tail 50 scheduler
+```bash
+# Imprime solamente las últimas 50 líneas y se queda escuchando
+docker logs -f --tail 50 scheduler
 
-  # Imprime logs de las últimas 2 horas
-  docker logs --since 2h scheduler
-  ```
+# Imprime logs de las últimas 2 horas
+docker logs --since 2h scheduler
+
+```
+
+* **Limpiar el historial de Logs de un contenedor**
+Docker no tiene un comando nativo para borrar los logs. Para vaciar el archivo físico que guarda el historial en el VPS sin necesidad de apagar el servicio, utiliza este comando (reemplaza `pristinoplant-scheduler` por el nombre exacto de tu contenedor si es distinto):
+
+```bash
+sudo sh -c 'truncate -s 0 $(docker inspect --format="{{.LogPath}}" pristinoplant-scheduler)'
+
+```
+
+*(Nota alternativa: Si no te importa que el servicio se reinicie un par de segundos, puedes forzar su recreación, lo cual borra los logs automáticamente: `docker compose --profile cloud up -d --force-recreate scheduler`)*
