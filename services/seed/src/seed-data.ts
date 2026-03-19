@@ -918,7 +918,7 @@ export const initialData: SeedData = {
       purpose: 'HUMIDIFICATION',
       // Cron: A las 16:00, todos los días
       cronTrigger: '0 16 * * *',
-      durationMinutes: 10,
+      durationMinutes: 3,
       zones: ['ZONA_A'],
       isEnabled: true
     },

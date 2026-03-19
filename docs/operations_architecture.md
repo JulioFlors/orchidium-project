@@ -60,7 +60,7 @@ stateDiagram-v2
     IN_PROGRESS --> COMPLETED: Bomba OFF
     IN_PROGRESS --> FAILED: Nodo offline
     COMPLETED --> [*]
-    FAILED --> PENDING: Ventana de recuperación (15min)
+    FAILED --> PENDING: Ventana de recuperación (20min)
     CANCELLED --> [*]
 ```
 
@@ -93,16 +93,16 @@ Cada tarea ocupa una **ventana temporal** que incluye:
 
 - **Duración efectiva:** `durationMinutes` del circuito
 - **Ventana de cebado:** `PUMP_PRIME_DELAY_SECONDS` (10s, despreciable)
-- **Ventana de gracia:** 15 minutos de recuperación en caso de fallo
-- **Ventana total:** `durationMinutes + 15 min`
+- **Ventana de gracia:** 20 minutos de recuperación en caso de fallo
+- **Ventana total:** `durationMinutes + 20 min`
 
 ### 4.2 Regla de Colisión
 
 Dos tareas **colisionan** si sus ventanas de reserva se solapan:
 
 ```text
-Tarea A: [inicio_A, inicio_A + duración_A + 15min]
-Tarea B: [inicio_B, inicio_B + duración_B + 15min]
+Tarea A: [inicio_A, inicio_A + duración_A + 20min]
+Tarea B: [inicio_B, inicio_B + duración_B + 20min]
 
 Colisión = inicio_A < fin_B AND inicio_B < fin_A
 ```
@@ -242,7 +242,7 @@ Sidebar Operaciones:
 | `PENDING` → `CANCELLED` (usuario) | *Motivo escrito por el usuario* (obligatorio) |
 | `WAITING_CONFIRMATION` → `CANCELLED` | "Sin confirmación del operador. Tarea cancelada automáticamente." |
 | `PENDING` → `CANCELLED` (clima) | "Cancelada por WeatherGuard: lluvia acumulada superó el umbral." |
-| `FAILED` → `PENDING` (recuperación) | "Reintento automático dentro de la ventana de gracia (15 min)." |
+| `FAILED` → `PENDING` (recuperación) | "Reintento automático dentro de la ventana de gracia (20 min)." |
 
 ### 7.5 Seguridad por Origen y Circuito
 

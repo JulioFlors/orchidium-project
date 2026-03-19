@@ -1,5 +1,7 @@
 export * from './backdrop/Backdrop'
 
+export * from './modal/Modal'
+
 export * from './border-trail/BorderTrail'
 
 export * from './footer/Footer'

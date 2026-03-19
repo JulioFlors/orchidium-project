@@ -361,9 +361,8 @@ async def boot_recovery_check():
         NVSManager.clear_task()
         return
     
-    # Ventana de oportunidad (15 min) para considerar "válido" un riego interrumpido
-    # Si paso la hora de fin + 15 min, ya fue.
-    RECOVERY_WINDOW = 900 
+    # Ventana de oportunidad (20 min) para recuperar un riego interrumpido.
+    RECOVERY_WINDOW = 1200 
 
     # ---- Análisis Temporal (Iterando todas las tareas) ----
     # 2026-Fix: Iteramos sobre los values del diccionario
@@ -432,7 +431,7 @@ async def boot_recovery_check():
             if saved_at_epoch > 0:
                 elapsed_offline = current_time - saved_at_epoch
                  
-                # Si estuvo apagado demasiado tiempo (más de 15 min), se cancela.
+                # Si estuvo apagado demasiado tiempo (más de 20 min), se cancela.
                 if elapsed_offline > RECOVERY_WINDOW:
                     if DEBUG:
                         print(f"    └─ 🗑️  {Colors.YELLOW}Tarea Pausada (Vencida){Colors.RESET} ID:{actuator_id} (Offline: {elapsed_offline}s)")

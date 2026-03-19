@@ -13,6 +13,11 @@ datasource db {
 
 // ---- Enums ---- //
 
+enum DeviceStatus {
+  ONLINE
+  OFFLINE
+}
+
 enum Role {
   USER
   ADMIN
@@ -57,7 +62,10 @@ enum PlantStatus {
 enum TaskStatus {
   CANCELLED // Cancelada por Clima/Lluvia/Usuario
   COMPLETED // OK
-  CONFIRMED // confirmación recibida, en espera para ejecutar
+  AUTHORIZED // Confirmación manual del usuario para agroquímicos
+  DISPATCHED // Comando enviado vía MQTT, esperando acuse de recibo
+  ACKNOWLEDGED // Hardware confirma recepción exitosa (ACK)
+  CONFIRMED // Alias legado para Acknowledged (se mantendrán ambos por ahora)
   FAILED // Error técnico
   IN_PROGRESS // Ejecutando acción
   PENDING // Creada, esperando su hora
@@ -343,15 +351,17 @@ model AutomationSchedule {
 }
 
 model TaskLog {
-  id          String      @id @default(uuid())
-  scheduledAt DateTime
-  executedAt  DateTime    @default(now())
-  status      TaskStatus  @default(PENDING)
-  source      TaskSource  @default(MANUAL)
-  purpose     TaskPurpose
-  zones       ZoneType[]
-  duration    Int
-  notes       String?
+  id                 String      @id @default(uuid())
+  scheduledAt        DateTime
+  executedAt         DateTime    @default(now())
+  status             TaskStatus  @default(PENDING)
+  source             TaskSource  @default(MANUAL)
+  purpose            TaskPurpose
+  zones              ZoneType[]
+  duration           Int
+  actualStartAt      DateTime? // Timestamp de cuando el relé se abrió realmente
+  completedMinutes   Int         @default(0) // Tiempo efectivo acumulado (en min)
+  notes              String?
   cancellationReason String?
 
   agrochemical   Agrochemical? @relation(fields: [agrochemicalId], references: [id])
@@ -360,8 +370,23 @@ model TaskLog {
   schedule   AutomationSchedule? @relation(fields: [scheduleId], references: [id])
   scheduleId String?
 
+  events TaskEventLog[]
+
   @@index([scheduledAt])
   @@index([status])
+}
+
+model TaskEventLog {
+  id        String     @id @default(uuid())
+  status    TaskStatus
+  timestamp DateTime   @default(now())
+  notes     String?
+
+  task   TaskLog @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId String
+
+  @@index([taskId])
+  @@index([timestamp])
 }
 
 // ---- Resumen Historico de Influxdb ---- //
@@ -390,4 +415,17 @@ model DailyEnvironmentStat {
   // Integridad: Solo un resumen por día por zona
   @@unique([date, zone])
   @@index([date])
+}
+
+// ---- Gestión de Conectividad IoT ---- //
+
+model DeviceLog {
+  id        String       @id @default(uuid())
+  device    String       @unique
+  status    DeviceStatus
+  timestamp DateTime     @default(now())
+  notes     String
+
+  @@index([device])
+  @@index([timestamp])
 }

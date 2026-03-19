@@ -804,7 +804,7 @@ Actúa como el **centro de inteligencia y memoria a largo plazo**. Su responsabi
 
 * **Lógica de Decisión y Análisis:**
 
-  * **Generación de Alertas por Umbrales:** El sistema monitorea continuamente los datos recibidos. Si los valores de temperatura o humedad exceden umbrales de seguridad predefinidos (ej. temperatura > 35°C por más de 15 minutos), el backend genera y envía notificaciones de alerta al usuario.
+  * **Generación de Alertas por Umbrales:** El sistema monitorea continuamente los datos recibidos. Si los valores de temperatura o humedad exceden umbrales de seguridad predefinidos (ej. temperatura > 35°C por más de 20 minutos), el backend genera y envía notificaciones de alerta al usuario.
 
   * **Análisis Histórico y Visualización:** Proporciona endpoints de API para construir gráficos que muestran la evolución de las condiciones ambientales. Esto permite al usuario final identificar patrones diurnos y estacionales, fundamentales para el cuidado de las orquídeas.
 

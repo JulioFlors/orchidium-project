@@ -49,7 +49,7 @@ export async function toggleSchedule(id: string, isEnabled: boolean) {
       data: { isEnabled },
     })
 
-    revalidatePath('/planner')
+    revalidatePath('/schedules')
 
     return { success: true, data: updated }
   } catch {
@@ -110,7 +110,7 @@ export async function upsertSchedule(data: ScheduleInput) {
       })
     }
 
-    revalidatePath('/planner')
+    revalidatePath('/schedules')
 
     return { success: true, data: result }
   } catch (error: unknown) {
@@ -140,7 +140,7 @@ export async function deleteSchedule(id: string) {
     await prisma.automationSchedule.delete({
       where: { id },
     })
-    revalidatePath('/planner')
+    revalidatePath('/schedules')
 
     return { success: true }
   } catch {

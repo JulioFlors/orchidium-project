@@ -31,7 +31,7 @@ echo ""
 # ================================================================
 # PASO 1: Sincronizar (Protegiendo infraestructura local)
 # ================================================================
-echo -e "${CYAN}📡 [1/5] Sincronizando con origin/main${RESET}"
+echo -e "${CYAN}📡 [1/4] Sincronizando con origin/main${RESET}"
 echo ""
 git fetch origin main
 # PROTECCIÓN: Resetear el código pero sin tocar la carpeta de certificados y logs
@@ -50,26 +50,10 @@ echo ""
 echo -e "${GREEN}✅ Imágenes construidas${RESET}"
 
 # ================================================================
-# PASO 3: Migraciones (CON FILTRO)
-# ================================================================
-if confirm "¿Ejecutar migraciones de base de datos (prisma db:deploy)?"; then
-    echo ""
-    echo -e "${CYAN}📦 [3/5] Aplicando migraciones${RESET}"
-    # Usamos el filtro para encontrar el comando db:deploy en el paquete correcto
-    docker compose --profile cloud run --rm scheduler pnpm --filter @package/database db:deploy
-    echo ""
-    echo -e "${GREEN}✅ Migraciones aplicadas${RESET}"
-    echo ""
-else
-    echo ""
-    echo -e "${YELLOW}⏭️ Migraciones omitidas${RESET}"
-fi
-
-# ================================================================
-# PASO 4: Levantar servicios
+# PASO 3: Levantar servicios
 # ================================================================
 echo ""
-echo -e "${CYAN}🚀 [4/5] Levantando servicios cloud${RESET}"
+echo -e "${CYAN}🚀 [3/4] Levantando servicios cloud${RESET}"
 docker compose --profile cloud up -d --remove-orphans
 echo ""
 echo -e "${GREEN}✅ Servicios cloud levantados${RESET}"
@@ -86,11 +70,16 @@ if confirm "¿Levantar/Reiniciar Mosquitto (perfil vps)?"; then
 fi
 
 # ================================================================
-# PASO 5: Limpieza
+# PASO 4: Limpieza
 # ================================================================
 echo ""
-echo -e "${CYAN}🧹 [5/5] Limpiando imágenes antiguas${RESET}"
+echo -e "${YELLOW}🧹 [4/4] Limpiando imágenes y caché antigua${RESET}"
+
+# Borra imágenes colgantes
 docker image prune -f
+
+# Borra SOLO la caché de construcción que tenga más de 7 días de antigüedad (168 horas)
+docker builder prune -f --filter "until=168h"
 
 echo ""
 echo -e "${GREEN}✅ Deploy Finalizado${RESET}"

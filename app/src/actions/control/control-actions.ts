@@ -32,21 +32,35 @@ export async function createManualTask(
     if (collisionCheck.hasCollision) {
       return {
         success: false,
-        error: `Colisión hidráulica detectada con una tarea agendada para ejecutarse cerca de ahora.`,
+        error: `Colisión hidráulica detectada con una tarea agendada para ejecutarse proximamente.`,
       }
     }
 
-    // Crear el log de tarea manual
-    const log = await prisma.taskLog.create({
-      data: {
-        purpose,
-        status: 'CONFIRMED', // Confirmado implícitamente por el usuario manual
-        source: 'MANUAL',
-        scheduledAt: new Date(),
-        duration: durationMinutes,
-        zones: [zone],
-        notes: 'Ejecución manual desde el Panel de Control',
-      },
+    // Crear el log de tarea manual con evento atómico
+    const log = await prisma.$transaction(async (tx) => {
+      const newLog = await tx.taskLog.create({
+        data: {
+          purpose,
+          status: 'DISPATCHED', // Se envía inmediatamente vía MQTT
+          source: 'MANUAL',
+          scheduledAt: new Date(),
+          executedAt: new Date(),
+          duration: durationMinutes,
+          zones: [zone],
+          notes: 'Ejecución manual desde el Panel de Control',
+        },
+      })
+
+      // Auditoría
+      await tx.taskEventLog.create({
+        data: {
+          taskId: newLog.id,
+          status: 'DISPATCHED',
+          notes: 'Usuario inició ejecución manual desde el Panel de Control.',
+        },
+      })
+
+      return newLog
     })
 
     return { success: true, taskId: log.id }
@@ -87,19 +101,49 @@ export async function getWaitingAgrochemicalTasks() {
 
 export async function confirmWaitingTasks(taskIds: string[]) {
   try {
-    const updated = await prisma.taskLog.updateMany({
-      where: { id: { in: taskIds }, status: 'WAITING_CONFIRMATION' },
-      data: {
-        status: 'PENDING',
-        scheduledAt: new Date(), // El Scheduler lo despachará al instante (próximo tick)
-        notes: 'Confirmado manualmente por el usuario tras rellenar bidón.',
-      },
+    let affectedCount = 0
+
+    await prisma.$transaction(async (tx) => {
+      // Idempotencia: Filtrar tareas que realmente estén esperando confirmación
+      const validTasks = await tx.taskLog.findMany({
+        where: { id: { in: taskIds }, status: 'WAITING_CONFIRMATION' },
+        select: { id: true },
+      })
+
+      const validIds = validTasks.map((t) => t.id)
+
+      affectedCount = validIds.length
+
+      if (affectedCount === 0) return // fue procesado previamente
+
+      // 1. Actualizar logs solo de las válidas
+      await tx.taskLog.updateMany({
+        where: { id: { in: validIds } },
+        data: {
+          status: 'AUTHORIZED',
+          scheduledAt: new Date(),
+          notes: 'Confirmado: Tanque de Agroquímicos preparado.',
+        },
+      })
+
+      // 2. Crear eventos solo para las válidas
+      for (const id of validIds) {
+        await tx.taskEventLog.create({
+          data: {
+            taskId: id,
+            status: 'AUTHORIZED',
+            notes: 'Usuario autorizó la ejecución tras confirmar preparación de insumos.',
+          },
+        })
+      }
     })
 
-    revalidatePath('/control')
-    revalidatePath('/planner')
+    if (affectedCount > 0) {
+      revalidatePath('/control')
+      revalidatePath('/queue')
+    }
 
-    return { success: true, count: updated.count }
+    return { success: true, count: affectedCount }
   } catch (error: unknown) {
     if (error instanceof Error) {
       return { success: false, error: 'Error confirmando tareas programadas: ' + error.message }
@@ -114,26 +158,74 @@ export async function confirmWaitingTasks(taskIds: string[]) {
  */
 export async function cancelManualTask(
   taskId: string,
-  notes: string = 'El usuario cerró el circuito manualmente desde la web.',
+  notes: string = 'Cerrado manualmente desde el Centro de Control',
 ) {
   try {
-    const updated = await prisma.taskLog.updateMany({
-      where: { id: taskId, status: { in: ['IN_PROGRESS', 'CONFIRMED'] } },
-      data: {
-        status: 'CANCELLED',
-        notes: notes,
-      },
+    let wasModified = false
+
+    await prisma.$transaction(async (tx) => {
+      // Idempotencia: Comprobar que no esté finalizada ya
+      const currentTask = await tx.taskLog.findUnique({
+        where: { id: taskId },
+        select: { status: true },
+      })
+
+      const terminalStatuses = ['CANCELLED', 'COMPLETED', 'FAILED']
+
+      if (!currentTask || terminalStatuses.includes(currentTask.status)) return
+
+      wasModified = true
+
+      // 1. Marcar como cancelada
+      await tx.taskLog.update({
+        where: { id: taskId },
+        data: {
+          status: 'CANCELLED',
+          notes: notes,
+        },
+      })
+
+      // 2. Auditoría
+      await tx.taskEventLog.create({
+        data: {
+          taskId: taskId,
+          status: 'CANCELLED',
+          notes: notes,
+        },
+      })
     })
 
-    // Forzamos revalidar historial
-    revalidatePath('/control')
+    if (wasModified) {
+      // Forzamos revalidar historial solo si hubo cambios reales
+      revalidatePath('/control')
+    }
 
-    return { success: true, count: updated.count }
+    return { success: true, count: wasModified ? 1 : 0 }
   } catch (error: unknown) {
     if (error instanceof Error) {
       return { success: false, error: 'Error cancelando tarea manual: ' + error.message }
     }
 
     return { success: false, error: 'Error cancelando tarea manual.' }
+  }
+}
+
+/**
+ * Obtiene la línea de tiempo de eventos para una tarea específica.
+ */
+export async function getTaskEvents(taskId: string) {
+  try {
+    const events = await prisma.taskEventLog.findMany({
+      where: { taskId },
+      orderBy: { timestamp: 'asc' },
+    })
+
+    return { success: true, data: events }
+  } catch (error: unknown) {
+    if (error instanceof Error) {
+      return { success: false, error: 'Error obteniendo eventos: ' + error.message }
+    }
+
+    return { success: false, error: 'Error obteniendo eventos de la tarea.' }
   }
 }

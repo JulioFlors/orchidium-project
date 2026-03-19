@@ -8,6 +8,7 @@ import {
   TaskStatus,
   Role,
   TaskPurpose,
+  TaskSource,
 } from '@package/database/enums'
 
 export const RoleLabels: Record<Role, string> = {
@@ -77,8 +78,11 @@ export const TaskStatusLabels: Record<TaskStatus, string> = {
   [TaskStatus.FAILED]: 'Fallida',
   [TaskStatus.SKIPPED]: 'Omitida',
   [TaskStatus.CONFIRMED]: 'Confirmada',
-  [TaskStatus.IN_PROGRESS]: 'En Progreso',
-  [TaskStatus.WAITING_CONFIRMATION]: 'Esperando Confirmación',
+  [TaskStatus.IN_PROGRESS]: 'Ejecutando',
+  [TaskStatus.WAITING_CONFIRMATION]: 'Esperando',
+  [TaskStatus.AUTHORIZED]: 'Autorizada',
+  [TaskStatus.DISPATCHED]: 'Despachada',
+  [TaskStatus.ACKNOWLEDGED]: 'Recibida',
 }
 
 export const TaskPurposeLabels: Record<TaskPurpose, string> = {
@@ -87,4 +91,28 @@ export const TaskPurposeLabels: Record<TaskPurpose, string> = {
   [TaskPurpose.SOIL_WETTING]: 'Humectación del Suelo',
   [TaskPurpose.FERTIGATION]: 'Fertirriego',
   [TaskPurpose.FUMIGATION]: 'Control Fitosanitario',
+}
+
+export const TaskSourceLabels: Record<TaskSource, string> = {
+  [TaskSource.MANUAL]: 'Manual',
+  [TaskSource.DEFERRED]: 'Diferido',
+  [TaskSource.ROUTINE]: 'Rutina',
+}
+
+/**
+ * Clases CSS de Tailwind asociadas a cada estado de tarea.
+ * Uso: colorear badges, iconos y bordes de tarjetas de forma centralizada.
+ */
+export const TaskStatusStyles: Record<TaskStatus, string> = {
+  [TaskStatus.PENDING]: 'text-secondary',
+  [TaskStatus.CONFIRMED]: 'text-blue-500',
+  [TaskStatus.IN_PROGRESS]: 'text-amber-500',
+  [TaskStatus.COMPLETED]: 'text-emerald-500',
+  [TaskStatus.FAILED]: 'text-red-500',
+  [TaskStatus.CANCELLED]: 'text-secondary',
+  [TaskStatus.SKIPPED]: 'text-secondary',
+  [TaskStatus.WAITING_CONFIRMATION]: 'text-orange-500',
+  [TaskStatus.AUTHORIZED]: 'text-orange-400',
+  [TaskStatus.DISPATCHED]: 'text-blue-400',
+  [TaskStatus.ACKNOWLEDGED]: 'text-cyan-400',
 }

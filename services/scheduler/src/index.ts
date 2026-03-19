@@ -40,17 +40,75 @@ const colors = {
   yellow: '\x1b[93m',
   blue: '\x1b[34m',
   magenta: '\x1b[95m',
+  cyan: '\x1b[96m',
   white: '\x1b[97m',
 }
 
 // ---- Sistema de Logs ----
+const getLogTime = () => {
+  return new Intl.DateTimeFormat('es-VE', {
+    timeZone: 'America/Caracas',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  }).format(new Date())
+}
+
 const Logger = {
-  mqtt: (msg: string) => console.log(`${colors.blue}📡 [ MQTT ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
-  info: (msg: string) => console.log(`${colors.blue}📡 [ INFO ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
-  success: (msg: string) => console.log(`${colors.green}✅ [ DONE ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
-  warn: (msg: string) => console.warn(`${colors.yellow}⚠️ [ WARN ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
-  error: (msg: string, err?: any) => console.error(`${colors.red}❌ [ ERROR ]${colors.reset}${colors.white} ${msg}${colors.reset}`, err || ''),
-  debug: (msg: string) => DEBUG && console.log(`${colors.green}🔎 [ DEBUG ]${colors.reset}${colors.white} ${msg}${colors.reset}`)
+  mqtt: (msg: string) => console.log(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.blue} 📡 [ MQTT ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
+
+  info: (msg: string) => console.log(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.blue} 📡 [ INFO ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
+
+  success: (msg: string) => console.log(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.green} ✅ [ DONE ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
+
+  warn: (msg: string) => console.warn(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.yellow} ⚠️ [ WARN ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
+
+  error: (msg: string, err?: any) => console.error(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.red} ❌ [ ERROR ]${colors.reset}${colors.white} ${msg}${colors.reset}`, err || ''),
+
+  debug: (msg: string) => DEBUG && console.log(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.cyan} 🔎 [ DEBUG ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
+
+  node: (status: 'ONLINE' | 'OFFLINE') => {
+    const isOnline = status === 'ONLINE'
+    const color = isOnline ? colors.green : colors.red
+    const icon = isOnline ? '✅' : '❌'
+    console.log(`${colors.white}[ ${getLogTime()} ] ${colors.reset}${color} ${icon} [ NODO ] ${status}${colors.reset}`)
+  }
+}
+
+/**
+ * Registra un evento de cambio de estado de forma atómica en TaskLog y TaskEventLog.
+ */
+async function recordTaskEvent(taskId: string, status: TaskStatus, notes?: string, extraData: any = {}) {
+  try {
+    return await prisma.$transaction(async (tx) => {
+      // 1. Actualizar el log principal
+      const updated = await tx.taskLog.update({
+        where: { id: taskId },
+        data: {
+          status,
+          notes,
+          ...extraData
+        }
+      })
+
+      // 2. Crear la entrada en la bitácora de eventos para el Timeline
+      await tx.taskEventLog.create({
+        data: {
+          taskId,
+          status,
+          notes
+        }
+      })
+
+      return updated
+    })
+  } catch (err) {
+    Logger.error(`Error persistiendo evento ${status} para tarea ${taskId.slice(0, 8)}:`, err)
+    return null
+  }
 }
 
 // ---- Cliente InfluxDB v3 ----
@@ -131,24 +189,59 @@ mqttClient.on('message', async (topic, payload) => {
       
       if (message === 'online' && lastActuatorState !== 'online') {
         lastActuatorState = 'online'
-        Logger.success('Nodo Actuador: ONLINE')
+        Logger.node('ONLINE')
+
+        // Registrar en DB
+        await prisma.deviceLog.create({
+          data: {
+            device: 'Actuator_Controller',
+            status: 'ONLINE',
+            notes: 'Dispositivo conectado / Heartbeat recuperado.'
+          }
+        }).catch(err => Logger.error('Fallo persistiendo deviceLog (ONLINE)', err))
+
+        // Reasunción de Tareas Interrumpidas
+        await resumeInterruptedTasks()
       } 
       else if (message === 'offline' && lastActuatorState !== 'offline') {
+        const previousState = lastActuatorState
         lastActuatorState = 'offline'
-        Logger.warn('Nodo Actuador: OFFLINE')
-        
-        // Fallar tareas confirmadas / En Progreso ya que cortarán abruptamente.
-        // El ESP32 las retomará solo si revive dentro de la ventana de gracia.
-        const affectedTasks = await prisma.taskLog.updateMany({
-          where: {
-            status: { in: [TaskStatus.CONFIRMED, TaskStatus.IN_PROGRESS] }
-          },
+        Logger.node('OFFLINE')
+
+        // Registrar en DB
+        await prisma.deviceLog.create({
           data: {
-            status: TaskStatus.FAILED,
-            notes: 'El Nodo Actuador perdió conexión durante una ventana crítica.'
+            device: 'Actuator_Controller',
+            status: 'OFFLINE',
+            notes: previousState === 'unknown' ? 'LWT: Estado inicial detectado como Offline.' : 'LWT: El dispositivo se desconectó inesperadamente.'
+          }
+        }).catch(err => Logger.error('Fallo persistiendo deviceLog (OFFLINE)', err))
+        
+        // Calcular deuda de tiempo para tareas interrumpidas
+        const interruptedTasks = await prisma.taskLog.findMany({
+          where: {
+            status: { in: [TaskStatus.ACKNOWLEDGED, TaskStatus.IN_PROGRESS, TaskStatus.DISPATCHED] }
           }
         })
-        if (affectedTasks.count > 0) Logger.warn(`Se cancelaron ${affectedTasks.count} tareas debido al corte.`)
+
+        for (const task of interruptedTasks) {
+          let extraNotes = 'El Nodo Actuador perdió conexión durante una ventana crítica.'
+          let addedMinutes = 0
+
+          if (task.actualStartAt && task.status === TaskStatus.IN_PROGRESS) {
+            const elapsedMs = Date.now() - new Date(task.actualStartAt).getTime()
+            addedMinutes = Math.floor(elapsedMs / 60000)
+            extraNotes = `Interrumpida tras ${addedMinutes} min de riego efectivo.`
+          }
+
+          await recordTaskEvent(task.id, TaskStatus.FAILED, extraNotes, {
+            completedMinutes: { increment: addedMinutes }
+          })
+        }
+
+        if (interruptedTasks.length > 0) {
+          Logger.warn(`Se marcaron ${interruptedTasks.length} tareas como INTERRUMPIDAS debido a la desconexión del Nodo Actuador.`)
+        }
       }
       return
     }
@@ -159,11 +252,8 @@ mqttClient.on('message', async (topic, payload) => {
       const taskId = parsed.task_id
 
       if (taskId) {
-        // Encontramos una tarea registrada. El modulo leyó formalmente y la encoló.
-        await prisma.taskLog.update({
-          where: { id: taskId },
-          data: { status: TaskStatus.CONFIRMED, notes: 'Comandos recibidos y encolados por el Nodo Actuador.' }
-        }).catch(() => null)
+        // El modulo leyó formalmente y la encoló.
+        await recordTaskEvent(taskId, TaskStatus.ACKNOWLEDGED, 'Comandos recibidos y encolados por el Nodo Actuador.')
       }
       return
     }
@@ -185,9 +275,8 @@ mqttClient.on('message', async (topic, payload) => {
       if (state === 'ON') {
         if (taskId) {
            // Actualización Atómica Exacta
-           await prisma.taskLog.updateMany({
-             where: { id: taskId, status: { in: [TaskStatus.CONFIRMED, TaskStatus.FAILED] } },
-             data: { status: TaskStatus.IN_PROGRESS, notes: 'Circuito de Riego abierto.' }
+           await recordTaskEvent(taskId, TaskStatus.IN_PROGRESS, 'Circuito de Riego abierto.', {
+             actualStartAt: new Date()
            })
         } else {
            // Soporte Legado
@@ -197,7 +286,11 @@ mqttClient.on('message', async (topic, payload) => {
                status: { in: [TaskStatus.CONFIRMED, TaskStatus.FAILED] },
                scheduledAt: { gte: graceWindow }
              },
-             data: { status: TaskStatus.IN_PROGRESS, notes: 'Circuito de Riego abierto (Legado).' }
+             data: { 
+               status: TaskStatus.IN_PROGRESS, 
+               actualStartAt: new Date(),
+               notes: 'Circuito de Riego abierto (Legado).' 
+             }
            })
         }
       }
@@ -205,11 +298,22 @@ mqttClient.on('message', async (topic, payload) => {
         // Si viene un taskId explícito, sabemos exactamente qué tarea finalizó 
         // y no dependemos de si es la bomba de agua o no (ej nebulizadores / suelo).
         if (taskId) {
-           const finished = await prisma.taskLog.updateMany({
-             where: { id: taskId, status: TaskStatus.IN_PROGRESS },
-             data: { status: TaskStatus.COMPLETED, notes: 'Circuito de Riego cerrado.' }
+           // Obtener el log de la tarea para calcular el tiempo real ejecutado
+           const currentTask = await prisma.taskLog.findUnique({
+             where: { id: taskId },
+             select: { actualStartAt: true, duration: true }
            })
-           if (finished.count > 0) Logger.success(`Tarea ${taskId.slice(0, 8)} COMPLETED`)
+
+           let completedMinutes = currentTask?.duration || 0
+           if (currentTask?.actualStartAt) {
+             const elapsedMs = Date.now() - new Date(currentTask.actualStartAt).getTime()
+             completedMinutes = Math.floor(elapsedMs / 60000)
+           }
+
+           const finished = await recordTaskEvent(taskId, TaskStatus.COMPLETED, 'Circuito de Riego cerrado.', {
+             completedMinutes: { set: completedMinutes }
+           })
+           if (finished) Logger.success(`Tarea ${taskId.slice(0, 8)} COMPLETED (${completedMinutes} min)`)
         } else {
            // Soporte Legado: La bomba es el último eslabón en apagarse, certifica el fin del circuito.
            // Ocurre solamente si el ESP32 no manda Task ID.
@@ -327,15 +431,9 @@ async function processTaskLog(taskLog: any) {
     // Activar Secuencia del Circuito de Riego (Despachar)
     executeSequence(taskLog.purpose, taskLog.duration, taskLog.id)
 
-    // Marcar como CONFIRMED para sacarlo del polling (que solo busca PENDING)
-    // El ACK del hardware sobreescribirá con notas específicas vía MQTT
-    await prisma.taskLog.update({
-      where: { id: taskLog.id },
-      data: {
-        status: TaskStatus.CONFIRMED,
-        notes: 'Comandos del Circuito de Riego despachados vía MQTT. Esperando confirmación del Nodo Actuador.',
-        executedAt: new Date()
-      }
+    // Marcar como DISPATCHED
+    await recordTaskEvent(taskLog.id, TaskStatus.DISPATCHED, 'Comandos despachados vía MQTT. Esperando ACK del hardware.', {
+      executedAt: new Date()
     })
 
     Logger.success(`Circuito de Tarea Log ${taskLog.id.slice(0, 8)} despachado.`)
@@ -412,9 +510,9 @@ async function runTask(scheduleId: string) {
 async function checkPendingTasks() {
   try {
     const now = new Date()
-    const graceWindow = new Date(Date.now() - 15 * 60000)
+    const graceWindow = new Date(Date.now() - 20 * 60000)
 
-    // 1. Ejecutar tareas PENDING dentro de la ventana de gracia (últimos 15 min)
+    // 1. Ejecutar tareas PENDING dentro de la ventana de gracia (últimos 20 min)
     const activeTasks = await prisma.taskLog.findMany({
       where: {
         status: TaskStatus.PENDING, // 🔴 Se elimina TaskStatus.FAILED para evitar bucles
@@ -449,11 +547,25 @@ async function checkPendingTasks() {
 
     if (expired.count > 0) Logger.warn(`🗑️ ${expired.count} tarea(s) expirada(s) auto-canceladas.`)
 
-    // 3. Auto-limpieza (Garbage Collector) con Cálculo Dinámico
-    // Busca tareas CONFIRMED o IN_PROGRESS y valida `scheduledAt + duration + graceWindow`
+    // 3. Auto-fallar tareas DISPATCHED sin ACK (Timeout de 2 min)
+    const ackTimeout = new Date(Date.now() - 2 * 60000)
+    const stuckDispatched = await prisma.taskLog.findMany({
+      where: {
+        status: TaskStatus.DISPATCHED,
+        executedAt: { lt: ackTimeout }
+      }
+    })
+
+    for (const task of stuckDispatched) {
+      await recordTaskEvent(task.id, TaskStatus.FAILED, 'Timeout: El Nodo Actuador nunca confirmó la recepción del comando (ACK).')
+    }
+    if (stuckDispatched.length > 0) Logger.warn(`🧹 Polling: ${stuckDispatched.length} tarea(s) DISPATCHED sin ACK pasadas a FAILED.`)
+
+    // 4. Auto-limpieza (Garbage Collector) con Cálculo Dinámico
+    // Busca tareas ACKNOWLEDGED o IN_PROGRESS y valida `scheduledAt + duration + graceWindow`
     const potentiallyStuck = await prisma.taskLog.findMany({
       where: {
-        status: { in: [TaskStatus.CONFIRMED, TaskStatus.IN_PROGRESS] }
+        status: { in: [TaskStatus.ACKNOWLEDGED, TaskStatus.IN_PROGRESS, TaskStatus.CONFIRMED] }
       }
     })
 
@@ -465,21 +577,72 @@ async function checkPendingTasks() {
       const expirationTime = task.scheduledAt.getTime() + (task.duration * 60000) + (20 * 60000)
       
       if (nowMs > expirationTime) {
-        await prisma.taskLog.update({
-          where: { id: task.id },
-          data: {
-            status: TaskStatus.FAILED,
-            notes: 'Tarea atascada: no se recibió telemetría de finalización a tiempo.'
-          }
-        })
+        await recordTaskEvent(task.id, TaskStatus.FAILED, 'Tarea atascada: no se recibió telemetría de finalización a tiempo (SLA Excedido).')
         stuckCount++
       }
     }
 
     if (stuckCount > 0) Logger.warn(`🧹 ${stuckCount} tarea(s) atascada(s) pasadas a FAILED.`)
 
+    // 5. Auto-Vencer tareas Interrumpidas (LWT FAILED) cuyo tiempo de recuperación caducó
+    const recoveryExpired = await prisma.taskLog.findMany({
+      where: {
+        status: TaskStatus.FAILED,
+        notes: { contains: 'Interrumpida' }
+      }
+    })
+
+    let expiredCount = 0
+    for (const task of recoveryExpired) {
+      if (!task.notes?.includes('descartada permanentemente')) {
+        // Límite absoluto de vida útil de la orden: inicio programado + duración + 20m de gracia
+        const absoluteExpiration = task.scheduledAt.getTime() + (task.duration * 60000) + (20 * 60000)
+        
+        if (nowMs > absoluteExpiration) {
+          const newNotes = `${task.notes} | Ventana de recuperación agotada. Tarea descartada permanentemente.`
+          await recordTaskEvent(task.id, TaskStatus.FAILED, newNotes)
+          expiredCount++
+        }
+      }
+    }
+
+    if (expiredCount > 0) Logger.warn(`🧹 Polling: ${expiredCount} tarea(s) interrumpidas marcadas como Vencidas permanentemente.`)
+
   } catch (error) {
     Logger.error('Error durante el Polling de tareas pendientes', error)
+  }
+}
+
+/**
+ * Busca tareas interrumpidas por fallos de conexión y las reanuda
+ * si aún les queda tiempo de riego y están en la ventana de gracia.
+ */
+async function resumeInterruptedTasks() {
+  const graceWindow = new Date(Date.now() - 20 * 60000) // 20 min de gracia
+  
+  const debtTasks = await prisma.taskLog.findMany({
+    where: {
+      status: TaskStatus.FAILED,
+      notes: { contains: 'Interrumpida' },
+      scheduledAt: { gte: graceWindow }
+    }
+  })
+
+  for (const task of debtTasks) {
+    const remainingMinutes = task.duration - task.completedMinutes
+
+    if (remainingMinutes > 0) {
+      Logger.info(`♻️ Reanudando Tarea ${task.id.slice(0, 8)}: Quedan ${remainingMinutes} min pendientes.`)
+      
+      // Despachar el tiempo RESTANTE
+      executeSequence(task.purpose, remainingMinutes, task.id)
+
+      // Marcar como DISPATCHED
+      await recordTaskEvent(task.id, TaskStatus.DISPATCHED, `Reanudando riego: Reenviando tiempo restante (${remainingMinutes} min) tras falla de conexión.`)
+    } else {
+      // Si por error de cálculo ya se completó, la cerramos
+      await recordTaskEvent(task.id, TaskStatus.COMPLETED, 'Cerrada por verificación de reasunción (Tiempo agotado).')
+    }
   }
 }
 

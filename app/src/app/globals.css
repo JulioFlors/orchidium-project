@@ -694,7 +694,7 @@
 
   .checkout-button {
     @apply bg-canvas shadow-top-highlight fixed bottom-0 left-0 w-full h-auto z-5;
-    @apply flex flex-col justify-center m-0 p-4 rounded-t;
+    @apply flex flex-col justify-center m-0 p-4 rounded-t-sm;
     @apply transition-colors duration-300 ease-in-out;
     @apply tds-lg:contents;
   }

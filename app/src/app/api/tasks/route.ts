@@ -40,16 +40,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
-    const taskLog = await prisma.taskLog.create({
-      data: {
-        purpose,
-        zones,
-        status: TaskStatus.PENDING,
-        source: 'DEFERRED',
-        scheduledAt: new Date(scheduledAt),
-        duration: durationMinutes,
-        notes: notes || null,
-      },
+    const taskLog = await prisma.$transaction(async (tx) => {
+      const newLog = await tx.taskLog.create({
+        data: {
+          purpose,
+          zones,
+          status: TaskStatus.PENDING,
+          source: 'DEFERRED',
+          scheduledAt: new Date(scheduledAt),
+          duration: durationMinutes,
+          notes: notes || null,
+        },
+      })
+
+      // Auditoría inicial
+      await tx.taskEventLog.create({
+        data: {
+          taskId: newLog.id,
+          status: TaskStatus.PENDING,
+          notes: 'Tarea agendada por el usuario desde el planificador.',
+        },
+      })
+
+      return newLog
     })
 
     return NextResponse.json(taskLog, { status: 201 })

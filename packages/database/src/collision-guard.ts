@@ -112,10 +112,16 @@ export class CollisionGuard {
     const dates: Date[] = []
     try {
         const interval = new Cron(cronStr, { timezone: 'America/Caracas' })
-        const nextDates = interval.nextRuns(Infinity, end)
+        let next = interval.nextRun(start)
         
-        // Solo incluir fechas que sean después del inicio solicitado
-        return nextDates.filter((d: Date) => d >= start)
+        // Límite estricto de iteraciones para prevenir bucles infinitos en Node (Secuestro del Event Loop)
+        let maxIterations = 500
+
+        while (next && next <= end && maxIterations > 0) {
+            dates.push(next)
+            next = interval.nextRun(next)
+            maxIterations--
+        }
     } catch {
         return []
     }

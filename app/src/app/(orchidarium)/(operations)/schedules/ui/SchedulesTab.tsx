@@ -121,7 +121,7 @@ export function SchedulesTab() {
         </div>
         <div className="w-full shrink-0 sm:w-auto">
           <button
-            className="bg-action hover:bg-action/90 focus-visible:ring-accessibility flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium text-white transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none sm:w-auto sm:py-2"
+            className="bg-action hover:bg-action/90 focus-visible:ring-accessibility flex w-full cursor-pointer items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium text-white transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none sm:w-auto sm:py-2"
             type="button"
             onClick={openNewModal}
           >
