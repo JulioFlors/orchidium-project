@@ -421,7 +421,7 @@ model DailyEnvironmentStat {
 
 model DeviceLog {
   id        String       @id @default(uuid())
-  device    String       @unique
+  device    String
   status    DeviceStatus
   timestamp DateTime     @default(now())
   notes     String
