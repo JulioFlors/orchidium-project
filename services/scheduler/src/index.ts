@@ -74,7 +74,7 @@ const Logger = {
     const isOnline = status === 'ONLINE'
     const color = isOnline ? colors.green : colors.red
     const icon = isOnline ? '✅' : '❌'
-    console.log(`${colors.white}[ ${getLogTime()} ] ${colors.reset}${color} ${icon} [ NODO ] ${status}${colors.reset}`)
+    console.log(`${colors.white}[ ${getLogTime()} ]${colors.reset}${color} ${icon} [ NODO ] ${status}${colors.reset}`)
   }
 }
 

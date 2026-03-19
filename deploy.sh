@@ -44,7 +44,7 @@ echo -e "${GREEN}✅ Repositorio Sincronizado${RESET}"
 # PASO 2: Construir imágenes
 # ================================================================
 echo ""
-echo -e "${CYAN}🏗️ [2/5] Construyendo imágenes${RESET}"
+echo -e "${CYAN}🏗️ [2/4] Construyendo imágenes${RESET}"
 docker compose --profile cloud build
 echo ""
 echo -e "${GREEN}✅ Imágenes construidas${RESET}"

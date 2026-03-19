@@ -478,25 +478,6 @@ git commit -m "⚙️ chore: otorgar permisos de ejecución permanentes a deploy
 # 4. Subir el cambio a la rama Dev
 git push
 
-```
-
-#### 3. Sincronización hacia Producción (`main`)
-
-Para que estos cambios (y cualquier código nuevo) lleguen al servidor, debes completar el ciclo de integración hacia la rama principal:
-
-```bash
-# 1. Preparar el commit
-git add .
-
-# 2. Cargar el commit desde un archivo
-git commit -F commit.txt
-
-# 3. Eliminar el archivo
-rm commit.txt
-
-# 4 Subir los cambios a la rama Dev
-git push
-
 # 5. Cambiar a la rama de producción
 git checkout main
 
@@ -514,7 +495,7 @@ git checkout Dev
 
 ```
 
-#### 4. Flujo de Trabajo Habitual (Actualizar el Servidor)
+#### 3. Flujo de Trabajo Habitual (Actualizar el Servidor)
 
 Una vez configurado lo anterior, el proceso para actualizar la plataforma en el futuro se reduce a dos simples pasos. Cada vez que fusiones código nuevo a la rama `main`, ingresa a tu VPS y ejecuta:
 
@@ -525,15 +506,9 @@ cd pristinoplant
 
 El script interactivo se encargará de descargar la última versión, reconstruir exclusivamente las capas modificadas y reiniciar los servicios (como `ingest` y `scheduler`) minimizando cualquier tiempo de inactividad.
 
-#### 5. Mantenimiento de Datos y Reglas del Scheduler
+#### 4. Mantenimiento de Datos y Reglas del Scheduler
 
 Durante la administración de PristinoPlant en el servidor, frecuentemente surgirán dudas respecto a cómo interactuar con los comandos de Prisma y el ciclo de vida del contenedor Scheduler. Aquí tienes la guía definitiva:
-
-* **¿Cuándo aplicar migraciones (`db:deploy`) en el script `./deploy.sh`?**
-  Sólo cuando un desarrollador haya alterado o creado **nuevas columnas o tablas** en el archivo `schema.prisma`. Agregar plantas, usuarios, o cambiar la configuración desde la página web NO requiere migración.
-
-* **Diferencia entre cambios por código y por UI**
-  Si editas una rutina de riego desde la interfaz web (cambias la hora o la apagas), el Scheduler reacciona solo, limpiando su RAM y programando el nuevo Cron al vuelo sin tocar Docker. Pero, si haces un cambio forzoso por terminal, la plataforma queda desfasada temporalmente.
 
 * **Semillas y Borrado Forzado (`db:seed` / `db:push --force-reset`)**
   Si en algún punto necesitas formatear la base de datos por terminal, las rutinas de la base de datos obtendrán nuevos identificadores UUID únicos. Dado que el Scheduler mantiene los CronJobs orquestados en la RAM atados a identificadores viejos, debes notificarle para que recargue y se vuelva a enlazar:
@@ -556,7 +531,7 @@ Durante la administración de PristinoPlant en el servidor, frecuentemente surgi
 
   Una vez resuelto, podrás usar `db:deploy` normalmente en los despliegues futuros.
 
-#### 6. Operaciones Diarias y Monitoreo (Docker)
+#### 5. Operaciones Diarias y Monitoreo (Docker)
 
 El orquestador en el VPS de producción utiliza Docker Compose bajo la red cloud. Para el monitoreo y manipulación manual rápida de los servicios scheduler, ingest o la web, aquí tienes los comandos fundamentales que debes ejecutar siempre dentro de la carpeta /pristinoplant:
 
@@ -564,50 +539,107 @@ El orquestador en el VPS de producción utiliza Docker Compose bajo la red cloud
 
   ```bash
   docker compose --profile cloud ps
-
   ```
 
 * **Reiniciar un servicio específico (ej: Scheduler)**
 
-```bash
-# Útil tras semillas o cambios forzados de BBDD
-docker compose --profile cloud restart scheduler
-
-```
+  ```bash
+  # Útil tras semillas o cambios forzados de BBDD
+  docker compose --profile cloud restart scheduler
+  ```
 
 * **Apagar o Encender un servicio individual**
 
-```bash
-docker compose --profile cloud stop scheduler
-docker compose --profile cloud start scheduler
-
-```
+  ```bash
+  docker compose --profile cloud stop scheduler
+  docker compose --profile cloud start scheduler
+  ```
 
 * **Leer en vivo los Logs de un microservicio**
 
-```bash
-# El flag -f mantiene la terminal escuchando los nuevos logs en tiempo real (Ctrl+C para salir)
-docker logs -f scheduler
-
-```
+  ```bash
+  # El flag -f mantiene la terminal escuchando los nuevos logs en tiempo real (Ctrl+C para salir)
+  docker logs -f scheduler
+  ```
 
 * **Filtrar Logs (Para evitar saturar la terminal con días de historial)**
 
-```bash
-# Imprime solamente las últimas 50 líneas y se queda escuchando
-docker logs -f --tail 50 scheduler
+  ```bash
+  # Imprime solamente las últimas 50 líneas y se queda escuchando
+  docker logs -f --tail 50 scheduler
 
-# Imprime logs de las últimas 2 horas
-docker logs --since 2h scheduler
-
-```
+  # Imprime logs de las últimas 2 horas
+  docker logs --since 2h scheduler
+  ```
 
 * **Limpiar el historial de Logs de un contenedor**
-Docker no tiene un comando nativo para borrar los logs. Para vaciar el archivo físico que guarda el historial en el VPS sin necesidad de apagar el servicio, utiliza este comando (reemplaza `pristinoplant-scheduler` por el nombre exacto de tu contenedor si es distinto):
+  Docker no tiene un comando nativo para borrar los logs. Para vaciar el archivo físico que guarda el historial en el VPS sin necesidad de apagar el servicio, utiliza este comando (reemplaza `pristinoplant-scheduler` por el nombre exacto de tu contenedor si es distinto):
+
+  ```bash
+  sudo sh -c 'truncate -s 0 $(docker inspect --format="{{.LogPath}}" pristinoplant-scheduler)'
+  ```
+
+  *(Nota alternativa: Si no te importa que el servicio se reinicie un par de segundos, puedes forzar su recreación, lo cual borra los logs automáticamente: `docker compose --profile cloud up -d --force-recreate scheduler`)*
+
+#### 6. Monitoreo de Recursos del Servidor y Contenedores
+
+Para garantizar que el VPS (memoria RAM, CPU) y los contenedores Docker funcionen sin cuellos de botella o desbordamientos, utiliza los siguientes comandos de diagnóstico directamente en la terminal del VPS:
+
+* **Revisar la memoria RAM global del VPS (`free`)**
+  Muestra la memoria física total, en uso y libre. Presta especial atención a la columna `available` (memoria real lista para usarse) y a la fila `Swap` (tu memoria de emergencia).
+
+  ```bash
+  free -h
+  ```
+
+* **Monitor de Procesos y CPU en Tiempo Real (`htop`)**
+  Abre un panel interactivo con barras visuales para observar el consumo de CPU por núcleo y los procesos activos. Ideal para detectar consultas lentas de bases de datos o picos de procesamiento. (Presiona `q` o `Ctrl+C` para salir).
+
+  ```bash
+  htop
+  ```
+
+* **Consumo de Recursos por Contenedor (`docker stats`)**
+  Muestra exactamente cuánta RAM y CPU está consumiendo cada microservicio aislado (ej: scheduler, ingest, base de datos). El flag `--no-stream` imprime una "foto" estática limpia para los logs, en lugar de bloquear la pantalla actualizándose infinitamente.
+
+  ```bash
+  docker stats --no-stream
+  ```
+
+#### 7. Sincronización hacia Producción (`main`)
+
+Para que estos cambios (y cualquier código nuevo) lleguen al servidor, debes completar el ciclo de integración hacia la rama principal:
 
 ```bash
-sudo sh -c 'truncate -s 0 $(docker inspect --format="{{.LogPath}}" pristinoplant-scheduler)'
+# 1. Verificar que estamos en Dev
+git checkout Dev
 
+# 2. Preparar el commit
+git add .
+
+# 3. Cargar el commit desde un archivo
+git commit -F commit.txt
+
+# 4. Eliminar el archivo
+rm commit.txt
+
+# 5. Subir los cambios a la rama Dev
+git push
+
+# 6. Cambiar a la rama de producción
+git checkout main
+
+# 7. Actualizar para evitar conflictos
+git pull origin main
+
+# 8. Fusionar los cambios desde Dev
+git merge Dev
+
+# 9. Subir la versión final a GitHub
+git push origin main
+
+# 10. Volver al entorno de desarrollo
+git checkout Dev
+
+# Ciclo de git completado
 ```
-
-*(Nota alternativa: Si no te importa que el servicio se reinicie un par de segundos, puedes forzar su recreación, lo cual borra los logs automáticamente: `docker compose --profile cloud up -d --force-recreate scheduler`)*
