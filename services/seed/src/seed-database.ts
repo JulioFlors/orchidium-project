@@ -173,7 +173,6 @@ async function main() {
             emailVerified: true
           },
         })
-        console.log(`✅ Usuario ${user.email} asegurado con rol ${user.role}`)
       } catch (err) {
         console.error(`Error forzando rol al usuario ${user.email}:`, err)
       }

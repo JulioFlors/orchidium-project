@@ -12,7 +12,7 @@ import mqtt from 'mqtt'
 const DEBUG = process.env.NODE_ENV !== 'production'
 
 // ---- Configuración MQTT ----
-const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || process.env.MQTT_BROKER_URL_CLOUD || process.env.MQTT_BROKER_URL_LOCAL || ''
+const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || process.env.MQTT_BROKER_URL_CLOUD || process.env.MQTT_BROKER_URL_SERVERLESS || process.env.MQTT_BROKER_URL_LOCAL || ''
 
 const MQTT_USERNAME = process.env.MQTT_USERNAME || process.env.MQTT_USER_BACKEND || ''
 const MQTT_PASSWORD = process.env.MQTT_PASSWORD || process.env.MQTT_PASS_BACKEND || ''
@@ -24,8 +24,8 @@ const ACTUATOR_TOPIC = 'PristinoPlant/Actuator_Controller/irrigation/cmd'
 const SERVICE_STATUS_TOPIC = `PristinoPlant/Services/${MQTT_CLIENT_ID}/status`
 
 // ---- Configuración InfluxDB ----
-const INFLUX_URL = process.env.INFLUX_URL || 'http://localhost:8181'
-const INFLUX_TOKEN = process.env.INFLUX_TOKEN
+const INFLUX_URL = process.env.INFLUX_URL || process.env.INFLUX_URL_CLOUD || process.env.INFLUX_URL_SERVERLESS || process.env.INFLUX_URL_LOCAL || 'http://localhost:8181'
+const INFLUX_TOKEN = process.env.INFLUX_TOKEN || process.env.INFLUX_TOKEN_SERVERLESS
 const INFLUX_BUCKET = process.env.INFLUX_BUCKET || 'telemetry'
 
 // ---- Configuración de Reglas ----
@@ -84,6 +84,24 @@ const Logger = {
 async function recordTaskEvent(taskId: string, status: TaskStatus, notes?: string, extraData: any = {}) {
   try {
     return await prisma.$transaction(async (tx) => {
+      // Comprobación de Idempotencia: ¿Ya estamos en ese estado?
+      const currentTask = await tx.taskLog.findUnique({
+        where: { id: taskId },
+        select: { status: true }
+      })
+
+      // Si el estado es exactamente el mismo, omitimos crear un nuevo TaskEventLog duplicado,
+      // pero aún así aplicamos la actualización del Log Principal (ej. para acumular minutos)
+      if (currentTask?.status === status) {
+        return await tx.taskLog.update({
+          where: { id: taskId },
+          data: {
+            notes,
+            ...extraData
+          }
+        })
+      }
+
       // 1. Actualizar el log principal
       const updated = await tx.taskLog.update({
         where: { id: taskId },
@@ -116,10 +134,21 @@ if (!INFLUX_TOKEN) {
   Logger.error('INFLUX_TOKEN no esta definido')
   process.exit(1)
 }
+const url = new URL(INFLUX_URL)
+const isPublicCloud = url.hostname.endsWith('influxdata.com')
+const isInternalHost = url.hostname === 'influxdb' || url.hostname === 'localhost'
+
 const influxClient = new InfluxDBClient({
   host: INFLUX_URL,
   token: INFLUX_TOKEN,
-  database: INFLUX_BUCKET
+  database: INFLUX_BUCKET,
+  // Configuracion inteligente de seguridad TLS:
+  // 1. Si es Cloud oficial (InfluxData) -> Validar TLS estrictamente (true).
+  // 2. Si es Host interno Docker (influxdb) -> Permitir cert autofirmado (false).
+  // 3. Por defecto (VPS con dominio propio o desconocido) -> Validar TLS (true).
+  transportOptions: {
+    rejectUnauthorized: isPublicCloud ? true : (isInternalHost ? false : true)
+  }
 })
 
 Logger.mqtt(

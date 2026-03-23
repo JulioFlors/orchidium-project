@@ -399,6 +399,11 @@ docker exec --user root -it influxdb sh -c \
 > [!IMPORTANT]
 > Guarda el token generado inmediatamente. No se mostrará de nuevo.
 > Actualiza `INFLUX_TOKEN` en el `.env` del VPS y reinicia los servicios que lo utilicen: `docker compose restart scheduler`.
+> [!NOTE]
+> **Gestión Inteligente de TLS:** El sistema detecta automáticamente si la conexión a InfluxDB es interna (red Docker) o externa (InfluxDB Cloud).
+>
+> * Si la URL contiene `influxdb` o `localhost`, se desactiva la verificación estricta para permitir certificados autofirmados.
+> * Si la URL es externa (`*.influxdata.com`), se mantiene la validación estricta para garantizar la seguridad en la nube.
 
 ---
 
