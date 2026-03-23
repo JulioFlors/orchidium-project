@@ -598,10 +598,10 @@ El orquestador en el VPS de producción utiliza Docker Compose bajo la red cloud
   ```
 
 * **Limpiar el historial de Logs de un contenedor**
-  Docker no tiene un comando nativo para borrar los logs. Para vaciar el archivo físico que guarda el historial en el VPS sin necesidad de apagar el servicio, utiliza este comando (reemplaza `pristinoplant-scheduler` por el nombre exacto de tu contenedor si es distinto):
+  Docker no tiene un comando nativo para borrar los logs. Para vaciar el archivo físico que guarda el historial en el VPS sin necesidad de apagar el servicio, utiliza este comando (reemplaza `scheduler` por el nombre exacto de tu contenedor si es distinto):
 
   ```bash
-  sudo sh -c 'truncate -s 0 $(docker inspect --format="{{.LogPath}}" pristinoplant-scheduler)'
+  sudo sh -c 'truncate -s 0 $(docker inspect --format="{{.LogPath}}" scheduler)'
   ```
 
   *(Nota alternativa: Si no te importa que el servicio se reinicie un par de segundos, puedes forzar su recreación, lo cual borra los logs automáticamente: `docker compose --profile cloud up -d --force-recreate scheduler`)*
