@@ -329,7 +329,7 @@ Pega tus credenciales de producción (Contraseñas fuertes para tu Postgres loca
 
 > **Importante:** Asegúrate de incluir la variable `COMPOSE_PROFILES=cloud` para que Docker levante la infraestructura nativa del VPS.
 
-#### 4. Generación de Certificados SSL (Mosquitto, PostgreSQL e InfluxDB)
+#### 4. Preparación de Volúmenes y Certificados SSL (Mosquitto, PostgreSQL e InfluxDB)
 
 Para que el frontend (Vercel) y los ESP32 puedan conectarse de forma segura a los servicios (PostgreSQL, MQTT e InfluxDB) en el VPS, es obligatorio generar certificados SSL válidos utilizando Let's Encrypt.
 
@@ -349,32 +349,43 @@ sudo docker run -it --rm -p 80:80 \
 
 > **Nota:** Siempre que quieras actualizar los certificados, ejecuta el comando anterior.
 
-**Ajuste y Aislamiento de Permisos (Crucial para PostgreSQL e InfluxDB):**
-Por defecto, Certbot crea los certificados con candados estrictos para el usuario `root` de Linux. Diferentes bases de datos exigen diferentes niveles de seguridad: PostgreSQL se niega a arrancar si la llave privada puede ser leída por otros (error fatal), mientras que InfluxDB necesita permisos de lectura pública para poder arrancar.
+**Ajuste y Aislamiento de Permisos (Crucial para Docker):**
+Por defecto, Git o Certbot crean archivos con propiedad estricta para el usuario `root` de Linux. Sin embargo, los contenedores seguros (PostgreSQL, InfluxDB) ejecutan sus motores con usuarios internos sin privilegios. Si no preparamos los permisos de antemano, los contenedores colapsarán con errores de "Acceso Denegado" (`Permission denied`).
 
-Para resolver este conflicto, no alteramos la carpeta original de Certbot. En su lugar, creamos copias aisladas con los permisos exactos que cada servicio exige. Ejecuta estos comandos en tu VPS:
+Para resolver esto y garantizar un arranque exitoso, creamos copias aisladas de los certificados y pre-asignamos la propiedad de las carpetas de datos a los identificadores internos (UID) que usa cada base de datos. Ejecuta este bloque de comandos en tu VPS:
 
 ```bash
-# 1. Darle permisos a InfluxDB para crear su base de datos
-sudo chmod -R 777 infrastructure/influxdb/data/
+# 1. Pre-asignar permisos a las carpetas de datos ANTES de arrancar Docker
+# UID 1500 es el usuario interno estricto para influxdb:3-core
+mkdir -p infrastructure/influxdb/data
+sudo chown -R 1500:1500 infrastructure/influxdb/data/
+sudo chmod -R 755 infrastructure/influxdb/data/
 
 # 2. Crear carpetas aisladas para los certificados de cada DB
 mkdir -p infrastructure/certs/postgres
 mkdir -p infrastructure/certs/influxdb
 
 # 3. Copiar los certificados reales (resolviendo los links de Certbot)
-cp -L infrastructure/certs/live/[vps.midominio.com/](https://vps.midominio.com/)* infrastructure/certs/postgres/
-cp -L infrastructure/certs/live/[vps.midominio.com/](https://vps.midominio.com/)* infrastructure/certs/influxdb/
+cp -L infrastructure/certs/live/vps.midominio.com/* infrastructure/certs/postgres/
+cp -L infrastructure/certs/live/vps.midominio.com/* infrastructure/certs/influxdb/
 
 # 4. Darle los permisos estrictos a PostgreSQL (Usuario interno UID 999)
 sudo chown -R 999:999 infrastructure/certs/postgres/
 sudo chmod 600 infrastructure/certs/postgres/privkey.pem
 
-# 5. Darle los permisos de lectura estándar a InfluxDB
+# 5. Darle los permisos de lectura estándar a InfluxDB (UID 1500)
+sudo chown -R 1500:1500 infrastructure/certs/influxdb/
 sudo chmod 644 infrastructure/certs/influxdb/privkey.pem
 ```
 
-*(Nota: Asegúrate de sustituir `vps.midominio.com` por el nombre real de la carpeta que generó Certbot).*
+> **💡 Tip para confirmar tu dominio:**
+> Certbot nombra la carpeta usando el primer dominio que le pasaste en el comando. Si no estás seguro del nombre exacto, ejecuta este comando para listar el contenido y copiar el nombre real:
+>
+> ```bash
+> ls infrastructure/certs/live/
+> ```
+>
+> Sustituye `vps.midominio.com` en los comandos del paso 3 por el nombre exacto que te devuelva el comando anterior.
 
 ---
 

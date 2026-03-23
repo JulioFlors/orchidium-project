@@ -17,17 +17,19 @@ echo " "
 echo "Verificando conexión con InfluxDB ($INFLUX_URL)"
 
 # InfluxDB 3 no expone /ping ni /health, pero responde con 200 a la raíz.
+# InfluxDB 3 requiere el Token incluso para verificar la raíz.
 # NOTA: wget viene preinstalado en Alpine, a diferencia de curl.
 #       Se agrega --no-check-certificate para evitar fallos de handshake TLS con HTTPS.
-until wget --no-check-certificate -q --spider --timeout=5 "$INFLUX_URL" 2>/dev/null; do
+until wget --no-check-certificate --header="Authorization: Token $INFLUX_TOKEN" -q --spider --timeout=5 "$INFLUX_URL" 2>/dev/null; do
   >&2 echo " "
   >&2 echo "🕒 InfluxDB aun no responde en $INFLUX_URL"
   sleep 5
 done
-echo " "
-echo "✅ InfluxDB está listo."
 
 echo " "
+echo "✅ $INFLUX_URL está listo."
+echo " "
+
 echo "🚀 Iniciando servicio de Rutinas de Riego Automatizadas (Scheduler)."
 echo " "
 
