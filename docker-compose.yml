@@ -18,7 +18,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./infrastructure/postgres/data:/var/lib/postgresql/data
+      - ./infrastructure/postgres-local/data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 10s
@@ -46,7 +46,7 @@ services:
     ports:
       - "8181:8181" 
     volumes:
-      - ./infrastructure/influxdb/data:/var/lib/influxdb3/data
+      - ./infrastructure/influxdb-local/data:/var/lib/influxdb3/data
     environment:
       INFLUXD_ADMIN_TOKEN: ${INFLUX_TOKEN}
     command:
@@ -138,9 +138,18 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: ${DB_NAME}
     ports:
-      - "5432:5432"  # Acceso externo (Vercel)
+      - "5432:5432"  # Acceso externo SEGURO (Vercel)
     volumes:
-      - ./infrastructure/postgres-cloud/data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/data:/var/lib/postgresql/data
+      - ./infrastructure/certs/postgres:/ssl:ro
+    command:
+      - "postgres"
+      - "-c"
+      - "ssl=on"
+      - "-c"
+      - "ssl_cert_file=/ssl/fullchain.pem"
+      - "-c"
+      - "ssl_key_file=/ssl/privkey.pem"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 10s
@@ -167,10 +176,10 @@ services:
     restart: always
     profiles: ["cloud"]
     ports:
-      - "8181:8181"
+      - "8181:8181" # Acceso externo SEGURO (Vercel)
     volumes:
-      - ./infrastructure/influxdb-cloud/data:/var/lib/influxdb3/data
-      - ./infrastructure/certs:/certs:ro
+      - ./infrastructure/influxdb/data:/var/lib/influxdb3/data
+      - ./infrastructure/certs/influxdb:/ssl:ro
     environment:
       INFLUXD_ADMIN_TOKEN: ${INFLUX_TOKEN}
     command:
@@ -180,8 +189,8 @@ services:
       - --object-store=file
       - --data-dir=/var/lib/influxdb3/data
       - --http-bind=0.0.0.0:8181
-      - --tls-cert=/certs/live/mqtt.sisparrow.com/fullchain.pem
-      - --tls-key=/certs/live/mqtt.sisparrow.com/privkey.pem
+      - --tls-cert=/ssl/fullchain.pem
+      - --tls-key=/ssl/privkey.pem
 
   ingest:
     container_name: ingest
