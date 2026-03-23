@@ -1,5 +1,17 @@
 #!/bin/bash
-# deploy.sh - Script de despliegue para VPS-Sparrow
+# deploy.sh - Script de despliegue para producción.
+# -------------------------------------------------------------------
+# 📊 GESTIÓN DE BASE DE DATOS (Flujo de Trabajo)
+# -------------------------------------------------------------------
+# Las migraciones son un proceso exclusivo del entorno de DESARROLLO.
+# 1. En LOCAL: Modificar schema.prisma -> `pnpm prisma migrate dev`
+# 2. En PROD: Al ejecutar este script, el código en el VPS ya tendrá 
+#    las migraciones registradas.
+#
+# Comandos manuales en el VPS (si es necesario):
+# - Aplicar pendientes: docker compose exec scheduler npx prisma migrate deploy
+# - Resetear (⚠️ BORRA TODO): docker compose exec scheduler npx prisma migrate reset --force
+# -------------------------------------------------------------------
 
 set -e
 
@@ -16,6 +28,7 @@ WHITE='\x1b[97m'
 # Evitar que pnpm pida confirmaciones interactivas
 export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
+# Confirmar un paso de ser necesario.
 confirm() {
     echo ""
     read -p "$(echo -e "${YELLOW}⚡ $1 [s/N]:${RESET}")" choice
@@ -24,13 +37,14 @@ confirm() {
         * ) return 1 ;;
     esac
 }
+
 echo ""
 echo -e "${GREEN}🌵 PristinoPlant | Deploy${RESET}"
 echo ""
 
-# ================================================================
+# -------------------------------------------------------------------
 # PASO 1: Sincronizar (Protegiendo infraestructura local)
-# ================================================================
+# -------------------------------------------------------------------
 echo -e "${CYAN}📡 [1/4] Sincronizando con origin/main${RESET}"
 echo ""
 git fetch origin main
@@ -40,38 +54,27 @@ git reset --hard origin/main
 echo ""
 echo -e "${GREEN}✅ Repositorio Sincronizado${RESET}"
 
-# ================================================================
+# -------------------------------------------------------------------
 # PASO 2: Construir imágenes
-# ================================================================
+# -------------------------------------------------------------------
 echo ""
 echo -e "${CYAN}🏗️ [2/4] Construyendo imágenes${RESET}"
-docker compose --profile cloud build
+docker compose build
 echo ""
 echo -e "${GREEN}✅ Imágenes construidas${RESET}"
 
-# ================================================================
+# -------------------------------------------------------------------
 # PASO 3: Levantar servicios
-# ================================================================
+# -------------------------------------------------------------------
 echo ""
-echo -e "${CYAN}🚀 [3/4] Levantando servicios cloud${RESET}"
-docker compose --profile cloud up -d --remove-orphans
+echo -e "${CYAN}🚀 [3/4] Levantando servicios${RESET}"
+docker compose up -d --remove-orphans
 echo ""
-echo -e "${GREEN}✅ Servicios cloud levantados${RESET}"
-echo ""
+echo -e "${GREEN}✅ Servicios levantados${RESET}"
 
-if confirm "¿Levantar/Reiniciar Mosquitto (perfil vps)?"; then
-    echo ""
-    echo -e "${CYAN}🚀 Levantando Mosquitto${RESET}"
-    echo ""
-    docker compose --profile vps up -d
-    echo ""
-    echo -e "${GREEN}✅ Mosquitto levantado${RESET}"
-    echo ""
-fi
-
-# ================================================================
+# -------------------------------------------------------------------
 # PASO 4: Limpieza
-# ================================================================
+# -------------------------------------------------------------------
 echo ""
 echo -e "${YELLOW}🧹 [4/4] Limpiando imágenes y caché antigua${RESET}"
 
@@ -84,4 +87,4 @@ docker builder prune -f --filter "until=168h"
 echo ""
 echo -e "${GREEN}✅ Deploy Finalizado${RESET}"
 echo ""
-docker compose --profile cloud --profile vps ps
+docker compose ps

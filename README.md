@@ -19,10 +19,10 @@ El proyecto está estructurado como un **Monorepo** (Turborepo) para separar res
 * **Firmware (MicroPython/ESP32):** Lógica de control para nodos IoT (Sensores y Actuadores).
 * **Services:** Servicios de backend auxiliares (MQTT, Seeders).
 
-### Base de Datos Híbrida (PostgreSQL - Neon)
+### Conexión a Base de Datos (PostgreSQL)
 
-* **Desarrollo Local:** Usa driver `pg` nativo (TCP) para máxima compatibilidad con Docker.
-* **Producción (Serverless):** Usa driver `@neondatabase/serverless` (WebSockets) y Pooling para manejar la alta concurrencia y conexiones inestables.
+* **Desarrollo (Local) y Producción (Cloud):** Utiliza el driver `pg` nativo (TCP) para conectarse directamente a los contenedores Docker locales o alojados en el servidor, garantizando máxima velocidad y control.
+* **Producción Capa Gratuita (Serverless):** Utiliza el driver `@neondatabase/serverless` (WebSockets) y Pooling para conectarse a Neon DB. Diseñado para manejar alta concurrencia y conexiones inestables cuando no se cuenta con infraestructura propia.
 
 ### Modelo de Datos (Triple Fuente de Verdad)
 
@@ -36,16 +36,6 @@ Resolvemos la discrepancia entre el inventario físico y el catálogo digital me
 * Tiene un `currentSize` (que determina a qué variante pertenece).
 * Tiene un `status` (`AVAILABLE` o `MOTHER`).
 * **Regla de Stock:** El stock de una `ProductVariant` se calcula contando las instancias de `Plant` disponibles de ese tamaño específico.
-
----
-
-Tienes toda la razón. Mi respuesta anterior fue un bloque de texto que no dejaba claro **dónde** pegarlo o qué reemplazar.
-
-Aquí tienes la versión definitiva. Esta sección **reemplaza por completo** el bloque que me mostraste (`## 📂 Guía de Organización de Archivos...`).
-
-He combinado la redacción profesional ("más general") con tus ejemplos específicos (que son muy valiosos), para que quede elegante pero útil.
-
-Copia y pega esto en tu `README.md`:
 
 ---
 
@@ -121,10 +111,11 @@ El archivo `.env` está dividido en secciones. Rellena tus credenciales (Google,
 
 #### ⚙️ Configuración de la App (Next.js)
 
-Al final del archivo `.env`, encontrarás la sección **"APP NEXT.JS"**. Aquí decides a dónde se conecta tu entorno de desarrollo local (`pnpm dev`):
+Al final del archivo `.env`, encontrarás la sección **"APP NEXT.JS"**. Aquí decides a qué backend se conecta tu entorno de desarrollo local (`pnpm dev`):
 
-* **Opción A (Cloud):** Descomenta las líneas bajo `Opción A` para usar datos reales en la nube (Neon, HiveMQ).
-* **Opción B (Local):** Descomenta las líneas bajo `Opción B` para usar los contenedores locales (Postgres, Mosquitto).
+* **Opción A (Cloud):** Apunta a los servicios alojados en tu VPS propio (`vps.midominio.com`).
+* **Opción B (Local):** Apunta a los contenedores locales de tu computadora (`localhost`).
+* **Opción C (Serverless):** Apunta a proveedores externos en la nube (Neon DB, HiveMQ, InfluxDB Cloud).
 
 > **Nota:** Esto solo afecta a la App Web. Los servicios de backend (ingesta/scheduler) se controlan por separado usando **Docker Profiles** (ver paso 3).
 
@@ -142,25 +133,32 @@ Hemos simplificado el despliegue usando **Docker Profiles**. Elige el comando se
 
 #### OPCIÓN A: Entorno 100% Local (Offline)
 
-Levanta toda la infraestructura localmente: Postgres, Mosquitto, InfluxDB y los servicios conectados a ellos.
+Levanta toda la infraestructura localmente: Postgres, Mosquitto, InfluxDB y los servicios de backend (`ingest`, `scheduler`).
 
 ```bash
 docker-compose --profile local up --build -d
 ```
 
-#### OPCIÓN B: Entorno Híbrido (Cloud)
+#### OPCIÓN B: Entorno Producción VPS (Cloud)
 
-Levanta SOLO los servicios de aplicación (`ingest`, `scheduler`) que se conectan a HiveMQ y Neon en la nube.
-*(No levanta bases de datos locales).*
+Levanta la infraestructura completa y sin límites dentro de tu propio servidor. *Este es el perfil por defecto para el VPS.*
 
 ```bash
-docker-compose --profile cloud up --build -d
+docker compose --profile cloud up --build -d
 ```
 
-#### Detener todo
+#### OPCIÓN C: Entorno Híbrido (Serverless)
+
+Levanta SOLO los servicios de aplicación (`ingest`, `scheduler`) y los conecta a proveedores de capa gratuita en la nube (Neon, HiveMQ). *(No levanta bases de datos locales).*
 
 ```bash
-docker-compose --profile cloud down
+docker compose --profile serverless up --build -d
+```
+
+#### Detener todo (Ejemplo con el perfil cloud)
+
+```bash
+docker compose --profile cloud down
 ```
 
 > [!TIP]
@@ -322,22 +320,22 @@ El archivo `.env` **no se sube al repositorio**. Debes crearlo manualmente en el
 nano .env
 ```
 
-Pega tus credenciales de producción (Neon DB, HiveMQ, Google Auth)
+Pega tus credenciales de producción (Contraseñas fuertes para tu Postgres local, Tokens de InfluxDB, Google Auth).
 
 **Guarda los cambios:**
 
 * Presiona `Ctrl + O` y `Enter` para guardar.
 * Presiona `Ctrl + X` para salir.
 
-> **Importante:** Asegúrate de incluir la variable `COMPOSE_PROFILES=cloud` al final del archivo para que Docker levante solo los servicios de producción conectados a Neon y HiveMQ.
+> **Importante:** Asegúrate de incluir la variable `COMPOSE_PROFILES=cloud` para que Docker levante la infraestructura nativa del VPS.
 
-#### 4. Generación de Certificados SSL (Mosquitto Cloud)
+#### 4. Generación de Certificados SSL (Mosquitto e InfluxDB)
 
-Para que el frontend (Vercel) y los ESP32 puedan conectarse de forma segura al broker MQTT en el VPS, es obligatorio generar certificados SSL válidos utilizando Let's Encrypt.
+Para que el frontend (Vercel) y los ESP32 puedan conectarse de forma segura al broker MQTT y a la base de datos de telemetría (InfluxDB) en el VPS, es obligatorio generar certificados SSL válidos utilizando Let's Encrypt.
 
 Para mantener el sistema anfitrión limpio, ejecutamos Certbot de forma efímera a través de Docker. Esto creará los certificados y los guardará directamente en la carpeta del proyecto.
 
-> **Requisito previo:** Asegúrate de que los subdominios (ej. `vps.tudominio.com`) ya estén apuntando a la IP del VPS y que el puerto 80 del servidor esté libre.
+> **Requisito previo:** Asegúrate de que los subdominios (ej. `vps.tudominio.com` y `mqtt.tudominio.com`) ya estén apuntando a la IP del VPS y que el puerto 80 del servidor esté libre.
 
 Ejecuta el siguiente comando en la raíz del proyecto (`pristinoplant`):
 
@@ -350,6 +348,14 @@ sudo docker run -it --rm -p 80:80 \
 ```
 
 > **Nota:** Siempre que quieras actualizar los certificados, ejecuta el comando anterior.
+
+**Ajuste de Permisos (Crucial para Docker):**
+Por defecto, Certbot crea los certificados con candados estrictos para el usuario `root`. Para que los contenedores de Docker (que corren bajo otros IDs internos) puedan leer estas llaves sin colapsar por errores de "Acceso Denegado" (`Permission denied`), es indispensable otorgar permisos de lectura ejecutando:
+
+```bash
+sudo chmod -R 755 infrastructure/certs/live/
+sudo chmod -R 755 infrastructure/certs/archive/
+```
 
 ---
 
@@ -606,7 +612,73 @@ Para garantizar que el VPS (memoria RAM, CPU) y los contenedores Docker funcione
   docker stats --no-stream
   ```
 
-#### 7. Sincronización hacia Producción (`main`)
+#### 7. Seguridad del VPS (UFW + Fail2ban)
+
+Para garantizar la integridad del servidor, implementamos un firewall (**UFW**) y un sistema de protección contra fuerza bruta (**Fail2ban**).
+
+##### A. Configuración de UFW (Firewall)
+
+Mantenemos abiertos los servicios críticos (incluyendo MySQL y Samba para otros usuarios del VPS) y bloqueamos el resto:
+
+```bash
+# 1. Instalar y permitir servicios
+apt update && apt install ufw -y
+ufw allow 22/tcp comment "SSH"
+ufw allow 3306/tcp comment "MySQL (Externo)"
+ufw allow 139/tcp comment "Samba"
+ufw allow 445/tcp comment "Samba"
+ufw allow 5432/tcp comment "PostgreSQL (PristinoPlant)"
+ufw allow 8181/tcp comment "InfluxDB (PristinoPlant)"
+ufw allow 8883/tcp comment "MQTTS (ESP32)"
+ufw allow 8884/tcp comment "WSS MQTT (Frontend)"
+
+# 2. Activar políticas seguras
+ufw default deny incoming
+ufw default allow outgoing
+ufw enable
+```
+
+##### B. Configuración de Fail2ban
+
+Bloquea automáticamente IPs que intenten ataques de fuerza bruta.
+
+```bash
+# 1. Instalar
+apt install fail2ban -y
+
+# 2. Configurar cárceles (SSH + Postgres)
+cat > /etc/fail2ban/jail.local << 'EOF'
+[DEFAULT]
+# Solo ignoramos localhost (el propio servidor)
+ignoreip = 127.0.0.1/8 ::1
+bantime  = 3600
+findtime = 600
+maxretry = 5
+
+[sshd]
+enabled = true
+
+[postgresql]
+enabled  = true
+port     = 5432
+filter   = postgresql
+logpath  = /var/lib/docker/containers/*/*-json.log
+maxretry = 3
+EOF
+
+# 3. Crear filtro para PostgreSQL (Docker)
+cat > /etc/fail2ban/filter.d/postgresql.conf << 'EOF'
+[Definition]
+failregex = .*password authentication failed for user .*
+ignoreregex =
+EOF
+systemctl restart fail2ban
+```
+
+> [!TIP]
+> **FAQ de Emergencia**: Si te bloqueas accidentalmente, entra desde otra conexión (ej. datos móviles) y ejecuta: `fail2ban-client set sshd unbanip <TU_IP>` (reemplaza `sshd` por `postgresql` si el bloqueo fue en la base de datos).
+
+#### 8. Sincronización hacia Producción (`main`)
 
 Para que estos cambios (y cualquier código nuevo) lleguen al servidor, debes completar el ciclo de integración hacia la rama principal:
 

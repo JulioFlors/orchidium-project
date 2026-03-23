@@ -1,10 +1,14 @@
 services:
-  # ================================================================
-  # 💻 ENTORNO DE DESARROLLO (Active Profile: local)
-  # ================================================================
-  postgres:
+  # -------------------------------------------------------------------
+  # 💻 PERFIL LOCAL — Desarrollo en tu PC (Active Profile: local)
+  # -------------------------------------------------------------------
+  # Los servicios corren en Docker dentro de tu máquina.
+  # Se usa con 'pnpm dev' para desarrollo local.
+  # ⚠️ NUNCA funcionará en producción (no es accesible desde internet).
+  # -------------------------------------------------------------------
+  postgres-local:
     image: postgres:17.3
-    container_name: postgres
+    container_name: postgres-local
     restart: always
     profiles: ["local"]
     environment:
@@ -34,9 +38,9 @@ services:
       - ./infrastructure/mosquitto-local/data:/mosquitto/data
       - ./infrastructure/mosquitto-local/log:/mosquitto/log
 
-  influxdb:
+  influxdb-local:
     image: influxdb:3-core
-    container_name: influxdb
+    container_name: influxdb-local
     restart: always
     profiles: ["local"]
     ports:
@@ -53,9 +57,6 @@ services:
       - --data-dir=/var/lib/influxdb3/data
       - --http-bind=0.0.0.0:8181
 
-  # ----------------------------------------------------------------
-  # SERVICIOS LOCALES 
-  # ----------------------------------------------------------------
   ingest-local:
     container_name: ingest-local
     profiles: ["local"]
@@ -64,21 +65,21 @@ services:
       dockerfile: services/ingest/Dockerfile
     restart: always
     depends_on:
-      postgres:
+      postgres-local:
         condition: service_healthy
       mosquitto-local:
         condition: service_started
     environment:
       DATABASE_URL: ${DATABASE_URL_LOCAL}
 
-      DB_HOST: postgres
+      DB_HOST: postgres-local
       DB_USER: ${DB_USER}
 
       INFLUX_BUCKET: ${INFLUX_BUCKET}
       INFLUX_TOKEN: ${INFLUX_TOKEN}
-      INFLUX_URL: ${INFLUX_URL_LOCAL}
+      INFLUX_URL: http://influxdb-local:8181
 
-      MQTT_BROKER_URL: ${MQTT_BROKER_URL_LOCAL}
+      MQTT_BROKER_URL: mqtt://mosquitto-local:1883
       MQTT_CLIENT_ID: ${MQTT_CLIENT_ID_INGEST}-LOCAL
       MQTT_PASSWORD: ${MQTT_PASS_BACKEND}
       MQTT_USERNAME: ${MQTT_USER_BACKEND}
@@ -94,23 +95,23 @@ services:
       dockerfile: services/scheduler/Dockerfile
     restart: always
     depends_on:
-      postgres:
+      postgres-local:
         condition: service_healthy
       mosquitto-local:
         condition: service_started
-      influxdb:
+      influxdb-local:
         condition: service_started
     environment:
       DATABASE_URL: ${DATABASE_URL_LOCAL}
 
-      DB_HOST: postgres
+      DB_HOST: postgres-local
       DB_USER: ${DB_USER}
 
       INFLUX_BUCKET: ${INFLUX_BUCKET}
       INFLUX_TOKEN: ${INFLUX_TOKEN}
-      INFLUX_URL: ${INFLUX_URL_LOCAL}
+      INFLUX_URL: http://influxdb-local:8181
 
-      MQTT_BROKER_URL: ${MQTT_BROKER_URL_LOCAL}
+      MQTT_BROKER_URL: mqtt://mosquitto-local:1883
       MQTT_CLIENT_ID: ${MQTT_CLIENT_ID_SCHEDULER}-LOCAL
       MQTT_PASSWORD: ${MQTT_PASS_BACKEND}
       MQTT_USERNAME: ${MQTT_USER_BACKEND}
@@ -119,14 +120,38 @@ services:
       NODE_OPTIONS: "--dns-result-order=ipv4first"
 
 
-  # ================================================================
-  # ☁️ INFRAESTRUCTURA DE PRODUCCIÓN (Active Profile: vps)
-  # ================================================================
+  # -------------------------------------------------------------------
+  # ☁️ PERFIL CLOUD — Producción en VPS (Active Profile: cloud)
+  # -------------------------------------------------------------------
+  # Toda la infraestructura (PostgreSQL, InfluxDB, Mosquitto) corre
+  # dentro del VPS como contenedores Docker. Sin límites de computo.
+  # La app en Vercel consume estos servicios apuntando
+  # a la IP/dominio público del VPS.
+  # -------------------------------------------------------------------
+  postgres:
+    image: postgres:17.3
+    container_name: postgres
+    restart: always
+    profiles: ["cloud"]
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5432:5432"  # Acceso externo (Vercel)
+    volumes:
+      - ./infrastructure/postgres-cloud/data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
   mosquitto:
     image: eclipse-mosquitto
     container_name: mosquitto
     restart: always
-    profiles: ["vps"]
+    profiles: ["cloud"]
     ports:
       - "8883:8883"  # MQTTS (Hardware ESP32)
       - "8884:8884"  # WSS (WebSockets Vercel - Compatible HiveMQ)
@@ -136,10 +161,28 @@ services:
       - ./infrastructure/mosquitto/log:/mosquitto/log
       - ./infrastructure/certs:/mosquitto/certs:ro
 
+  influxdb:
+    image: influxdb:3-core
+    container_name: influxdb
+    restart: always
+    profiles: ["cloud"]
+    ports:
+      - "8181:8181"
+    volumes:
+      - ./infrastructure/influxdb-cloud/data:/var/lib/influxdb3/data
+      - ./infrastructure/certs:/certs:ro
+    environment:
+      INFLUXD_ADMIN_TOKEN: ${INFLUX_TOKEN}
+    command:
+      - influxdb3
+      - serve
+      - --node-id=node0
+      - --object-store=file
+      - --data-dir=/var/lib/influxdb3/data
+      - --http-bind=0.0.0.0:8181
+      - --tls-cert=/certs/live/mqtt.sisparrow.com/fullchain.pem
+      - --tls-key=/certs/live/mqtt.sisparrow.com/privkey.pem
 
-  # ================================================================
-  # 🚀 SERVICIOS DE PRODUCCIÓN (Active Profile: cloud)
-  # ================================================================
   ingest:
     container_name: ingest
     profiles: ["cloud"]
@@ -149,25 +192,29 @@ services:
       extra_hosts:
         - "registry.npmjs.org:104.16.27.35"
     restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      influxdb:
+        condition: service_started
     environment:
       DATABASE_URL_UNPOOLED: ${DATABASE_URL_CLOUD_UNPOOLED}
       DATABASE_URL: ${DATABASE_URL_CLOUD}
 
-      DB_HOST: ${DB_HOST_CLOUD}
-      DB_USER: ${DB_USER_CLOUD}
+      DB_HOST: postgres
+      DB_USER: ${DB_USER}
 
       INFLUX_BUCKET: ${INFLUX_BUCKET}
       INFLUX_TOKEN: ${INFLUX_TOKEN}
-      INFLUX_URL: ${INFLUX_URL_CLOUD}
+      INFLUX_URL: http://influxdb:8181
 
-      MQTT_BROKER_URL: ${MQTT_BROKER_URL_CLOUD} 
+      MQTT_BROKER_URL: mqtt://mosquitto:1883
       MQTT_CLIENT_ID: ${MQTT_CLIENT_ID_INGEST}
       MQTT_PASSWORD: ${MQTT_PASS_BACKEND}
       MQTT_USERNAME: ${MQTT_USER_BACKEND}
 
       NODE_ENV: development
       NODE_OPTIONS: "--dns-result-order=ipv4first"
-
 
   scheduler:
     container_name: scheduler
@@ -178,19 +225,23 @@ services:
       extra_hosts:
         - "registry.npmjs.org:104.16.27.35"
     restart: always
-    # Sin dependencia de infraestructura. Puede conectar a HiveMQ o VPS.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      influxdb:
+        condition: service_started
     environment:
       DATABASE_URL_UNPOOLED: ${DATABASE_URL_CLOUD_UNPOOLED}
       DATABASE_URL: ${DATABASE_URL_CLOUD}
 
-      DB_HOST: ${DB_HOST_CLOUD}
-      DB_USER: ${DB_USER_CLOUD}
+      DB_HOST: postgres
+      DB_USER: ${DB_USER}
 
       INFLUX_BUCKET: ${INFLUX_BUCKET}
       INFLUX_TOKEN: ${INFLUX_TOKEN}
-      INFLUX_URL: ${INFLUX_URL_CLOUD}
+      INFLUX_URL: http://influxdb:8181
 
-      MQTT_BROKER_URL: ${MQTT_BROKER_URL_CLOUD}
+      MQTT_BROKER_URL: mqtt://mosquitto:1883
       MQTT_CLIENT_ID: ${MQTT_CLIENT_ID_SCHEDULER}
       MQTT_PASSWORD: ${MQTT_PASS_BACKEND}
       MQTT_USERNAME: ${MQTT_USER_BACKEND}
@@ -198,6 +249,88 @@ services:
       NODE_ENV: development
       NODE_OPTIONS: "--dns-result-order=ipv4first"
 
+
+  # -------------------------------------------------------------------
+  # 🆓 PERFIL SERVERLESS — Capas Gratuitas (Active Profile: serverless)
+  # -------------------------------------------------------------------
+  # Sin contenedores de infraestructura propios. Los servicios se
+  # conectan directamente a proveedores externos:
+  #   - PostgreSQL → Neon (Límite: 100h compute/mes)
+  #   - MQTT       → HiveMQ Cloud
+  #   - InfluxDB   → InfluxDB Cloud AWS (Límite: 30 días de datos)
+  #
+  # ⚠️ ADVERTENCIA DE RECURSOS: El uso de este perfil requiere un equilibrio estricto entre 
+  # la frecuencia de tareas automatizadas y los límites de computo de las capas gratuitas.
+  # El polling predeterminado del scheduler (`checkPendingTasks` cada 60s) genera un volumen
+  # de consultas (~216K/mes) que agota la cuota de Neon. Es imperativo ajustar los intervalos
+  # de cron y optimizar las operaciones de DB para garantizar la sostenibilidad del servicio.
+  # -------------------------------------------------------------------
+  ingest-serverless:
+    container_name: ingest-serverless
+    profiles: ["serverless"]
+    build:
+      context: .
+      dockerfile: services/ingest/Dockerfile
+      extra_hosts:
+        - "registry.npmjs.org:104.16.27.35"
+    restart: always
+    environment:
+      DATABASE_URL_UNPOOLED: ${DATABASE_URL_SERVERLESS_UNPOOLED}
+      DATABASE_URL: ${DATABASE_URL_SERVERLESS}
+
+      DB_HOST: ${DB_HOST_SERVERLESS}
+      DB_USER: ${DB_USER_SERVERLESS}
+
+      INFLUX_BUCKET: ${INFLUX_BUCKET}
+      INFLUX_TOKEN: ${INFLUX_TOKEN_SERVERLESS}
+      INFLUX_URL: ${INFLUX_URL_SERVERLESS}
+
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL_SERVERLESS}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID_INGEST}
+      MQTT_PASSWORD: ${MQTT_PASS_BACKEND}
+      MQTT_USERNAME: ${MQTT_USER_BACKEND}
+
+      NODE_ENV: development
+      NODE_OPTIONS: "--dns-result-order=ipv4first"
+
+  scheduler-serverless:
+    container_name: scheduler-serverless
+    profiles: ["serverless"]
+    build:
+      context: .
+      dockerfile: services/scheduler/Dockerfile
+      extra_hosts:
+        - "registry.npmjs.org:104.16.27.35"
+    restart: always
+    environment:
+      DATABASE_URL_UNPOOLED: ${DATABASE_URL_SERVERLESS_UNPOOLED}
+      DATABASE_URL: ${DATABASE_URL_SERVERLESS}
+
+      DB_HOST: ${DB_HOST_SERVERLESS}
+      DB_USER: ${DB_USER_SERVERLESS}
+
+      INFLUX_BUCKET: ${INFLUX_BUCKET}
+      INFLUX_TOKEN: ${INFLUX_TOKEN_SERVERLESS}
+      INFLUX_URL: ${INFLUX_URL_SERVERLESS}
+
+      MQTT_BROKER_URL: ${MQTT_BROKER_URL_SERVERLESS}
+      MQTT_CLIENT_ID: ${MQTT_CLIENT_ID_SCHEDULER}
+      MQTT_PASSWORD: ${MQTT_PASS_BACKEND}
+      MQTT_USERNAME: ${MQTT_USER_BACKEND}
+
+      NODE_ENV: development
+      NODE_OPTIONS: "--dns-result-order=ipv4first"
+
+# -------------------------------------------------------------------
+# 🌐 CONFIGURACIÓN DE RED
+# -------------------------------------------------------------------
+# MTU (Maximum Transmission Unit) reducido de 1500 a 1350 bytes.
+# Necesario en VPS con redes virtualizadas (OpenVZ, VPN, túneles)
+# donde el encapsulamiento de la infraestructura del proveedor
+# reduce el MTU efectivo. Si se deja en 1500 (el estándar), los
+# paquetes grandes se fragmentan o descartan, causando conexiones
+# que se "cuelgan" silenciosamente (especialmente TLS/SSL).
+# -------------------------------------------------------------------
 
 networks:
   default:
