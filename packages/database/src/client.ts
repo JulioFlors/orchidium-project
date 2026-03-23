@@ -38,11 +38,17 @@ const prismaClientSingleton = () => {
   const connectionType = isPooler ? 'Pooler (Optimized for Cloud)' : 'Unpooled (Optimized for Local)'
 
   // Configuración del Pool
+  // SSL se habilita solo cuando es necesario:
+  //   - Vercel: Neon requiere SSL obligatoriamente.
+  //   - sslmode=require en URL: Conexiones externas al VPS (ej: desde la app).
+  // Para conexiones internas Docker (container↔container) NO se usa SSL,
+  // porque el hostname Docker ("postgres") no coincide con el certificado
+  // emitido para el dominio público ("vps.tudominio.com").
+  const requiresSsl = isVercel || connectionString.includes('sslmode=require')
+
   const poolConfig: PoolConfig = {
     connectionString,
-    // Neon requiere SSL en Vercel
-    // 'ssl: true' es equivalente a 'sslmode=require' pero más compatible con el objeto de config.
-    ssl: true,
+    ssl: requiresSsl ? { rejectUnauthorized: false } : false,
     // Timeouts generosos para evitar errores en "Cold Starts" de serverless
     connectionTimeoutMillis: 120000, // 120s
     idleTimeoutMillis: 120000,       // 120s
