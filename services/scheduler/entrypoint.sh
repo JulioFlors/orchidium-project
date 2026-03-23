@@ -16,19 +16,16 @@ echo " "
 
 echo "Verificando conexión con InfluxDB ($INFLUX_URL)"
 
-# wget viene preinstalado en Alpine, a diferencia de curl.
 # InfluxDB 3 no expone /ping ni /health, pero responde con 200 a la raíz.
-until wget -q --spider --timeout=5 "$INFLUX_URL" 2>/dev/null; do
+# NOTA: wget viene preinstalado en Alpine, a diferencia de curl.
+#       Se agrega --no-check-certificate para evitar fallos de handshake TLS con HTTPS.
+until wget --no-check-certificate -q --spider --timeout=5 "$INFLUX_URL" 2>/dev/null; do
   >&2 echo " "
   >&2 echo "🕒 InfluxDB aun no responde en $INFLUX_URL"
   sleep 5
 done
 echo " "
 echo "✅ InfluxDB está listo."
-
-
-# NOTA: Las migraciones se han movido al pipeline de despliegue (deploy.sh)
-# para evitar condiciones de carrera y reinicios en bucle.
 
 echo " "
 echo "🚀 Iniciando servicio de Rutinas de Riego Automatizadas (Scheduler)."
