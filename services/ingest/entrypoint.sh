@@ -17,7 +17,6 @@ echo "✅ $DB_HOST está listo."
 echo " "
 
 echo "📡 Verificando conexión con InfluxDB ($INFLUX_URL)"
-echo " "
 
 # InfluxDB 3 no expone /ping ni /health. Se verifica que responda HTTP.
 # Con autenticación habilitada responde 401/404, lo cual es válido como

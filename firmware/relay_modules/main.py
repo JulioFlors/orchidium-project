@@ -35,8 +35,8 @@ MQTT_CONFIG = {
 }
 
 # ---- Configuración Resiliencia / Watchdog ----
-# Tiempo máximo sin conexión MQTT/WiFi antes de forzar un Hard Reset (5 minutos)
-MAX_OFFLINE_RESET_SEC = 300
+# Tiempo máximo sin conexión MQTT/WiFi antes de forzar un Hard Reset (10 minutos)
+MAX_OFFLINE_RESET_SEC = 600
 # Tiempo del Watchdog Timer (Hardware) en milisegundos (65 segundos (1m 5s))
 # [WDT Safety]: Debe ser mayor que MESSAGE_TIMEOUT (60s) para evitar reinicios durante operaciones lentas.
 WDT_TIMEOUT_MS = 100000

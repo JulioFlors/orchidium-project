@@ -5,21 +5,33 @@ import {
   IoShieldCheckmarkOutline,
   IoAlertCircleOutline,
   IoRocketOutline,
+  IoHourglassOutline,
 } from 'react-icons/io5'
 import { motion } from 'motion/react'
 
 import { Modal } from '@/components/ui'
+import { TaskStatusLabels } from '@/config/mappings'
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
-  PENDING: <IoTimeOutline className="text-zinc-500" />,
-  AUTHORIZED: <IoShieldCheckmarkOutline className="text-orange-500" />,
-  DISPATCHED: <IoRocketOutline className="text-blue-500" />,
+  // 1. Fase de Gestación (Azules y Violetas)
+  PENDING: <IoTimeOutline className="text-blue-500" />,
+  WAITING_CONFIRMATION: <IoHourglassOutline className="animate-pulse text-violet-500" />,
+
+  // 2. Fase de Conectividad (Indigo y Cian)
+  DISPATCHED: <IoRocketOutline className="text-indigo-500" />,
   ACKNOWLEDGED: <IoRadioOutline className="text-cyan-500" />,
   CONFIRMED: <IoRadioOutline className="text-cyan-500" />,
-  IN_PROGRESS: <IoRadioOutline className="animate-pulse text-amber-500" />,
-  COMPLETED: <IoCheckmarkCircle className="text-emerald-500" />,
+
+  // 3. Fase de Acción (Verdes)
+  AUTHORIZED: <IoShieldCheckmarkOutline className="text-lime-500" />,
+  IN_PROGRESS: <IoRadioOutline className="text-emerald-500" />,
+  COMPLETED: <IoCheckmarkCircle className="text-green-600" />,
+
+  // 4. Fase Terminal (Gris, Naranja y Rojos)
+  SKIPPED: <IoHourglassOutline className="text-slate-400" />,
+  CANCELLED: <IoAlertCircleOutline className="text-orange-600" />,
   FAILED: <IoAlertCircleOutline className="text-red-500" />,
-  CANCELLED: <IoAlertCircleOutline className="text-zinc-400" />,
+  EXPIRED: <IoAlertCircleOutline className="text-red-500" />,
 }
 
 interface TaskEvent {
@@ -88,7 +100,8 @@ export function TaskTimelineModal({
               <div>
                 <div className="mb-1 flex items-baseline justify-between">
                   <span className="text-primary text-sm font-bold tracking-tight">
-                    {event.status}
+                    {TaskStatusLabels[event.status as keyof typeof TaskStatusLabels] ||
+                      event.status}
                   </span>
                   <span className="text-secondary font-mono text-[10px] opacity-60">
                     {new Date(event.timestamp).toLocaleTimeString('es-VE', {

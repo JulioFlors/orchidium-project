@@ -78,9 +78,10 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
   DISPATCHED: <IoRocketOutline />,
   ACKNOWLEDGED: <LuRadioTower />,
   CONFIRMED: <LuRadioTower />,
-  IN_PROGRESS: <HiOutlineCog className="animate-spin" />,
+  IN_PROGRESS: <HiOutlineCog />,
   COMPLETED: <IoCheckmarkCircleOutline />,
   FAILED: <IoCloseCircleOutline />,
+  EXPIRED: <IoCloseCircleOutline />,
   CANCELLED: <IoWarningOutline />,
   SKIPPED: <IoHourglassOutline />,
   WAITING_CONFIRMATION: <IoHourglassOutline className="animate-pulse" />,
@@ -180,23 +181,45 @@ function HistoryTaskCard({
 
 export default function HistoryPage() {
   const [selectedTask, setSelectedTask] = useState<HistoryTask | null>(null)
-  const [timelineEvents, setTimelineEvents] = useState<TaskEvent[]>([])
-  const [isTimelineLoading, setIsTimelineLoading] = useState(false)
 
+  // 1. Evitar polling innecesario de eventos si la tarea ya terminó o falló definitivamente
+  const isModalTerminal = useMemo(() => {
+    if (!selectedTask) return false
+
+    return ['COMPLETED', 'CANCELLED', 'SKIPPED', 'EXPIRED'].includes(selectedTask.status)
+  }, [selectedTask])
+
+  const { data: timelineEvents = [], isLoading: isTimelineLoading } = useSWR<TaskEvent[]>(
+    selectedTask ? ['task-events', selectedTask.id] : null,
+    async ([, id]: [string, string]) => {
+      const res = await getTaskEvents(id)
+
+      return res.data || []
+    },
+    { refreshInterval: isModalTerminal ? 0 : 5000 },
+  )
+
+  // 2. Refresh de la tabla global relajado (60s) por defecto para optimizar peticiones a la Base de Datos
   const { data: tasks = [], isLoading } = useSWR<HistoryTask[]>('/api/tasks/history', fetcher, {
-    refreshInterval: 15000,
+    refreshInterval: 60000,
   })
 
-  // Refresh adaptativo: si hay tareas activas, refrescar más rápido
+  // 3. Refresh adaptativo: si hay tareas activas, refrescamos más rápido (5s) para dar feedback real-time
   const hasActiveTasks = useMemo(
     () =>
       tasks.some((t) =>
-        ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'WAITING_CONFIRMATION'].includes(t.status),
+        [
+          'PENDING',
+          'CONFIRMED',
+          'IN_PROGRESS',
+          'WAITING_CONFIRMATION',
+          'DISPATCHED',
+          'ACKNOWLEDGED',
+        ].includes(t.status),
       ),
     [tasks],
   )
 
-  // Re-fetch más agresivo si hay tareas activas
   useSWR<HistoryTask[]>(hasActiveTasks ? '/api/tasks/history' : null, fetcher, {
     refreshInterval: 5000,
   })
@@ -232,20 +255,7 @@ export default function HistoryPage() {
       ) : (
         <div className="flex flex-col gap-3">
           {tasks.map((task) => (
-            <HistoryTaskCard
-              key={task.id}
-              task={task}
-              onClick={async (t) => {
-                setSelectedTask(t)
-                setIsTimelineLoading(true)
-                const res = await getTaskEvents(t.id)
-
-                if (res.success && res.data) {
-                  setTimelineEvents(res.data)
-                }
-                setIsTimelineLoading(false)
-              }}
-            />
+            <HistoryTaskCard key={task.id} task={task} onClick={(t) => setSelectedTask(t)} />
           ))}
         </div>
       )}

@@ -477,11 +477,11 @@ async function processTaskLog(taskLog: any) {
     executeSequence(taskLog.purpose, taskLog.duration, taskLog.id)
 
     // Marcar como DISPATCHED
-    await recordTaskEvent(taskLog.id, TaskStatus.DISPATCHED, 'Comandos despachados vía MQTT. Esperando ACK del hardware.', {
+    await recordTaskEvent(taskLog.id, TaskStatus.DISPATCHED, 'Comandos MQTT enviados al Nodo Actuador.', {
       executedAt: new Date()
     })
 
-    Logger.success(`Circuito de Tarea Log ${taskLog.id.slice(0, 8)} despachado.`)
+    Logger.success(`Circuito de Tarea Log ${taskLog.id.slice(0, 8)} despachado.`) 
 
   } catch (error) {
     Logger.error('Fallo crítico ejecutando taskLog', error)
@@ -602,7 +602,7 @@ async function checkPendingTasks() {
     })
 
     for (const task of stuckDispatched) {
-      await recordTaskEvent(task.id, TaskStatus.FAILED, 'Timeout: El Nodo Actuador nunca confirmó la recepción del comando (ACK).')
+      await recordTaskEvent(task.id, TaskStatus.FAILED, 'Timeout: El Nodo Actuador no confirmó recepción (ACK).')
     }
     if (stuckDispatched.length > 0) Logger.warn(`🧹 Polling: ${stuckDispatched.length} tarea(s) DISPATCHED sin ACK pasadas a FAILED.`)
 
@@ -639,15 +639,13 @@ async function checkPendingTasks() {
 
     let expiredCount = 0
     for (const task of recoveryExpired) {
-      if (!task.notes?.includes('descartada permanentemente')) {
-        // Límite absoluto de vida útil de la orden: inicio programado + duración + 20m de gracia
-        const absoluteExpiration = task.scheduledAt.getTime() + (task.duration * 60000) + (20 * 60000)
-        
-        if (nowMs > absoluteExpiration) {
-          const newNotes = 'Ventana de recuperación (20 min) agotada. Tarea descartada.'
-          await recordTaskEvent(task.id, TaskStatus.FAILED, newNotes)
-          expiredCount++
-        }
+      // Límite absoluto de vida útil de la orden: inicio programado + duración + 20m de gracia
+      const absoluteExpiration = task.scheduledAt.getTime() + (task.duration * 60000) + (20 * 60000)
+      
+      if (nowMs > absoluteExpiration) {
+        const newNotes = 'Ventana de recuperación (20 min) agotada. Tarea descartada.'
+        await recordTaskEvent(task.id, TaskStatus.EXPIRED, newNotes)
+        expiredCount++
       }
     }
 

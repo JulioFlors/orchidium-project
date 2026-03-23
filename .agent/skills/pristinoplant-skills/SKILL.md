@@ -30,15 +30,13 @@ Este documento define las directrices, convenciones y flujos de trabajo ESTRICTO
 ### Paso 2: Flujo de Trabajo de Commits (Estricto)
 
 1. **Verificar `commit.txt`**:
-   - Usar `Get-Content commit.txt` (PowerShell) o `cat` para leerlo si está ignorado.
+   - Usar `Get-Content commit.txt` (PowerShell) o `cat` para leerlo.
+   - Si el archivo **NO existe**, no hay commits pendientes o el usuario ya lo ejecutó.
 2. **Acción**:
-   - *Existe*: Leer y **ANEXAR**.
-   - *No existe*: Crear.
-3. **Aprobación**: Esperar confirmación del usuario.
-4. **Ejecución**:
-   - Leer contenido final.
-   - `git commit -m "..."`.
-   - Eliminar `commit.txt`.
+   - El Agente **NUNCA** ejecuta `git commit` directamente.
+   - El Agente se limita a generar/anexar el contenido en `commit.txt`.
+3. **Aprobación**: El usuario revisa el contenido de `commit.txt` y ejecuta el commit manualmente.
+4. **Finalización**: Una vez que el usuario ejecuta el commit, el archivo `commit.txt` debe desaparecer o ser limpiado para la siguiente tarea.
 
 ### Paso 3: Estándares de Mensaje
 

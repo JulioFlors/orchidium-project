@@ -76,6 +76,7 @@ export const TaskStatusLabels: Record<TaskStatus, string> = {
   [TaskStatus.COMPLETED]: 'Completada',
   [TaskStatus.CANCELLED]: 'Cancelada',
   [TaskStatus.FAILED]: 'Fallida',
+  [TaskStatus.EXPIRED]: 'Fallida',
   [TaskStatus.SKIPPED]: 'Omitida',
   [TaskStatus.CONFIRMED]: 'Confirmada',
   [TaskStatus.IN_PROGRESS]: 'Ejecutando',
@@ -104,15 +105,23 @@ export const TaskSourceLabels: Record<TaskSource, string> = {
  * Uso: colorear badges, iconos y bordes de tarjetas de forma centralizada.
  */
 export const TaskStatusStyles: Record<TaskStatus, string> = {
-  [TaskStatus.PENDING]: 'text-secondary',
-  [TaskStatus.CONFIRMED]: 'text-blue-500',
-  [TaskStatus.IN_PROGRESS]: 'text-amber-500',
-  [TaskStatus.COMPLETED]: 'text-emerald-500',
+  // 1. Fase de Gestación (Azules y Violetas)
+  [TaskStatus.PENDING]: 'text-blue-500',
+  [TaskStatus.WAITING_CONFIRMATION]: 'text-violet-500',
+
+  // 2. Fase de Conectividad (Indigo y Cian)
+  [TaskStatus.DISPATCHED]: 'text-indigo-500',
+  [TaskStatus.ACKNOWLEDGED]: 'text-cyan-500',
+  [TaskStatus.CONFIRMED]: 'text-cyan-500',
+
+  // 3. Fase de Acción (Verdes)
+  [TaskStatus.AUTHORIZED]: 'text-lime-500',
+  [TaskStatus.IN_PROGRESS]: 'text-emerald-500',
+  [TaskStatus.COMPLETED]: 'text-green-600',
+
+  // 4. Fase Terminal (Gris, Naranja y Rojos)
+  [TaskStatus.SKIPPED]: 'text-slate-400',
+  [TaskStatus.CANCELLED]: 'text-orange-600',
   [TaskStatus.FAILED]: 'text-red-500',
-  [TaskStatus.CANCELLED]: 'text-secondary',
-  [TaskStatus.SKIPPED]: 'text-secondary',
-  [TaskStatus.WAITING_CONFIRMATION]: 'text-orange-500',
-  [TaskStatus.AUTHORIZED]: 'text-orange-400',
-  [TaskStatus.DISPATCHED]: 'text-blue-400',
-  [TaskStatus.ACKNOWLEDGED]: 'text-cyan-400',
+  [TaskStatus.EXPIRED]: 'text-red-500',
 }

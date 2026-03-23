@@ -67,6 +67,7 @@ enum TaskStatus {
   ACKNOWLEDGED // Hardware confirma recepción exitosa (ACK)
   CONFIRMED // Alias legado para Acknowledged (se mantendrán ambos por ahora)
   FAILED // Error técnico
+  EXPIRED // Expiración de ventana de gracia
   IN_PROGRESS // Ejecutando acción
   PENDING // Creada, esperando su hora
   SKIPPED // Omitida

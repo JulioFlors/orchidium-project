@@ -11,6 +11,7 @@ export async function GET() {
             TaskStatus.IN_PROGRESS,
             TaskStatus.COMPLETED,
             TaskStatus.FAILED,
+            TaskStatus.EXPIRED,
             TaskStatus.CANCELLED,
             TaskStatus.SKIPPED,
           ],
