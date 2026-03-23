@@ -387,6 +387,19 @@ sudo chmod 644 infrastructure/certs/influxdb/privkey.pem
 >
 > Sustituye `vps.midominio.com` en los comandos del paso 3 por el nombre exacto que te devuelva el comando anterior.
 
+**Regenerar Token Admin de InfluxDB (Con TLS habilitado):**
+
+Cuando InfluxDB corre con TLS (`--tls-cert` / `--tls-key`), el CLI `influxdb3` dentro del contenedor necesita comunicarse vía HTTPS. Como el certificado fue emitido para el dominio público (`vps.midominio.com`) y no para `127.0.0.1`, hay que inyectar la resolución DNS manualmente dentro del contenedor:
+
+```bash
+docker exec --user root -it influxdb sh -c \
+  'echo "127.0.0.1 vps.midominio.com" >> /etc/hosts && influxdb3 create token --admin --host "https://vps.midominio.com:8181" --tls-ca /ssl/fullchain.pem'
+```
+
+> [!IMPORTANT]
+> Guarda el token generado inmediatamente. No se mostrará de nuevo.
+> Actualiza `INFLUX_TOKEN` en el `.env` del VPS y reinicia los servicios que lo utilicen: `docker compose restart scheduler`.
+
 ---
 
 ### 🚀 Despliegue y Actualización Continua
