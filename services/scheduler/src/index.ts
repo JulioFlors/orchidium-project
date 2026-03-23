@@ -138,17 +138,18 @@ const url = new URL(INFLUX_URL)
 const isPublicCloud = url.hostname.endsWith('influxdata.com')
 const isInternalHost = url.hostname === 'influxdb' || url.hostname === 'localhost'
 
+// El SDK v3 (@influxdata/influxdb3-client) usa la API fetch internamente,
+// la cual en Node.js 18+ NO obedece el parámetro transportOptions: { rejectUnauthorized }.
+// Por lo tanto, relajamos la validación a nivel de proceso SIEMPRE QUE aseguremos
+// que la conexión es puramente interna (red Docker o Local).
+if (isInternalHost && !isPublicCloud) {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+}
+
 const influxClient = new InfluxDBClient({
   host: INFLUX_URL,
   token: INFLUX_TOKEN,
   database: INFLUX_BUCKET,
-  // Configuracion inteligente de seguridad TLS:
-  // 1. Si es Cloud oficial (InfluxData) -> Validar TLS estrictamente (true).
-  // 2. Si es Host interno Docker (influxdb) -> Permitir cert autofirmado (false).
-  // 3. Por defecto (VPS con dominio propio o desconocido) -> Validar TLS (true).
-  transportOptions: {
-    rejectUnauthorized: isPublicCloud ? true : (isInternalHost ? false : true)
-  }
 })
 
 Logger.mqtt(

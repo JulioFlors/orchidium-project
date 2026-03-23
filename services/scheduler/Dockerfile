@@ -55,7 +55,7 @@ RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
 # ---- Production: Imagen final ----
 FROM base AS production
 
-# Instala cliente PostgreSQL (para healthcheck)
+# Instala cliente PostgreSQL (para healthcheck en entrypoint)
 RUN apk add postgresql-client
 
 # ---- Copiamos los Artefactos Construidos ----

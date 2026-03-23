@@ -23,18 +23,17 @@ echo "Verificando conexión con InfluxDB ($INFLUX_URL)"
 #       returned error") confirma que el servidor sí está escuchando.
 
 check_influx() {
-  # Ejecutamos wget y capturamos TODA la salida (stdout y stderr) en la variable RESULT
-  RESULT=$(wget --no-check-certificate --timeout=5 -O /dev/null "$INFLUX_URL" 2>&1)
-  
-  # Guardamos el código de salida exacto de wget ANTES de que cualquier otro comando lo sobreescriba
+  # En InfluxDB 3 (Catalyst), el endpoint /api/v2/ping es el más fiable para healthchecks.
+  # Usamos el token para evitar logs de "MissingToken" en el servidor.
+  RESULT=$(wget --no-check-certificate --timeout=5 --header "Authorization: Token $INFLUX_TOKEN" -O /dev/null "$INFLUX_URL/api/v2/ping" 2>&1)
   WGET_STATUS=$?
 
-  # Si wget fue exitoso (0) OR el servidor devolvió un error HTTP (está vivo), retornamos éxito (0)
+  # Éxito (0) o cualquier respuesta del servidor (incluso errores HTTP) confirman que está vivo.
+  # El código 8 en GNU wget es "Server error", en BusyBox suele ser 1.
   if [ $WGET_STATUS -eq 0 ] || echo "$RESULT" | grep -q "server returned error"; then
     return 0
-  else
-    return 1 # Falló por timeout, connection refused, etc.
   fi
+  return 1
 }
 
 until check_influx; do
