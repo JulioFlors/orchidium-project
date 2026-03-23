@@ -733,33 +733,23 @@ Para que estos cambios (y cualquier código nuevo) lleguen al servidor, debes co
 ```bash
 # 1. Verificar que estamos en Dev
 git checkout Dev
-
 # 2. Preparar el commit
 git add .
-
 # 3. Cargar el commit desde un archivo
 git commit -F commit.txt
-
 # 4. Eliminar el archivo
 rm commit.txt
-
 # 5. Subir los cambios a la rama Dev
 git push
-
 # 6. Cambiar a la rama de producción
 git checkout main
-
 # 7. Actualizar para evitar conflictos
 git pull origin main
-
 # 8. Fusionar los cambios desde Dev
 git merge Dev
-
 # 9. Subir la versión final a GitHub
 git push origin main
-
 # 10. Volver al entorno de desarrollo
 git checkout Dev
-
 # Ciclo de git completado
 ```

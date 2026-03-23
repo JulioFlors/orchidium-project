@@ -78,28 +78,43 @@ const Logger = {
   }
 }
 
+const recentEvents = new Map<string, number>()
+
 /**
  * Registra un evento de cambio de estado de forma atómica en TaskLog y TaskEventLog.
  */
 async function recordTaskEvent(taskId: string, status: TaskStatus, notes?: string, extraData: any = {}) {
   try {
+    // 🛡️ [Anti-Ráfagas / Debounce]
+    // Evita la duplicación concurrente provocada por múltiples relés de un mismo circuito
+    // encendiéndose y enviando MQTT exactamente al mismo milisegundo.
+    const lockKey = `${taskId}_${status}`
+    const now = Date.now()
+    if (recentEvents.has(lockKey) && (now - recentEvents.get(lockKey)!) < 2000) {
+      return null
+    }
+    recentEvents.set(lockKey, now)
+
     return await prisma.$transaction(async (tx) => {
       // Comprobación de Idempotencia: ¿Ya estamos en ese estado?
       const currentTask = await tx.taskLog.findUnique({
         where: { id: taskId },
-        select: { status: true }
+        select: { status: true, notes: true }
       })
 
-      // Si el estado es exactamente el mismo, omitimos crear un nuevo TaskEventLog duplicado,
-      // pero aún así aplicamos la actualización del Log Principal (ej. para acumular minutos)
+      // Si el estado es exactamente el mismo, evaluamos si la semántica (notas) cambió.
+      // Si la nota es idéntica (ej. varios IN_PROGRESS de válvulas), omitimos el duplicado visual.
       if (currentTask?.status === status) {
-        return await tx.taskLog.update({
-          where: { id: taskId },
-          data: {
-            notes,
-            ...extraData
-          }
-        })
+        if (currentTask.notes === notes || status === TaskStatus.IN_PROGRESS) {
+          // Actualizamos el Log Principal silenciosamente (ej. para acumular minutos)
+          return await tx.taskLog.update({
+            where: { id: taskId },
+            data: {
+              notes,
+              ...extraData
+            }
+          })
+        }
       }
 
       // 1. Actualizar el log principal
@@ -187,7 +202,7 @@ mqttClient.on('connect', () => {
 
   // Suscribirse a los tópicos de QoS de las tareas del dispositivo de Borde
   mqttClient.subscribe([
-    'PristinoPlant/Actuator_Controller/irrigation/cmd/received',
+    'PristinoPlant/Actuator_Controller/cmd/received',
     'PristinoPlant/Actuator_Controller/irrigation/state/#',
     'PristinoPlant/Actuator_Controller/status'
   ], { qos: 1 })
@@ -277,7 +292,7 @@ mqttClient.on('message', async (topic, payload) => {
     }
 
     // 2. Acuse de Recibo (ACK) emitido por el Nodo Actuador
-    if (topic === 'PristinoPlant/Actuator_Controller/irrigation/cmd/received') {
+    if (topic === 'PristinoPlant/Actuator_Controller/cmd/received') {
       const parsed = JSON.parse(message)
       const taskId = parsed.task_id
 
@@ -629,7 +644,7 @@ async function checkPendingTasks() {
         const absoluteExpiration = task.scheduledAt.getTime() + (task.duration * 60000) + (20 * 60000)
         
         if (nowMs > absoluteExpiration) {
-          const newNotes = `${task.notes} | Ventana de recuperación agotada. Tarea descartada permanentemente.`
+          const newNotes = 'Ventana de recuperación (20 min) agotada. Tarea descartada.'
           await recordTaskEvent(task.id, TaskStatus.FAILED, newNotes)
           expiredCount++
         }
