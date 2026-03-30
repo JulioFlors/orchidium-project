@@ -17,6 +17,7 @@ import { MdOutlineHistoryToggleOff, MdLayers } from 'react-icons/md'
 import { LuRadioTower } from 'react-icons/lu'
 import { HiOutlineCog } from 'react-icons/hi'
 
+import { Badge } from '@/components'
 import { TaskTimelineModal } from '@/components/operations/TaskTimelineModal'
 import { getTaskEvents } from '@/actions/control/control-actions'
 import {
@@ -121,14 +122,9 @@ function HistoryTaskCard({
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
             <h3 className="text-primary text-sm leading-tight font-bold">{actionLabel}</h3>
-            <span
-              className={clsx(
-                'rounded-full bg-current/10 px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase',
-                statusStyle,
-              )}
-            >
+            <Badge className={statusStyle} size="sm" variant="status">
               {statusLabel}
-            </span>
+            </Badge>
           </div>
           <div className="text-label mt-1 flex items-center gap-2 text-[11px] font-medium opacity-80">
             <span>{sourceLabel}</span>

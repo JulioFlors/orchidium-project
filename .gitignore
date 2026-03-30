@@ -47,6 +47,8 @@
 /**/out/
 # Carpeta de build genérica (buena práctica incluirla)
 /**/build/
+# Excepción para la carpeta de build de firmware
+!firmware/build/
 
 # ---- Archivos Generados ----
 # Carpeta de distribución para librerías y paquetes (builds)

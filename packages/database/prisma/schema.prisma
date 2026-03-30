@@ -28,6 +28,7 @@ enum ZoneType {
   ZONA_B
   ZONA_C
   ZONA_D
+  EXTERIOR
 }
 
 enum TableType {
@@ -405,8 +406,8 @@ model DailyEnvironmentStat {
   minHumidity Float
   maxHumidity Float
 
-  avgLightIntensity  Float
-  maxLightIntensity  Float
+  avgIlluminance  Float
+  maxIlluminance  Float
   lightDurationHours Float
 
   totalRainDuration Int
@@ -429,4 +430,50 @@ model DeviceLog {
 
   @@index([device])
   @@index([timestamp])
+}
+
+// ---- Inteligencia Climática (WeatherGuard) ---- //
+
+enum WeatherCondition {
+  CLEAR
+  CLOUDY
+  RAIN
+  STORM
+  FOG
+  SNOW
+  UNKNOWN
+}
+
+model WeatherForecast {
+  id        String   @id @default(uuid())
+  timestamp DateTime // Hora del pronóstico
+
+  temperature Float
+  humidity    Float
+  pressure    Float?
+  precipProb  Float            @default(0) // Probabilidad de precipitación (0-1)
+  condition   WeatherCondition @default(UNKNOWN)
+  windSpeed   Float?
+
+  source    String // 'OpenWeatherMap', 'Open-Meteo', etc.
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([timestamp, source])
+  @@index([timestamp])
+}
+
+model WeatherAlert {
+  id          String    @id @default(uuid())
+  type        String // 'STORM', 'HEAT_WAVE', 'FROST', etc.
+  severity    String // 'ADVISORY', 'WATCH', 'WARNING'
+  title       String
+  description String?   @db.Text
+  startsAt    DateTime
+  endsAt      DateTime?
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@index([startsAt])
 }

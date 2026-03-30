@@ -2,12 +2,24 @@
 
 import type { User } from '@package/database'
 
-import clsx from 'clsx'
 import { useState } from 'react'
 import { IoTrashOutline, IoShieldCheckmarkOutline } from 'react-icons/io5'
 
 import { changeUserRole, deleteUser } from '@/actions'
-import { Backdrop } from '@/components'
+import {
+  Backdrop,
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  CardTitle,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components'
 
 interface Props {
   users: User[]
@@ -58,7 +70,7 @@ export function UsersTable({ users }: Props) {
   )
 
   return (
-    <div className="bg-canvas border-input-outline overflow-hidden rounded-xl border shadow-sm">
+    <Card className="overflow-hidden">
       <Backdrop visible={loading}>
         <div className="flex flex-col items-center gap-4 p-8">
           <div className="text-primary h-12 w-12 animate-spin rounded-full border-4 border-current border-t-transparent" />
@@ -69,8 +81,8 @@ export function UsersTable({ users }: Props) {
       </Backdrop>
 
       {/* Header & Search */}
-      <div className="border-input-outline flex flex-col gap-4 border-b p-4 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-primary text-md w-full font-semibold">Usuarios Registrados</h3>
+      <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <CardTitle className="text-md w-full">Usuarios Registrados</CardTitle>
         <input
           className="focus-input bg-canvas border-input-outline w-full rounded-lg border-none px-4 py-2 text-sm outline-none sm:w-64"
           placeholder="Buscar usuario..."
@@ -78,89 +90,75 @@ export function UsersTable({ users }: Props) {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
-      </div>
+      </CardHeader>
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] text-left text-sm">
-          <thead className="bg-zinc-50 dark:bg-zinc-800/50">
-            <tr>
-              <th className="text-secondary px-6 py-3 font-semibold">Avatar</th>
-              <th className="text-secondary px-6 py-3 font-semibold">Nombre</th>
-              <th className="text-secondary px-6 py-3 font-semibold">Email</th>
-              <th className="text-secondary px-6 py-3 font-semibold">Rol</th>
-              <th className="text-secondary px-6 py-3 text-right font-semibold">Acciones</th>
-            </tr>
-          </thead>
-          <tbody className="divide-input-outline divide-y">
-            {filteredUsers.map((user) => (
-              <tr
-                key={user.id}
-                className="transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/30"
-              >
-                <td className="px-6 py-4">
-                  <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-full text-zinc-500">
-                    {user.image ? (
-                      <img
-                        alt={user.name || ''}
-                        className="h-full w-full rounded-full object-cover"
-                        src={user.image}
-                      />
-                    ) : (
-                      <span className="text-xs font-bold">
-                        {user.name?.substring(0, 2).toUpperCase()}
-                      </span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-6 py-4 font-medium text-zinc-900 dark:text-zinc-100">
-                  {user.name || 'Sin nombre'}
-                </td>
-                <td className="text-secondary px-6 py-4">{user.email}</td>
-                <td className="px-6 py-4">
-                  <span
-                    className={clsx(
-                      'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
-                      user.role === 'ADMIN'
-                        ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
-                        : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-                    )}
+      <Table className="min-w-[900px]">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Avatar</TableHead>
+            <TableHead>Nombre</TableHead>
+            <TableHead>Email</TableHead>
+            <TableHead>Rol</TableHead>
+            <TableHead className="text-right">Acciones</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {filteredUsers.map((user) => (
+            <TableRow key={user.id}>
+              <TableCell>
+                <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-full text-zinc-500">
+                  {user.image ? (
+                    <img
+                      alt={user.name || ''}
+                      className="h-full w-full rounded-full object-cover"
+                      src={user.image}
+                    />
+                  ) : (
+                    <span className="text-xs font-bold">
+                      {user.name?.substring(0, 2).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+              </TableCell>
+              <TableCell className="font-medium text-zinc-900 dark:text-zinc-100">
+                {user.name || 'Sin nombre'}
+              </TableCell>
+              <TableCell className="text-secondary">{user.email}</TableCell>
+              <TableCell>
+                <Badge variant={user.role === 'ADMIN' ? 'purple' : 'success'}>{user.role}</Badge>
+              </TableCell>
+              <TableCell className="text-right">
+                <div className="flex justify-end gap-2">
+                  <Button
+                    className="p-2"
+                    title={user.role === 'ADMIN' ? 'Degradar a Usuario' : 'Promover a Admin'}
+                    variant="ghost"
+                    onClick={() => handleRoleChange(user.id, user.role)}
                   >
-                    {user.role}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-right">
-                  <div className="flex justify-end gap-2">
-                    <button
-                      className="text-secondary rounded-lg p-2 transition-colors hover:bg-zinc-100 hover:text-blue-600 dark:hover:bg-zinc-700/50"
-                      title={user.role === 'ADMIN' ? 'Degradar a Usuario' : 'Promover a Admin'}
-                      type="button"
-                      onClick={() => handleRoleChange(user.id, user.role)}
-                    >
-                      <IoShieldCheckmarkOutline size={18} />
-                    </button>
-                    <button
-                      className="text-secondary rounded-lg p-2 transition-colors hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/10"
-                      title="Eliminar Usuario"
-                      type="button"
-                      onClick={() => handleDelete(user.id)}
-                    >
-                      <IoTrashOutline size={18} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                    <IoShieldCheckmarkOutline size={18} />
+                  </Button>
+                  <Button
+                    className="p-2"
+                    title="Eliminar Usuario"
+                    variant="ghost"
+                    onClick={() => handleDelete(user.id)}
+                  >
+                    <IoTrashOutline size={18} />
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
 
-            {filteredUsers.length === 0 && (
-              <tr>
-                <td className="py-8 text-center text-zinc-500" colSpan={5}>
-                  No se encontraron usuarios
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+          {filteredUsers.length === 0 && (
+            <TableRow>
+              <TableCell className="py-8 text-center text-zinc-500" colSpan={5}>
+                No se encontraron usuarios
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </Card>
   )
 }

@@ -24,18 +24,8 @@ const TOPIC_PREFIX = 'PristinoPlant/Actuator_Controller'
 const TOPIC_COMMAND = `${TOPIC_PREFIX}/irrigation/cmd`
 const TOPIC_STATUS = `${TOPIC_PREFIX}/status`
 
-// Tópicos de Estado (Feedback)
-// Escuchamos todo lo que venga de irrigation/state (pump, valves, etc)
-const TOPIC_STATE_WILDCARD = `${TOPIC_PREFIX}/irrigation/state/#`
-// Tópicos específicos para mapeo
-const TOPIC_STATE_SPRINKLER = `${TOPIC_PREFIX}/irrigation/state/valve/sprinkler`
-const TOPIC_STATE_FOGGER = `${TOPIC_PREFIX}/irrigation/state/valve/fogger`
-const TOPIC_STATE_SOIL_WET = `${TOPIC_PREFIX}/irrigation/state/valve/soil_wet`
-const TOPIC_STATE_FERTIGATION = `${TOPIC_PREFIX}/irrigation/state/valve/fertigation`
-// Tópicos de Actuadores Comunes
-
-const TOPIC_STATE_MAIN_WATER = `${TOPIC_PREFIX}/irrigation/state/valve/main_water`
-const TOPIC_STATE_AGROCHEMICAL = `${TOPIC_PREFIX}/irrigation/state/valve/agrochemical`
+// Tópico Unificado de Estado (Feedback)
+const TOPIC_STATE_ALL = `${TOPIC_PREFIX}/irrigation/state`
 
 // Mapa de Circuitos de Riego → Nombres del firmware
 const CIRCUIT_MAP: Record<string, string | string[]> = {
@@ -47,11 +37,6 @@ const CIRCUIT_MAP: Record<string, string | string[]> = {
 
 // Duración por defecto para activación manual (5 minutos)
 const DEFAULT_DURATION_SEC = 300
-
-interface ActuatorPayload {
-  state?: string | number | boolean
-  task_id?: string | null
-}
 
 interface WaitingTask {
   id: string
@@ -91,54 +76,43 @@ export function ControlPanel() {
   useEffect(() => {
     if (status === 'connected') {
       subscribe(TOPIC_STATUS)
-      subscribe(TOPIC_STATE_WILDCARD)
+      subscribe(TOPIC_STATE_ALL)
       setTimeout(() => setIsReady(true), 0)
     }
   }, [status, subscribe])
 
-  // --- 2. Helper de Estado de Actuador (Soporta JSON y Legacy) ---
-  const getActuatorPayload = (valveTopic: string) => {
+  // --- 2. Helper de Estado de Actuador (Parseo de Snapshot Único) ---
+  const getActuatorPayload = (actuatorKey: string) => {
     if (!isReady) return { state: 'OFF', taskId: null }
 
-    const payload = messages[valveTopic]?.payload
+    const unifiedSnapshot = messages[TOPIC_STATE_ALL]?.payload
 
-    // Si el store ya lo parseó como Object
-    if (typeof payload === 'object' && payload !== null) {
-      const parsed = payload as ActuatorPayload
+    if (unifiedSnapshot && typeof unifiedSnapshot === 'object') {
+      const data = (unifiedSnapshot as Record<string, { state: string; task_id?: string }>)[
+        actuatorKey
+      ]
 
-      return { state: String(parsed.state || 'OFF'), taskId: parsed.task_id || null }
-    }
-
-    // Fallback legado (Texto plano o string stringificado)
-    const rawPayload = String(payload || 'OFF')
-
-    try {
-      if (rawPayload.startsWith('{')) {
-        const parsed = JSON.parse(rawPayload) as ActuatorPayload
-
-        return { state: String(parsed.state || 'OFF'), taskId: parsed.task_id || null }
+      if (data) {
+        return { state: String(data.state || 'OFF'), taskId: data.task_id || null }
       }
-    } catch {
-      // Si falla el parseo, caemos al fallback
     }
 
-    // Fallback legado (Texto plano o string stringificado)
-    return { state: rawPayload.replace(/['"]+/g, ''), taskId: null }
+    return { state: 'OFF', taskId: null }
   }
 
-  const isActuatorActive = (valveTopic: string) => getActuatorPayload(valveTopic).state === 'ON'
+  const isActuatorActive = (actuatorKey: string) => getActuatorPayload(actuatorKey).state === 'ON'
 
   // Helper para recuperar el UUID de la tarea amarrada al circuito activo
   const getCircuitActiveTaskId = (circuit: keyof typeof activeCircuits): string | null => {
     switch (circuit) {
       case 'irrigation':
-        return getActuatorPayload(TOPIC_STATE_SPRINKLER).taskId
+        return getActuatorPayload('sprinkler').taskId
       case 'humidification':
-        return getActuatorPayload(TOPIC_STATE_FOGGER).taskId
+        return getActuatorPayload('fogger').taskId
       case 'soilWet':
-        return getActuatorPayload(TOPIC_STATE_SOIL_WET).taskId
+        return getActuatorPayload('soil_wet').taskId
       case 'fertigation':
-        return getActuatorPayload(TOPIC_STATE_FERTIGATION).taskId
+        return getActuatorPayload('fertigation').taskId
       default:
         return null
     }
@@ -146,16 +120,16 @@ export function ControlPanel() {
 
   // Mapeo Directo (Sin timers locales, solo verdad del firmware)
   // Estado Estricto: Solo activo si TODOS los componentes están ON
-  const isMainWaterOn = isActuatorActive(TOPIC_STATE_MAIN_WATER)
-  const isAgroOn = isActuatorActive(TOPIC_STATE_AGROCHEMICAL)
+  const isMainWaterOn = isActuatorActive('main_water')
+  const isAgroOn = isActuatorActive('agrochemical')
 
   // Estado "Activo": Válvula de Línea + Válvula Fuente (Ignoramos Bomba por el delay)
   // Esto da feedback inmediato al usuario mientras la bomba arranca en background (10s después)
   const activeCircuits = {
-    irrigation: isActuatorActive(TOPIC_STATE_SPRINKLER) && isMainWaterOn,
-    humidification: isActuatorActive(TOPIC_STATE_FOGGER) && isMainWaterOn,
-    soilWet: isActuatorActive(TOPIC_STATE_SOIL_WET) && isMainWaterOn,
-    fertigation: isActuatorActive(TOPIC_STATE_FERTIGATION) && isAgroOn, // Aquí Ferti + Agro (No Main)
+    irrigation: isActuatorActive('sprinkler') && isMainWaterOn,
+    humidification: isActuatorActive('fogger') && isMainWaterOn,
+    soilWet: isActuatorActive('soil_wet') && isMainWaterOn,
+    fertigation: isActuatorActive('fertigation') && isAgroOn, // Aquí Ferti + Agro (No Main)
   }
 
   // --- 3. Monitoreo de Resiliencia (Limpieza de Timeouts) ---

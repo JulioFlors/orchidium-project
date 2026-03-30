@@ -1,9 +1,11 @@
 'use client'
 
+import { useState, FormEvent, MouseEvent } from 'react'
 import { clsx } from 'clsx'
 import Link from 'next/link'
-import { useState, FormEvent, MouseEvent } from 'react'
-// Importar tu Server Action cuando esté lista
+
+import { Button } from '@/components'
+// todo: Importar tu Server Action cuando esté lista
 // import { requestStockNotificationWhatsapp } from '@/actions/notify-stock';
 
 interface Props {
@@ -197,13 +199,14 @@ export function StockNotificationWhatsapp({ productName }: Props) {
               </p>
             )}
 
-          <button
-            className="btn-primary mt-4 w-full justify-center py-2 font-semibold"
+          <Button
+            className="mt-4 w-full"
             disabled={isSubmitting}
+            isLoading={isSubmitting}
             type="submit"
           >
             {isSubmitting ? 'Enviando...' : 'Notifíquenme'}
-          </button>
+          </Button>
         </form>
       )}
     </div>

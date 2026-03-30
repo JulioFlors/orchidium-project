@@ -45,6 +45,7 @@ export const ZoneTypeLabels: Record<ZoneType, string> = {
   [ZoneType.ZONA_B]: 'Zona B',
   [ZoneType.ZONA_C]: 'Zona C',
   [ZoneType.ZONA_D]: 'Zona D',
+  [ZoneType.EXTERIOR]: 'Exterior',
 }
 
 export const TableTypeLabels: Record<TableType, string> = {
@@ -76,7 +77,7 @@ export const TaskStatusLabels: Record<TaskStatus, string> = {
   [TaskStatus.COMPLETED]: 'Completada',
   [TaskStatus.CANCELLED]: 'Cancelada',
   [TaskStatus.FAILED]: 'Fallida',
-  [TaskStatus.EXPIRED]: 'Fallida',
+  [TaskStatus.EXPIRED]: 'Expirada',
   [TaskStatus.SKIPPED]: 'Omitida',
   [TaskStatus.CONFIRMED]: 'Confirmada',
   [TaskStatus.IN_PROGRESS]: 'Ejecutando',

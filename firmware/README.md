@@ -9,16 +9,17 @@ El objetivo de este firmware es monitorear variables ambientales (temperatura, h
 1. [Entorno de Desarrollo](#️-entorno-de-desarrollo)
 2. [Configuración del ESP32](#-configuración-del-esp32)
 3. [DOC mpremote & mprun](#-doc-mpremote--mprun)
-4. [Configuración del Broker MQTT](#-configuración-del-broker-mqtt)
-5. [Pruebas con MQTT Explorer](#-pruebas-con-mqtt-explorer)
-6. [Componentes Electrónicos](#-componentes-electrónicos)
+4. [Manual del Manifiesto (manifest.json)](#-manual-del-manifiesto-manifestjson)
+5. [Configuración del Broker MQTT](#-configuración-del-broker-mqtt)
+6. [Pruebas con MQTT Explorer](#-pruebas-con-mqtt-explorer)
+7. [Componentes Electrónicos](#-componentes-electrónicos)
    * [Sensor de Temperatura y Humedad (DHT22)](#sensor-de-temperatura-y-humedad-dht22)
    * [Sensor de Luz Ambiental (BH1750)](#sensor-de-luz-ambiental-bh1750)
    * [Módulo Relé de 4 Canales](#módulo-relé-de-4-canales)
    * [Sensor de Lluvia (MH-RD)](#-sensor-de-lluvia-mh-rd)
    * [Transductor de Presión de Agua (150 PSI)](#transductor-de-presión-de-agua-150-psi)
-7. [Arquitectura IoT: Procesamiento en el Borde y Lógica Centralizada](#-arquitectura-iot-procesamiento-en-el-borde-y-lógica-centralizada)
-8. [Mantenimiento y Actualizaciones (OTA)](#-mantenimiento-y-actualizaciones-ota)
+8. [Arquitectura IoT: Procesamiento en el Borde y Lógica Centralizada](#-arquitectura-iot-procesamiento-en-el-borde-y-lógica-centralizada)
+9. [Mantenimiento y Actualizaciones (OTA)](#-mantenimiento-y-actualizaciones-ota)
 
 ---
 
@@ -67,60 +68,40 @@ esptool write-flash 0x1000 C:\Dev\pristinoplant\firmware\ESP32_2025-08-09_v1.26.
 
 ### 📚 Instalar Librerías Necesarias
 
-Usamos la herramienta **`mpremote`** para instalar las librerías que nuestro código necesita en los ESP32
+Para simplificar el despliegue, utilizamos el comando personalizado **`mprun -l`** (o `--lib`). Este comando automatiza toda la gestión de dependencias en el ESP32.
 
-> **Importante:** La instalación de librerías debe hacerse según el rol del dispositivo.
->
-> * **Actuator Controller Firmware** (Relay Modules): Requiere `umqtt.simple2`, `ota` y `secrets`.
-> * **Environmental Monitoring Firmware** (Sensors): Requiere `umqtt.simple2`, `ota`, `secrets` y `bh1750`.
+#### Método Recomendado (Automático)
 
-#### ⚠️ Paso Preliminar OBLIGATORIO: Crear Directorio `/lib`
+1. Asegúrate de estar en la carpeta del firmware que deseas configurar (ej. `firmware/relay_modules`).
+2. Ejecuta el siguiente comando:
 
-Antes de instalar cualquier librería, es **fundamental** asegurarse de que el directorio `/lib` existe en el sistema de archivos del ESP32. Sin este paso, las copias recursivas fallarán.
+    ```powershell
+    mprun -l
+    ```
 
-Ejecuta este comando una sola vez:
+**¿Qué hace este comando?**
 
-```bash
-mpremote mkdir :lib
-```
+* **Lectura Inteligente**: Lee el archivo `manifest.json` local para saber exactamente qué librerías requiere ese nodo.
+* **Preparación**: Crea automáticamente la carpeta `/lib` en el ESP32 si no existe.
+* **Limpieza**: Borra el contenido previo de `/lib` para asegurar una instalación limpia.
+* **Instalación**: Copia las carpetas necesarias desde `firmware/lib/` al dispositivo.
+* **Optimización**: Elimina archivos innecesarios (como `template.py`) del dispositivo para ahorrar espacio.
 
-#### 1. Librería ASÍNCRONA para MQTT `umqtt.simple2`
+---
 
-**Fuente:** [https://github.com/fizista/micropython-umqtt.simple2](https://github.com/fizista/micropython-umqtt.simple2)
+#### Método Manual (Opcional)
 
-Esta librería es **requerida para AMBOS firmwares**.
-Los archivos de la librería ya están incluidos en la ruta local `firmware\lib` del proyecto.
+Si prefieres realizar la instalación paso a paso o no utilizas PowerShell, puedes usar `mpremote` directamente.
 
-**Instalación:**
-*(Ejecuta este comando desde la carpeta del firmware correspondiente)*
+> [!WARNING]
+> Debes crear la carpeta `/lib` antes de copiar: `mpremote mkdir :lib`
 
-```bash
-mpremote cp -r ../lib/umqtt :lib/
-```
-
-#### 2\. Librería `OTA`
-
-Esta librería es **requerida para AMBOS firmwares** para permitir actualizaciones remotas.
-Se encuentra en `firmware\lib\ota`.
-
-**Instalación:**
-*(Ejecuta este comando desde la carpeta del firmware correspondiente)*
-
-```bash
-mpremote cp -r ../lib/ota :lib/
-```
-
-#### 3\. Archivos de Configuración `secrets`
-
-Esta librería contiene las credenciales WiFi y es **requerida para AMBOS firmwares**.
-Se encuentra en `firmware\lib\secrets`.
-
-**Instalación:**
-*(Ejecuta este comando desde la carpeta del firmware correspondiente)*
-
-```bash
-mpremote cp -r ../lib/secrets :lib/
-```
+| Librería | Propósito | Fuente / Repositorio | Comando de Instalación |
+| :------- | :-------- | :------------------- | :--------------------- |
+| **umqtt** | MQTT asíncrono | [fizista/umqtt.simple2](https://github.com/fizista/micropython-umqtt.simple2) | `mpremote cp -r ../lib/umqtt :lib/` |
+| **ota** | Update remoto | Propia | `mpremote cp -r ../lib/ota :lib/` |
+| **secrets** | Credenciales | Propia | `mpremote cp -r ../lib/secrets :lib/` |
+| **bh1750** | Sensor de Luz | [PinkInk/bh1750](https://github.com/PinkInk/upylib/tree/master/bh1750/bh1750) | `mpremote cp -r ../lib/bh1750 :lib/` |
 
 > **Limpieza:** El archivo template no es necesario en el dispositivo.
 >
@@ -129,20 +110,6 @@ mpremote cp -r ../lib/secrets :lib/
 > ```
 >
 > **Nota de Seguridad:** El archivo `secrets/__init__.py` está en `.gitignore`. Debes crearlo localmente con tus credenciales reales antes de subirlo.
-
-#### 4\. Librería del Sensor de Luz `BH1750`
-
-Esta librería es **exclusiva** para el **Environmental Monitoring Firmware**.
-Se encuentra en `firmware\lib\bh1750`.
-
-**Fuente:** [https://github.com/PinkInk/upylib/tree/master/bh1750/bh1750](https://github.com/PinkInk/upylib/blob/master/bh1750/bh1750/__init__.py)
-
-**Instalación:**
-*(Ejecuta este comando desde la carpeta `firmware/sensors/`)*
-
-```bash
-mpremote cp -r ../lib/bh1750 :lib/
-```
 
 ---
 
@@ -485,6 +452,36 @@ mprun -build
 ```
 
 > **Nota:** `mprun` (sin argumentos) seguirá subiendo los archivos `.py` originales sin compilar, útil para depuración rápida de código pequeño.
+
+---
+
+## 📄 Manual del Manifiesto (`manifest.json`)
+
+Cada proyecto de firmware debe incorporar un archivo `manifest.json`. Este archivo funciona como la "hoja de ruta" para el script de despliegue `mprun` y para el sistema de actualizaciones remotas (OTA).
+
+### Estructura de ejemplo (`relay_modules/manifest.json`)
+
+```json
+{
+  "name": "Relay Modules",
+  "description": "Actuator Controller Firmware",
+  "version": "0.6.0",
+  "date": "23-03-2026",
+  "notes_release": "Integración de lluvia y sensor de presión",
+  "files": ["main.py"],
+  "libs": ["umqtt", "ota", "secrets", "bh1750"]
+}
+```
+
+### Descripción de los Campos
+
+* **`name`**: Nombre identificador del tipo de nodo.
+* **`description`**: Propósito general del firmware.
+* **`version`**: Versión actual (`x.y.z`). Utilizada por el sistema OTA para decidir si el firmware en el ESP32 debe actualizarse.
+* **`date`**: Fecha de liberación de la versión.
+* **`notes_release`**: Registro legible sobre qué cambió en esta versión.
+* **`files`**: Lista de archivos fuente que deben copiarse al directorio raíz (`:/`) del dispositivo. Generalmente solo incluye `main.py`.
+* **`libs`**: Lista de carpetas de librerías requeridas. El comando `mprun -l` las buscará en `firmware/lib/` y las copiará recursivamente a `:/lib/` en el dispositivo.
 
 ---
 
@@ -930,35 +927,17 @@ El firmware del Proyecto Orchidium incluye un módulo de actualización Over-The
 ### Requisitos para OTA
 
 1. **Librería `ota`:** Debe estar instalada en el dispositivo (`/lib/ota`).
-2. **Archivo `manifest.json`:** Este archivo local en el ESP32 es crítico; le indica al dispositivo cuál es su versión actual y qué archivos debe gestionar.
+2. **Archivo `manifest.json`:** Este archivo local en el ESP32 es crítico; le indica al dispositivo cuál es su versión actual y qué archivos debe gestionar. (Ver sección [Manual del Manifiesto](#-manual-del-manifiesto-manifestjson)).
 
-### Archivo de Control: `manifest.json`
+### Funcionamiento del Sistema OTA
 
-Cada dispositivo debe tener un archivo `manifest.json` en su raíz. Este archivo actúa como el registro de versión local.
+El sistema OTA funciona comparando la versión del **Manifiesto Local** (dentro del dispositivo) contra el **Manifiesto Remoto** (alojado en GitHub/Servidor).
 
-**Ejemplo de `manifest.json` (Sensors):**
+* **Detección de Versión**: Si la versión remota es mayor (ej. 0.6.1 > 0.6.0), el dispositivo inicia la descarga.
+* **Descarga Selectiva**: Solo descarga los archivos listados en el array `"files"` del manifiesto.
+* **Atomicidad**: Los archivos se descargan primero con prefijo `.new`, se validan y luego se sobrescriben para evitar dejar el dispositivo con código corrupto ante un fallo de red.
 
-```json
-{
-  "name": "Sensors",
-  "description": "Environmental Monitoring Firmware",
-  "notes_release": "Implementación de Detección Zombie, Publicación JSON Atómica, Actualización de Firmware con OTA, Apagado Controlado v2 y Actualización de Credenciales",
-  "version": "0.3.3",
-  "date": "02-12-2025",
-  "files": [
-    "main.py"
-  ]
-}
-```
-
-* **`version`**: El dispositivo compara este número con el `manifest.json` remoto en GitHub. Si la versión remota es mayor, inicia la actualización.
-* **`files`**: Lista de archivos que el sistema OTA debe descargar y sobrescribir si hay una actualización.
-
-**Subir el manifiesto inicial al dispositivo:**
-
-```bash
-mpremote cp manifest.json :/
-```
+---
 
 ---
 

@@ -119,6 +119,29 @@ services:
       NODE_ENV: development
       NODE_OPTIONS: "--dns-result-order=ipv4first"
 
+  weather-oracle-local:
+    container_name: weather-oracle-local
+    profiles: ["local"]
+    build:
+      context: .
+      dockerfile: services/weather-oracle/Dockerfile
+    restart: always
+    depends_on:
+      postgres-local:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL_LOCAL}
+
+      DB_HOST: postgres-local
+      DB_USER: ${DB_USER}
+
+      # Ubicación predeterminada: Ciudad Guayana
+      LATITUDE: "8.31"
+      LONGITUDE: "-62.71"
+
+      NODE_ENV: development
+      NODE_OPTIONS: "--dns-result-order=ipv4first"
+
 
   # -------------------------------------------------------------------
   # ☁️ PERFIL CLOUD — Producción en VPS (Active Profile: cloud)
@@ -155,6 +178,32 @@ services:
       interval: 10s
       timeout: 10s
       retries: 5
+
+  weather-oracle:
+    container_name: weather-oracle
+    profiles: ["cloud"]
+    build:
+      context: .
+      dockerfile: services/weather-oracle/Dockerfile
+      extra_hosts:
+        - "registry.npmjs.org:104.16.27.35"
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL_UNPOOLED: ${DATABASE_URL_CLOUD_UNPOOLED}
+      DATABASE_URL: ${DATABASE_URL_CLOUD}
+
+      DB_HOST: postgres
+      DB_USER: ${DB_USER}
+
+      # Ubicación predeterminada: Ciudad Guayana
+      LATITUDE: "8.31"
+      LONGITUDE: "-62.71"
+
+      NODE_ENV: development
+      NODE_OPTIONS: "--dns-result-order=ipv4first"
 
   mosquitto:
     image: eclipse-mosquitto
@@ -326,6 +375,29 @@ services:
       MQTT_CLIENT_ID: ${MQTT_CLIENT_ID_SCHEDULER}
       MQTT_PASSWORD: ${MQTT_PASS_BACKEND}
       MQTT_USERNAME: ${MQTT_USER_BACKEND}
+
+      NODE_ENV: development
+      NODE_OPTIONS: "--dns-result-order=ipv4first"
+
+  weather-oracle-serverless:
+    container_name: weather-oracle-serverless
+    profiles: ["serverless"]
+    build:
+      context: .
+      dockerfile: services/weather-oracle/Dockerfile
+      extra_hosts:
+        - "registry.npmjs.org:104.16.27.35"
+    restart: always
+    environment:
+      DATABASE_URL_UNPOOLED: ${DATABASE_URL_SERVERLESS_UNPOOLED}
+      DATABASE_URL: ${DATABASE_URL_SERVERLESS}
+
+      DB_HOST: ${DB_HOST_SERVERLESS}
+      DB_USER: ${DB_USER_SERVERLESS}
+
+      # Ubicación predeterminada: Ciudad Guayana
+      LATITUDE: "8.31"
+      LONGITUDE: "-62.71"
 
       NODE_ENV: development
       NODE_OPTIONS: "--dns-result-order=ipv4first"

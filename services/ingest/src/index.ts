@@ -76,7 +76,6 @@ const TOPIC_ROUTES: Record<string, PacketProcessor> = {
   // Necesitamos inyectar el 5to argumento (eventType)
   '/status': (s, z, c, p) => processZoneStateEvent(s, z, c, p, 'Device_Status'),
   '/rain/state': (s, z, c, p) => processZoneStateEvent(s, z, c, p, 'Rain_State'),
-  '/irrigation/state': (s, z, c, p) => processZoneStateEvent(s, z, c, p, 'Irrigation_State'),
 }
 
 // ---- Utils ---- 
@@ -105,21 +104,45 @@ async function processEnvironmentPacket(source: string, zone: ZoneType, context:
   try {
     const data = JSON.parse(payload)
 
-    // Creamos un Punto de InfluxDB
+    // [Vercion v1.0.7]: Soporte para Batching / History
+    // Si el payload contiene un historial (array de [timestamp, data])
+    if (data.history && Array.isArray(data.history)) {
+      for (const entry of data.history) {
+        if (!Array.isArray(entry) || entry.length !== 2) continue
+        
+        const [timestamp, metrics] = entry as [number, Record<string, number>]
+        
+        const point = Point.measurement('environment_metrics')
+          .setTag('source', source)
+          .setTag('zone', zone)
+          .setTag('context', context)
+          .setTimestamp(new Date(timestamp * 1000)) // Referencia temporal exacta del dispositivo
+
+        if (metrics.temperature !== undefined) point.setFloatField('temperature', Number(metrics.temperature))
+        if (metrics.humidity !== undefined) point.setFloatField('humidity', Number(metrics.humidity))
+        if (metrics.illuminance !== undefined) point.setFloatField('illuminance', Number(metrics.illuminance))
+        if (metrics.pressure !== undefined) point.setFloatField('pressure', Number(metrics.pressure))
+
+        await writeToInflux(point)
+      }
+      return
+    }
+
+    // Fallback: Procesamiento de punto único tradicional
     const point = Point.measurement('environment_metrics')
       .setTag('source', source)
       .setTag('zone', zone)
       .setTag('context', context)
 
-    // Agregamos los campos si existen
     if (data.temperature !== undefined) point.setFloatField('temperature', Number(data.temperature))
     if (data.humidity !== undefined) point.setFloatField('humidity', Number(data.humidity))
-    if (data.light_intensity !== undefined) point.setFloatField('light_intensity', Number(data.light_intensity))
+    if (data.illuminance !== undefined) point.setFloatField('illuminance', Number(data.illuminance))
+    if (data.pressure !== undefined) point.setFloatField('pressure', Number(data.pressure))
 
     await writeToInflux(point)
 
   } catch (e) {
-    Logger.error('Error procesando paquete de datos Ambientales', e)
+    Logger.error('Error procesando paquete de datos Ambientales (Batch/Single)', e)
   }
 }
 
@@ -275,8 +298,8 @@ client.on('message', async (topic, payload) => {
     return
   }
 
-  // Lógica para Sensores Ambientales
-  if (firmwareSource === 'Environmental_Monitoring') {
+  // Lógica para Sensores Ambientales y Estación Meteorológica
+  if (firmwareSource === 'Environmental_Monitoring' || firmwareSource === 'Weather_Station') {
     const zoneSlug = topicParts[2]
     const zone = mapZoneSlugToZoneType(zoneSlug)
 

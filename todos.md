@@ -43,9 +43,24 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
   * [ ] Cuando no estén agrupadas, aplicar label "Floración" (similar visualmente al label "Agotado") a los productos correspondientes.
   * [ ] Distintivo visual en la card de producto.
 
-### 🧪 1.3 Gestión de Laboratorio (Insumos)
+### 🧪 1.3 Gestión de Laboratorio (Insumos y Recetas)
 
-* [ ] **Catálogo de Agroquímicos:** CRUD Clasificado (Fertilizante/Fitosanitario) con instrucciones de uso.
+*Objetivo:* Implementar los CRUD de `/supplies` (Insumos) y `/recipes` (Programas) usando **estrictamente componentes UI universales** para garantizar diseño consistente y escalabilidad.
+
+* [ ] **Capa 0: Reutilización de UI (Universal Components):**
+  * Identificar e implementar un Sistema de Diseño atómico basado en Tailwind y clsx-tailwind-merge en `src/components/ui/` para evitar código espagueti.
+  * [ ] `Button.tsx`: Botón universal con variantes (`primary`, `secondary`, `destructive`, `ghost`, `outline`) y estados (`isLoading`, `disabled`).
+  * [ ] `Card.tsx`: Contenedor semántico compuesto de `Card`, `CardHeader`, `CardTitle`, `CardContent`, y `CardFooter`.
+  * [ ] `Table.tsx`: Sistema de tablas componibles (`Table`, `TableHeader`, `TableRow`, `TableHead`, `TableBody`, `TableCell`).
+  * [ ] `Badge.tsx`: Píldoras indicadoras de estado.
+  * [ ] Reemplazar las implementaciones ad-hoc en vistas existentes (ej. `AdminDashboard.tsx`) para asegurar que el sistema se adapte bien antes de construir el CRUD.
+* [ ] **Página `/supplies` (Catálogo de Agroquímicos):**
+  * [ ] Tabla universal para listar `Agrochemical` (Nombre, Tipo, Propósito, Instrucciones).
+  * [ ] Modal/Panel unificado para **Crear/Editar** insumos (Fertilizante/Fitosanitario).
+  * [ ] Lógica de Server Actions (`createSupply`, `updateSupply`, `deleteSupply`).
+* [ ] **Página `/recipes` (Programas de Cultivo):**
+  * [ ] Interfaces para listar `FertilizationProgram` y `PhytosanitaryProgram`.
+  * [ ] Componente Constructor de Recetas: Permitir añadir N pasos (Cycles) y seleccionar el Agroquímico y Sequencia con un selector unificado.
 
 ### 👥 1.4 Gestión de Usuarios
 
@@ -96,20 +111,25 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 
 ### 💡 3.2 Motor de Inferencias (El Cerebro Analítico)
 
-* [ ] **Módulo Backend Independiente:** Crear servicio/script cron que se ejecute a las 23:55 diariamente.
-* [ ] **Cálculo de Métricas:** Programar algoritmos para:
-  * [ ] DLI (Daily Light Integral) con factor de conversión dinámico (Sol vs. Luz Artificial nocturna).
-  * [ ] DIF (Promedio Temp Diurna - Promedio Temp Nocturna).
-  * [ ] VPD Horario (Déficit de Presión de Vapor).
-* [ ] **Reglas Epidemiológicas:** Modelo de "Horas de Humedad Foliar" para disparar alertas de riesgo de hongos.
-* [ ] **Machine Learning Ligero:** Función para cruzar avistamientos de plagas (Fase 1.1) con el histórico de InfluxDB de las 3 semanas previas.
+> Ver especificaciones en `docs/specs/04-environmental-inference-engine.md`
+
+* [ ] **Fase 3.2.1 - Estabilización de Tiempo Real (Smooth Data):**
+  * [ ] Modificar la API/WebSocket de telemetría para que retorne Medias Móviles Simples (SMA de 10-15 min) en vez de lecturas crudas puras (elimina parpadeos UI por nubes/reflejos).
+* [ ] **Fase 3.2.2 - Agregación de VPD:**
+  * [ ] Backend: Añadir cálculo de Déficit de Presión de Vapor (VPD) combinando Temp/Humedad para inferir transpiración de fluidos en las orquídeas.
+* [ ] **Fase 3.2.3 - Worker de Agregación Diaria (CRON 23:55):**
+  * [ ] Crear script/servicio independiente para Downsampling de InfluxDB.
+  * [ ] Calcular métricas botánicas: DLI (Daily Light Integral) convirtiendo Lux a PPFD, y DIF (Salto Térmico Día-Noche).
+  * [ ] Calcular Riesgo Epidemiológico: "Horas de Humedad Foliar" consecutivas (>85% HR sin salto térmico).
+  * [ ] Persistir resumen procesado diario en base de datos central.
+* [ ] **Machine Learning Ligero:** Función para cruzar avistamientos de plagas (Fase 1.1) con los históricos de InfluxDB.
 
 ### 🌤️ 3.3 WeatherGuard (Inteligencia Predictiva Híbrida)
 
 *Objetivo:* Evitar riegos redundantes y prevenir pudrición de raíces anticipándose al clima.
 
-* [ ] **Integración de API Meteorológica:** Conectar el backend a una API externa (Ej. OpenWeatherMap o WeatherAPI) geolocalizada en Ciudad Guayana.
-* [ ] **Algoritmo de Decisión Proactiva/Reactiva:** Crear la lógica en el Scheduler que evalúe dos factores antes de abrir una válvula:
+* [x] **Integración de API Meteorológica:** Conectar el backend a una API externa (Open-Meteo) para Ciudad Guayana.
+* [x] **Algoritmo de Decisión Proactiva/Reactiva:** Crear la lógica en el Scheduler que evalúe dos factores antes de abrir una válvula:
   * *Reactivo (Local):* Consultar InfluxDB -> ¿La duración de lluvia local en las últimas 24h superó el umbral? (Sensor físico).
   * *Proactivo (Nube):* Consultar API -> ¿La probabilidad de precipitación (PoP) para las próximas 3 horas es mayor al 70%?
   * *Acción:* Si cualquiera de las dos es verdadera, cancelar o posponer el riego programado y registrar el motivo en el Log.
@@ -170,9 +190,8 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
   * **Light Sleep:** Mantiene RAM/WiFi, menor ahorro (~2mA) pero mantiene MQTT.
   * **Delta Publishing:** Solo publicar cuando el cambio supere un umbral (ej: ΔTemp > 0.5°C).
   * Reducir frecuencia de OTA checks (ej: 1 de cada N boots).
-* [ ] **Integración Transductor de Presión:** Desarrollar la logica para detectar irregularidades en el funcionamiento del sistema que indiquen que se debe de limpiar el filtro de agua que esta ubicado entre la salida de la bomba y la entrada de todas las lineas de riego. y que cuando se ensucia el filtro hace que la bomba se sobre esfuerce y no salga agua suficiente en las lineas de riego. (la funcion del filtro es proteger los aspersores de suciedad que cause una obstrupcion)
-* [ ] **Migración Sensor Lluvia al Nodo Actuador:** Mover lógica `rain_monitor_task()` del firmware Sensors al firmware Relays. Integrar sensores cableados (BH1750 exterior + sensor de gotas de lluvia) al ESP32 del tablero de control. Considerar ESP32 adicional si la carga de procesamiento es excesiva.
-  * **Tópicos MQTT:** La estación exterior debe publicar en `PristinoPlant/Environmental_Monitoring/Exterior/readings` y `/status` para ser captada automáticamente por el ingest y el frontend (zona `EXTERIOR`).
-  * **Consideración clave:** El frontend se suscribe a `PristinoPlant/Environmental_Monitoring/#` — los tópicos del actuador (`/Actuator_Controller/`) no caen bajo este patrón. Opciones: (A) publicar desde el actuador reutilizando el árbol `Environmental_Monitoring/Exterior/` o (B) crear suscripción adicional en el frontend.
-  * **BH1750 interior adicional:** Evaluar si cablear un segundo BH1750 + DHT22 dentro del invernadero al tablero, para no depender 100% del dispositivo móvil con batería.
-* [ ] **Sensor de Luminosidad externo:** Desarrollar la logica para calcular la diferencia de iluminancia entre lo que reporta el firmware de `Sensors` ubicado en el orquideario protegido por malla-sombra y la realidad de externa del orquideario. (el sensor esta ubicado en el techo de una casa de 2 pisos que le da sombra parcial al orquideario luego de las 12 cuando el sol rota. El sensor mide la iluminancia que recibe del sol sin ningun obtaculo, mientras que el sensor interno mide la iluminancia que recibe del sol filtrada por la malla-sombra (+ la posible sombra parcial de la casa). la diferencia entre ambos sensores indica la cantidad de luz que se pierde debido a la malla-sombra. pudiendo cuantificar el porcentaje que filtra la malla-sombra.) tambien sirve para medir de manera mas acertada si el clima esta nublado, templado o soleado.
+* [x] **Integración Transductor de Presión:** Desarrollar la logica para detectar el circuito activo y reportarlo en el payload (v0.6.1).
+* [x] **Renombrar Light Intensity a Illuminance:** Uniformar el término técnico en todo el sistema (firmware, ingest, database, frontend) (v0.6.1).
+* [x] **Optimización Status Exterior:** Unificar el status de la estación exterior con el del nodo actuador para ahorrar recursos (v0.6.1).
+* [x] **Migración Sensor Lluvia al Nodo Actuador:** ~~Mover lógica `rain_monitor_task()` del firmware Sensors al firmware Relays.~~ Migrado en v0.6.0. Incluye BH1750 exterior + sensor de gotas de lluvia + transductor de presión. Tópicos MQTT bajo `PristinoPlant/Environmental_Monitoring/Exterior/`.
+* [x] **Sensor de Iluminancia externo:** ~~Desarrollar la logica para calcular la diferencia de iluminancia.~~ Implementado en v0.6.0 como `exterior_publish_task()` en el nodo actuador. Publica en `Exterior/readings` para comparar con el BH1750 interior.

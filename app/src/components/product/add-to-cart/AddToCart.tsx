@@ -5,7 +5,13 @@ import type { Species, ProductVariant } from '@/interfaces'
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 
-import { StockNotificationWhatsapp, QuantitySelector, SizeSelector, StockLabel } from '@/components'
+import {
+  StockNotificationWhatsapp,
+  QuantitySelector,
+  SizeSelector,
+  StockLabel,
+  Button,
+} from '@/components'
 
 interface Props {
   product: Species
@@ -117,13 +123,13 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
               </div>
             ) : (
               // CASO: Disponible para comprar
-              <button
-                className={`w-full cursor-pointer transition-all duration-300 sm:w-[320px] lg:w-full xl:w-[320px] ${!selectedVariant && posted ? 'btn-primary' : 'btn-primary'} `}
+              <Button
+                className="tds-sm:w-[320px] tds-lg:w-full tds-xl:w-[320px] w-full"
                 type="button"
                 onClick={addToCart}
               >
                 Agregar al carrito
-              </button>
+              </Button>
             )}
           </div>
         </>

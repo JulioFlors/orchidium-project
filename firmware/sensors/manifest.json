@@ -1,11 +1,12 @@
 {
   "name": "Sensors",
   "description": "Environmental Monitoring Firmware",
-  "version": "0.5.0",
-  "date": "05-03-2026",
-  "notes_release": "parche de la libreria umqtt.simple2",
+  "version": "0.7.2",
+  "date": "25-03-2026",
+  "notes_release": "v0.7.2 - Batching & Power Saving (Radio duty cycling)",
   "files": [
-    "main.py"
+    "main.py",
+    "app.mpy"
   ],
   "libs": [
     "umqtt",

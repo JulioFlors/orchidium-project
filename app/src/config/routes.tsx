@@ -87,12 +87,6 @@ export const adminRoutes: AdminRoute[] = [
         description: 'Sensores en tiempo real por zona',
       },
       {
-        name: 'Línea de Tiempo',
-        url: '/timeline',
-        icon: <IoListOutline />,
-        description: 'Log de actividades y eventos',
-      },
-      {
         name: 'Alertas',
         url: '/alerts',
         icon: <IoWarningOutline />,

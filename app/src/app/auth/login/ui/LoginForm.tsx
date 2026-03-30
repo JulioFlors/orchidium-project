@@ -11,7 +11,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { zodResolver } from '@hookform/resolvers/zod'
 
 import { verifyEmailInDb } from '@/actions'
-import { Backdrop } from '@/components'
+import { Backdrop, Button } from '@/components'
 import { authClient } from '@/lib/auth-client'
 
 const loginSchema = z.object({
@@ -50,6 +50,8 @@ export function LoginForm() {
     formState: { errors },
   } = useForm<FormInputs>({
     resolver: zodResolver(loginSchema),
+    mode: 'all',
+    defaultValues: { email: '', password: '' },
   })
 
   // Monitoreamos ambos campos para validar botones
@@ -279,29 +281,25 @@ export function LoginForm() {
             {/* ------------ Submit Button ------------ */}
             {loginStep === 'email' ? (
               /* Paso 1: Verificar email en la DB */
-              <button
-                className={clsx('btn-primary my-2', {
-                  'cursor-wait opacity-70': isCheckingEmail,
-                  'cursor-not-allowed opacity-70': !emailValue,
-                })}
-                disabled={!emailValue || isCheckingEmail}
+              <Button
+                className="my-2"
+                disabled={!emailValue}
+                isLoading={isCheckingEmail}
                 type="button"
                 onClick={handleNextStep}
               >
                 Siguiente
-              </button>
+              </Button>
             ) : (
               /* Paso 2: Iniciar Sesión */
-              <button
-                className={clsx('btn-primary my-2', {
-                  'cursor-wait opacity-70': isPending,
-                  'cursor-not-allowed opacity-70': !passwordValue,
-                })}
-                disabled={isPending || !passwordValue}
+              <Button
+                className="my-2"
+                disabled={!passwordValue}
+                isLoading={isPending}
                 type="submit"
               >
                 Ingresar
-              </button>
+              </Button>
             )}
           </form>
 
@@ -328,10 +326,15 @@ export function LoginForm() {
               </div>
 
               {/* Google Button */}
-              <button className="btn-border-none" type="button" onClick={handleGoogleLogin}>
-                <FcGoogle className="text-secondary h-5 w-5" />
+              <Button
+                isLoading={isGoogleLoading}
+                type="button"
+                variant="ghost"
+                onClick={handleGoogleLogin}
+              >
+                <FcGoogle className="text-secondary h-5 w-5 shrink-0" />
                 Continúa con Google
-              </button>
+              </Button>
 
               {/* New to PristinoPlant? */}
               <div className="text-secondary mt-4 flex w-full max-w-[340px] flex-col items-center justify-center gap-2 p-4 text-center font-medium">

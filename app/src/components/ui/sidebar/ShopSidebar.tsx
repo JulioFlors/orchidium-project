@@ -11,7 +11,7 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import { AnimatePresence, motion } from 'motion/react'
 
 import { authClient } from '@/lib/auth-client'
-import { PersonIcon, SearchBox, ThemeToggle } from '@/components'
+import { PersonIcon, SearchBox, ThemeToggle, buttonVariants } from '@/components'
 import { shopRoutes } from '@/config'
 import { useUIStore } from '@/store'
 
@@ -119,7 +119,10 @@ export function ShopSidebar({ suggestions = [] }: Props) {
 
           <div className="mt-2.5 mb-8 w-full">
             <Link
-              className="btn-secondary focus-btn-secondary block"
+              className={buttonVariants({
+                variant: 'secondary',
+                className: 'block w-full',
+              })}
               href={`/category/${sidebarRoute}`}
               onClick={closeSidebar}
             >

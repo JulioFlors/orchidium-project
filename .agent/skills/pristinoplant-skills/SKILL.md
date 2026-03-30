@@ -108,3 +108,14 @@ Formato: `[Emoji] [tipo] ([área]): [Título Conciso]`
 4. **Colores Semánticos (Sensores)**:
     - Mantener consistencia con el sistema: Temp (Orange), Hum (Blue), Lux (Yellow), Rain (Cyan).
     - Usar estos colores en combinación con `bg-surface` y `text-primary`.
+
+### Paso 8: Estándares de Documentación (Markdown)
+
+Para mantener la limpieza y compatibilidad con linters (MD041, MD022, MD032, MD007, MD009):
+
+1. **Estructura H1**: Todo archivo DEBE comenzar con un único encabezado de nivel 1 (`# Título`).
+2. **Espaciado de Encabezados**: Dejar SIEMPRE una línea en blanco antes y después de cada encabezado (`#`, `##`, `###`).
+3. **Espaciado de Listas**: Las listas (`-`, `1.`, `[ ]`) deben estar rodeadas por líneas en blanco.
+4. **Indentación de Listas**: Usar SIEMPRE **2 espacios** para sub-elementos. Nunca 4.
+5. **Sin Espacios al Final**: Prohibido dejar espacios en blanco al final de las líneas (Trailing spaces).
+6. **Encabezados Únicos**: No repetir el contenido de encabezados dentro del mismo documento.

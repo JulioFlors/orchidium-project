@@ -2,399 +2,410 @@
 
 import type { DeviceLog } from '@package/database'
 
-import { useEffect, useState, useRef } from 'react'
-import {
-  IoBugOutline,
-  IoRefreshOutline,
-  IoDownloadOutline,
-  IoPowerOutline,
-  IoChevronDownOutline,
-} from 'react-icons/io5'
-import { motion, AnimatePresence } from 'motion/react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { IoServerOutline } from 'react-icons/io5'
 import clsx from 'clsx'
 
-import { useMqttStore } from '@/store/mqtt/mqtt.store'
-import { getConnectivityLogs } from '@/actions'
+import { ToolboxGrid, AuditConsoleCard, HeartbeatCard } from './DiagnosticPanel'
 
-// Animación copiada de SearchBox
-const motionProps = {
-  initial: { opacity: 0, scale: 0.8, y: -10 },
-  animate: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.2, ease: 'easeOut' } },
-  exit: { opacity: 0, scale: 0.8, y: -10, transition: { duration: 0.15, ease: 'easeInOut' } },
-} as const
+import { getConnectivityLogs } from '@/actions'
+import { Card, SmartDeviceHeader } from '@/components'
+import { useMqttStore } from '@/store/mqtt/mqtt.store'
 
 interface DeviceConfig {
+  id: string
   name: string
+  description: string
   baseTopic: string
-  hasMaskNvs?: boolean // Si es true, oculta el botón de Dump NVS
-  isService?: boolean // Si es true, oculta Reset y Logs de Conexión
-  heartbeatTimeoutMs?: number // Umbral para estado zombie
+  hasMaskNvs?: boolean
+  isService?: boolean
+  heartbeatTimeoutMs?: number
+  hasDiagnostics?: boolean
 }
 
 const DEVICES: DeviceConfig[] = [
   {
-    name: 'ESP32 Relay Module',
+    id: 'actuator',
+    name: 'Relay Module',
+    description: 'Control de electroválvulas y bombas.',
     baseTopic: 'PristinoPlant/Actuator_Controller',
-    heartbeatTimeoutMs: 60000, // 60s
+    heartbeatTimeoutMs: 60000,
+    hasDiagnostics: true,
   },
   {
-    name: 'ESP32 Sensors',
+    id: 'sensors',
+    name: 'Environmental Sensors',
+    description: 'Monitoreo de Zona A (Lux, Lluvia, Presión).',
     baseTopic: 'PristinoPlant/Environmental_Monitoring/Zona_A',
     hasMaskNvs: true,
-    heartbeatTimeoutMs: 60000, // 60s
-  },
-  {
-    name: 'Service: Ingest',
-    baseTopic: 'PristinoPlant/Services/Ingest',
-    hasMaskNvs: true,
-    isService: true,
-    heartbeatTimeoutMs: 360000, // 6 min (latido cada 5 min)
-  },
-  {
-    name: 'Service: Scheduler',
-    baseTopic: 'PristinoPlant/Services/Scheduler',
-    hasMaskNvs: true,
-    isService: true,
-    heartbeatTimeoutMs: 360000, // 6 min (latido cada 5 min)
+    heartbeatTimeoutMs: 60000,
+    hasDiagnostics: true,
   },
 ]
 
+const SERVICES: DeviceConfig[] = [
+  {
+    id: 'ingest',
+    name: 'Service: Ingest',
+    description: 'Ingesta de telemetría a InfluxDB.',
+    baseTopic: 'PristinoPlant/Services/Ingest',
+    isService: true,
+    heartbeatTimeoutMs: 360000,
+  },
+  {
+    id: 'scheduler',
+    name: 'Service: Scheduler',
+    description: 'Planificador de tareas y automatizaciones.',
+    baseTopic: 'PristinoPlant/Services/Scheduler',
+    isService: true,
+    heartbeatTimeoutMs: 360000,
+  },
+]
+
+type ConnectionState = 'online' | 'offline' | 'unknown' | 'zombie'
+
+const formatVETime = (timestamp: number | string | Date) => {
+  return new Date(timestamp).toLocaleTimeString('en-US', {
+    timeZone: 'America/Caracas',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  })
+}
+
 export function DeviceDebugger() {
-  // ----- Hooks -----
-  const { subscribe, unsubscribe, publish, messages } = useMqttStore()
+  const { subscribe, publish, messages, status } = useMqttStore()
 
-  // ----- States -----
-  const [selectedDevice, setSelectedDevice] = useState<DeviceConfig>(DEVICES[0])
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
-  const dropdownRef = useRef<HTMLDivElement>(null)
-
-  const [lastRequested, setLastRequested] = useState<number | null>(null)
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>(DEVICES[0].id)
   const [connectivityLogs, setConnectivityLogs] = useState<DeviceLog[]>([])
-  const [isLoadingLogs, setIsLoadingLogs] = useState(false)
+  const [now, setNow] = useState(() => Date.now())
 
-  // ----- Topicos MQTT -----
-  const cmdTopic = `${selectedDevice.baseTopic}/cmd`
-  const debugTopic = `${selectedDevice.baseTopic}/debug/nvs`
+  const [lastCommand, setLastCommand] = useState<string | null>(null)
+  const [showServices, setShowServices] = useState(false)
+  const [showTimeline, setShowTimeline] = useState(false)
+  const [showHeartbeat, setShowHeartbeat] = useState(false)
+  const [showNvs, setShowNvs] = useState(false) // Estado local para el widget de ráfaga
+
+  const selectedDevice = DEVICES.find((d) => d.id === selectedDeviceId) || DEVICES[0]
   const statusTopic = `${selectedDevice.baseTopic}/status`
+  const topicCmd = `${selectedDevice.baseTopic}/cmd`
+  const topicReceived = `${selectedDevice.baseTopic}/cmd/received`
 
-  // ----------------------------------------
-  //  useEffects
-  // ----------------------------------------
+  const unifiedAuditTopic = `${selectedDevice.baseTopic}/audit`
+  const auditStateTopic = `${selectedDevice.baseTopic}/audit/state`
 
-  // ----- Cierra el dropdown al hacer click fuera -----
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false)
-      }
+  // El estado de presencia de hardware y status general se envía integrado en el mensaje principal
+  const hardwarePresence = useMemo(() => {
+    const msg = messages[statusTopic]
+
+    if (!msg) return {}
+
+    try {
+      const payload = msg.payload
+      const hwState = (
+        typeof payload === 'object' ? payload : JSON.parse(String(payload))
+      ) as Record<string, boolean>
+
+      const presence: Record<string, boolean> = {}
+
+      Object.entries(hwState).forEach(([key, value]) => {
+        if (key.endsWith('_hw')) {
+          presence[key.replace('_hw', '')] = value
+        }
+      })
+
+      return presence
+    } catch {
+      return {}
     }
+  }, [messages, statusTopic])
 
-    document.addEventListener('mousedown', handleClickOutside)
-
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  // ----- Cargar Historial de Conectividad -----
   useEffect(() => {
-    const fetchLogs = async () => {
-      setIsLoadingLogs(true)
-      const res = await getConnectivityLogs(15)
-
-      if (res.ok && res.logs) {
-        setConnectivityLogs(res.logs)
-      }
-
-      setIsLoadingLogs(false)
-    }
-
-    fetchLogs()
-
-    // Opcional: Refrescar cada 30s
-    const interval = setInterval(fetchLogs, 30000)
+    const interval = setInterval(() => setNow(Date.now()), 5000)
 
     return () => clearInterval(interval)
   }, [])
 
-  // Suscripción Dinámica al cambiar de dispositivo
   useEffect(() => {
-    // Suscribirse a Debug y Status del dispositivo seleccionado
-    subscribe(debugTopic)
-    subscribe(statusTopic)
+    const fetchLogs = async () => {
+      const res = await getConnectivityLogs(15)
 
-    return () => {
-      // Opcional: Desuscribirse al cambiar
+      if (res.ok && res.logs) setConnectivityLogs(res.logs)
     }
-  }, [subscribe, unsubscribe, debugTopic, statusTopic])
 
-  // 2. Comandos
-  const handleRequestNvs = () => {
-    publish(cmdTopic, 'get_nvs')
-    setLastRequested(Date.now())
-  }
+    fetchLogs()
+    const interval = setInterval(fetchLogs, 45000)
 
-  const handleReset = () => {
-    if (confirm(`¿Estás SEGURO de reiniciar ${selectedDevice.name} remotamente?`)) {
-      publish(cmdTopic, 'reset')
-    }
-  }
-
-  // 3. Obtener datos del store
-  const debugData = messages[debugTopic]
-  const nvsContent = debugData?.payload
-  const receivedAt = debugData?.receivedAt
-
-  // 4. Lógica de Estado (Heartbeat) local
-  const statusData = messages[statusTopic] as { payload: unknown; receivedAt: number } | undefined
-  const lastHeartbeat = statusData?.receivedAt || null
-  const rawStatus = String(statusData?.payload || 'unknown').trim()
-
-  const [now, setNow] = useState(0)
-
-  useEffect(() => {
-    // Sincronizar al montar (usamos timeout para evitar error de linter sobre set state sincrono)
-    const timeout = setTimeout(() => setNow(Date.now()), 0)
-    const interval = setInterval(() => setNow(Date.now()), 5000)
-
-    return () => {
-      clearTimeout(timeout)
-      clearInterval(interval)
-    }
+    return () => clearInterval(interval)
   }, [])
 
-  const isZombie =
-    lastHeartbeat !== null &&
-    rawStatus === 'online' &&
-    now > 0 &&
-    now - lastHeartbeat > (selectedDevice.heartbeatTimeoutMs || 60000)
+  const getStatus = useCallback(
+    (topic: string, timeout: number = 60000): ConnectionState => {
+      const data = messages[topic] as { payload: unknown; receivedAt: number } | undefined
 
-  let connectionState = 'unknown'
+      if (!data) return 'unknown'
+      const statusVal = String(data.payload).trim()
 
-  if (rawStatus === 'offline') connectionState = 'offline'
-  else if (rawStatus === 'online') connectionState = isZombie ? 'zombie' : 'online'
+      if (statusVal === 'offline') return 'offline'
+      if (statusVal === 'online') {
+        const isZombie = now - data.receivedAt > timeout
 
-  // Colores de estado (Sólo texto/borde, el icono es SVG)
-  const statusColors = {
-    // Green
-    online: 'text-green-600 dark:text-green-400',
-    // Red
-    offline: 'text-red-600 dark:text-red-400',
-    // Yellow
-    zombie: 'text-yellow-600 dark:text-yellow-400',
-    // Gray
-    unknown: 'text-zinc-400',
+        return isZombie ? 'zombie' : 'online'
+      }
+
+      return 'unknown'
+    },
+    [messages, now],
+  )
+
+  useEffect(() => {
+    if (status === 'connected') {
+      subscribe(statusTopic)
+      subscribe(topicReceived)
+      SERVICES.forEach((s) => subscribe(`${s.baseTopic}/status`))
+      subscribe(unifiedAuditTopic)
+      subscribe(auditStateTopic)
+    }
+  }, [status, subscribe, statusTopic, topicReceived, unifiedAuditTopic, auditStateTopic])
+
+  // El estado visual de las auditorías se deriva directamente del hardware (Fuente de Verdad)
+  const hardwareAudits = useMemo(() => {
+    const msg = messages[auditStateTopic]
+
+    if (!msg) return []
+
+    try {
+      const payload = msg.payload
+      const hwState = (
+        typeof payload === 'object' ? payload : JSON.parse(String(payload))
+      ) as Record<string, boolean>
+
+      return Object.entries(hwState)
+        .filter(([key, active]) => active && !key.endsWith('_hw'))
+        .map(([key]) => key)
+    } catch {
+      return []
+    }
+  }, [messages, auditStateTopic])
+
+  // Combinamos las auditorías del Hardware con las de la UI (Heartbeat y NVS son locales/UI)
+  const activeDisplayWidgets = useMemo(() => {
+    const list = [...hardwareAudits]
+
+    if (showHeartbeat) list.unshift('heartbeat')
+    if (showNvs) list.push('nvs')
+
+    return list
+  }, [hardwareAudits, showHeartbeat, showNvs])
+
+  const connectionState = getStatus(statusTopic, selectedDevice.heartbeatTimeoutMs)
+  const receivedMsg = messages[topicReceived]?.payload
+
+  const handleCommand = (cmd: string, auditKey: string | null) => {
+    if (auditKey === 'heartbeat') {
+      setShowHeartbeat((prev) => !prev)
+
+      return
+    }
+
+    if (auditKey === 'nvs') {
+      const willShow = !showNvs
+
+      setShowNvs(willShow)
+      if (willShow) {
+        publish(topicCmd, 'audit_nvs')
+        setLastCommand('audit_nvs')
+      }
+
+      return
+    }
+
+    if (auditKey) {
+      // El toggle se hace basándose en el estado real reportado por el hardware
+      const isCurrentlyActive = hardwareAudits.includes(auditKey)
+      const toggleCmd = isCurrentlyActive ? `audit_${auditKey}_off` : `audit_${auditKey}_on`
+
+      publish(topicCmd, toggleCmd)
+      setLastCommand(toggleCmd)
+
+      return
+    }
+
+    publish(topicCmd, cmd)
+    setLastCommand(cmd)
+    if (cmd === 'reset') setTimeout(() => setLastCommand(null), 5000)
   }
 
-  const currentColorClass = statusColors[connectionState as keyof typeof statusColors]
+  const forceRefreshAudit = (auditKey: string) => {
+    if (auditKey === 'nvs') publish(topicCmd, 'audit_nvs')
+    else publish(topicCmd, `audit_${auditKey}_on`)
+    setLastCommand(`audit_${auditKey}_on`)
+  }
+
+  const getDeviceLabel = (id: string) => {
+    if (id === 'actuator') return 'RELAY'
+    if (id === 'sensors') return 'SENSOR'
+
+    return id.split('/').pop()?.toUpperCase() || 'HUB'
+  }
 
   return (
-    <div className="space-y-6">
-      {/* Selector de Dispositivo (Estilo SearchBox results con Motion) */}
-      <div className="bg-canvas border-input-outline flex flex-col items-center justify-between gap-4 rounded-xl border p-4 shadow-sm md:flex-row">
-        <div ref={dropdownRef} className="relative z-20 w-full md:max-w-md">
-          {/* Trigger del Dropdown */}
-          <button
-            className="text-primary hover:bg-hover-overlay bg-surface flex w-full items-center justify-between rounded-lg p-3 text-left text-sm transition-all focus:outline-none"
-            type="button"
-            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-          >
-            <span className="font-medium">{selectedDevice.name}</span>
-            <IoChevronDownOutline
-              className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`}
-            />
-          </button>
+    <div className="animate-in fade-in space-y-10 duration-500">
+      <SmartDeviceHeader
+        connectionState={connectionState}
+        deviceDescription={selectedDevice.description}
+        deviceName={selectedDevice.name}
+        dropdownTitle="Seleccionar Firmware"
+        selectedZone={selectedDeviceId}
+        zoneMapping={Object.fromEntries(DEVICES.map((d) => [d.id, d.name]))}
+        zones={DEVICES.map((d) => d.id)}
+        onZoneChanged={(id) => {
+          setSelectedDeviceId(id)
+          setLastCommand(null)
+        }}
+      />
 
-          {/* Lista Animada */}
-          <AnimatePresence>
-            {isDropdownOpen && (
-              <motion.div
-                className="border-input-outline bg-canvas text-black-and-white absolute top-12 left-0 w-full overflow-hidden rounded-lg border py-1 shadow-lg"
-                {...motionProps}
-              >
-                {DEVICES.map((device) => (
-                  <button
-                    key={device.name}
-                    className={clsx(
-                      'hover:bg-hover-overlay w-full px-4 py-3 text-left text-sm transition-colors',
-                      device.name === selectedDevice.name &&
-                        'bg-primary/5 text-primary font-medium',
-                    )}
-                    type="button"
-                    onClick={() => {
-                      setSelectedDevice(device)
-                      setIsDropdownOpen(false)
-                    }}
-                  >
-                    {device.name}
-                    <span className="text-secondary mt-0.5 block truncate font-mono text-xs opacity-60">
-                      {device.baseTopic}
-                    </span>
-                  </button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+      {/* Toolbox Grid: Individual Cards (Media grid minimum) */}
+      <ToolboxGrid
+        activeAudits={activeDisplayWidgets}
+        disableNVS={selectedDevice.hasMaskNvs}
+        hardwarePresence={hardwarePresence}
+        isOnline={connectionState === 'online'}
+        isPending={(cmd) => {
+          if (!lastCommand || lastCommand !== cmd) return false
 
-        {/* Estado de Conectividad (Pulse Icon) */}
-        <div className={`flex items-center gap-2 font-medium capitalize ${currentColorClass}`}>
-          {/* Pulse Circle CSS puro */}
-          <span className="relative flex h-3 w-3">
-            {connectionState === 'online' && (
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-75" />
-            )}
-            <span className="relative inline-flex h-3 w-3 rounded-full bg-current" />
-          </span>
-          <span>{connectionState}</span>
-        </div>
-      </div>
+          // El ESP32 hace eco exacto del comando en topicReceived (v0.9.0)
+          if (String(receivedMsg) === cmd) return false
 
-      {/* Acciones */}
-      <div className="flex items-center justify-between">
-        <div className="text-secondary flex items-center gap-2">
-          <IoBugOutline size={24} />
-          <h2 className="text-xl font-bold">Herramientas</h2>
-        </div>
+          return true
+        }}
+        isSuccess={(cmd) => {
+          if (!lastCommand || lastCommand !== cmd) return false
 
-        <div className="flex gap-2">
-          {/* Hard Reset: Solo para Hardware */}
-          {!selectedDevice.isService && (
-            <button
-              className="btn-danger flex items-center gap-2"
-              title="Envía comando 'reset' al tópico /cmd"
-              type="button"
-              onClick={handleReset}
-            >
-              <IoPowerOutline size={20} />
-              Hard Reset
-            </button>
-          )}
+          return String(receivedMsg) === cmd
+        }}
+        showServices={showServices}
+        showTimeline={showTimeline}
+        onCommand={handleCommand}
+        onToggleServices={() => setShowServices((prev) => !prev)}
+        onToggleTimeline={() => setShowTimeline((prev) => !prev)}
+      />
 
-          {!selectedDevice.hasMaskNvs && (
-            <button
-              className="btn-primary flex items-center gap-2"
-              type="button"
-              onClick={handleRequestNvs}
-            >
-              <IoRefreshOutline size={20} />
-              Solicitar Dump NVS
-            </button>
-          )}
-        </div>
-      </div>
+      {/* Widgets Area: Alumno vertical Stack (Full Width siempre) */}
+      <div className="animate-in slide-in-from-top-4 flex flex-col gap-6 duration-500">
+        {(showServices || showTimeline || activeDisplayWidgets.length > 0) && (
+          <>
+            {showServices && (
+              <Card className="flex w-full flex-col p-5">
+                <h3 className="text-primary mb-6 flex items-center gap-2 text-sm font-bold tracking-widest uppercase opacity-60">
+                  <IoServerOutline className="text-indigo-500" />
+                  Estado de Servicios
+                </h3>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {SERVICES.map((srv) => {
+                    const srvStatus = getStatus(`${srv.baseTopic}/status`, srv.heartbeatTimeoutMs)
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Panel de Control */}
-        <div className="bg-canvas border-input-outline rounded-xl border p-6 shadow-sm">
-          <h3 className="text-primary mb-4 font-semibold">Detalles de Depuración</h3>
-          <div className="space-y-4 text-sm">
-            <div className="border-input-outline flex justify-between border-b pb-2">
-              <span className="text-secondary">Última Solicitud:</span>
-              <span className="font-mono">
-                {lastRequested ? new Date(lastRequested).toLocaleTimeString() : '-'}
-              </span>
-            </div>
-            {!selectedDevice.hasMaskNvs && (
-              <div className="border-input-outline flex justify-between border-b pb-2">
-                <span className="text-secondary">Última Respuesta NVS:</span>
-                <span className="font-mono">
-                  {receivedAt ? new Date(receivedAt).toLocaleTimeString() : '-'}
-                </span>
-              </div>
-            )}
-            <div className="border-input-outline flex justify-between border-b pb-2">
-              <span className="text-secondary">Último Heartbeat:</span>
-              <span className="font-mono">
-                {lastHeartbeat ? new Date(lastHeartbeat).toLocaleTimeString() : '-'}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Panel de Visualización JSON */}
-        {!selectedDevice.hasMaskNvs && (
-          <div className="bg-canvas border-input-outline flex h-[500px] flex-col overflow-hidden rounded-xl border p-0 shadow-sm">
-            <div className="border-input-outline bg-surface flex items-center justify-between border-b px-4 py-2">
-              <span className="text-secondary font-mono text-xs tracking-wider uppercase">
-                recovery.json
-              </span>
-              {!!nvsContent && (
-                <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-                  <IoDownloadOutline /> Recibido
-                </span>
-              )}
-            </div>
-            <div className="text-secondary flex-1 overflow-auto bg-[#1e1e1e] p-4 font-mono text-xs">
-              {nvsContent ? (
-                <pre>{JSON.stringify(nvsContent, null, 2)}</pre>
-              ) : (
-                <div className="flex h-full flex-col items-center justify-center text-zinc-600">
-                  <IoBugOutline className="mb-2 opacity-20" size={48} />
-                  <p>Sin datos recibidos.</p>
-                  <p className="mt-2 text-xs text-zinc-500">
-                    Asegúrate de que el dispositivo esté Online.
-                  </p>
+                    return (
+                      <div
+                        key={srv.id}
+                        className="group flex items-center justify-between rounded-xl border border-transparent bg-zinc-50 p-5 transition-all hover:border-zinc-200 dark:bg-zinc-800/40 dark:hover:border-zinc-700"
+                      >
+                        <div className="flex flex-col">
+                          <span className="mb-1.5 text-xs leading-none font-black tracking-wide uppercase">
+                            {srv.name.replace('Service: ', '')}
+                          </span>
+                          <span className="font-mono text-[9px] font-bold tracking-wider text-zinc-500 uppercase opacity-60">
+                            Heartbeat OK
+                          </span>
+                        </div>
+                        <div
+                          className={clsx(
+                            'h-3 w-3 rounded-full ring-4 transition-all duration-500',
+                            srvStatus === 'online'
+                              ? 'bg-green-500 shadow-[0_0_15px_rgba(34,197,94,0.5)] ring-green-500/10'
+                              : srvStatus === 'zombie'
+                                ? 'bg-yellow-500 ring-yellow-500/10'
+                                : 'bg-red-500 ring-red-500/10',
+                          )}
+                        />
+                      </div>
+                    )
+                  })}
                 </div>
-              )}
-            </div>
-          </div>
+              </Card>
+            )}
+
+            {showTimeline && (
+              <Card className="flex w-full flex-col overflow-hidden p-0">
+                <div className="bg-surface/50 border-input-outline border-b px-5 py-3">
+                  <h4 className="flex items-center gap-2 text-[10px] font-bold tracking-widest text-zinc-500 uppercase opacity-60">
+                    Línea de Tiempo
+                  </h4>
+                </div>
+                <div className="max-h-[350px] flex-1 divide-y divide-zinc-100 overflow-y-auto dark:divide-zinc-800/50">
+                  {connectivityLogs.map((log) => (
+                    <div
+                      key={log.id}
+                      className="group flex items-center justify-between px-5 py-3.5 text-[10px] transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/20"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span
+                          className={clsx(
+                            'rounded px-2 py-0.5 text-[8px] font-black tracking-tighter text-white',
+                            log.device === 'actuator' ? 'bg-indigo-500' : 'bg-amber-500',
+                          )}
+                        >
+                          {getDeviceLabel(log.device)}
+                        </span>
+                        <span
+                          className={clsx(
+                            'font-bold',
+                            log.status === 'ONLINE' ? 'text-green-600' : 'text-red-600',
+                          )}
+                        >
+                          {log.status}
+                        </span>
+                      </div>
+                      <span className="font-mono text-zinc-400 opacity-50 transition-opacity group-hover:opacity-100">
+                        {formatVETime(log.timestamp)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+
+            {activeDisplayWidgets.map((auditId) => {
+              const unifiedPacket = messages[unifiedAuditTopic]?.payload as Record<
+                string,
+                { history: unknown[] }
+              >
+
+              let payload
+
+              if (unifiedPacket && unifiedPacket[auditId]) {
+                payload = unifiedPacket[auditId]
+              }
+
+              return (
+                <div key={auditId} className="w-full">
+                  {auditId === 'heartbeat' ? (
+                    <HeartbeatCard lastSeen={messages[statusTopic]?.receivedAt} />
+                  ) : (
+                    <AuditConsoleCard
+                      activeAudit={auditId}
+                      currentPayload={payload}
+                      receivedAt={messages[unifiedAuditTopic]?.receivedAt}
+                      onRefresh={() => forceRefreshAudit(auditId)}
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </>
         )}
       </div>
-
-      {/* Historial de Conexión (Línea de Tiempo) - Solo para Hardware */}
-      {!selectedDevice.isService && (
-        <div className="bg-canvas border-input-outline overflow-hidden rounded-xl border shadow-sm">
-          <div className="border-input-outline bg-surface flex items-center justify-between border-b px-6 py-4">
-            <h3 className="text-primary flex items-center gap-2 font-semibold">
-              <IoRefreshOutline className={clsx(isLoadingLogs && 'animate-spin')} />
-              Línea de Tiempo de Conexión
-            </h3>
-            <span className="text-secondary text-xs opacity-60">Últimos 15 eventos</span>
-          </div>
-
-          <div className="divide-input-outline divide-y">
-            {connectivityLogs.length > 0 ? (
-              connectivityLogs.map((log) => (
-                <div key={log.id} className="flex items-center justify-between px-6 py-3 text-sm">
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={clsx(
-                        'h-2.5 w-2.5 rounded-full',
-                        log.status === 'ONLINE'
-                          ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]'
-                          : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]',
-                      )}
-                    />
-                    <div>
-                      <span className="text-primary font-medium">Actuator {log.status}</span>
-                      <p className="text-secondary text-xs opacity-70">{log.notes}</p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-primary block font-mono text-xs">
-                      {new Intl.DateTimeFormat('es-VE', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        year: 'numeric',
-                      }).format(new Date(log.timestamp))}
-                    </span>
-                    <span className="text-secondary block font-mono text-[10px] uppercase opacity-60">
-                      {new Intl.DateTimeFormat('es-VE', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        hour12: true,
-                      }).format(new Date(log.timestamp))}
-                    </span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-secondary py-12 text-center text-sm">
-                No hay eventos de conectividad registrados.
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   )
 }

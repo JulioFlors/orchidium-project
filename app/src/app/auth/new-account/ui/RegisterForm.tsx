@@ -12,9 +12,9 @@ import {
   IoCartOutline,
   IoRibbonOutline,
 } from 'react-icons/io5'
-import { LuLoader } from 'react-icons/lu'
 
 import { authClient } from '@/lib/auth-client'
+import { Button } from '@/components'
 
 // --- Types & Data ---
 
@@ -124,7 +124,12 @@ export function RegisterForm() {
     handleSubmit,
     formState: { errors },
   } = useForm<FormInputs>({
-    mode: 'onTouched',
+    mode: 'all',
+    defaultValues: {
+      name: '',
+      email: '',
+      password: '',
+    },
   })
 
   // Focus on name input on mount
@@ -304,21 +309,18 @@ export function RegisterForm() {
                 </div>
               )}
 
-              <button
-                className={clsx('btn-primary mt-4', {
-                  'cursor-wait opacity-70': isSubmitting,
-                })}
+              <Button
+                className="mt-4"
                 disabled={isSubmitting}
+                isLoading={isSubmitting}
                 type="submit"
               >
                 {isSubmitting ? (
-                  <div className="flex items-center justify-center gap-2">
-                    <LuLoader className="animate-spin" /> Creando su cuenta
-                  </div>
+                  <div className="flex items-center justify-center gap-2">Creando su cuenta</div>
                 ) : (
                   'Registrarse'
                 )}
-              </button>
+              </Button>
             </form>
 
             <div className="text-secondary mt-6 text-center text-sm font-medium">

@@ -1,0 +1,22 @@
+{
+  "name": "@service/weather-oracle",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/bundle.mjs",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/bundle.mjs --target=node23 --external:@prisma/client --external:pg --external:axios --external:croner",
+    "start": "dotenv -e ../../.env -- node dist/bundle.mjs",
+    "dev": "dotenv -e ../../.env -- tsx src/index.ts"
+  },
+  "dependencies": {
+    "@package/database": "workspace:*",
+    "@prisma/client": "7.0.1",
+    "axios": "1.13.6",
+    "croner": "10.0.1",
+    "pg": "8.16.3",
+    "prisma": "7.0.1"
+  }
+}

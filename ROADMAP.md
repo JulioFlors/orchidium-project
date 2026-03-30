@@ -60,7 +60,7 @@ El usuario no sabe qué es un relé o un tópico MQTT. El sistema traduce intenc
 
 Interfaz para crear/editar/eliminar rutinas de automatización (`AutomationSchedule`). Riegos, Fertilización, etc., con bloqueos simples en tiempo real (ej. Sensor de lluvia).
 
-* **Confirmación Previa de Agroquímicos:** Las tareas de Fertirriego/Fumigación requieren confirmación del usuario 1h antes. Sin confirmación, la tarea se cancela automáticamente. Depende del Sistema de Notificaciones.
+* [x] **Confirmación Previa de Agroquímicos:** Las tareas de Fertirriego/Fumigación requieren confirmación del usuario 1h antes. Sin confirmación, la tarea se cancela automáticamente. Depende del Sistema de Notificaciones.
 
 ### 3.2 WeatherGuard (El Escudo Preventivo)
 

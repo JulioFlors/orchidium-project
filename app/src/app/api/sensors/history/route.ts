@@ -55,9 +55,9 @@ export async function GET(request: Request) {
     for await (const row of reader) {
       const point = {
         time: row.time,
-        temperature: row.temperature,
-        humidity: row.humidity,
-        lux: row.light_intensity || 0, // Ingest uses 'light_intensity'
+        temperature: row.temperature || 0,
+        humidity: row.humidity || 0,
+        illuminance: row.illuminance || 0,
       }
 
       data.push(point)

@@ -203,7 +203,7 @@ mqttClient.on('connect', () => {
   // Suscribirse a los tópicos de QoS de las tareas del dispositivo de Borde
   mqttClient.subscribe([
     'PristinoPlant/Actuator_Controller/cmd/received',
-    'PristinoPlant/Actuator_Controller/irrigation/state/#',
+    'PristinoPlant/Actuator_Controller/irrigation/state',
     'PristinoPlant/Actuator_Controller/status'
   ], { qos: 1 })
 
@@ -303,76 +303,74 @@ mqttClient.on('message', async (topic, payload) => {
       return
     }
 
-    // 3. Telemetría Funcional Física (Los relés del Circuito de Riego cambiaron de estado)
-    if (topic.startsWith('PristinoPlant/Actuator_Controller/irrigation/state/')) {
-      let state = message
-      let taskId = ''
+    // 3. Telemetría Funcional Física (Consolidada)
+    if (topic === 'PristinoPlant/Actuator_Controller/irrigation/state') {
+      let updates: Record<string, { state: string, task_id?: string }> = {}
 
-      // Intentamos parsear por si es JSON nuevo (Sincronía Transaccional)
       try {
-        const parsed = JSON.parse(message)
-        state = parsed.state || message
-        taskId = parsed.task_id || ''
-      } catch {
-        // Formato legado de texto plano
+        updates = JSON.parse(message)
+      } catch (e) {
+        Logger.error('Fallo parseando snapshot unificado:', e)
+        return
       }
 
-      if (state === 'ON') {
-        if (taskId) {
+
+      // Procesar cada actuador/relé detectado
+      for (const [name, info] of Object.entries(updates)) {
+        const { state, task_id: taskId } = info
+
+        if (state === 'ON') {
+          if (taskId) {
            // Actualización Atómica Exacta
-           await recordTaskEvent(taskId, TaskStatus.IN_PROGRESS, 'Circuito de Riego abierto.', {
-             actualStartAt: new Date()
-           })
-        } else {
-           // Soporte Legado
-           const graceWindow = new Date(Date.now() - 20 * 60000)
-           await prisma.taskLog.updateMany({
-             where: { 
-               status: { in: [TaskStatus.CONFIRMED, TaskStatus.FAILED] },
-               scheduledAt: { gte: graceWindow }
-             },
-             data: { 
-               status: TaskStatus.IN_PROGRESS, 
-               actualStartAt: new Date(),
-               notes: 'Circuito de Riego abierto (Legado).' 
-             }
-           })
+            await recordTaskEvent(taskId, TaskStatus.IN_PROGRESS, 'Circuito de Riego abierto.', {
+              actualStartAt: new Date()
+            })
+          } else {
+            const graceWindow = new Date(Date.now() - 20 * 60000)
+            await prisma.taskLog.updateMany({
+              where: { 
+                status: { in: [TaskStatus.CONFIRMED, TaskStatus.FAILED] },
+                scheduledAt: { gte: graceWindow }
+              },
+              data: { 
+                status: TaskStatus.IN_PROGRESS, 
+                actualStartAt: new Date(),
+                notes: `Circuito abierto: ${name} (Snapshot).` 
+              }
+            })
+          }
         }
-      }
-      else if (state === 'OFF') {
-        // Si viene un taskId explícito, sabemos exactamente qué tarea finalizó 
-        // y no dependemos de si es la bomba de agua o no (ej nebulizadores / suelo).
-        if (taskId) {
+        else if (state === 'OFF') {
+        // Si viene un taskId explícito, sabemos exactamente qué tarea finalizó.
+          if (taskId) {
            // Obtener el log de la tarea para calcular el tiempo real ejecutado
-           const currentTask = await prisma.taskLog.findUnique({
-             where: { id: taskId },
-             select: { actualStartAt: true, duration: true }
-           })
+            const currentTask = await prisma.taskLog.findUnique({
+              where: { id: taskId },
+              select: { actualStartAt: true, duration: true }
+            })
 
-           let completedMinutes = currentTask?.duration || 0
-           if (currentTask?.actualStartAt) {
-             const elapsedMs = Date.now() - new Date(currentTask.actualStartAt).getTime()
-             completedMinutes = Math.floor(elapsedMs / 60000)
-           }
+            let completedMinutes = currentTask?.duration || 0
+            if (currentTask?.actualStartAt) {
+              const elapsedMs = Date.now() - new Date(currentTask.actualStartAt).getTime()
+              completedMinutes = Math.floor(elapsedMs / 60000)
+            }
 
-           const finished = await recordTaskEvent(taskId, TaskStatus.COMPLETED, 'Circuito de Riego cerrado.', {
-             completedMinutes: { set: completedMinutes }
-           })
-           if (finished) Logger.success(`Tarea ${taskId.slice(0, 8)} COMPLETED (${completedMinutes} min)`)
-        } else {
-           // Soporte Legado: La bomba es el último eslabón en apagarse, certifica el fin del circuito.
-           // Ocurre solamente si el ESP32 no manda Task ID.
-           if (topic.endsWith('/pump')) {
-             const hoursAgo = new Date(Date.now() - 2 * 3600000)
-             const finished = await prisma.taskLog.updateMany({
-               where: { 
-                 status: TaskStatus.IN_PROGRESS,
-                 scheduledAt: { gte: hoursAgo }
-               },
-               data: { status: TaskStatus.COMPLETED, notes: 'Circuito de Riego cerrado (Legado).' }
-             })
-             if (finished.count > 0) Logger.success('Tareas catalogadas con éxito (Legado)')
-           }
+            const finished = await recordTaskEvent(taskId, TaskStatus.COMPLETED, 'Circuito de Riego cerrado.', {
+              completedMinutes: { set: completedMinutes }
+            })
+            if (finished) Logger.success(`Tarea ${taskId.slice(0, 8)} COMPLETED (${completedMinutes} min) [via ${name}]`)
+          } 
+          else if (name === 'pump' || topic.endsWith('/pump')) {
+            const hoursAgo = new Date(Date.now() - 2 * 3600000)
+            const finished = await prisma.taskLog.updateMany({
+              where: { 
+                status: TaskStatus.IN_PROGRESS,
+                scheduledAt: { gte: hoursAgo }
+              },
+              data: { status: TaskStatus.COMPLETED, notes: 'Circuito cerrado (Snapshot Pump).' }
+            })
+            if (finished.count > 0) Logger.success('Tareas catalogadas vía Bomba (Snapshot)')
+          }
         }
       }
       return
@@ -426,6 +424,41 @@ async function checkRainCondition(zone: ZoneType): Promise<{ shouldCancel: boole
 }
 
 /**
+ * Consulta la base de datos de pronósticos (WeatherGuard) para ver si se espera lluvia inminente.
+ * Retorna true si el pronóstico indica alta probabilidad (>70%).
+ */
+async function checkWeatherGuard(): Promise<{ shouldCancel: boolean, chance: number, time?: Date }> {
+  try {
+    const now = new Date()
+    const horizon = new Date(now.getTime() + 3 * 3600000) // Ventana de 3 horas
+
+    const forecast = await prisma.weatherForecast.findFirst({
+      where: {
+        timestamp: {
+          gte: now,
+          lte: horizon
+        },
+        precipProb: { gte: 0.7 }
+      },
+      orderBy: { timestamp: 'asc' }
+    })
+
+    if (forecast) {
+      return { 
+        shouldCancel: true, 
+        chance: forecast.precipProb * 100, 
+        time: forecast.timestamp 
+      }
+    }
+
+    return { shouldCancel: false, chance: 0 }
+  } catch (error) {
+    Logger.error('Error consultando WeatherGuard (Forecast Cache)', error)
+    return { shouldCancel: false, chance: 0 }
+  }
+}
+
+/**
  * Envía un comando de circuito al Nodo Actuador.
  * Un solo JSON con la clave `circuit` que el ESP32 desglosará
  * en las acciones individuales de cada relé.
@@ -457,16 +490,33 @@ async function processTaskLog(taskLog: any) {
   try {
     // Verificar Regla de Lluvia (Solo si es Riego o Fertirriego)
     if (taskLog.purpose === 'IRRIGATION' || taskLog.purpose === 'FERTIGATION') {
+      // 1. Check Reactivo: ¿Está lloviendo o llovió mucho? (Sensores)
       const rainCheck = await checkRainCondition(taskLog.zones[0])
 
       if (rainCheck.shouldCancel) {
-        Logger.warn(`🌧️ Tarea CANCELADA por lluvia (${rainCheck.duration}s acumulados)`)
+        Logger.warn(`🌧️ Tarea CANCELADA por sensores de lluvia (${rainCheck.duration}s acumulados)`)
 
         await prisma.taskLog.update({
           where: { id: taskLog.id },
           data: {
             status: TaskStatus.CANCELLED,
-            notes: `Cancelado por lluvia acumulada: ${rainCheck.duration}s`
+            notes: `Cancelado por WeatherGuard (Sensores): ${Math.floor(rainCheck.duration / 60)} min de lluvia previa.`
+          }
+        })
+        return
+      }
+
+      // 2. Check Proactivo: ¿Va a llover pronto? (Pronóstico API)
+      const forecastCheck = await checkWeatherGuard()
+      if (forecastCheck.shouldCancel) {
+        const timeStr = forecastCheck.time?.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })
+        Logger.warn(`⛈️ Tarea CANCELADA por pronóstico: ${forecastCheck.chance}% lluvia a las ${timeStr}`)
+
+        await prisma.taskLog.update({
+          where: { id: taskLog.id },
+          data: {
+            status: TaskStatus.CANCELLED,
+            notes: `Cancelado por WeatherGuard (Pronóstico): ${forecastCheck.chance}% prob. lluvia a las ${timeStr}.`
           }
         })
         return

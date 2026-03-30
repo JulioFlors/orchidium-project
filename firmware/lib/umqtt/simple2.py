@@ -125,7 +125,7 @@ class MQTTClient:
 		else:raise MQTTException(28)
 		if D==b'':raise MQTTException(1)
 		if D==b'\xd0':
-			if A._read(1)[0]!=0:MQTTException(-1)
+			if A._read(1)[0]!=0:raise MQTTException(-1)
 			A.last_cpacket=ticks_ms();return
 		B=D[0]
 		if B==64:

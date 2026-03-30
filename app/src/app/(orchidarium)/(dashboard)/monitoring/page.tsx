@@ -13,8 +13,8 @@ interface SensorData {
   time: string
   temperature: number
   humidity: number
-  lux: number
-  external_lux: number
+  illuminance: number
+  external_illuminance: number
   [key: string]: string | number
 }
 
@@ -23,7 +23,7 @@ interface RainData {
   averageIntensity: number
 }
 
-type MetricType = 'temperature' | 'humidity' | 'lux' | 'external_lux' | 'rain'
+type MetricType = 'temperature' | 'humidity' | 'illuminance' | 'external_illuminance' | 'rain'
 
 export default function MonitoringPage() {
   const [data, setData] = useState<SensorData[]>([])
@@ -94,7 +94,13 @@ export default function MonitoringPage() {
   const current =
     data.length > 0
       ? data[data.length - 1]
-      : { time: new Date(0).toISOString(), temperature: 0, humidity: 0, lux: 0, external_lux: 0 }
+      : {
+          time: new Date(0).toISOString(),
+          temperature: 0,
+          humidity: 0,
+          illuminance: 0,
+          external_illuminance: 0,
+        }
 
   // 1. Estado de Conexión Unificado (para el Badge y Dashboard) usando el custom hook
   const { connectionState } = useDeviceHeartbeat(statusTopic)
@@ -134,7 +140,7 @@ export default function MonitoringPage() {
   }
 
   // Simple trend calculation (last vs average of last 5)
-  const calculateTrend = (key: 'temperature' | 'humidity' | 'lux') => {
+  const calculateTrend = (key: 'temperature' | 'humidity' | 'illuminance') => {
     if (data.length < 5) return 'stable'
     const last = data[data.length - 1][key]
     const prev = data[data.length - 5][key]
@@ -174,17 +180,17 @@ export default function MonitoringPage() {
           title: 'Humedad Relativa',
           icon: <Droplets className="h-4 w-4" />,
         }
-      case 'lux':
+      case 'illuminance':
         return {
-          dataKey: 'lux',
+          dataKey: 'illuminance',
           color: '#eab308',
           unit: 'lx',
           title: 'Iluminancia',
           icon: <Sun className="h-4 w-4" />,
         }
-      case 'external_lux':
+      case 'external_illuminance':
         return {
-          dataKey: 'external_lux',
+          dataKey: 'external_illuminance',
           color: '#ca8a04', // A slightly different yellow/amber for external
           unit: 'lx',
           title: 'Iluminancia',
@@ -210,6 +216,34 @@ export default function MonitoringPage() {
   }
 
   const chartProps = selectedMetric ? getChartProps() : null
+
+  // Lógica de clasificación de iluminancia (basada en docs/specs/02-light-standards-orchids.md)
+  const getInteriorLuxStatus = (
+    val: number,
+  ): { status: 'optimal' | 'warning' | 'critical'; label: string } => {
+    if (val < 10000) return { status: 'warning', label: 'Bajo' }
+
+    if (val <= 45000) return { status: 'optimal', label: 'Óptimo' }
+
+    if (val <= 60000) return { status: 'warning', label: 'Alto' }
+
+    return { status: 'critical', label: 'Peligro' }
+  }
+
+  const getExteriorLuxStatus = (
+    val: number,
+  ): { status: 'optimal' | 'warning' | 'critical'; label: string } => {
+    if (val < 20000) return { status: 'optimal', label: 'Sombra' }
+
+    if (val < 60000) return { status: 'optimal', label: 'Nublado' }
+
+    if (val < 90000) return { status: 'optimal', label: 'Soleado' }
+
+    return { status: 'warning', label: 'Extremo' }
+  }
+
+  const intLux = getInteriorLuxStatus(current.illuminance)
+  const extLux = getExteriorLuxStatus(current.external_illuminance)
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
@@ -261,39 +295,41 @@ export default function MonitoringPage() {
               onClick={() => setSelectedMetric('humidity')}
             />
 
-            {/* Lux Card (Internal) */}
+            {/* Illuminance Card (Internal) */}
             <EnvironmentCard
               className="tds-sm:col-span-2 tds-lg:col-span-1"
               color="yellow"
               hasData={data.length > 0}
               icon={<Sun className="h-6 w-6" />}
-              isActive={selectedMetric === 'lux'}
+              isActive={selectedMetric === 'illuminance'}
               isLoading={initialLoading || isMqttLoading}
               isOffline={isOffline}
-              status={current.lux > 50000 ? 'warning' : 'optimal'}
+              status={intLux.status}
+              statusLabel={intLux.label}
               title="Iluminancia"
-              trend={calculateTrend('lux')}
+              trend={calculateTrend('illuminance')}
               unit="lux"
-              value={current.lux.toLocaleString()}
-              onClick={() => setSelectedMetric('lux')}
+              value={Math.round(current.illuminance).toLocaleString()}
+              onClick={() => setSelectedMetric('illuminance')}
             />
           </div>
         ) : (
           <div className="tds-sm:grid-cols-2 tds-xl:gap-6 grid grid-cols-1 gap-5">
-            {/* External Lux Card */}
+            {/* External Illuminance Card */}
             <EnvironmentCard
               color="yellow"
               description="Estación Meteorológica"
               hasData={data.length > 0}
               icon={<Sun className="h-6 w-6" />}
-              isActive={selectedMetric === 'external_lux'}
+              isActive={selectedMetric === 'external_illuminance'}
               isLoading={initialLoading || isMqttLoading}
               isOffline={isOffline}
-              status={current.external_lux > 100000 ? 'warning' : 'optimal'}
+              status={extLux.status}
+              statusLabel={extLux.label}
               title="Iluminancia"
               unit="lux"
-              value={current.external_lux ? current.external_lux.toLocaleString() : '0'}
-              onClick={() => setSelectedMetric('external_lux')}
+              value={Math.round(current.external_illuminance).toLocaleString()}
+              onClick={() => setSelectedMetric('external_illuminance')}
             />
 
             {/* Rain Card */}

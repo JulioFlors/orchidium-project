@@ -18,7 +18,7 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve('..'),
   },
-  allowedDevOrigins: ['localhost', '192.168.1.5'],
+  allowedDevOrigins: ['localhost', '192.168.0.20', '192.168.0.227'],
   images: {
     // ------------------------------------------------------------------------
     // TODO: PARCHE DE EMERGENCIA (Marzo 2026)

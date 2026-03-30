@@ -2,14 +2,14 @@
 
 import type { User } from '@package/database'
 
-import clsx from 'clsx'
 import { useState } from 'react'
 import { IoPeopleOutline, IoSettingsOutline, IoBugOutline } from 'react-icons/io5'
+import clsx from 'clsx'
 
 import { UsersTable } from './UsersTable'
 
 import { LogoutButton } from '@/app/(shop)/account/ui/LogoutButton'
-import { DeviceDebugger } from '@/components/admin/DeviceDebugger'
+import { Card, DeviceDebugger, Badge } from '@/components'
 
 interface Props {
   user: {
@@ -31,7 +31,7 @@ export function AdminDashboard({ user, users }: Props) {
       {/* Sidebar: Perfil + Navegación Unificada */}
       <div className="space-y-6 lg:col-span-1">
         {/* Card 1: Perfil + Logout */}
-        <div className="bg-canvas border-input-outline flex flex-col overflow-hidden rounded-xl border shadow-sm">
+        <Card className="flex flex-col overflow-hidden">
           {/* Header Perfil */}
           <div className="border-input-outline flex flex-col items-center border-b bg-zinc-50 p-6 text-center dark:bg-zinc-800/50">
             <div className="bg-surface text-primary flex h-20 w-20 items-center justify-center rounded-full">
@@ -50,9 +50,9 @@ export function AdminDashboard({ user, users }: Props) {
 
             <h2 className="text-primary text-lg font-bold">{user.name || 'Administrador'}</h2>
             <p className="text-secondary text-sm">{user.email}</p>
-            <span className="mt-2 inline-block rounded-full bg-purple-100 px-3 py-1 text-xs font-semibold tracking-wider text-purple-800 uppercase dark:bg-purple-900/30 dark:text-purple-300">
+            <Badge className="mt-2" variant="purple">
               {user.role}
-            </span>
+            </Badge>
           </div>
 
           {/* Footer Logout (Ahora parte de la Card de Perfil) */}
@@ -61,10 +61,10 @@ export function AdminDashboard({ user, users }: Props) {
               <LogoutButton />
             </div>
           </div>
-        </div>
+        </Card>
 
         {/* Card 2: Menú de Navegación Independiente */}
-        <div className="bg-canvas border-input-outline rounded-xl border p-2 shadow-sm">
+        <Card className="p-2">
           {/* Configuración Primero (Solo Label y Separador) */}
           <div className="flex cursor-not-allowed items-center gap-2 px-4 py-2 text-xs font-bold tracking-wider text-zinc-400 uppercase opacity-60">
             <IoSettingsOutline />
@@ -98,7 +98,7 @@ export function AdminDashboard({ user, users }: Props) {
             <IoBugOutline size={20} />
             Debugging IoT
           </button>
-        </div>
+        </Card>
       </div>
 
       {/* Contenido Principal */}

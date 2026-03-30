@@ -4,6 +4,8 @@ import Link from 'next/link'
 
 import { AddressForm } from './ui/AddressForm'
 
+import { buttonVariants } from '@/components'
+
 export const metadata: Metadata = {
   title: 'Facturación y envío',
 }
@@ -17,7 +19,9 @@ export default function AddressPage() {
           <AddressForm />
 
           <Link
-            className="btn-primary mx-0.75 mt-6 mb-12 w-auto min-w-[206px] align-middle"
+            className={buttonVariants({
+              className: 'mx-0.75 mt-6 mb-12 w-auto min-w-[206px] align-middle',
+            })}
             href="/checkout"
           >
             Siguiente

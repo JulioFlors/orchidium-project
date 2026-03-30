@@ -2,7 +2,7 @@
 export interface EnvironmentalReading {
   temperature?: number
   humidity?: number
-  light_intensity?: number
+  illuminance?: number
 }
 
 // Basado en firmware/sensors/main.py

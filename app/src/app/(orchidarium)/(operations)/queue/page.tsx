@@ -19,7 +19,7 @@ import { HiOutlineCog } from 'react-icons/hi'
 
 import { DeferredTaskModal } from './ui/DeferredTaskModal'
 
-import { Modal } from '@/components/ui'
+import { Modal, Badge } from '@/components/ui'
 import { TaskPurposeLabels } from '@/config/mappings'
 
 const fetcher = async (url: string) => {
@@ -85,25 +85,25 @@ const ACTION_MAP: Record<
 function TaskStatusBadge({ isPast, status }: { isPast: boolean; status: string }) {
   if (status === 'IN_PROGRESS') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold tracking-wide text-amber-500">
+      <Badge className="gap-1 border-none" size="sm" variant="warning">
         <HiOutlineCog className="h-3 w-3 animate-spin" />
         Ejecutando
-      </span>
+      </Badge>
     )
   }
   if (status === 'CONFIRMED') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-bold tracking-wide text-blue-500">
+      <Badge className="gap-1 border-none" size="sm" variant="info">
         <LuRadioTower className="h-3 w-3" />
         Confirmado
-      </span>
+      </Badge>
     )
   }
   if (isPast && status === 'PENDING') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/10 px-2 py-0.5 text-[10px] font-bold tracking-wide text-yellow-600 dark:text-yellow-400">
+      <Badge className="gap-1 border-none" size="sm" variant="warning">
         En espera
-      </span>
+      </Badge>
     )
   }
 
@@ -276,9 +276,9 @@ export default function QueuePage() {
                       <div className="flex flex-col">
                         <span className="text-primary flex items-center gap-2 text-sm font-medium">
                           {action.label}
-                          <span className="text-secondary rounded-full bg-black/5 px-2 py-0.5 text-[10px] font-bold tracking-wider uppercase dark:bg-white/10">
+                          <Badge className="border-none bg-black/5 dark:bg-white/10" size="sm">
                             {task.zones.join(', ')}
-                          </span>
+                          </Badge>
                           <TaskStatusBadge isPast={isPast} status={task.status} />
                         </span>
                         <div className="text-secondary mt-1 flex items-center gap-2 text-xs">

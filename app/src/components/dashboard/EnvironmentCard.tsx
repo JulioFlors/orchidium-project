@@ -21,6 +21,7 @@ export interface EnvironmentCardProps {
   isOffline?: boolean
   isLoading?: boolean
   hasData?: boolean
+  statusLabel?: string
 }
 
 export function EnvironmentCard({
@@ -29,7 +30,6 @@ export function EnvironmentCard({
   unit,
   icon,
   status = 'optimal',
-  trend,
   className,
   description,
   color = 'purple',
@@ -37,7 +37,9 @@ export function EnvironmentCard({
   isOffline = false,
   isLoading = false,
   hasData = true,
+  statusLabel,
   onClick,
+  trend: _trend,
 }: EnvironmentCardProps) {
   const mouseX = useMotionValue(0)
   const mouseY = useMotionValue(0)
@@ -201,14 +203,14 @@ export function EnvironmentCard({
             <div className="bg-primary/10 h-5 w-16 animate-pulse rounded-full" />
           ) : (
             <>
-              {status !== 'optimal' && trend && !isOffline && hasData && (
+              {(statusLabel || status !== 'optimal') && !isOffline && hasData && (
                 <div
                   className={clsx(
                     'border-input-outline bg-surface rounded-full border px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase shadow-sm',
                     statusColors[status],
                   )}
                 >
-                  {status === 'warning' ? 'Revisar' : 'Crítico'}
+                  {statusLabel || (status === 'warning' ? 'Revisar' : 'Crítico')}
                 </div>
               )}
               {isOffline && (

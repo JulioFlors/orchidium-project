@@ -6,7 +6,7 @@ import Link from 'next/link'
 import clsx from 'clsx'
 import { initialData } from '@service/seeding'
 
-import { QuantityDropdown } from '@/components'
+import { QuantityDropdown, buttonVariants } from '@/components'
 
 const productsInCart = [
   initialData.species[3],
@@ -63,14 +63,22 @@ export function CartView() {
               </div>
 
               <Link
-                className="btn-primary tds-lg:justify-center tds-lg:w-[320px] tds-lg:mr-6 mt-6 inline-block w-full justify-items-start"
+                className={buttonVariants({
+                  variant: 'primary',
+                  className:
+                    'tds-lg:justify-center tds-lg:w-[320px] tds-lg:mr-6 mt-6 w-full justify-items-start',
+                })}
                 href="/category/plants"
               >
                 Continúa comprando
               </Link>
 
               <Link
-                className="btn-secondary tds-lg:justify-center tds-lg:w-[320px] mt-4 inline-block w-full justify-items-start"
+                className={buttonVariants({
+                  variant: 'secondary',
+                  className:
+                    'tds-lg:justify-center tds-lg:w-[320px] mt-4 w-full justify-items-start',
+                })}
                 href="/auth/login"
               >
                 Iniciar sesión
@@ -183,7 +191,11 @@ export function CartView() {
                   <div className="checkout-button">
                     <div className="my-2.5 flex w-full justify-center">
                       <Link
-                        className="btn-primary tds-lg:max-w-none inline-block w-full max-w-125 justify-center align-middle tracking-wide"
+                        className={buttonVariants({
+                          variant: 'primary',
+                          className:
+                            'tds-lg:max-w-none w-full max-w-125 justify-center align-middle tracking-wide',
+                        })}
                         href="/checkout/address"
                       >
                         Pagar
