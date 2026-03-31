@@ -76,7 +76,7 @@ Para simplificar el despliegue, utilizamos el comando personalizado **`mprun -l`
 2. Ejecuta el siguiente comando:
 
     ```powershell
-    mprun -l
+    mprun -b -l
     ```
 
 **¿Qué hace este comando?**

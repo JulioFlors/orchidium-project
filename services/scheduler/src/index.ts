@@ -293,12 +293,17 @@ mqttClient.on('message', async (topic, payload) => {
 
     // 2. Acuse de Recibo (ACK) emitido por el Nodo Actuador
     if (topic === 'PristinoPlant/Actuator_Controller/cmd/received') {
-      const parsed = JSON.parse(message)
-      const taskId = parsed.task_id
+      try {
+        const parsed = JSON.parse(message)
+        const taskId = parsed.task_id
 
-      if (taskId) {
-        // El modulo leyó formalmente y la encoló.
-        await recordTaskEvent(taskId, TaskStatus.ACKNOWLEDGED, 'Comandos recibidos y encolados por el Nodo Actuador.')
+        if (taskId) {
+          // El modulo leyó formalmente y la encoló.
+          await recordTaskEvent(taskId, TaskStatus.ACKNOWLEDGED, 'Comandos recibidos y encolados por el Nodo Actuador.')
+        }
+      } catch (e) {
+        // Ignorar de forma silenciosa comandos de auditoría crudos como "audit_health_on"
+        // ya que este tópico solo nos interesa para extraer el task_id de riegos.
       }
       return
     }
