@@ -303,7 +303,7 @@ mqttClient.on('message', async (topic, payload) => {
         })
 
         for (const task of interruptedTasks) {
-          let extraNotes = 'El Nodo Actuador perdió conexión durante una ventana crítica.'
+          let extraNotes = 'Interrumpida: El Nodo Actuador perdió conexión durante una ventana crítica.'
           let addedMinutes = 0
 
           if (task.actualStartAt && task.status === TaskStatus.IN_PROGRESS) {

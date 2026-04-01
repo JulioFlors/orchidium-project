@@ -81,7 +81,7 @@ export function DeviceDebugger() {
   const [connectivityLogs, setConnectivityLogs] = useState<DeviceLog[]>([])
   const [now, setNow] = useState(() => Date.now())
 
-  const [lastCommand, setLastCommand] = useState<string | null>(null)
+  const [pendingCommands, setPendingCommands] = useState<string[]>([])
   const [showServices, setShowServices] = useState(false)
   const [showTimeline, setShowTimeline] = useState(false)
   const [showHeartbeat, setShowHeartbeat] = useState(false)
@@ -95,9 +95,9 @@ export function DeviceDebugger() {
   const unifiedAuditTopic = `${selectedDevice.baseTopic}/audit`
   const auditStateTopic = `${selectedDevice.baseTopic}/audit/state`
 
-  // El estado de presencia de hardware y status general se envía integrado en el mensaje principal
+  // El estado de presencia de hardware y status general se envía integrado en el mensaje de error o estado de auditoría
   const hardwarePresence = useMemo(() => {
-    const msg = messages[statusTopic]
+    const msg = messages[auditStateTopic]
 
     if (!msg) return {}
 
@@ -119,7 +119,7 @@ export function DeviceDebugger() {
     } catch {
       return {}
     }
-  }, [messages, statusTopic])
+  }, [messages, auditStateTopic])
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 5000)
@@ -200,7 +200,17 @@ export function DeviceDebugger() {
   }, [hardwareAudits, showHeartbeat, showNvs])
 
   const connectionState = getStatus(statusTopic, selectedDevice.heartbeatTimeoutMs)
-  const receivedMsg = messages[topicReceived]?.payload
+  
+  const receivedMsgItem = messages[topicReceived]
+
+  // Limpiador automático del spool de comandos pendientes interceptando confirmaciones MQTT
+  useEffect(() => {
+    if (receivedMsgItem?.payload) {
+      setTimeout(() => {
+        setPendingCommands((prev) => prev.filter((cmd) => cmd !== String(receivedMsgItem.payload)))
+      }, 0)
+    }
+  }, [receivedMsgItem?.receivedAt, receivedMsgItem?.payload])
 
   const handleCommand = (cmd: string, auditKey: string | null) => {
     if (auditKey === 'heartbeat') {
@@ -215,7 +225,7 @@ export function DeviceDebugger() {
       setShowNvs(willShow)
       if (willShow) {
         publish(topicCmd, 'audit_nvs')
-        setLastCommand('audit_nvs')
+        setPendingCommands((prev) => Array.from(new Set([...prev, 'audit_nvs'])))
       }
 
       return
@@ -227,20 +237,22 @@ export function DeviceDebugger() {
       const toggleCmd = isCurrentlyActive ? `audit_${auditKey}_off` : `audit_${auditKey}_on`
 
       publish(topicCmd, toggleCmd)
-      setLastCommand(toggleCmd)
+      setPendingCommands((prev) => Array.from(new Set([...prev, toggleCmd])))
 
       return
     }
 
     publish(topicCmd, cmd)
-    setLastCommand(cmd)
-    if (cmd === 'reset') setTimeout(() => setLastCommand(null), 5000)
+    setPendingCommands((prev) => Array.from(new Set([...prev, cmd])))
+    if (cmd === 'reset') {
+      setTimeout(() => setPendingCommands((prev) => prev.filter((c) => c !== 'reset')), 5000)
+    }
   }
 
   const forceRefreshAudit = (auditKey: string) => {
     if (auditKey === 'nvs') publish(topicCmd, 'audit_nvs')
     else publish(topicCmd, `audit_${auditKey}_on`)
-    setLastCommand(`audit_${auditKey}_on`)
+    setPendingCommands((prev) => Array.from(new Set([...prev, `audit_${auditKey}_on`])))
   }
 
   const getDeviceLabel = (id: string) => {
@@ -262,7 +274,7 @@ export function DeviceDebugger() {
         zones={DEVICES.map((d) => d.id)}
         onZoneChanged={(id) => {
           setSelectedDeviceId(id)
-          setLastCommand(null)
+          setPendingCommands([])
         }}
       />
 
@@ -272,19 +284,7 @@ export function DeviceDebugger() {
         disableNVS={selectedDevice.hasMaskNvs}
         hardwarePresence={hardwarePresence}
         isOnline={connectionState === 'online'}
-        isPending={(cmd) => {
-          if (!lastCommand || lastCommand !== cmd) return false
-
-          // El ESP32 hace eco exacto del comando en topicReceived (v0.9.0)
-          if (String(receivedMsg) === cmd) return false
-
-          return true
-        }}
-        isSuccess={(cmd) => {
-          if (!lastCommand || lastCommand !== cmd) return false
-
-          return String(receivedMsg) === cmd
-        }}
+        isPending={(cmd) => pendingCommands.includes(cmd)}
         showServices={showServices}
         showTimeline={showTimeline}
         onCommand={handleCommand}

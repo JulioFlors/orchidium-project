@@ -119,7 +119,7 @@ function HistoryTaskCard({
           </div>
           <div className="text-secondary mt-1 flex items-center gap-2 text-[11px] font-medium opacity-60">
             <span>{sourceLabel}</span>
-            <span className="font-mono">#{task.id}</span>
+            <span className="font-mono">#{task.id.substring(0, 8)}</span>
           </div>
         </div>
 
@@ -335,7 +335,9 @@ export default function HistoryPage() {
         isLoading={isTimelineLoading}
         isOpen={!!selectedTask}
         taskName={
-          selectedTask ? `${TaskPurposeLabels[selectedTask.purpose]} #${selectedTask.id}` : ''
+          selectedTask
+            ? `${TaskPurposeLabels[selectedTask.purpose]} #${selectedTask.id.substring(0, 8)}`
+            : ''
         }
         onClose={() => setSelectedTask(null)}
       />

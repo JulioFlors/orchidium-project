@@ -24,43 +24,32 @@ interface ToolCardProps {
   label: string
   onClick: () => void
   pending?: boolean
-  success?: boolean
   active?: boolean // Latching effect
   disabled?: boolean
 }
 
-function ToolCard({ icon, label, onClick, pending, success, active, disabled }: ToolCardProps) {
+function ToolCard({ icon, label, onClick, pending, active, disabled }: ToolCardProps) {
   return (
     <Card
       className={clsx(
         'flex flex-col items-center justify-center gap-3 p-6 transition-all duration-300',
-        !pending && !success && !disabled
+        !pending && !disabled
           ? 'cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800'
           : 'cursor-wait',
-        success && 'cursor-not-allowed',
         active
           ? 'border-indigo-500 bg-indigo-500 text-white'
           : 'border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900',
         pending && 'border-indigo-500 ring-4 ring-indigo-500/10',
-        success && 'border-green-500 ring-4 ring-green-500/10',
         disabled && 'pointer-events-none cursor-not-allowed opacity-30 grayscale',
       )}
-      onClick={!pending && !success && !disabled ? onClick : undefined}
+      onClick={!pending && !disabled ? onClick : undefined}
     >
       <div className="relative">
-        <div className={clsx('text-3xl transition-all', (pending || success) && 'opacity-20')}>
-          {icon}
-        </div>
+        <div className={clsx('text-3xl transition-all', pending && 'opacity-20')}>{icon}</div>
 
         {pending && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
-          </div>
-        )}
-
-        {success && (
-          <div className="absolute inset-0 flex items-center justify-center text-2xl text-green-500">
-            <IoPulseOutline className="animate-bounce" />
           </div>
         )}
       </div>
@@ -88,7 +77,6 @@ interface ToolboxGridProps {
   onToggleTimeline: () => void
   onCommand: (cmd: string, auditId: string | null) => void
   isPending: (cmd: string) => boolean
-  isSuccess: (cmd: string) => boolean
   onToggleHeartbeat?: () => void
   hardwarePresence?: Record<string, boolean>
 }
@@ -103,7 +91,6 @@ export function ToolboxGrid({
   onToggleTimeline,
   onCommand,
   isPending,
-  isSuccess,
   hardwarePresence = {},
 }: ToolboxGridProps) {
   return (
@@ -132,7 +119,6 @@ export function ToolboxGrid({
         }
         label={hardwarePresence.lux === false ? 'Lux (Off)' : 'Lux Meter'}
         pending={isPending('audit_lux_on')}
-        success={isSuccess('audit_lux_on')}
         onClick={() => onCommand('audit_lux_on', 'lux')}
       />
 
@@ -144,7 +130,6 @@ export function ToolboxGrid({
         }
         label={hardwarePresence.rain === false ? 'Rain (Off)' : 'Rain Audit'}
         pending={isPending('audit_rain_on')}
-        success={isSuccess('audit_rain_on')}
         onClick={() => onCommand('audit_rain_on', 'rain')}
       />
 
@@ -158,7 +143,6 @@ export function ToolboxGrid({
         }
         label={hardwarePresence.pressure === false ? 'Pr (Off)' : 'Pressure'}
         pending={isPending('audit_pressure_on')}
-        success={isSuccess('audit_pressure_on')}
         onClick={() => onCommand('audit_pressure_on', 'pressure')}
       />
 
@@ -184,7 +168,6 @@ export function ToolboxGrid({
           }
           label="NVS Stack"
           pending={isPending('audit_nvs')}
-          success={isSuccess('audit_nvs')}
           onClick={() => onCommand('audit_nvs', 'nvs')}
         />
       )}
@@ -200,7 +183,6 @@ export function ToolboxGrid({
         }
         label="RAM Audit"
         pending={isPending('audit_ram_on')}
-        success={isSuccess('audit_ram_on')}
         onClick={() => onCommand('audit_ram_on', 'ram')}
       />
 
@@ -212,7 +194,6 @@ export function ToolboxGrid({
         }
         label="WiFi Audit"
         pending={isPending('audit_health_on')}
-        success={isSuccess('audit_health_on')}
         onClick={() => onCommand('audit_health_on', 'health')}
       />
 
@@ -244,8 +225,29 @@ export function AuditConsoleCard({
   onRefresh,
 }: AuditConsoleCardProps) {
   const accumulatorRef = useRef<Record<string, unknown>>({})
-  const [displayPayload, setDisplayPayload] = useState<unknown>(currentPayload)
 
+  // 1. Lazy Initializer (Evita renders en cascada y soluciona rule de React react-hooks/exhaustive-deps)
+  const [displayPayload, setDisplayPayload] = useState<unknown>(() => {
+    if (typeof window === 'undefined' || !activeAudit) return null
+
+    const isChartable = ['lux', 'rain', 'pressure'].includes(activeAudit)
+
+    if (isChartable) {
+      const cached = window.sessionStorage.getItem(`audit_history_${activeAudit}`)
+
+      if (cached) {
+        try {
+          return JSON.parse(cached)
+        } catch {
+          // Fallback silencioso
+        }
+      }
+    }
+
+    return null
+  })
+
+  // 2. Procesar payload entrante
   useEffect(() => {
     if (!currentPayload) return
 
@@ -281,12 +283,67 @@ export function AuditConsoleCard({
         // Error silencioso en parseo de chunks
       }
     } else {
-      // Para auditos estándar, solo guardamos si es diferente
-      setDisplayPayload(currentPayload)
+      const isChartable = ['lux', 'rain', 'pressure'].includes(activeAudit || '')
+
+      if (isChartable) {
+        setDisplayPayload((prev: unknown) => {
+          const prevPayload = (prev as { history?: unknown[] }) || { history: [] }
+          const incomingPayload = (currentPayload as { history?: unknown[] }) || { history: [] }
+
+          const prevHistory = prevPayload.history || []
+          const incomingHistory = incomingPayload.history || []
+
+          // Desduplicación por timestamp (el índice 0 de [ts, value])
+          const mergedMap = new Map<number | string, unknown>()
+
+          prevHistory.forEach((item) => {
+            const ts = Array.isArray(item) ? item[0] : null
+
+            if (ts) mergedMap.set(ts, item)
+          })
+
+          incomingHistory.forEach((item) => {
+            const ts = Array.isArray(item) ? item[0] : null
+
+            if (ts) mergedMap.set(ts, item)
+          })
+
+          // Extraer ordenados cronológicamente y limitar a 200 puntos (memoria)
+          const mergedHistory = Array.from(mergedMap.values())
+            .sort((a, b) => {
+              const tsA = Array.isArray(a) ? Number(a[0]) : 0
+              const tsB = Array.isArray(b) ? Number(b[0]) : 0
+
+              return tsA - tsB
+            })
+            .slice(-200)
+
+          const nextState = {
+            ...(incomingPayload as Record<string, unknown>),
+            history: mergedHistory,
+          }
+
+          if (typeof window !== 'undefined' && activeAudit) {
+            window.sessionStorage.setItem(`audit_history_${activeAudit}`, JSON.stringify(nextState))
+          }
+
+          return nextState
+        })
+      } else {
+        // Para auditorías estándar (salud, ram, etc.), se setea directo
+        setDisplayPayload(currentPayload)
+      }
     }
   }, [currentPayload, activeAudit])
 
   const handleClear = () => {
+    if (activeAudit && typeof window !== 'undefined') {
+      const isChartable = ['lux', 'rain', 'pressure'].includes(activeAudit)
+
+      if (isChartable) {
+        window.sessionStorage.removeItem(`audit_history_${activeAudit}`)
+      }
+    }
     setDisplayPayload(null)
   }
 
