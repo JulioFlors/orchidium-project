@@ -32,8 +32,11 @@ export const auth = betterAuth({
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: isVercel
     ? process.env.BETTER_AUTH_URL
-    : process.env.BETTER_AUTH_URL || 'http://localhost:3000',
+    : process.env.BETTER_AUTH_URL?.includes('localhost') ||
+        process.env.BETTER_AUTH_URL?.includes('192.168')
+      ? process.env.BETTER_AUTH_URL
+      : 'http://localhost:3000',
   trustedOrigins: isVercel
     ? []
-    : ['http://192.168.1.5:3000', 'http://192.168.0.20:3000', 'http://localhost:3000'],
+    : ['http://192.168.0.20:3000', 'http://192.168.0.227:3000', 'http://localhost:3000'],
 })

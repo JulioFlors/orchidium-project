@@ -2,7 +2,7 @@
 
 import type { User } from '@package/database'
 
-import { useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { IoPeopleOutline, IoSettingsOutline, IoBugOutline } from 'react-icons/io5'
 import clsx from 'clsx'
 
@@ -24,7 +24,23 @@ interface Props {
 type AdminView = 'users' | 'iot_debug'
 
 export function AdminDashboard({ user, users }: Props) {
-  const [currentView, setCurrentView] = useState<AdminView>('users')
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+
+  // Derivamos la vista actual del parámetro 'view' en la URL
+  const currentView = (searchParams.get('view') as AdminView) || 'users'
+
+  const setView = (view: AdminView) => {
+    const params = new URLSearchParams(searchParams.toString())
+
+    if (view === 'users') {
+      params.delete('view')
+    } else {
+      params.set('view', view)
+    }
+    router.replace(`${pathname}?${params.toString()}`)
+  }
 
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-4">
@@ -79,7 +95,7 @@ export function AdminDashboard({ user, users }: Props) {
               currentView === 'users' ? 'bg-surface/60 text-primary shadow-sm' : 'text-secondary',
             )}
             type="button"
-            onClick={() => setCurrentView('users')}
+            onClick={() => setView('users')}
           >
             <IoPeopleOutline size={20} />
             Gestión de Usuarios
@@ -93,7 +109,7 @@ export function AdminDashboard({ user, users }: Props) {
                 : 'text-secondary',
             )}
             type="button"
-            onClick={() => setCurrentView('iot_debug')}
+            onClick={() => setView('iot_debug')}
           >
             <IoBugOutline size={20} />
             Debugging IoT

@@ -551,6 +551,8 @@ async def boot_recovery_check():
                 if elapsed_offline > RECOVERY_WINDOW:
                     if DEBUG:
                         print(f"    └─ 🗑️  {Colors.YELLOW}Tarea Pausada (Vencida){Colors.RESET} ID:{actuator_id} (Offline: {elapsed_offline}s)")
+                    if actuator_id in relays:
+                        relays[actuator_id]['task_id'] = ""
                     NVSManager.clear_task(actuator_id)
                     continue
             
@@ -610,6 +612,8 @@ async def boot_recovery_check():
         else:
             if DEBUG:
                 print(f"    └─ 🗑️  {Colors.YELLOW}Tarea Vencida{Colors.RESET} ID:{actuator_id} (No reanudar)")
+            if actuator_id in relays:
+                relays[actuator_id]['task_id'] = ""
             NVSManager.clear_task(actuator_id)
 
     # ---- Escritura Física en Disco ----
@@ -1063,6 +1067,8 @@ async def mqtt_processor_task():
 
                             if actuator_id in pending_start_tasks:
                                 pending_start_tasks[actuator_id].cancel()
+                                if actuator_id in relays:
+                                    relays[actuator_id]['task_id'] = "" # Limpiamos ID de tarea tras cancelar delay
                                 NVSManager.clear_task(actuator_id)
                                 if not circuit_name: break
 
@@ -1080,6 +1086,7 @@ async def mqtt_processor_task():
                                 target_relay['task_id'] = cmd_task_id
                             
                             if cmd_state == "OFF":
+                                target_relay['task_id'] = "" # Limpiamos ID de tarea para snapshot unificado
                                 NVSManager.clear_task(actuator_id)
                                 # Gestión de variables globales
                                 global active_irrigation_timers
@@ -1756,6 +1763,7 @@ async def timer_manager_task():
                 if target_relay and target_relay['state'] == "ON":
                     target_relay['pin'].value(0) # Apaga el relé | active-HIGH
                     target_relay['state'] = "OFF" # Reestablece el state en el Diccionario de Relays
+                    target_relay['task_id'] = "" # Limpiamos ID de tarea para snapshot unificado
                     state_changed.set() # Notifica el cambio de estado
 
                     # Log del evento automático

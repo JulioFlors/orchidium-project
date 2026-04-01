@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
 
@@ -36,7 +37,9 @@ export default async function AdminPage() {
 
   return (
     <div className="mx-auto mt-8 max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      <AdminDashboard user={safeUser} users={users} />
+      <Suspense fallback={<div>Cargando</div>}>
+        <AdminDashboard user={safeUser} users={users} />
+      </Suspense>
     </div>
   )
 }
