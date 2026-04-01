@@ -10,7 +10,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     }
 
     // Leer el motivo de cancelación del body (opcional pero esperado)
-    let reason = 'Cancelada por el usuario.'
+    let reason = 'Tarea Cancelada por el Admin antes de iniciar'
 
     try {
       const body = await request.json()
@@ -26,7 +26,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       where: { id },
       data: {
         status: TaskStatus.CANCELLED,
-        cancellationReason: reason,
+        notes: reason,
       },
     })
 

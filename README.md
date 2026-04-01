@@ -560,30 +560,25 @@ cd pristinoplant
 
 El script interactivo se encargará de descargar la última versión, reconstruir exclusivamente las capas modificadas y reiniciar los servicios (como `ingest` y `scheduler`) minimizando cualquier tiempo de inactividad.
 
-#### 4. Mantenimiento de Datos y Reglas del Scheduler
+#### 4. Gestión y Mantenimiento de Base de Datos (Protocolo Local-to-Prod)
 
-Durante la administración de PristinoPlant en el servidor, frecuentemente surgirán dudas respecto a cómo interactuar con los comandos de Prisma y el ciclo de vida del contenedor Scheduler. Aquí tienes la guía definitiva:
+Para garantizar la seguridad de los datos de producción y evitar reseteos accidentales en el servidor, el sistema utiliza un modelo de **Gestión Remota**:
 
-* **Semillas y Borrado Forzado (`db:seed` / `db:push --force-reset`)**
-  Si en algún punto necesitas formatear la base de datos por terminal, las rutinas de la base de datos obtendrán nuevos identificadores UUID únicos. Dado que el Scheduler mantiene los CronJobs orquestados en la RAM atados a identificadores viejos, debes notificarle para que recargue y se vuelva a enlazar:
+* **Sincronización Automática (`db:deploy`)**:
+  Cada vez que ejecutas `./deploy.sh` en el VPS, se formaliza el historial de migraciones de forma segura. No borra datos ni requiere interacción.
 
-  ```bash
-  # reiniciar contenerdor tras hacer un db:seed o reset para cargar los nuevos datos.
-  docker compose --profile cloud restart scheduler
-  ```
+* **Administración (Solo desde Local)**:
+  Cualquier tarea de diseño, limpieza o población de datos debe ejecutarse desde tu entorno de desarrollo local, configurando la `DATABASE_URL` para que apunte al VPS:
+  1. **Migrar**: `pnpm db:migrate` (Aplica cambios de esquema).
+  2. **Resetear**: `pnpm db:reset` (Limpia la base de datos de producción). ⚠️
+  3. **Poblar**: `pnpm db:seed` (Inserta los datos iniciales).
 
-  *(No hace falta volver a ejecutar un "build" de la imagen).*
-
-* **Error P3005 al Desplegar (Desincronización de Migraciones)**
-  Si hiciste un borrado/reseteo forzado, la tabla interna `_prisma_migrations` se perdió. Cuando ejecutes `./deploy.sh` y respondas "SÍ" a las migraciones, Prisma intentará correrlas desde cero y chocará con las tablas que ya existen, arrojando el Error P3005. Tu BD no está rota.
-  Para arreglar esto y decirle a Prisma "acepta que la BD ya tiene esta estructura", debes resolver (baseline) la migración conflictiva que lance el error:
+* **Error P3005 (Sincronización)**:
+  Si tras un reseteo local Prisma no reconoce la base de datos en el VPS como sincronizada, marca la migración manualmente desde el VPS:
 
   ```bash
-  # Ejecuta esto en el VPS sustituyendo el nombre exacto de la carpeta de la migración que falló
-  docker compose --profile cloud run --rm scheduler pnpm --filter @package/database exec npx prisma migrate resolve --applied 20240316123000_init
+  docker compose run --rm scheduler pnpm --filter @package/database exec npx prisma migrate resolve --applied <NOMBRE_DE_LA_MIGRACION>
   ```
-
-  Una vez resuelto, podrás usar `db:deploy` normalmente en los despliegues futuros.
 
 #### 5. Operaciones Diarias y Monitoreo (Docker)
 

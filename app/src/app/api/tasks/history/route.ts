@@ -1,7 +1,11 @@
 import { NextResponse } from 'next/server'
 import { prisma, TaskStatus } from '@package/database'
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100)
+  const offset = parseInt(searchParams.get('offset') || '0')
+
   try {
     const tasks = await prisma.taskLog.findMany({
       where: {
@@ -20,7 +24,8 @@ export async function GET() {
       orderBy: {
         scheduledAt: 'desc', // Más recientes primero
       },
-      take: 50, // Para evitar sobrecargar la vista
+      take: limit,
+      skip: offset,
     })
 
     return NextResponse.json(tasks)

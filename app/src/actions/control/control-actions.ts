@@ -156,10 +156,7 @@ export async function confirmWaitingTasks(taskIds: string[]) {
 /**
  * Cierra manualmente un circuito y registra en el historial la intervención del usuario.
  */
-export async function cancelManualTask(
-  taskId: string,
-  notes: string = 'Cerrado manualmente desde el Centro de Control',
-) {
+export async function cancelManualTask(taskId: string, notes?: string) {
   try {
     let wasModified = false
 
@@ -177,12 +174,20 @@ export async function cancelManualTask(
       wasModified = true
 
       // 1. Marcar como cancelada
+      // Si la tarea estaba en PENDING/AUTHORIZED, usamos la nota proporcionada o una por defecto.
+      // Si estaba en IN_PROGRESS, usamos la nota específica solicitada por el usuario.
+      const finalNotes =
+        notes ||
+        (currentTask.status === 'IN_PROGRESS'
+          ? 'El Admin cerró el circuito desde el Centro de Control.'
+          : 'Tarea Cancelada por el Admin antes de iniciar')
+
       await tx.taskLog.update({
-        where: { id: taskId },
         data: {
           status: 'CANCELLED',
-          notes: notes,
+          notes: finalNotes,
         },
+        where: { id: taskId },
       })
 
       // 2. Auditoría
@@ -190,7 +195,7 @@ export async function cancelManualTask(
         data: {
           taskId: taskId,
           status: 'CANCELLED',
-          notes: notes,
+          notes: finalNotes,
         },
       })
     })

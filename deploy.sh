@@ -45,7 +45,7 @@ echo ""
 # -------------------------------------------------------------------
 # PASO 1: Sincronizar (Protegiendo infraestructura local)
 # -------------------------------------------------------------------
-echo -e "${CYAN}📡 [1/4] Sincronizando con origin/main${RESET}"
+echo -e "${CYAN}📡 [1/5] Sincronizando con origin/main${RESET}"
 echo ""
 git fetch origin main
 # PROTECCIÓN: Resetear el código pero sin tocar la carpeta de certificados y logs
@@ -58,25 +58,40 @@ echo -e "${GREEN}✅ Repositorio Sincronizado${RESET}"
 # PASO 2: Construir imágenes
 # -------------------------------------------------------------------
 echo ""
-echo -e "${CYAN}🏗️ [2/4] Construyendo imágenes${RESET}"
+echo -e "${CYAN}🏗️ [2/5] Construyendo imágenes${RESET}"
 docker compose build
+
 echo ""
 echo -e "${GREEN}✅ Imágenes construidas${RESET}"
 
 # -------------------------------------------------------------------
-# PASO 3: Levantar servicios
+# PASO 3: Sincronizar Base de Datos
 # -------------------------------------------------------------------
 echo ""
-echo -e "${CYAN}🚀 [3/4] Levantando servicios${RESET}"
+echo -e "${CYAN}🐘 [3/5] Sincronizando esquema de Base de Datos${RESET}"
+echo ""
+
+# Aplicamos migraciones pendientes de forma automática y segura
+# Este es un paso de formalización; el cambio real ya ocurrió en local
+docker compose run --rm scheduler pnpm --filter @package/database db:deploy
+
+echo ""
+echo -e "${GREEN}✅ Base de Datos Sincronizada${RESET}"
+
+# -------------------------------------------------------------------
+# PASO 4: Levantar servicios
+# -------------------------------------------------------------------
+echo ""
+echo -e "${CYAN}🚀 [4/5] Levantando servicios${RESET}"
 docker compose up -d --remove-orphans
 echo ""
 echo -e "${GREEN}✅ Servicios levantados${RESET}"
 
 # -------------------------------------------------------------------
-# PASO 4: Limpieza
+# PASO 5: Limpieza
 # -------------------------------------------------------------------
 echo ""
-echo -e "${YELLOW}🧹 [4/4] Limpiando imágenes y caché antigua${RESET}"
+echo -e "${YELLOW}🧹 [5/5] Limpiando imágenes y caché antigua${RESET}"
 
 # Borra imágenes colgantes
 docker image prune -f

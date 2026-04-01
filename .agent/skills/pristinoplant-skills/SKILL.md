@@ -118,4 +118,25 @@ Para mantener la limpieza y compatibilidad con linters (MD041, MD022, MD032, MD0
 3. **Espaciado de Listas**: Las listas (`-`, `1.`, `[ ]`) deben estar rodeadas por líneas en blanco.
 4. **Indentación de Listas**: Usar SIEMPRE **2 espacios** para sub-elementos. Nunca 4.
 5. **Sin Espacios al Final**: Prohibido dejar espacios en blanco al final de las líneas (Trailing spaces).
-6. **Encabezados Únicos**: No repetir el contenido de encabezados dentro del mismo documento.
+
+### Paso 9: Gestión de Base de Datos (Protocolo Local-to-Prod)
+
+Para garantizar la seguridad total de la base de datos de producción y evitar reseteos accidentales en el VPS, se establece un modelo de **Gestión Local-to-Prod**:
+
+1. **Gestión Administrativa (SOLO LOCAL)**:
+    - Toda operación "destructiva" o de población de datos debe realizarse desde tu PC local, apuntando a la `DATABASE_URL` del VPS.
+    - **`pnpm db:migrate`**: Para cambios estructurales (Genera SQL y actualiza el esquema en Prod).
+    - **`pnpm db:reset`**: Para limpiar la base de datos de producción (SIEMPRE desde local).
+    - **`pnpm db:seed`**: Para poblar la base de datos (SIEMPRE desde local).
+
+2. **Despliegue en VPS (Runtime Only)**:
+    - El VPS es exclusivamente para **ejecutar** los servicios. No debe realizar tareas administrativas de gestión de datos.
+    - **`pnpm db:deploy`**: Se ejecuta automáticamente mediante `deploy.sh`. Es un paso seguro que solo "formaliza" las migraciones ya aplicadas desde local.
+    - **PROHIBIDO**: No intentes ejecutar comandos de reset o seed dentro de los contenedores del VPS.
+
+3. **Flujo de Trabajo Seguro**:
+    - **Diseño**: Modificar `schema.prisma`.
+    - **Aplicación**: Ejecutar `pnpm db:migrate --name descriptive_name` en local.
+    - **Población**: Si es necesario, ejecutar `pnpm db:seed` en local para rellenar datos.
+    - **Distribución**: Commit del esquema y las migraciones SQL a `main`.
+    - **Despliegue**: Ejecutar `./deploy.sh` en el VPS para actualizar el código y el Prisma Client.

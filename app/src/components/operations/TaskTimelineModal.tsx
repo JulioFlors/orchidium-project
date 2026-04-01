@@ -75,7 +75,7 @@ export function TaskTimelineModal({
       {isLoading ? (
         <div className="flex flex-col items-center justify-center gap-3 py-12">
           <div className="border-primary h-6 w-6 animate-spin rounded-full border-2 border-t-transparent" />
-          <span className="text-secondary text-sm">Cargando eventos...</span>
+          <span className="text-secondary text-sm">Cargando eventos</span>
         </div>
       ) : events.length === 0 ? (
         <div className="text-secondary py-12 text-center text-sm italic">

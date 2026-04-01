@@ -340,7 +340,7 @@ export function ControlPanel() {
       <SmartDeviceHeader
         connectionState={connectionState}
         deviceDescription="Control directo sobre los actuadores del orquideario. Utilice estas herramientas para mantenimiento, pruebas o correcciones puntuales del microclima."
-        deviceName="Control de Actuadores"
+        deviceName="Centro de Control"
         gridClassName="grid-cols-1 gap-4 tds-sm:grid-cols-2 tds-lg:grid-cols-4"
         isLoadingStatus={isConnecting}
         selectedZone="ZONA_A"

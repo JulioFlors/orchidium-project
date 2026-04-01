@@ -2,7 +2,11 @@
 
 import prisma from '@package/database'
 
-export const getSearchSpeciesByTerm = async (searchTerm: string) => {
+export const getSearchSpeciesByTerm = async (
+  searchTerm: string,
+  limit: number = 20,
+  offset: number = 0,
+) => {
   // Normalizamos el término de búsqueda
   const SearchTerm = searchTerm.trim().toLowerCase()
 
@@ -13,6 +17,8 @@ export const getSearchSpeciesByTerm = async (searchTerm: string) => {
 
   try {
     const species = await prisma.species.findMany({
+      take: limit,
+      skip: offset,
       where: {
         // Usamos 'OR' para buscar en múltiples campos
         OR: [

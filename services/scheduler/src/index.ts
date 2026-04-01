@@ -85,58 +85,75 @@ const recentEvents = new Map<string, number>()
  */
 async function recordTaskEvent(taskId: string, status: TaskStatus, notes?: string, extraData: any = {}) {
   try {
-    // 🛡️ [Anti-Ráfagas / Debounce]
-    // Evita la duplicación concurrente provocada por múltiples relés de un mismo circuito
-    // encendiéndose y enviando MQTT exactamente al mismo milisegundo.
     const lockKey = `${taskId}_${status}`
     const now = Date.now()
-    if (recentEvents.has(lockKey) && (now - recentEvents.get(lockKey)!) < 2000) {
+    if (recentEvents.has(lockKey) && now - (recentEvents.get(lockKey) || 0) < 2000) {
       return null
     }
     recentEvents.set(lockKey, now)
 
     return await prisma.$transaction(async (tx) => {
-      // Comprobación de Idempotencia: ¿Ya estamos en ese estado?
       const currentTask = await tx.taskLog.findUnique({
         where: { id: taskId },
-        select: { status: true, notes: true }
+        select: { status: true, notes: true, actualStartAt: true },
       })
 
-      // Si el estado es exactamente el mismo, evaluamos si la semántica (notas) cambió.
-      // Si la nota es idéntica (ej. varios IN_PROGRESS de válvulas), omitimos el duplicado visual.
-      if (currentTask?.status === status) {
-        if (currentTask.notes === notes || status === TaskStatus.IN_PROGRESS) {
-          // Actualizamos el Log Principal silenciosamente (ej. para acumular minutos)
-          return await tx.taskLog.update({
-            where: { id: taskId },
-            data: {
-              notes,
-              ...extraData
-            }
-          })
+      const terminalStatuses: TaskStatus[] = [
+        TaskStatus.COMPLETED,
+        TaskStatus.CANCELLED,
+        TaskStatus.EXPIRED,
+        TaskStatus.SKIPPED,
+      ]
+
+      let shouldUpdateStatus = true
+      if (currentTask && terminalStatuses.includes(currentTask.status)) {
+        if (currentTask.status !== status) {
+          shouldUpdateStatus = false
         }
       }
 
-      // 1. Actualizar el log principal
-      const updated = await tx.taskLog.update({
-        where: { id: taskId },
-        data: {
-          status,
-          notes,
-          ...extraData
-        }
-      })
+      let resultRecord: any = currentTask
 
-      // 2. Crear la entrada en la bitácora de eventos para el Timeline
+      if (shouldUpdateStatus) {
+        if (currentTask?.status === status) {
+          if (currentTask.notes === notes || status === TaskStatus.IN_PROGRESS) {
+            resultRecord = await tx.taskLog.update({
+              where: { id: taskId },
+              data: { notes, ...extraData },
+            })
+          }
+        } else {
+          resultRecord = await tx.taskLog.update({
+            where: { id: taskId },
+            data: {
+              status,
+              notes,
+              executedAt:
+                status === TaskStatus.IN_PROGRESS && !currentTask?.actualStartAt
+                  ? new Date()
+                  : undefined,
+              ...extraData,
+            },
+          })
+        }
+      } else {
+        // Mantenemos el status principal terminal pero actualizamos notas/extraData (ej. duración real)
+        resultRecord = await tx.taskLog.update({
+          where: { id: taskId },
+          data: { notes, ...extraData },
+        })
+      }
+
+      // Registro SIEMPRE en la línea de tiempo para auditoría completa solicitada
       await tx.taskEventLog.create({
         data: {
           taskId,
           status,
-          notes
-        }
+          notes: notes || `Evento: ${status}`,
+        },
       })
 
-      return updated
+      return resultRecord
     })
   } catch (err) {
     Logger.error(`Error persistiendo evento ${status} para tarea ${taskId.slice(0, 8)}:`, err)
@@ -348,10 +365,10 @@ mqttClient.on('message', async (topic, payload) => {
         else if (state === 'OFF') {
         // Si viene un taskId explícito, sabemos exactamente qué tarea finalizó.
           if (taskId) {
-           // Obtener el log de la tarea para calcular el tiempo real ejecutado
+            // 🛡️ Obtener el log de la tarea para validar estado y calcular el tiempo real
             const currentTask = await prisma.taskLog.findUnique({
               where: { id: taskId },
-              select: { actualStartAt: true, duration: true }
+              select: { status: true, actualStartAt: true, duration: true, purpose: true },
             })
 
             let completedMinutes = currentTask?.duration || 0
@@ -360,10 +377,17 @@ mqttClient.on('message', async (topic, payload) => {
               completedMinutes = Math.floor(elapsedMs / 60000)
             }
 
-            const finished = await recordTaskEvent(taskId, TaskStatus.COMPLETED, 'Circuito de Riego cerrado.', {
-              completedMinutes: { set: completedMinutes }
-            })
-            if (finished) Logger.success(`Tarea ${taskId.slice(0, 8)} COMPLETED (${completedMinutes} min) [via ${name}]`)
+            const finished = await recordTaskEvent(
+              taskId,
+              TaskStatus.COMPLETED,
+              'Circuito de Riego cerrado correctamente.',
+              { completedMinutes: { set: completedMinutes } },
+            )
+
+            if (finished) {
+              const purposeLabel = currentTask?.purpose || 'Tarea'
+              Logger.success(`${purposeLabel} ${taskId.slice(0, 8)} FINISHED (${completedMinutes} min)`)
+            }
           } 
           else if (name === 'pump' || topic.endsWith('/pump')) {
             const hoursAgo = new Date(Date.now() - 2 * 3600000)
@@ -588,7 +612,7 @@ async function runTask(scheduleId: string) {
         source: 'ROUTINE',
         scheduledAt: new Date(),
         duration: schedule.durationMinutes,
-        ...(cancelReason ? { cancellationReason: cancelReason } : {})
+        ...(cancelReason ? { notes: cancelReason } : {})
       }
     })
 

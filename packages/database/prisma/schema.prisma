@@ -364,7 +364,6 @@ model TaskLog {
   actualStartAt      DateTime? // Timestamp de cuando el relé se abrió realmente
   completedMinutes   Int         @default(0) // Tiempo efectivo acumulado (en min)
   notes              String?
-  cancellationReason String?
 
   agrochemical   Agrochemical? @relation(fields: [agrochemicalId], references: [id])
   agrochemicalId String?
