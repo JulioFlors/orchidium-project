@@ -22,12 +22,25 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       // Body vacío o no JSON — usar motivo por defecto
     }
 
-    const updatedTask = await prisma.taskLog.update({
-      where: { id },
-      data: {
-        status: TaskStatus.CANCELLED,
-        notes: reason,
-      },
+    const updatedTask = await prisma.$transaction(async (tx) => {
+      const task = await tx.taskLog.update({
+        where: { id },
+        data: {
+          status: TaskStatus.CANCELLED,
+          notes: reason,
+        },
+      })
+
+      // Registrar el evento de cancelación en la línea de tiempo
+      await tx.taskEventLog.create({
+        data: {
+          taskId: id,
+          status: TaskStatus.CANCELLED,
+          notes: reason,
+        },
+      })
+
+      return task
     })
 
     return NextResponse.json(updatedTask)

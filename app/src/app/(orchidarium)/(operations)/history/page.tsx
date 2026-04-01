@@ -263,17 +263,17 @@ export default function HistoryPage() {
     [tasks],
   )
 
-  // Solo refrescamos la primera página cada 10s si hay actividad
-  useSWR(hasActiveTasks ? getKey(0, []) : null, fetcher, {
-    refreshInterval: 10000,
+  // 4. Refresh adaptativo para la primera página
+  // Mantener refresco constante: 10s si hay actividad, 60s en reposo (evita UI estática)
+  useSWR(getKey(0, []), fetcher, {
+    refreshInterval: hasActiveTasks ? 10000 : 60000,
     onSuccess: (newData) => {
       // Actualizar la primera página de Infinite SWR
       if (pages) {
         const newPages = [...pages]
 
         newPages[0] = newData
-        // SWRInfinite se actualizará si detecta cambios mutados,
-        // pero aquí confiamos en el revalidate automático de la página 0.
+        // SWRInfinite se actualizará si detecta cambios mutados
       }
     },
   })
