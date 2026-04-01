@@ -2,9 +2,9 @@
 # Relay Modules: Actuator Controller Firmware.
 # Descripción: Firmware dedicado para el control de las electroválvulas, la bomba
 #              y la estación meteorológica exterior (lluvia, iluminancia, presión).
-# Versión: v0.8.1
-# notes_release: [🛡️ Hotfix Seguridad]: Corrección del deadlock en el gestor de tiempos (Timer Manager) inyectando eventos de despertado en cada inicio de riego && [👁️ Visibilidad]: Sincronización optimizada de tareas diferidas.
-# Fecha: 1-04-2026
+# Versión: v0.8.2
+# notes_release: [🛡️ Consistencia]: Unificación de la limpieza de task_id en RAM y NVS para evitar reportes de estado obsoletos en snapshots MQTT.
+# Fecha: 01-04-2026
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib.
