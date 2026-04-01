@@ -2,9 +2,9 @@
 # Relay Modules: Actuator Controller Firmware.
 # Descripción: Firmware dedicado para el control de las electroválvulas, la bomba
 #              y la estación meteorológica exterior (lluvia, iluminancia, presión).
-# Versión: v0.8.0
-# notes_release: Meteorológica Pro 🌧️ (FSM lluvia 20 muestras + illuminance_Batch 10 min), Optimización RAM 🧠 (Lazy Imports + const() extendido) y Auditoría Remota 📡 (Dump paginado de NVS vía MQTT para diagnóstico sin cables).
-# Fecha: 29-03-2026
+# Versión: v0.8.1
+# notes_release: [🛡️ Hotfix Seguridad]: Corrección del deadlock en el gestor de tiempos (Timer Manager) inyectando eventos de despertado en cada inicio de riego && [👁️ Visibilidad]: Sincronización optimizada de tareas diferidas.
+# Fecha: 1-04-2026
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib.
@@ -1091,6 +1091,7 @@ async def mqtt_processor_task():
                                 active_irrigation_timers = [(id, t) for id, t in active_irrigation_timers if id != actuator_id]
                                 active_irrigation_timers.append((actuator_id, end_time))
                                 NVSManager.save_task({"actuator_id": actuator_id, "start_epoch": time(), "duration": cmd_duration, "type": "irrigation_run", "task_id": cmd_task_id})
+                                timer_wake_event.set() # Sincronizar despertador de timers
 
                         state_changed.set()
                         NVSManager.flush()
@@ -1697,6 +1698,7 @@ async def delayed_start_task(target_relay, actuator_id, delay, duration, task_id
             ]
 
             active_irrigation_timers.append((actuator_id, end_time))
+            timer_wake_event.set() # Despertar gestor de tiempos tras inicio diferido
 
             if DEBUG:
                 print(f"    └─ Timer:    Apagar en {Colors.CYAN}{duration}s{Colors.RESET}")

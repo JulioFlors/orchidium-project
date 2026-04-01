@@ -1,9 +1,9 @@
 {
   "name": "Relay Modules",
   "description": "Nodo Actuador + Meteorológica Exterior",
-  "version": "0.8.0",
-  "date": "29-03-2026",
-  "notes_release": "Meteorológica Pro 🌧️: FSM de lluvia (20 muestras) e illuminance_Batch (Lote 10 min). Optimización RAM 🧠: Implementación agresiva de Lazy Imports y const(). Auditoría Remota NVS 📡: Dump de recovery.json vía MQTT (vía chunks) para diagnóstico sin cables.",
+  "version": "0.8.1",
+  "date": "01-04-2026",
+  "notes_release": "[🛡️ Hotfix Seguridad]: Corrección del deadlock en el gestor de tiempos (Timer Manager) inyectando eventos de despertado en cada inicio de riego && [👁️ Visibilidad]: Sincronización optimizada de tareas diferidas.",
   "files": [
     "main.py",
     "app.mpy"

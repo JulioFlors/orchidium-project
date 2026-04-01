@@ -11,6 +11,7 @@ export async function GET(request: Request) {
       where: {
         status: {
           in: [
+            TaskStatus.PENDING,
             TaskStatus.CONFIRMED,
             TaskStatus.IN_PROGRESS,
             TaskStatus.COMPLETED,
@@ -18,6 +19,9 @@ export async function GET(request: Request) {
             TaskStatus.EXPIRED,
             TaskStatus.CANCELLED,
             TaskStatus.SKIPPED,
+            TaskStatus.DISPATCHED,
+            TaskStatus.ACKNOWLEDGED,
+            TaskStatus.WAITING_CONFIRMATION,
           ],
         },
       },
