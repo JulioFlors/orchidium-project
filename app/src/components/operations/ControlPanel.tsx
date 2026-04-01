@@ -293,11 +293,8 @@ export function ControlPanel() {
       const activeTaskId = getCircuitActiveTaskId(circuit)
 
       if (activeTaskId) {
-        // Cancelamos formalmente inyectando el motivo
-        await cancelManualTask(
-          activeTaskId,
-          'El usuario cerró el circuito manualmente desde la web.',
-        )
+        // Cancelamos formalmente delegando la lógica de la nota a la Server Action
+        await cancelManualTask(activeTaskId)
         taskId = activeTaskId // Retornamos el mismo ID al ESP32 para su limpieza local
       }
     }

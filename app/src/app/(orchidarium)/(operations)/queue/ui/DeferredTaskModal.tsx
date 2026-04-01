@@ -102,7 +102,11 @@ export function DeferredTaskModal({ isOpen, onClose, onSubmitSuccess }: Props) {
                   : 'border-input-outline',
               )}
               id="scheduledAt"
-              min={new Date().toISOString().slice(0, 16)}
+              // Ajuste de Zona Horaria: toISOString() devuelve UTC (Londres).
+              // Restamos el desfase local (en ms) para obtener una cadena ISO que represente la hora local real del usuario.
+              min={new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000)
+                .toISOString()
+                .slice(0, 16)}
               type="datetime-local"
               {...register('scheduledAt')}
             />
