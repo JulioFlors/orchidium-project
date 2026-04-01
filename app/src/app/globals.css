@@ -184,16 +184,6 @@
   }
 }
 
-@layer components {
-
-  /* Estabilización de HistoryCard para evitar errores de parseo en Turbopack v4 */
-  .history-card-technical {
-    @container (width < 650px) {
-      flex-direction: column !important;
-    }
-  }
-}
-
 @layer utilities {
 
   .hyphens-auto {

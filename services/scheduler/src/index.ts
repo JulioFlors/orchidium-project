@@ -98,6 +98,11 @@ async function recordTaskEvent(taskId: string, status: TaskStatus, notes?: strin
         select: { status: true, notes: true, actualStartAt: true },
       })
 
+      if (!currentTask) {
+        Logger.warn(`Se recibió evento ${status} para tarea inexistente: ${taskId.slice(0, 8)}`)
+        return null
+      }
+
       const terminalStatuses: TaskStatus[] = [
         TaskStatus.COMPLETED,
         TaskStatus.CANCELLED,
@@ -105,8 +110,17 @@ async function recordTaskEvent(taskId: string, status: TaskStatus, notes?: strin
         TaskStatus.SKIPPED,
       ]
 
+      const isCurrentTerminal = terminalStatuses.includes(currentTask.status)
+      const isNewTerminal = terminalStatuses.includes(status)
+      const isStatusChange = currentTask.status !== status
+
+      // 🛡️ Bloqueo de Eventos Tardíos: No permitir que eventos de "proceso" (ACK, ON) resuciten tareas terminadas
+      if (isCurrentTerminal && !isNewTerminal) {
+        return null
+      }
+
       let shouldUpdateStatus = true
-      if (currentTask && terminalStatuses.includes(currentTask.status)) {
+      if (isCurrentTerminal) {
         if (currentTask.status !== status) {
           shouldUpdateStatus = false
         }
@@ -115,7 +129,7 @@ async function recordTaskEvent(taskId: string, status: TaskStatus, notes?: strin
       let resultRecord: any = currentTask
 
       if (shouldUpdateStatus) {
-        if (currentTask?.status === status) {
+        if (currentTask.status === status) {
           if (currentTask.notes === notes || status === TaskStatus.IN_PROGRESS) {
             resultRecord = await tx.taskLog.update({
               where: { id: taskId },
@@ -129,7 +143,7 @@ async function recordTaskEvent(taskId: string, status: TaskStatus, notes?: strin
               status,
               notes,
               executedAt:
-                status === TaskStatus.IN_PROGRESS && !currentTask?.actualStartAt
+                status === TaskStatus.IN_PROGRESS && !currentTask.actualStartAt
                   ? new Date()
                   : undefined,
               ...extraData,
@@ -137,21 +151,23 @@ async function recordTaskEvent(taskId: string, status: TaskStatus, notes?: strin
           })
         }
       } else {
-        // Mantenemos el status principal terminal pero actualizamos notas/extraData (ej. duración real)
+        // En estado terminal, solo permitimos actualizaciones sutiles (ej: duración real) sin cambiar el status.
         resultRecord = await tx.taskLog.update({
           where: { id: taskId },
           data: { notes, ...extraData },
         })
       }
 
-      // Registro SIEMPRE en la línea de tiempo para auditoría completa solicitada
-      await tx.taskEventLog.create({
-        data: {
-          taskId,
-          status,
-          notes: notes || `Evento: ${status}`,
-        },
-      })
+      // 🛡️ Registro Atómico en la Línea de Tiempo: SOLO si hay un cambio real de estado
+      if (isStatusChange) {
+        await tx.taskEventLog.create({
+          data: {
+            taskId,
+            status,
+            notes: notes || `Evento: ${status}`,
+          },
+        })
+      }
 
       return resultRecord
     })
@@ -671,8 +687,8 @@ async function checkPendingTasks() {
 
     if (expired.count > 0) Logger.warn(`🗑️ ${expired.count} tarea(s) expirada(s) auto-canceladas.`)
 
-    // 3. Auto-fallar tareas DISPATCHED sin ACK (Timeout de 2 min)
-    const ackTimeout = new Date(Date.now() - 2 * 60000)
+    // 3. Auto-fallar tareas DISPATCHED sin ACK (Timeout de 5 min)
+    const ackTimeout = new Date(Date.now() - 5 * 60000)
     const stuckDispatched = await prisma.taskLog.findMany({
       where: {
         status: TaskStatus.DISPATCHED,

@@ -90,7 +90,7 @@ function HistoryTaskCard({
 
   return (
     <motion.div
-      className="tds-sm:items-center tds-sm:gap-6 tds-sm:px-6 bg-surface border-input-outline group hover:bg-hover-overlay @container relative flex cursor-pointer flex-row gap-4 rounded-xl border p-4 shadow-sm transition-all"
+      className="tds-sm:items-center tds-sm:gap-6 tds-sm:px-6 bg-surface border-input-outline group hover:bg-hover-overlay relative flex cursor-pointer flex-row gap-4 rounded-xl border p-4 shadow-sm transition-all"
       whileHover={{ y: -1 }}
       whileTap={{ scale: 0.99 }}
       onClick={() => onClick(task)}
@@ -124,7 +124,7 @@ function HistoryTaskCard({
         </div>
 
         {/* Columna Derecha: Metadatos Técnicos (Colapso por Container Query) */}
-        <div className="history-card-technical tds-sm:items-end tds-sm:border-0 tds-sm:pt-0 flex flex-col gap-2 border-t border-dashed border-white/5 pt-3">
+        <div className="tds-sm:items-end tds-sm:border-0 tds-sm:pt-0 flex flex-col gap-2 border-t border-dashed border-white/5 pt-3">
           {/* Bloque Superior/Horizontal: Datos de Ejecución */}
           <div className="tds-sm:justify-end flex flex-row flex-wrap items-center gap-x-6 gap-y-2">
             {/* Bloque A: Zonas y Duración */}
