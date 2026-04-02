@@ -159,8 +159,16 @@ function HistoryTaskCard({
               {/* Hora de Inicio */}
               <div className="text-primary flex items-center gap-1.5 font-mono text-xs font-bold tracking-tighter whitespace-nowrap">
                 <IoTimeOutline className="h-3.5 w-3.5 opacity-40" />
-                <span className={clsx(!task.executedAt && 'opacity-30')}>
-                  {new Date(task.executedAt || task.scheduledAt).toLocaleTimeString('es-VE', {
+                <span
+                  className={clsx(
+                    ['PENDING', 'WAITING_CONFIRMATION'].includes(task.status) && 'opacity-30',
+                  )}
+                >
+                  {new Date(
+                    (['PENDING', 'WAITING_CONFIRMATION'].includes(task.status)
+                      ? task.scheduledAt
+                      : task.executedAt) || task.scheduledAt,
+                  ).toLocaleTimeString('es-VE', {
                     hour: '2-digit',
                     minute: '2-digit',
                     hour12: true,
@@ -200,6 +208,7 @@ export default function HistoryPage() {
   const {
     data: pages,
     setSize,
+    mutate,
     isLoading,
     isValidating,
   } = useSWRInfinite<HistoryTask[]>(getKey, fetcher, {
@@ -273,7 +282,7 @@ export default function HistoryPage() {
         const newPages = [...pages]
 
         newPages[0] = newData
-        // SWRInfinite se actualizará si detecta cambios mutados
+        mutate(newPages, { revalidate: false })
       }
     },
   })

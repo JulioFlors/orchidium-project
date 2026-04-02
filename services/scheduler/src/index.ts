@@ -404,17 +404,6 @@ mqttClient.on('message', async (topic, payload) => {
               const purposeLabel = currentTask?.purpose || 'Tarea'
               Logger.success(`${purposeLabel} ${taskId.slice(0, 8)} FINISHED (${completedMinutes} min)`)
             }
-          } 
-          else if (name === 'pump' || topic.endsWith('/pump')) {
-            const hoursAgo = new Date(Date.now() - 2 * 3600000)
-            const finished = await prisma.taskLog.updateMany({
-              where: { 
-                status: TaskStatus.IN_PROGRESS,
-                scheduledAt: { gte: hoursAgo }
-              },
-              data: { status: TaskStatus.COMPLETED, notes: 'Circuito cerrado (Snapshot Pump).' }
-            })
-            if (finished.count > 0) Logger.success('Tareas catalogadas vía Bomba (Snapshot)')
           }
         }
       }
