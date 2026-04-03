@@ -404,6 +404,20 @@ mqttClient.on('message', async (topic, payload) => {
               const purposeLabel = currentTask?.purpose || 'Tarea'
               Logger.success(`${purposeLabel} ${taskId.slice(0, 8)} FINISHED (${completedMinutes} min)`)
             }
+          } 
+          else {
+            // Caso: Relé se apagó pero no recibimos task_id en el snapshot.
+            // Si el relé es 'pump' (Bomba), y tenemos tareas IN_PROGRESS, reportamos el bypass.
+            if (name === 'pump') {
+               const hoursAgo = new Date(Date.now() - 2 * 3600000)
+               const activeInDb = await prisma.taskLog.findMany({
+                 where: { status: TaskStatus.IN_PROGRESS, scheduledAt: { gte: hoursAgo } }
+               })
+
+               if (activeInDb.length > 0) {
+                 Logger.warn(`⚠️ [SNAPSHOT] Bomba OFF sin TaskID. Manteniendo tareas en IN_PROGRESS (Esperando SLA o ACK de válvulas).`)
+               }
+            }
           }
         }
       }

@@ -1,9 +1,9 @@
 {
   "name": "Relay Modules",
   "description": "Nodo Actuador + Meteorológica Exterior",
-  "version": "0.8.2",
-  "date": "01-04-2026",
-  "notes_release": "[🛡️ Consistencia]: Unificación de la limpieza de task_id en RAM y NVS para evitar reportes de estado obsoletos en snapshots MQTT.",
+  "version": "0.8.3",
+  "date": "02-04-2026",
+  "notes_release": "[⚙️ Robustez MQTT]: El Nodo ahora retiene las IDs de tareas en snapshots de apagado, garantizando que el Scheduler reciba la confirmación de finalización.",
   "files": [
     "app.mpy",
     "main.py"

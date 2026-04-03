@@ -2,9 +2,9 @@
 # Relay Modules: Actuator Controller Firmware.
 # Descripción: Firmware dedicado para el control de las electroválvulas, la bomba
 #              y la estación meteorológica exterior (lluvia, iluminancia, presión).
-# Versión: v0.8.2
-# notes_release: [🛡️ Consistencia]: Unificación de la limpieza de task_id en RAM y NVS para evitar reportes de estado obsoletos en snapshots MQTT.
-# Fecha: 01-04-2026
+# Versión: v0.8.3
+# notes_release: [⚙️ Robustez MQTT]: Retención de Task ID en snapshots de apagado para asegurar la sincronía del Scheduler.
+# Fecha: 02-04-2026
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib.
@@ -1086,7 +1086,6 @@ async def mqtt_processor_task():
                                 target_relay['task_id'] = cmd_task_id
                             
                             if cmd_state == "OFF":
-                                target_relay['task_id'] = "" # Limpiamos ID de tarea para snapshot unificado
                                 NVSManager.clear_task(actuator_id)
                                 # Gestión de variables globales
                                 global active_irrigation_timers
@@ -1763,7 +1762,6 @@ async def timer_manager_task():
                 if target_relay and target_relay['state'] == "ON":
                     target_relay['pin'].value(0) # Apaga el relé | active-HIGH
                     target_relay['state'] = "OFF" # Reestablece el state en el Diccionario de Relays
-                    target_relay['task_id'] = "" # Limpiamos ID de tarea para snapshot unificado
                     state_changed.set() # Notifica el cambio de estado
 
                     # Log del evento automático
@@ -1848,6 +1846,10 @@ async def state_publisher_task():
             # Marcamos como publicadas
             for relay_info in updates_pending:
                 relay_info['last_published_state'] = relay_info['state']
+                # [Smart Cleanup]: Si el relé se apagó, ahora sí limpiamos su ID de la RAM 
+                # tras habernos asegurado de que se envió al Broker/Scheduler en el snapshot.
+                if relay_info['state'] == 'OFF':
+                    relay_info['task_id'] = ""
             
             if DEBUG: print(f"    └─ {Colors.GREEN}Snapshot Unificado Enviado{Colors.RESET}")
 
