@@ -353,17 +353,17 @@ model AutomationSchedule {
 }
 
 model TaskLog {
-  id                 String      @id @default(uuid())
-  scheduledAt        DateTime
-  executedAt         DateTime    @default(now())
-  status             TaskStatus  @default(PENDING)
-  source             TaskSource  @default(MANUAL)
-  purpose            TaskPurpose
-  zones              ZoneType[]
-  duration           Int
-  actualStartAt      DateTime? // Timestamp de cuando el relé se abrió realmente
-  completedMinutes   Int         @default(0) // Tiempo efectivo acumulado (en min)
-  notes              String?
+  id               String      @id @default(uuid())
+  scheduledAt      DateTime
+  executedAt       DateTime    @default(now())
+  status           TaskStatus  @default(PENDING)
+  source           TaskSource  @default(MANUAL)
+  purpose          TaskPurpose
+  zones            ZoneType[]
+  duration         Int
+  actualStartAt    DateTime? // Timestamp de cuando el relé se abrió realmente
+  completedMinutes Int         @default(0) // Tiempo efectivo acumulado (en min)
+  notes            String?
 
   agrochemical   Agrochemical? @relation(fields: [agrochemicalId], references: [id])
   agrochemicalId String?
@@ -405,8 +405,8 @@ model DailyEnvironmentStat {
   minHumidity Float
   maxHumidity Float
 
-  avgIlluminance  Float
-  maxIlluminance  Float
+  avgIlluminance     Float
+  maxIlluminance     Float
   lightDurationHours Float
 
   totalRainDuration Int
@@ -429,6 +429,19 @@ model DeviceLog {
 
   @@index([device])
   @@index([timestamp])
+}
+
+// ---- Snapshots de Auditoría IoT (TTL 7 días) ---- //
+
+model AuditSnapshot {
+  id        String   @id @default(uuid())
+  device    String // 'actuator' | 'sensors'
+  category  String // 'lux' | 'rain' | 'pressure' | 'ram' | 'health'
+  data      Json // Payload completo del snapshot
+  createdAt DateTime @default(now())
+
+  @@index([device, category])
+  @@index([createdAt])
 }
 
 // ---- Inteligencia Climática (WeatherGuard) ---- //

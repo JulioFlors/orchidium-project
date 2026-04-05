@@ -13,22 +13,107 @@ import {
   IoTrashOutline,
 } from 'react-icons/io5'
 import { IoIosRefresh } from 'react-icons/io'
-import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts'
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import clsx from 'clsx'
 
 import { Card } from '@/components'
+
+// ---- Mapa de Colores por Herramienta ----
+// Cada key corresponde al identificador único de la herramienta/auditoría.
+// Se propaga al fondo, borde y anillo de la ToolCard cuando está activa.
+const TOOL_COLORS: Record<string, { bg: string; ring: string; border: string; icon: string }> = {
+  services: {
+    bg: 'bg-indigo-500',
+    ring: 'ring-indigo-500/10',
+    border: 'border-indigo-500',
+    icon: 'text-indigo-400',
+  },
+  timeline: {
+    bg: 'bg-slate-600',
+    ring: 'ring-slate-600/10',
+    border: 'border-slate-600',
+    icon: 'text-slate-400',
+  },
+  lux: {
+    bg: 'bg-cyan-500',
+    ring: 'ring-cyan-500/10',
+    border: 'border-cyan-500',
+    icon: 'text-cyan-500',
+  },
+  rain: {
+    bg: 'bg-blue-500',
+    ring: 'ring-blue-500/10',
+    border: 'border-blue-500',
+    icon: 'text-blue-500',
+  },
+  pressure: {
+    bg: 'bg-purple-500',
+    ring: 'ring-purple-500/10',
+    border: 'border-purple-500',
+    icon: 'text-purple-500',
+  },
+  heartbeat: {
+    bg: 'bg-red-500',
+    ring: 'ring-red-500/10',
+    border: 'border-red-500',
+    icon: 'text-red-500',
+  },
+  nvs: {
+    bg: 'bg-amber-500',
+    ring: 'ring-amber-500/10',
+    border: 'border-amber-500',
+    icon: 'text-amber-500',
+  },
+  ram: {
+    bg: 'bg-zinc-600',
+    ring: 'ring-zinc-600/10',
+    border: 'border-zinc-600',
+    icon: 'text-zinc-500',
+  },
+  health: {
+    bg: 'bg-emerald-500',
+    ring: 'ring-emerald-500/10',
+    border: 'border-emerald-500',
+    icon: 'text-emerald-500',
+  },
+}
+
+// Colores de trazo para las gráficas de auditoría (coinciden con TOOL_COLORS)
+const AUDIT_CHART_COLORS: Record<string, string> = {
+  lux: '#eab308', // yellow-500
+  rain: '#3b82f6', // blue-500
+  pressure: '#a855f7', // purple-500
+}
+
+const fallbackColor = {
+  bg: 'bg-indigo-500',
+  ring: 'ring-indigo-500/10',
+  border: 'border-indigo-500',
+  icon: 'text-indigo-400',
+}
 
 // --- Micro-Componente: Herramienta Individual (Card) ---
 interface ToolCardProps {
   icon: React.ReactNode
   label: string
+  colorKey: string
   onClick: () => void
   pending?: boolean
-  active?: boolean // Latching effect
+  active?: boolean
   disabled?: boolean
 }
 
-function ToolCard({ icon, label, onClick, pending, active, disabled }: ToolCardProps) {
+function ToolCard({ icon, label, colorKey, onClick, pending, active, disabled }: ToolCardProps) {
+  const colors = TOOL_COLORS[colorKey] || fallbackColor
+
   return (
     <Card
       className={clsx(
@@ -37,9 +122,9 @@ function ToolCard({ icon, label, onClick, pending, active, disabled }: ToolCardP
           ? 'cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-800'
           : 'cursor-wait',
         active
-          ? 'border-indigo-500 bg-indigo-500 text-white'
+          ? `${colors.bg} ${colors.border} text-white`
           : 'border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900',
-        pending && 'border-indigo-500 ring-4 ring-indigo-500/10',
+        pending && `${colors.border} ring-4 ${colors.ring}`,
         disabled && 'pointer-events-none cursor-not-allowed opacity-30 grayscale',
       )}
       onClick={!pending && !disabled ? onClick : undefined}
@@ -66,7 +151,7 @@ function ToolCard({ icon, label, onClick, pending, active, disabled }: ToolCardP
   )
 }
 
-// --- Toolbox Grid (V2.1.0: Mínimo 2 columnas siempre) ---
+// --- Toolbox Grid ---
 interface ToolboxGridProps {
   isOnline: boolean
   disableNVS?: boolean
@@ -98,14 +183,16 @@ export function ToolboxGrid({
       {/* Botones de Widget (Latching) */}
       <ToolCard
         active={showServices}
-        icon={<IoServerOutline className={clsx(!showServices && 'text-indigo-400')} />}
+        colorKey="services"
+        icon={<IoServerOutline className={clsx(!showServices && TOOL_COLORS.services.icon)} />}
         label="Servicios"
         onClick={onToggleServices}
       />
 
       <ToolCard
         active={showTimeline}
-        icon={<IoTimeOutline className={clsx(!showTimeline && 'text-indigo-400')} />}
+        colorKey="timeline"
+        icon={<IoTimeOutline className={clsx(!showTimeline && TOOL_COLORS.timeline.icon)} />}
         label="Timeline"
         onClick={onToggleTimeline}
       />
@@ -113,9 +200,12 @@ export function ToolboxGrid({
       {/* Herramientas Diagnostic (ESP32) */}
       <ToolCard
         active={activeAudits.includes('lux')}
+        colorKey="lux"
         disabled={!isOnline || hardwarePresence.lux === false}
         icon={
-          <IoSearchOutline className={clsx(!activeAudits.includes('lux') && 'text-cyan-500')} />
+          <IoSearchOutline
+            className={clsx(!activeAudits.includes('lux') && TOOL_COLORS.lux.icon)}
+          />
         }
         label={hardwarePresence.lux === false ? 'Lux (Off)' : 'Lux Meter'}
         pending={isPending('audit_lux_on')}
@@ -124,9 +214,12 @@ export function ToolboxGrid({
 
       <ToolCard
         active={activeAudits.includes('rain')}
+        colorKey="rain"
         disabled={!isOnline || hardwarePresence.rain === false}
         icon={
-          <IoPulseOutline className={clsx(!activeAudits.includes('rain') && 'text-blue-500')} />
+          <IoPulseOutline
+            className={clsx(!activeAudits.includes('rain') && TOOL_COLORS.rain.icon)}
+          />
         }
         label={hardwarePresence.rain === false ? 'Rain (Off)' : 'Rain Audit'}
         pending={isPending('audit_rain_on')}
@@ -135,10 +228,11 @@ export function ToolboxGrid({
 
       <ToolCard
         active={activeAudits.includes('pressure')}
+        colorKey="pressure"
         disabled={!isOnline || hardwarePresence.pressure === false}
         icon={
           <IoPulseOutline
-            className={clsx(!activeAudits.includes('pressure') && 'text-purple-500')}
+            className={clsx(!activeAudits.includes('pressure') && TOOL_COLORS.pressure.icon)}
           />
         }
         label={hardwarePresence.pressure === false ? 'Pr (Off)' : 'Pressure'}
@@ -148,9 +242,12 @@ export function ToolboxGrid({
 
       <ToolCard
         active={activeAudits.includes('heartbeat')}
+        colorKey="heartbeat"
         icon={
           <IoHeartOutline
-            className={clsx(activeAudits.includes('heartbeat') ? 'text-red-500' : 'text-zinc-600')}
+            className={clsx(
+              activeAudits.includes('heartbeat') ? 'text-red-500' : TOOL_COLORS.heartbeat.icon,
+            )}
           />
         }
         label="Heartbeat"
@@ -160,10 +257,11 @@ export function ToolboxGrid({
       {!disableNVS && (
         <ToolCard
           active={activeAudits.includes('nvs')}
+          colorKey="nvs"
           disabled={!isOnline}
           icon={
             <IoCodeSlashOutline
-              className={clsx(!activeAudits.includes('nvs') && 'text-amber-500')}
+              className={clsx(!activeAudits.includes('nvs') && TOOL_COLORS.nvs.icon)}
             />
           }
           label="NVS Stack"
@@ -175,10 +273,11 @@ export function ToolboxGrid({
       {/* Nuevas Auditorías v0.8.5 */}
       <ToolCard
         active={activeAudits.includes('ram')}
+        colorKey="ram"
         disabled={!isOnline}
         icon={
           <IoHardwareChipOutline
-            className={clsx(!activeAudits.includes('ram') && 'text-zinc-600')}
+            className={clsx(!activeAudits.includes('ram') && TOOL_COLORS.ram.icon)}
           />
         }
         label="RAM Audit"
@@ -188,9 +287,12 @@ export function ToolboxGrid({
 
       <ToolCard
         active={activeAudits.includes('health')}
+        colorKey="health"
         disabled={!isOnline}
         icon={
-          <IoWifiOutline className={clsx(!activeAudits.includes('health') && 'text-emerald-500')} />
+          <IoWifiOutline
+            className={clsx(!activeAudits.includes('health') && TOOL_COLORS.health.icon)}
+          />
         }
         label="WiFi Audit"
         pending={isPending('audit_health_on')}
@@ -198,6 +300,7 @@ export function ToolboxGrid({
       />
 
       <ToolCard
+        colorKey="services"
         disabled={!isOnline}
         icon={<IoPulseOutline className="rotate-90 text-red-500" />}
         label="Node Reset"
@@ -215,6 +318,7 @@ interface AuditConsoleCardProps {
   activeAudit: string | null
   currentPayload: unknown
   receivedAt?: number
+  isStale?: boolean
   onRefresh?: () => void
 }
 
@@ -222,6 +326,7 @@ export function AuditConsoleCard({
   activeAudit,
   currentPayload,
   receivedAt,
+  isStale = false,
   onRefresh,
 }: AuditConsoleCardProps) {
   const accumulatorRef = useRef<Record<string, unknown>>({})
@@ -355,7 +460,10 @@ export function AuditConsoleCard({
 
   if (!activeAudit && !finalDisplay) return null
 
-  // Render Engine per Audit Type
+  // Color de la gráfica según la categoría de auditoría
+  const chartColor = AUDIT_CHART_COLORS[activeAudit || ''] || '#818cf8'
+  const gradientId = `audit-grad-${activeAudit}`
+
   const renderContent = () => {
     if (activeAudit === 'nvs') {
       return (
@@ -441,17 +549,42 @@ export function AuditConsoleCard({
       })
 
       return (
-        <div className="mt-2 h-[200px] w-full select-none">
+        <div
+          className={clsx(
+            'mt-2 h-[200px] w-full select-none',
+            // Clases CSS de supresión de foco (idénticas a SensorHistoryChart)
+            '[&_.recharts-wrapper_*]:outline-none!',
+            '[&_.recharts-surface]:outline-none!',
+            '[&_.recharts-tooltip-wrapper]:outline-none!',
+            '[&_.recharts-accessibility-focus]:hidden',
+          )}
+        >
           <ResponsiveContainer height="100%" width="100%">
-            <AreaChart data={chartData} margin={{ top: 5, right: 0, left: 0, bottom: 5 }}>
+            <AreaChart accessibilityLayer={false} data={chartData}>
               <defs>
-                <linearGradient id="colorValue" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="5%" stopColor="#818cf8" stopOpacity={0.6} />
-                  <stop offset="95%" stopColor="#818cf8" stopOpacity={0} />
+                <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="5%" stopColor={chartColor} stopOpacity={0.25} />
+                  <stop offset="95%" stopColor={chartColor} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <XAxis hide dataKey="name" />
-              <YAxis hide domain={['auto', 'auto']} />
+              <CartesianGrid
+                stroke="var(--color-input-outline)"
+                strokeDasharray="3 3"
+                vertical={false}
+              />
+              <XAxis axisLine={false} dataKey="name" tick={false} tickLine={false} />
+              <YAxis
+                axisLine={false}
+                domain={['auto', 'auto']}
+                fontSize={11}
+                stroke="var(--color-secondary)"
+                tickFormatter={(value) =>
+                  value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value.toFixed(1)
+                }
+                tickLine={false}
+                tickMargin={10}
+                width={45}
+              />
               <Tooltip
                 contentStyle={{
                   backgroundColor: '#18181b',
@@ -459,15 +592,24 @@ export function AuditConsoleCard({
                   borderRadius: '8px',
                   fontSize: '11px',
                 }}
-                itemStyle={{ color: '#818cf8', fontWeight: 'bold' }}
+                cursor={{
+                  stroke: chartColor,
+                  strokeWidth: 1,
+                  strokeDasharray: '4 4',
+                  fill: 'transparent',
+                }}
+                itemStyle={{ color: chartColor, fontWeight: 'bold' }}
+                wrapperStyle={{ outline: 'none' }}
               />
               <Area
+                activeDot={{ style: { outline: 'none' } }}
+                animationDuration={800}
                 dataKey="value"
-                fill="url(#colorValue)"
+                fill={`url(#${gradientId})`}
                 fillOpacity={1}
-                stroke="#818cf8"
+                stroke={chartColor}
                 strokeWidth={2}
-                type="stepAfter"
+                type="monotone"
               />
             </AreaChart>
           </ResponsiveContainer>
@@ -482,18 +624,35 @@ export function AuditConsoleCard({
     )
   }
 
+  // Color del indicador pulsante del header (coincide con la herramienta)
+  const headerColor = AUDIT_CHART_COLORS[activeAudit || ''] || '#6366f1'
+
   return (
-    <Card className="flex flex-col overflow-hidden border-zinc-200 p-0 dark:border-zinc-800/50">
+    <Card
+      className={clsx(
+        'flex flex-col overflow-hidden p-0',
+        'border-zinc-200 dark:border-zinc-800/50',
+      )}
+    >
       <div className="bg-surface border-input-outline flex items-center justify-between border-b px-5 py-2">
         <div className="flex items-center gap-3">
-          <div className="h-2 w-2 animate-pulse rounded-full bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]" />
+          <div
+            className="h-2 w-2 animate-pulse rounded-full"
+            style={{ backgroundColor: headerColor, boxShadow: `0 0 8px ${headerColor}80` }}
+          />
           <span className="text-secondary font-mono text-[10px] font-bold tracking-widest uppercase opacity-80">
             {activeAudit === 'nvs' ? 'recovery.json' : `audit/${activeAudit || 'idle'}`}
           </span>
         </div>
 
         <div className="flex items-center gap-4">
-          {Boolean(finalDisplay) && (
+          {isStale && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[9px] font-black tracking-widest text-amber-500 uppercase">
+              Datos Antiguos
+            </span>
+          )}
+
+          {Boolean(finalDisplay) && !isStale && (
             <span className="hidden items-center gap-1.5 text-[9px] font-black tracking-widest text-emerald-500 uppercase opacity-80 sm:inline-flex">
               <IoTimeOutline size={12} /> {timeAgeStr}
             </span>

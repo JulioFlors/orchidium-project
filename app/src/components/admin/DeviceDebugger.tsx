@@ -74,6 +74,15 @@ const formatVETime = (timestamp: number | string | Date) => {
   })
 }
 
+// Interfaz para los snapshots cargados desde la API
+interface AuditSnapshotResponse {
+  id: string
+  device: string
+  category: string
+  data: unknown
+  createdAt: string
+}
+
 export function DeviceDebugger() {
   const { subscribe, publish, messages, status } = useMqttStore()
 
@@ -84,8 +93,14 @@ export function DeviceDebugger() {
   const [pendingCommands, setPendingCommands] = useState<string[]>([])
   const [showServices, setShowServices] = useState(false)
   const [showTimeline, setShowTimeline] = useState(false)
-  const [showHeartbeat, setShowHeartbeat] = useState(false)
-  const [showNvs, setShowNvs] = useState(false) // Estado local para el widget de ráfaga
+
+  // Cola FIFO: orden estricto de activación de widgets por el usuario
+  const [widgetOrder, setWidgetOrder] = useState<string[]>([])
+
+  // Datos históricos cargados desde PostgreSQL (por categoría)
+  const [historicalData, setHistoricalData] = useState<Record<string, unknown>>({})
+  // Indica qué widgets muestran datos antiguos (cargados desde DB)
+  const [staleWidgets, setStaleWidgets] = useState<Record<string, boolean>>({})
 
   const selectedDevice = DEVICES.find((d) => d.id === selectedDeviceId) || DEVICES[0]
   const statusTopic = `${selectedDevice.baseTopic}/status`
@@ -95,7 +110,6 @@ export function DeviceDebugger() {
   const unifiedAuditTopic = `${selectedDevice.baseTopic}/audit`
   const auditStateTopic = `${selectedDevice.baseTopic}/audit/state`
 
-  // El estado de presencia de hardware y status general se envía integrado en el mensaje de error o estado de auditoría
   const hardwarePresence = useMemo(() => {
     const msg = messages[auditStateTopic]
 
@@ -169,7 +183,7 @@ export function DeviceDebugger() {
     }
   }, [status, subscribe, statusTopic, topicReceived, unifiedAuditTopic, auditStateTopic])
 
-  // El estado visual de las auditorías se deriva directamente del hardware (Fuente de Verdad)
+  // Lista de widgets activos combinando hardware y UI local (para el grid de tools)
   const hardwareAudits = useMemo(() => {
     const msg = messages[auditStateTopic]
 
@@ -189,21 +203,19 @@ export function DeviceDebugger() {
     }
   }, [messages, auditStateTopic])
 
-  // Combinamos las auditorías del Hardware con las de la UI (Heartbeat y NVS son locales/UI)
+  // Los widgets visibles derivan del widgetOrder (cola FIFO del usuario)
+  // Los que están en hardwareAudits también se marcan como activos en el ToolboxGrid
   const activeDisplayWidgets = useMemo(() => {
-    const list = [...hardwareAudits]
+    const allActive = new Set([...hardwareAudits, ...widgetOrder])
 
-    if (showHeartbeat) list.unshift('heartbeat')
-    if (showNvs) list.push('nvs')
-
-    return list
-  }, [hardwareAudits, showHeartbeat, showNvs])
+    return [...allActive]
+  }, [hardwareAudits, widgetOrder])
 
   const connectionState = getStatus(statusTopic, selectedDevice.heartbeatTimeoutMs)
 
   const receivedMsgItem = messages[topicReceived]
 
-  // Limpiador automático del spool de comandos pendientes interceptando confirmaciones MQTT
+  // Limpiador automático del spool de comandos pendientes
   useEffect(() => {
     if (receivedMsgItem?.payload) {
       setTimeout(() => {
@@ -212,48 +224,162 @@ export function DeviceDebugger() {
     }
   }, [receivedMsgItem?.receivedAt, receivedMsgItem?.payload])
 
-  const handleCommand = (cmd: string, auditKey: string | null) => {
-    if (auditKey === 'heartbeat') {
-      setShowHeartbeat((prev) => !prev)
+  // Consultar datos históricos desde PostgreSQL al activar un widget
+  const fetchHistoricalData = useCallback(async (device: string, category: string) => {
+    try {
+      const res = await fetch(`/api/admin/audit?device=${device}&category=${category}`)
 
-      return
+      if (res.ok) {
+        const json = (await res.json()) as { snapshots: AuditSnapshotResponse[] }
+
+        if (json.snapshots && json.snapshots.length > 0) {
+          // Combinar los datos de todos los snapshots
+          const isChartable = ['lux', 'rain', 'pressure'].includes(category)
+
+          if (isChartable) {
+            // Para gráficas: combinar los historiales de todos los snapshots
+            const allHistory: unknown[] = []
+
+            for (const snap of json.snapshots) {
+              const snapData = snap.data as { history?: unknown[] }
+
+              if (snapData?.history) {
+                allHistory.push(...snapData.history)
+              }
+            }
+
+            if (allHistory.length > 0) {
+              setHistoricalData((prev) => ({
+                ...prev,
+                [category]: { history: allHistory },
+              }))
+              setStaleWidgets((prev) => ({ ...prev, [category]: true }))
+
+              return true // Hay datos históricos
+            }
+          } else {
+            // Para widgets no gráficos: usar el último snapshot
+            const lastSnap = json.snapshots[json.snapshots.length - 1]
+
+            setHistoricalData((prev) => ({
+              ...prev,
+              [category]: lastSnap.data,
+            }))
+            setStaleWidgets((prev) => ({ ...prev, [category]: true }))
+
+            return true
+          }
+        }
+      }
+    } catch {
+      // Error silencioso al consultar datos históricos
     }
 
-    if (auditKey === 'nvs') {
-      const willShow = !showNvs
+    return false // No hay datos históricos
+  }, [])
 
-      setShowNvs(willShow)
-      if (willShow) {
-        publish(topicCmd, 'audit_nvs')
-        setPendingCommands((prev) => Array.from(new Set([...prev, 'audit_nvs'])))
+  const handleCommand = useCallback(
+    async (cmd: string, auditKey: string | null) => {
+      if (auditKey === 'heartbeat') {
+        setWidgetOrder((prev) => {
+          if (prev.includes('heartbeat')) return prev.filter((k) => k !== 'heartbeat')
+
+          return [...prev, 'heartbeat']
+        })
+
+        return
       }
 
-      return
-    }
+      if (auditKey === 'nvs') {
+        setWidgetOrder((prev) => {
+          const willShow = !prev.includes('nvs')
 
-    if (auditKey) {
-      // El toggle se hace basándose en el estado real reportado por el hardware
-      const isCurrentlyActive = hardwareAudits.includes(auditKey)
-      const toggleCmd = isCurrentlyActive ? `audit_${auditKey}_off` : `audit_${auditKey}_on`
+          if (willShow) {
+            publish(topicCmd, 'audit_nvs')
+            setPendingCommands((p) => Array.from(new Set([...p, 'audit_nvs'])))
 
-      publish(topicCmd, toggleCmd)
-      setPendingCommands((prev) => Array.from(new Set([...prev, toggleCmd])))
+            return [...prev, 'nvs']
+          }
 
-      return
-    }
+          return prev.filter((k) => k !== 'nvs')
+        })
 
-    publish(topicCmd, cmd)
-    setPendingCommands((prev) => Array.from(new Set([...prev, cmd])))
-    if (cmd === 'reset') {
-      setTimeout(() => setPendingCommands((prev) => prev.filter((c) => c !== 'reset')), 5000)
-    }
-  }
+        return
+      }
 
-  const forceRefreshAudit = (auditKey: string) => {
-    if (auditKey === 'nvs') publish(topicCmd, 'audit_nvs')
-    else publish(topicCmd, `audit_${auditKey}_on`)
-    setPendingCommands((prev) => Array.from(new Set([...prev, `audit_${auditKey}_on`])))
-  }
+      if (auditKey) {
+        const isCurrentlyVisible = widgetOrder.includes(auditKey)
+
+        if (isCurrentlyVisible) {
+          // Toggle OFF: solo ocultar el widget (no enviar comandos MQTT)
+          setWidgetOrder((prev) => prev.filter((k) => k !== auditKey))
+        } else {
+          // Toggle ON: añadir a la cola FIFO
+          setWidgetOrder((prev) => [...prev, auditKey])
+
+          // Consultar datos históricos de la DB
+          const hasHistory = await fetchHistoricalData(selectedDevice.id, auditKey)
+
+          if (!hasHistory) {
+            // No hay datos históricos → activar auditoría en el firmware
+            const isCurrentlyActive = hardwareAudits.includes(auditKey)
+
+            if (!isCurrentlyActive) {
+              publish(topicCmd, `audit_${auditKey}_on`)
+              setPendingCommands((prev) => Array.from(new Set([...prev, `audit_${auditKey}_on`])))
+            }
+          }
+        }
+
+        return
+      }
+
+      publish(topicCmd, cmd)
+      setPendingCommands((prev) => Array.from(new Set([...prev, cmd])))
+      if (cmd === 'reset') {
+        setTimeout(() => setPendingCommands((prev) => prev.filter((c) => c !== 'reset')), 5000)
+      }
+    },
+    [widgetOrder, hardwareAudits, publish, topicCmd, fetchHistoricalData, selectedDevice.id],
+  )
+
+  const forceRefreshAudit = useCallback(
+    async (auditKey: string) => {
+      // 1. Limpiar datos antiguos en la DB
+      try {
+        await fetch(`/api/admin/audit?device=${selectedDevice.id}&category=${auditKey}`, {
+          method: 'DELETE',
+        })
+      } catch {
+        // Error silencioso al limpiar datos
+      }
+
+      // 2. Limpiar estado local
+      setHistoricalData((prev) => {
+        const next = { ...prev }
+
+        delete next[auditKey]
+
+        return next
+      })
+      setStaleWidgets((prev) => {
+        const next = { ...prev }
+
+        delete next[auditKey]
+
+        return next
+      })
+
+      // 3. Enviar comando para nuevas lecturas
+      if (auditKey === 'nvs') {
+        publish(topicCmd, 'audit_nvs')
+      } else {
+        publish(topicCmd, `audit_${auditKey}_on`)
+      }
+      setPendingCommands((prev) => Array.from(new Set([...prev, `audit_${auditKey}_on`])))
+    },
+    [publish, topicCmd, selectedDevice.id],
+  )
 
   const getDeviceLabel = (id: string) => {
     if (id === 'actuator') return 'RELAY'
@@ -261,6 +387,14 @@ export function DeviceDebugger() {
 
     return id.split('/').pop()?.toUpperCase() || 'HUB'
   }
+
+  // Renderizar widgets en el orden FIFO de activación del usuario
+  const orderedWidgets = useMemo(() => {
+    // El widgetOrder define el orden estricto.
+    // Si hay widgets activos en el hardware que no están en widgetOrder,
+    // se añaden al final (pero NO se auto-muestran, solo se marcan como activos en el grid).
+    return widgetOrder.filter((w) => activeDisplayWidgets.includes(w) || widgetOrder.includes(w))
+  }, [widgetOrder, activeDisplayWidgets])
 
   return (
     <div className="animate-in fade-in space-y-10 duration-500">
@@ -275,10 +409,13 @@ export function DeviceDebugger() {
         onZoneChanged={(id) => {
           setSelectedDeviceId(id)
           setPendingCommands([])
+          setWidgetOrder([])
+          setHistoricalData({})
+          setStaleWidgets({})
         }}
       />
 
-      {/* Toolbox Grid: Individual Cards (Media grid minimum) */}
+      {/* Toolbox Grid */}
       <ToolboxGrid
         activeAudits={activeDisplayWidgets}
         disableNVS={selectedDevice.hasMaskNvs}
@@ -292,9 +429,9 @@ export function DeviceDebugger() {
         onToggleTimeline={() => setShowTimeline((prev) => !prev)}
       />
 
-      {/* Widgets Area: Alumno vertical Stack (Full Width siempre) */}
+      {/* Widgets Area: Cola FIFO vertical */}
       <div className="animate-in slide-in-from-top-4 flex flex-col gap-6 duration-500">
-        {(showServices || showTimeline || activeDisplayWidgets.length > 0) && (
+        {(showServices || showTimeline || orderedWidgets.length > 0) && (
           <>
             {showServices && (
               <Card className="flex w-full flex-col p-5">
@@ -376,16 +513,19 @@ export function DeviceDebugger() {
               </Card>
             )}
 
-            {activeDisplayWidgets.map((auditId) => {
+            {orderedWidgets.map((auditId) => {
               const unifiedPacket = messages[unifiedAuditTopic]?.payload as Record<
                 string,
                 { history: unknown[] }
               >
 
-              let payload
+              // Priorizar datos MQTT en vivo sobre datos históricos
+              let payload = historicalData[auditId] || null
+              let isStale = staleWidgets[auditId] || false
 
               if (unifiedPacket && unifiedPacket[auditId]) {
                 payload = unifiedPacket[auditId]
+                isStale = false // Datos frescos del firmware
               }
 
               return (
@@ -396,6 +536,7 @@ export function DeviceDebugger() {
                     <AuditConsoleCard
                       activeAudit={auditId}
                       currentPayload={payload}
+                      isStale={isStale}
                       receivedAt={messages[unifiedAuditTopic]?.receivedAt}
                       onRefresh={() => forceRefreshAudit(auditId)}
                     />

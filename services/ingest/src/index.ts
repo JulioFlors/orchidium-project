@@ -289,6 +289,29 @@ async function start() {
           .setStringField('value', messageValue)
         await writeToInflux(point)
       }
+
+      // Persistir paquetes de auditoría en PostgreSQL
+      if (topic.endsWith('/audit')) {
+        try {
+          const auditPayload = JSON.parse(messageValue) as Record<string, unknown>
+
+          for (const [category, data] of Object.entries(auditPayload)) {
+            if (data && typeof data === 'object') {
+              await prisma.auditSnapshot.create({
+                data: {
+                  device: 'actuator',
+                  category,
+                  data: data as object,
+                },
+              })
+            }
+          }
+          Logger.debug(`📋 Auditoría persistida: ${Object.keys(auditPayload).join(', ')}`)
+        } catch (e) {
+          Logger.error('Error persistiendo paquete de auditoría', e)
+        }
+        return
+      }
       
       const hasSensorData = Object.keys(TOPIC_ROUTES).some(suffix => topic.endsWith(suffix))
       if (!hasSensorData) return
