@@ -3,15 +3,10 @@ import { NextResponse } from 'next/server'
 import { influxClient } from '@/lib/influxdb'
 
 export async function GET(_request: Request) {
-  // const { searchParams } = new URL(request.url)
-  // const range = searchParams.get('range') || '24h'
-  // const zone = searchParams.get('zone') || 'Orchidarium'
+  const { searchParams } = new URL(_request.url)
+  const range = searchParams.get('range') || '24h'
+  const zone = searchParams.get('zone') || 'EXTERIOR'
 
-  if (!influxClient) {
-    return NextResponse.json({ error: 'InfluxDB client not initialized' }, { status: 500 })
-  }
-
-  /*
   let rangeString = '24h'
 
   switch (range) {
@@ -24,25 +19,10 @@ export async function GET(_request: Request) {
     case '30d':
       rangeString = '30d'
       break
-    case 'all':
-      rangeString = '30d'
-      break
     default:
       rangeString = '24h'
   }
-  */
 
-  // Temporalmente inhabilitado ya que el sensor de lluvia no está activo y la tabla no existe.
-  // Esto previene spam de errores (RpcError table not found) en los logs de InfluxDB.
-  return NextResponse.json({
-    totalDurationSeconds: 0,
-    averageIntensity: 0,
-    eventCount: 0,
-    events: [],
-  })
-
-  /*
-  // Consulta para obtener eventos de lluvia (Deshabilitada)
   const query = `
     SELECT *
     FROM "rain_events"
@@ -53,9 +33,30 @@ export async function GET(_request: Request) {
 
   try {
     const reader = influxClient.query(query)
-    // ...
+    const events = []
+    let totalDuration = 0
+    let totalIntensity = 0
+
+    for await (const row of reader) {
+      events.push({
+        time: row.time,
+        duration: row.duration_seconds,
+        intensity: row.intensity_percent,
+      })
+      totalDuration += Number(row.duration_seconds)
+      totalIntensity += Number(row.intensity_percent)
+    }
+
+    return NextResponse.json({
+      totalDurationSeconds: totalDuration,
+      averageIntensity: events.length > 0 ? Math.round(totalIntensity / events.length) : 0,
+      eventCount: events.length,
+      events,
+    })
   } catch (error: unknown) {
-    // ...
+    // eslint-disable-next-line no-console
+    console.error('Error querying Rain Events:', error)
+
+    return NextResponse.json({ error: 'Failed to fetch rain data' }, { status: 500 })
   }
-  */
 }

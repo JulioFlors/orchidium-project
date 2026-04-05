@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { CloudRain, Droplets, Thermometer, Sun } from 'lucide-react'
+import { CloudRain, Droplets, Thermometer, Sun, Cloud, Moon, CloudSun } from 'lucide-react'
 import { FaChartLine } from 'react-icons/fa6'
 
 import { SmartDeviceHeader } from '@/components/dashboard/SmartDeviceHeader'
@@ -10,24 +10,33 @@ import { SensorHistoryChart } from '@/components/dashboard/SensorHistoryChart'
 import { useDeviceHeartbeat } from '@/hooks'
 
 interface SensorData {
-  time: string
-  temperature: number
+  [key: string]: string | number | undefined
+  external_illuminance: number
   humidity: number
   illuminance: number
-  external_illuminance: number
-  [key: string]: string | number
+  phase?: string
+  temperature: number
+  time: string
 }
 
 interface RainData {
   totalDurationSeconds: number
   averageIntensity: number
+  eventCount: number
 }
 
-type MetricType = 'temperature' | 'humidity' | 'illuminance' | 'external_illuminance' | 'rain'
+interface FilterData {
+  health: number
+  pressure: number
+  status: 'optimal' | 'warning' | 'critical' | 'unknown'
+}
+
+type MetricType = 'temperature' | 'humidity' | 'illuminance' | 'pressure' | 'rain'
 
 export default function MonitoringPage() {
   const [data, setData] = useState<SensorData[]>([])
   const [rainData, setRainData] = useState<RainData | null>(null)
+  const [filterData, setFilterData] = useState<FilterData | null>(null)
   const [initialLoading, setInitialLoading] = useState(true)
   const [range, setRange] = useState('24h')
   const [zone, setZone] = useState('ZONA_A')
@@ -55,9 +64,10 @@ export default function MonitoringPage() {
     const fetchData = async () => {
       try {
         // Parallel data fetching
-        const [histRes, rainRes] = await Promise.all([
+        const [histRes, rainRes, filterRes] = await Promise.all([
           fetch(`/api/sensors/history?range=${range}&zone=${zone}`),
           fetch(`/api/sensors/rain?range=${range}&zone=${zone}`),
+          fetch(`/api/sensors/filter?zone=${zone}`),
         ])
 
         if (histRes.ok) {
@@ -70,6 +80,12 @@ export default function MonitoringPage() {
           const rainJson = await rainRes.json()
 
           setRainData(rainJson)
+        }
+
+        if (filterRes.ok) {
+          const filterJson = await filterRes.json()
+
+          setFilterData(filterJson)
         }
       } catch (error) {
         // eslint-disable-next-line no-console
@@ -99,7 +115,8 @@ export default function MonitoringPage() {
           temperature: 0,
           humidity: 0,
           illuminance: 0,
-          external_illuminance: 0,
+          pressure: 0,
+          rain_intensity: 0,
         }
 
   // 1. Estado de Conexión Unificado (para el Badge y Dashboard) usando el custom hook
@@ -140,10 +157,10 @@ export default function MonitoringPage() {
   }
 
   // Simple trend calculation (last vs average of last 5)
-  const calculateTrend = (key: 'temperature' | 'humidity' | 'illuminance') => {
+  const calculateTrend = (key: 'temperature' | 'humidity' | 'illuminance' | 'pressure') => {
     if (data.length < 5) return 'stable'
-    const last = data[data.length - 1][key]
-    const prev = data[data.length - 5][key]
+    const last = Number(data[data.length - 1][key])
+    const prev = Number(data[data.length - 5][key])
 
     if (last > prev + 0.5) return 'up'
     if (last < prev - 0.5) return 'down'
@@ -188,20 +205,20 @@ export default function MonitoringPage() {
           title: 'Iluminancia',
           icon: <Sun className="h-4 w-4" />,
         }
-      case 'external_illuminance':
+      case 'pressure':
         return {
-          dataKey: 'external_illuminance',
-          color: '#ca8a04', // A slightly different yellow/amber for external
-          unit: 'lx',
-          title: 'Iluminancia',
-          icon: <Sun className="h-4 w-4" />,
+          dataKey: 'pressure',
+          color: '#818cf8',
+          unit: 'PSI',
+          title: 'Presión de Agua',
+          icon: <Droplets className="h-4 w-4" />,
         }
       case 'rain':
         return {
-          dataKey: 'temperature',
-          color: '#06b6d4',
-          unit: '',
-          title: 'Lluvia',
+          dataKey: 'rain_intensity',
+          color: '#0ea5e9',
+          unit: '%',
+          title: 'Intensidad de Lluvia',
           icon: <CloudRain className="h-4 w-4" />,
         }
       default:
@@ -243,7 +260,71 @@ export default function MonitoringPage() {
   }
 
   const intLux = getInteriorLuxStatus(current.illuminance)
-  const extLux = getExteriorLuxStatus(current.external_illuminance)
+  const extLux = getExteriorLuxStatus(current.illuminance)
+
+  // 3. Lógica de Clima Inteligente (Deducción por sensores + tiempo)
+  const getClimateStatus = () => {
+    // Prioridad 1: Lluvia
+    const isRaining = Number(current.rain_intensity) > 0
+
+    if (isRaining) {
+      return {
+        label: 'Lloviendo',
+        icon: <CloudRain className="h-6 w-6 text-blue-400" />,
+        color: 'blue' as const,
+        description: 'Precipitación detectada',
+        status: 'warning' as const,
+      }
+    }
+
+    const lux = Number(current.illuminance)
+    const hour = new Date(current.time).getHours()
+
+    // Prioridad 2: Noche (Lux bajo o horario nocturno)
+    // Umbral: 19:30 a 06:00 o Lux muy bajo (< 50)
+    if (lux < 50 || hour >= 20 || hour < 6) {
+      return {
+        label: 'Noche',
+        icon: <Moon className="h-6 w-6 text-indigo-300" />,
+        color: 'blue' as const,
+        description: 'Cielos oscuros',
+        status: 'optimal' as const,
+      }
+    }
+
+    // Prioridad 3: Soleado (Lux alto)
+    if (lux > 25000) {
+      return {
+        label: 'Soleado',
+        icon: <Sun className="h-6 w-6 text-yellow-500" />,
+        color: 'yellow' as const,
+        description: 'Cielos despejados',
+        status: 'optimal' as const,
+      }
+    }
+
+    // Prioridad 4: Nublado (Lux medio)
+    if (lux > 2000) {
+      return {
+        label: 'Nublado',
+        icon: <Cloud className="h-6 w-6 text-gray-400" />,
+        color: 'orange' as const,
+        description: 'Luz tamizada por nubes',
+        status: 'optimal' as const,
+      }
+    }
+
+    // Prioridad 5: Atardecer / Sombrío (Lux bajo pero de día)
+    return {
+      label: 'Sombrío',
+      icon: <CloudSun className="h-6 w-6 text-orange-300" />,
+      color: 'orange' as const,
+      description: 'Baja luminosidad / Atardecer',
+      status: 'optimal' as const,
+    }
+  }
+
+  const climate = getClimateStatus()
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
@@ -321,34 +402,91 @@ export default function MonitoringPage() {
               description="Estación Meteorológica"
               hasData={data.length > 0}
               icon={<Sun className="h-6 w-6" />}
-              isActive={selectedMetric === 'external_illuminance'}
+              isActive={selectedMetric === 'illuminance'}
               isLoading={initialLoading || isMqttLoading}
               isOffline={isOffline}
               status={extLux.status}
               statusLabel={extLux.label}
               title="Iluminancia"
               unit="lux"
-              value={Math.round(current.external_illuminance).toLocaleString()}
-              onClick={() => setSelectedMetric('external_illuminance')}
+              value={Math.round(current.illuminance).toLocaleString()}
+              onClick={() => setSelectedMetric('illuminance')}
             />
 
-            {/* Rain Card */}
+            {/* Pressure Card */}
             <EnvironmentCard
-              className="opacity-90"
               color="cyan"
+              description="Transductor 150PSI"
+              hasData={data.length > 0}
+              icon={<Droplets className="h-6 w-6" />}
+              isActive={selectedMetric === 'pressure'}
+              isLoading={initialLoading || isMqttLoading}
+              isOffline={isOffline}
+              status={
+                Number(current.pressure) > 100 || Number(current.pressure) < 5
+                  ? 'warning'
+                  : 'optimal'
+              }
+              title="Presión de Agua"
+              trend={calculateTrend('pressure')}
+              unit="PSI"
+              value={Number(current.pressure).toFixed(1)}
+              onClick={() => setSelectedMetric('pressure')}
+            />
+
+            {/* Climate Status Card */}
+            <EnvironmentCard
+              hasData
+              color={climate.color}
+              description={climate.description}
+              icon={climate.icon}
+              isActive={false}
+              isLoading={initialLoading || isMqttLoading}
+              isOffline={isOffline}
+              status={climate.status}
+              title="Estado del Clima"
+              unit=""
+              value={climate.label}
+              onClick={() => {}}
+            />
+
+            {/* Rain Statistics Card */}
+            <EnvironmentCard
+              color="blue"
               description={
-                rainData ? `Intensidad media: ${rainData.averageIntensity}%` : 'Sin datos'
+                rainData
+                  ? `${rainData.eventCount} eventos | Prom: ${rainData.averageIntensity}%`
+                  : 'Sin registros'
               }
               hasData={!!rainData}
-              icon={<CloudRain className="h-6 w-6" />}
+              icon={<FaChartLine className="h-6 w-6" />}
               isActive={selectedMetric === 'rain'}
               isLoading={initialLoading || isMqttLoading}
               isOffline={isOffline}
-              status={rainData && rainData.totalDurationSeconds > 0 ? 'warning' : 'optimal'}
-              title="Lluvia"
+              status="optimal"
+              title="Resumen de Lluvia"
               unit=""
               value={!rainData ? '--' : formatDuration(rainData.totalDurationSeconds)}
               onClick={() => setSelectedMetric('rain')}
+            />
+
+            {/* Filter Health Card */}
+            <EnvironmentCard
+              color={!filterData || filterData.health > 80 ? 'green' : 'orange'}
+              description={
+                filterData ? `Presión de trabajo: ${filterData.pressure} PSI` : 'Bomba inactiva'
+              }
+              hasData={!!filterData}
+              icon={<FaChartLine className="h-6 w-6" />}
+              isActive={false}
+              isLoading={initialLoading || isMqttLoading}
+              isOffline={isOffline}
+              status={filterData?.status === 'unknown' ? undefined : filterData?.status}
+              statusLabel={filterData ? `${filterData.health}%` : 'Óptimo'}
+              title="Salud del Filtro"
+              unit=""
+              value={filterData ? `${filterData.health}%` : '100%'}
+              onClick={() => {}}
             />
           </div>
         )}
@@ -372,7 +510,7 @@ export default function MonitoringPage() {
               <p className="text-sm font-medium">Seleccione un parametro ambiental</p>
             </div>
           </div>
-        ) : selectedMetric !== 'rain' && chartProps ? (
+        ) : chartProps ? (
           <SensorHistoryChart
             color={chartProps.color}
             data={data}
@@ -383,14 +521,7 @@ export default function MonitoringPage() {
             unit={chartProps.unit}
             onRangeChange={setRange}
           />
-        ) : (
-          <div className="border-input-outline bg-surface text-secondary flex h-[350px] w-full items-center justify-center rounded-xl border">
-            <div className="flex flex-col items-center gap-2">
-              <CloudRain className="h-8 w-8 opacity-20" />
-              <p className="text-sm">Gráfica de lluvia no disponible (Próximamente)</p>
-            </div>
-          </div>
-        )}
+        ) : null}
       </div>
     </div>
   )

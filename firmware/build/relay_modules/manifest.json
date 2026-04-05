@@ -1,9 +1,9 @@
 {
   "name": "Relay Modules",
   "description": "Nodo Actuador + Meteorológica Exterior",
-  "version": "0.8.3",
-  "date": "02-04-2026",
-  "notes_release": "[⚙️ Robustez MQTT]: El Nodo ahora retiene las IDs de tareas en snapshots de apagado, garantizando que el Scheduler reciba la confirmación de finalización.",
+  "version": "0.9.0",
+  "date": "05-04-2026",
+  "notes_release": "[🌦️ Estación Meteorológica / 🛡️ Salud Filtro]: Sensores migrados al dominio Weather_Station. Nueva corrutina 'circuit_pressure_worker' para telemetría de presión por lotes y análisis de salud del filtro. Robustez MQTT optimizada (Diag + Backoff).",
   "files": [
     "app.mpy",
     "main.py"

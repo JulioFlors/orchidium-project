@@ -15,7 +15,7 @@ import { clsx } from 'clsx'
 // Recharts needs direct hex colors for some props often, or we use CSS var trick.
 
 interface SensorHistoryChartProps {
-  data: Record<string, number | string>[]
+  data: Record<string, number | string | undefined>[]
   className?: string
   dataKey: string
   color: string
@@ -24,6 +24,58 @@ interface SensorHistoryChartProps {
   icon?: React.ReactNode
   range: string
   onRangeChange: (range: string) => void
+}
+
+interface CustomTooltipProps {
+  active?: boolean
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload?: any[]
+  label?: string | number
+  timeFormatter: Intl.DateTimeFormat
+  color: string
+  title: string
+  unit: string
+}
+
+function CustomTooltip({
+  active,
+  payload,
+  label,
+  timeFormatter,
+  color,
+  title,
+  unit,
+}: CustomTooltipProps) {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload as Record<string, string | number | undefined>
+
+    // Mapeo de fases técnicas a etiquetas amigables
+    const phaseLabels: Record<string, string> = {
+      MAIN_WATER: 'Entrada de Agua',
+      BOMBA: 'Bomba Activa',
+      TRANSICION: 'Presurizando',
+    }
+    const displayPhase = data.phase ? phaseLabels[String(data.phase)] || String(data.phase) : null
+
+    return (
+      <div className="bg-surface border-input-outline relative z-50 flex flex-col overflow-visible rounded-lg border p-3 text-xs shadow-md outline-none">
+        <span className="text-secondary mb-1 font-medium">
+          {label !== undefined ? timeFormatter.format(new Date(label)) : ''}
+        </span>
+        <span className="text-sm font-semibold" style={{ color }}>
+          {title.replace('Histórico ', '')}: {payload[0].value} {unit}
+        </span>
+        {displayPhase && (
+          <span className="mt-1 inline-flex items-center gap-1.5 text-[9px] font-bold tracking-widest text-cyan-400 uppercase">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" />
+            Modo: {displayPhase}
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  return null
 }
 
 export function SensorHistoryChart({
@@ -164,35 +216,20 @@ export function SensorHistoryChart({
               width={45}
             />
             <Tooltip
-              contentStyle={{
-                backgroundColor: 'var(--color-surface)',
-                borderColor: 'var(--color-input-outline)',
-                borderRadius: '8px',
-                fontSize: '12px',
-                color: 'var(--color-primary)',
-                boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                padding: '8px 12px',
-                outline: 'none',
-              }}
+              content={
+                <CustomTooltip
+                  color={color}
+                  timeFormatter={timeFormatter}
+                  title={title}
+                  unit={unit}
+                />
+              }
               cursor={{
                 stroke: color,
                 strokeWidth: 1,
                 strokeDasharray: '4 4',
                 fill: 'transparent',
               }}
-              formatter={(value: number | string | Array<number | string> | undefined) => [
-                value !== undefined ? `${value} ${unit}` : '',
-                title.replace('Histórico ', ''),
-              ]}
-              itemStyle={{ color: color, fontWeight: 600 }}
-              labelFormatter={(label) => {
-                try {
-                  return timeFormatter.format(new Date(label))
-                } catch {
-                  return ''
-                }
-              }}
-              labelStyle={{ color: 'var(--color-secondary)', marginBottom: '0.25rem' }}
               wrapperStyle={{ outline: 'none' }}
             />
             <Area

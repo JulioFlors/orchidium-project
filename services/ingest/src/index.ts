@@ -1,14 +1,7 @@
-// -----------------------------------------------------------------------------
-// ORCHIDIUM-PROJECT: MQTT Ingestion Service
-// Descripción: Servicio persistente que se suscribe a los tópicos MQTT del broker, procesa los datos y los almacena en InfluxDB
-// Versión: v0.9 - Logger Unificado
-// Fecha: 29-11-2025
-// -----------------------------------------------------------------------------
-
 import { InfluxDBClient, Point } from '@influxdata/influxdb3-client'
 import mqtt from 'mqtt'
 
-import { ZoneType } from '@package/database'
+import { prisma, ZoneType } from '@package/database'
 
 // ---- Cargar variables de entorno ----
 // La carga de variables de entorno se gestiona externamente.
@@ -58,6 +51,33 @@ const Logger = {
   influx: (msg: string) => DEBUG && console.log(`${colors.green}💾 [ INFLUX ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
 }
 
+// ---- Inicialización Atómica (Fail-Fast) ----
+if (!INFLUX_TOKEN) {
+  Logger.error('INFLUX_TOKEN no está definido. Verifique el archivo .env')
+  process.exit(1)
+}
+
+/**
+ * Verifica la conexión con PostgreSQL al arranque.
+ */
+async function checkDbConnection() {
+  try {
+    await prisma.$queryRaw`SELECT 1`
+  } catch (err) {
+    Logger.error('FALLO CRÍTICO: No se pudo conectar a PostgreSQL. Verifique el archivo .env', err)
+    process.exit(1)
+  }
+}
+
+// Configuración de Seguridad para InfluxDB (Interno vs Cloud)
+const url = new URL(INFLUX_URL)
+const isPublicCloud = url.hostname.endsWith('influxdata.com')
+const isInternalHost = url.hostname === 'influxdb' || url.hostname === 'localhost'
+
+if (isInternalHost && !isPublicCloud) {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+}
+
 // ---- Definición de tipo estándar  ----
 type PacketProcessor = (
   source: string,
@@ -76,7 +96,11 @@ const TOPIC_ROUTES: Record<string, PacketProcessor> = {
   // Necesitamos inyectar el 5to argumento (eventType)
   '/status': (s, z, c, p) => processZoneStateEvent(s, z, c, p, 'Device_Status'),
   '/rain/state': (s, z, c, p) => processZoneStateEvent(s, z, c, p, 'Rain_State'),
+  '/filter/status': processFilterHealthPacket,
 }
+
+// ---- Global Influx Client (puntero) ----
+let influxClient: InfluxDBClient;
 
 // ---- Utils ---- 
 function mapZoneSlugToZoneType(zoneSlug: string): ZoneType | undefined {
@@ -98,37 +122,35 @@ async function writeToInflux(point: Point) {
 }
 
 // ---- Procesadores de Paquetes JSON ----
-// Cada función es responsable de parsear el payload y escribir en InfluxDB
 
 async function processEnvironmentPacket(source: string, zone: ZoneType, context: string, payload: string) {
   try {
     const data = JSON.parse(payload)
 
-    // [Vercion v1.0.7]: Soporte para Batching / History
-    // Si el payload contiene un historial (array de [timestamp, data])
     if (data.history && Array.isArray(data.history)) {
       for (const entry of data.history) {
         if (!Array.isArray(entry) || entry.length !== 2) continue
         
-        const [timestamp, metrics] = entry as [number, Record<string, number>]
+        const [timestamp, metrics] = entry as [number, Record<string, string | number>]
         
         const point = Point.measurement('environment_metrics')
           .setTag('source', source)
           .setTag('zone', zone)
           .setTag('context', context)
-          .setTimestamp(new Date(timestamp * 1000)) // Referencia temporal exacta del dispositivo
+          .setTimestamp(new Date(timestamp * 1000))
 
         if (metrics.temperature !== undefined) point.setFloatField('temperature', Number(metrics.temperature))
         if (metrics.humidity !== undefined) point.setFloatField('humidity', Number(metrics.humidity))
         if (metrics.illuminance !== undefined) point.setFloatField('illuminance', Number(metrics.illuminance))
         if (metrics.pressure !== undefined) point.setFloatField('pressure', Number(metrics.pressure))
+        if (metrics.rain_intensity !== undefined) point.setFloatField('rain_intensity', Number(metrics.rain_intensity))
+        if (metrics.phase !== undefined) point.setStringField('phase', String(metrics.phase))
 
         await writeToInflux(point)
       }
       return
     }
 
-    // Fallback: Procesamiento de punto único tradicional
     const point = Point.measurement('environment_metrics')
       .setTag('source', source)
       .setTag('zone', zone)
@@ -138,6 +160,8 @@ async function processEnvironmentPacket(source: string, zone: ZoneType, context:
     if (data.humidity !== undefined) point.setFloatField('humidity', Number(data.humidity))
     if (data.illuminance !== undefined) point.setFloatField('illuminance', Number(data.illuminance))
     if (data.pressure !== undefined) point.setFloatField('pressure', Number(data.pressure))
+    if (data.rain_intensity !== undefined) point.setFloatField('rain_intensity', Number(data.rain_intensity))
+    if (data.phase !== undefined) point.setStringField('phase', String(data.phase))
 
     await writeToInflux(point)
 
@@ -149,8 +173,6 @@ async function processEnvironmentPacket(source: string, zone: ZoneType, context:
 async function processRainEventPacket(source: string, zone: ZoneType, context: string, payload: string) {
   try {
     const data = JSON.parse(payload)
-
-    // Creamos un Punto de InfluxDB
     const point = Point.measurement('rain_events')
       .setTag('source', source)
       .setTag('zone', zone)
@@ -159,11 +181,26 @@ async function processRainEventPacket(source: string, zone: ZoneType, context: s
       .setFloatField('intensity_percent', Number(data.average_intensity_percent))
 
     await writeToInflux(point)
-
     Logger.info('🌧️ Evento de lluvia registrado')
-
   } catch (e) {
     Logger.error('Error procesando paquete de datos de Rain Event', e)
+  }
+}
+
+async function processFilterHealthPacket(source: string, zone: ZoneType, context: string, payload: string) {
+  try {
+    const data = JSON.parse(payload)
+    const point = Point.measurement('filter_health')
+      .setTag('source', source)
+      .setTag('zone', zone)
+      .setTag('context', context)
+      .setFloatField('health_percent', Number(data.health))
+      .setFloatField('pressure_reading', Number(data.pressure))
+
+    await writeToInflux(point)
+    Logger.info(`🛡 Salud del filtro: ${data.health}%`)
+  } catch (e) {
+    Logger.error('Error procesando paquete de salud del filtro', e)
   }
 }
 
@@ -184,154 +221,127 @@ async function processZoneStateEvent(
   await writeToInflux(point)
 }
 
-// ---- Validación Crítica ----
-if (!INFLUX_TOKEN) {
-  Logger.error('INFLUX_TOKEN no está definido. Abortando.')
-  process.exit(1)
-}
+// ---- Punto de Entrada ----
+async function start() {
+  // 1. Validar conexión con Base de Datos
+  await checkDbConnection()
 
-// Cliente InfluxDB v3
-const url = new URL(INFLUX_URL)
-const isPublicCloud = url.hostname.endsWith('influxdata.com')
-const isInternalHost = url.hostname === 'influxdb' || url.hostname === 'localhost'
+  // 2. Cliente InfluxDB v3
+  influxClient = new InfluxDBClient({
+    host: INFLUX_URL,
+    token: INFLUX_TOKEN,
+    database: INFLUX_BUCKET,
+  })
 
-// El SDK v3 (@influxdata/influxdb3-client) usa la API fetch internamente,
-// la cual en Node.js 18+ NO obedece el parámetro transportOptions: { rejectUnauthorized }.
-// Por lo tanto, relajamos la validación a nivel de proceso SIEMPRE QUE aseguremos
-// que la conexión es puramente interna (red Docker o Local).
-if (isInternalHost && !isPublicCloud) {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
-}
+  // 3. Cliente MQTT
+  Logger.mqtt(`Conectando a ${colors.blue}${MQTT_BROKER_URL}${colors.reset}`)
 
-const influxClient = new InfluxDBClient({
-  host: INFLUX_URL,
-  token: INFLUX_TOKEN,
-  database: INFLUX_BUCKET,
-})
-
-Logger.mqtt(`Conectando a ${colors.blue}${MQTT_BROKER_URL}${colors.reset}`)
-
-// ---- Cliente MQTT ----
-const client = mqtt.connect(MQTT_BROKER_URL, {
-  clientId: MQTT_CLIENT_ID,
-  protocolVersion: 5,
-  username: MQTT_USERNAME,
-  password: MQTT_PASSWORD,
-  // Opciones típicamente requeridas o recomendadas para HiveMQ Cloud
-  protocol: MQTT_BROKER_URL.startsWith('mqtts') ? 'mqtts' : 'mqtt',
-  rejectUnauthorized: true,
-  servername: new URL(MQTT_BROKER_URL).hostname, // SNI: Garantiza que se envíe el hostname correcto en el handshake TLS
-  will: {
-    topic: SERVICE_STATUS_TOPIC,
-    payload: Buffer.from('offline'),
-    qos: 1,
-    retain: true
-  }
-})
-
-let heartbeatInterval: NodeJS.Timeout | null = null
-
-client.on('connect', () => {
-  Logger.success('Conectado a Broker MQTT')
-
-  // Publicar estado de vida apenas conectamos
-  client.publish(SERVICE_STATUS_TOPIC, 'online', { qos: 1, retain: true })
-
-  // ---- FRECUENCIA DE SEÑAL DE VIDA (HEARTBEAT) ----
-  // Define cada cuánto tiempo Node.js le cuenta al Frontend que sigue vivo
-  // Configurado a 5 minutos (300,000 ms) para evitar sobrecarga en la UI de React.
-  if (heartbeatInterval) clearInterval(heartbeatInterval)
-  heartbeatInterval = setInterval(() => {
-    client.publish(SERVICE_STATUS_TOPIC, 'online', { qos: 1, retain: true })
-  }, 300000)
-
-  const topicToSubscribe = `${BASE_TOPIC_PREFIX}/#`
-
-  client.subscribe(topicToSubscribe, (err) => {
-    if (!err) {
-      Logger.mqtt(`Suscrito al árbol de tópicos ${colors.blue}${topicToSubscribe}${colors.reset}`)
-    } else {
-      Logger.error(`Error de suscripción MQTT: ${err}`)
+  const client = mqtt.connect(MQTT_BROKER_URL, {
+    clientId: MQTT_CLIENT_ID,
+    protocolVersion: 5,
+    username: MQTT_USERNAME,
+    password: MQTT_PASSWORD,
+    protocol: MQTT_BROKER_URL.startsWith('mqtts') ? 'mqtts' : 'mqtt',
+    rejectUnauthorized: true,
+    servername: new URL(MQTT_BROKER_URL).hostname,
+    will: {
+      topic: SERVICE_STATUS_TOPIC,
+      payload: Buffer.from('offline'),
+      qos: 1,
+      retain: true
     }
   })
-})
 
-// ---- El core del Enrutamiento ----
-client.on('message', async (topic, payload) => {
-  const messageValue = payload.toString()
-  const topicParts = topic.split('/')
+  let heartbeatInterval: NodeJS.Timeout | null = null
 
-  if (topicParts.length <= 2) return
+  client.on('connect', () => {
+    Logger.success('Conectado a Broker MQTT')
+    client.publish(SERVICE_STATUS_TOPIC, 'online', { qos: 1, retain: true })
 
-  // 'Environmental_Monitoring' o 'Actuator_Controller'
-  const firmwareSource = topicParts[1]
+    if (heartbeatInterval) clearInterval(heartbeatInterval)
+    heartbeatInterval = setInterval(() => {
+      client.publish(SERVICE_STATUS_TOPIC, 'online', { qos: 1, retain: true })
+    }, 300000)
 
-  // Registrar el status (online/offline) del Nodo Actuador en InfluxDB para auditoría.
-  // Los comandos y telemetría de riego son exclusivos del Scheduler — no se procesan aquí.
-  if (firmwareSource === 'Actuator_Controller') {
-    if (topic.endsWith('/status')) {
-      const point = Point.measurement('system_events')
-        .setTag('source', firmwareSource)
-        .setTag('context', 'status')
-        .setTag('event_type', 'Device_Status')
-        .setStringField('value', messageValue)
+    const topicToSubscribe = `${BASE_TOPIC_PREFIX}/#`
+    client.subscribe(topicToSubscribe, (err) => {
+      if (!err) {
+        Logger.mqtt(`Suscrito al árbol de tópicos ${colors.blue}${topicToSubscribe}${colors.reset}`)
+      } else {
+        Logger.error(`Error de suscripción MQTT: ${err}`)
+      }
+    })
+  })
 
-      await writeToInflux(point)
+  client.on('message', async (topic, payload) => {
+    const messageValue = payload.toString()
+    const topicParts = topic.split('/')
+
+    if (topicParts.length <= 2) return
+    const firmwareSource = topicParts[1]
+
+    if (firmwareSource === 'Actuator_Controller') {
+      if (topic.endsWith('/status')) {
+        const point = Point.measurement('system_events')
+          .setTag('source', firmwareSource)
+          .setTag('context', 'status')
+          .setTag('event_type', 'Device_Status')
+          .setStringField('value', messageValue)
+        await writeToInflux(point)
+      }
+      
+      const hasSensorData = Object.keys(TOPIC_ROUTES).some(suffix => topic.endsWith(suffix))
+      if (!hasSensorData) return
     }
-    return
-  }
 
-  // Registrar el status de los servicios backend (Scheduler, Ingest) para auditoría.
-  // Tópico: PristinoPlant/Services/{ServiceName}/status → "online"/"offline"
-  if (topicParts[1] === 'Services') {
-    if (topic.endsWith('/status')) {
-      const serviceName = topicParts[2] || 'Unknown'
-      const point = Point.measurement('system_events')
-        .setTag('source', 'Services')
-        .setTag('context', 'status')
-        .setTag('event_type', 'Service_Status')
-        .setTag('service_name', serviceName)
-        .setStringField('value', messageValue)
-
-      await writeToInflux(point)
-    }
-    return
-  }
-
-  // Lógica para Sensores Ambientales y Estación Meteorológica
-  if (firmwareSource === 'Environmental_Monitoring' || firmwareSource === 'Weather_Station') {
-    const zoneSlug = topicParts[2]
-    const zone = mapZoneSlugToZoneType(zoneSlug)
-
-    if (!zone) {
-      Logger.warn(`Zona desconocida: ${zoneSlug}`)
+    if (topicParts[1] === 'Services') {
+      if (topic.endsWith('/status')) {
+        const serviceName = topicParts[2] || 'Unknown'
+        const point = Point.measurement('system_events')
+          .setTag('source', 'Services')
+          .setTag('context', 'status')
+          .setTag('event_type', 'Service_Status')
+          .setTag('service_name', serviceName)
+          .setStringField('value', messageValue)
+        await writeToInflux(point)
+      }
       return
     }
 
-    const matchingSuffix = Object.keys(TOPIC_ROUTES).find(suffix => topic.endsWith(suffix))
+    if (firmwareSource === 'Environmental_Monitoring' || firmwareSource === 'Weather_Station') {
+      const zoneSlug = topicParts[2]
+      const zone = mapZoneSlugToZoneType(zoneSlug)
 
-    if (matchingSuffix) {
-      const processor = TOPIC_ROUTES[matchingSuffix]
+      if (!zone) {
+        Logger.warn(`Zona desconocida: ${zoneSlug}`)
+        return
+      }
 
-      // Limpiamos el sufijo para el contexto (ej: "/readings" -> "readings")
-      const context = matchingSuffix.replace(/^\//, '')
-
-      await processor(firmwareSource, zone, context, messageValue)
-
-    } else {
-      Logger.warn(`No hay ruta definida para el tópico: ${topic}`)
+      const matchingSuffix = Object.keys(TOPIC_ROUTES).find(suffix => topic.endsWith(suffix))
+      if (matchingSuffix) {
+        const processor = TOPIC_ROUTES[matchingSuffix]
+        const context = matchingSuffix.replace(/^\//, '')
+        await processor(firmwareSource, zone, context, messageValue)
+      } else {
+        Logger.warn(`No hay ruta definida para el tópico: ${topic}`)
+      }
     }
-  }
-})
+  })
 
-client.on('error', (error) => {
-  Logger.error('Error en el cliente MQTT', error)
-})
+  client.on('error', (error) => {
+    Logger.error('Error en el cliente MQTT', error)
+  })
 
-client.on('close', () => {
-  Logger.warn('Conexión MQTT perdida')
-  if (heartbeatInterval) {
-    clearInterval(heartbeatInterval)
-    heartbeatInterval = null
-  }
+  client.on('close', () => {
+    Logger.warn('Conexión MQTT perdida')
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval)
+      heartbeatInterval = null
+    }
+  })
+}
+
+start().catch(err => {
+  Logger.error('Error fatal detectado al arrancar el servicio Ingest:', err)
+  process.exit(1)
 })

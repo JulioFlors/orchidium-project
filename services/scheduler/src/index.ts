@@ -177,10 +177,22 @@ async function recordTaskEvent(taskId: string, status: TaskStatus, notes?: strin
   }
 }
 
-// ---- Cliente InfluxDB v3 ----
+// ---- Inicialización Atómica (Fail-Fast) ----
 if (!INFLUX_TOKEN) {
-  Logger.error('INFLUX_TOKEN no esta definido')
+  Logger.error('INFLUX_TOKEN no está definido. Verifique el archivo .env')
   process.exit(1)
+}
+
+/**
+ * Verifica la conexión con PostgreSQL al arranque.
+ */
+async function checkDbConnection() {
+  try {
+    await prisma.$queryRaw`SELECT 1`
+  } catch (err) {
+    Logger.error('FALLO CRÍTICO: No se pudo conectar a PostgreSQL. Verifique el archivo .env', err)
+    process.exit(1)
+  }
 }
 const url = new URL(INFLUX_URL)
 const isPublicCloud = url.hostname.endsWith('influxdata.com')
@@ -237,7 +249,8 @@ mqttClient.on('connect', () => {
   mqttClient.subscribe([
     'PristinoPlant/Actuator_Controller/cmd/received',
     'PristinoPlant/Actuator_Controller/irrigation/state',
-    'PristinoPlant/Actuator_Controller/status'
+    'PristinoPlant/Actuator_Controller/status',
+    'PristinoPlant/Weather_Station/Exterior/readings'
   ], { qos: 1 })
 
   // ---- FRECUENCIA DE SEÑAL DE VIDA (HEARTBEAT) ----
@@ -424,6 +437,50 @@ mqttClient.on('message', async (topic, payload) => {
       return
     }
 
+    // 4. Inteligencia Hidráulica Diágnostica basada en Chunks de Presión
+    if (topic === 'PristinoPlant/Weather_Station/Exterior/readings') {
+      try {
+        const parsed = JSON.parse(message)
+        if (parsed.history && Array.isArray(parsed.history)) {
+          // Obtener la tarea de riego actualmente activa para inyectar logs contextuales
+          const activeIrrigation = await prisma.taskLog.findFirst({
+            where: { status: TaskStatus.IN_PROGRESS },
+            orderBy: { actualStartAt: 'desc' }
+          })
+
+          if (activeIrrigation) {
+             for (const entry of parsed.history) {
+                // Formato RingBuffer: [ts, {"pressure": X, "phase": "MAIN_WATER"}]
+                if (!Array.isArray(entry) || entry.length !== 2) continue
+                const metrics = entry[1]
+
+                if (metrics.pressure !== undefined && metrics.phase) {
+                   const psi = Number(metrics.pressure)
+                   const phase = String(metrics.phase)
+
+                   // Regla: Si está en fase bomba pero la presión es < 5, posible marcha en seco o fallo de apertura.
+                   if (phase === 'BOMBA' && psi < 5) {
+                      Logger.warn(`[Inteligencia Hidráulica] Anomalía en Bomba: Marcha en Seco detectada (${psi} PSI) en la tarea ${activeIrrigation.id.slice(0, 8)}`)
+                      await recordTaskEvent(activeIrrigation.id, TaskStatus.FAILED, `🔴 Error Crítico (Inteligencia Hidráulica): Posible marcha en seco o fallo de solenoide. Presurización fallida (${psi} PSI en fase BOMBA).`)
+                   } 
+                   // Regla: Presión de entrada principal estática buena (SILENCIOSA)
+                   else if (phase === 'MAIN_WATER') {
+                      if (psi < 5) {
+                        Logger.warn(`[Inteligencia Hidráulica] Presión Agua Principal Baja: ${psi} PSI en la tarea ${activeIrrigation.id.slice(0, 8)}`)
+                        await recordTaskEvent(activeIrrigation.id, TaskStatus.IN_PROGRESS, `⚠️ [WARN]: Baja Presión de Entrada Detectada (${psi} PSI). El riego será deficiente si no interviene la bomba secundaria.`)
+                      }
+                      // TODO: Implementar lógica de control una vez calibrado (ej: auto-cancelar si no hay presión)
+                   }
+                }
+             }
+          }
+        }
+      } catch (e) {
+         Logger.error('Error procesando Chunks de Telemetría Exterior (Presión/Fase)', e)
+      }
+      return
+    }
+
   } catch (error) {
     Logger.error('Error procesando QoS Message:', error)
   }
@@ -589,7 +646,9 @@ async function processTaskLog(taskLog: any) {
         status: TaskStatus.FAILED,
         notes: String(error)
       }
-    }).catch()
+    }).catch(err => {
+      Logger.error(`Fallo secundario marcando tarea ${taskLog.id.slice(0, 8)} como FAILED tras error previo`, err)
+    })
   }
 }
 
@@ -789,6 +848,7 @@ async function resumeInterruptedTasks() {
 
 // ---- Inicialización del Servicio ----
 async function initScheduler() {
+  await checkDbConnection()
   Logger.info('Cargando Rutinas desde la base de datos')
 
   const schedules = await prisma.automationSchedule.findMany({

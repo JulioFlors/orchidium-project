@@ -11,8 +11,8 @@ import {
   IoWifiOutline,
   IoHeartOutline,
   IoTrashOutline,
-  IoRefreshOutline,
 } from 'react-icons/io5'
+import { IoIosRefresh } from 'react-icons/io'
 import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts'
 import clsx from 'clsx'
 
@@ -506,7 +506,7 @@ export function AuditConsoleCard({
               type="button"
               onClick={onRefresh}
             >
-              <IoRefreshOutline size={14} />
+              <IoIosRefresh size={14} />
             </button>
             <button
               className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800/50 hover:text-red-400"

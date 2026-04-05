@@ -200,7 +200,7 @@ export function DeviceDebugger() {
   }, [hardwareAudits, showHeartbeat, showNvs])
 
   const connectionState = getStatus(statusTopic, selectedDevice.heartbeatTimeoutMs)
-  
+
   const receivedMsgItem = messages[topicReceived]
 
   // Limpiador automático del spool de comandos pendientes interceptando confirmaciones MQTT

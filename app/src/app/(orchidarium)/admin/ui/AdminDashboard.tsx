@@ -28,17 +28,13 @@ export function AdminDashboard({ user, users }: Props) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  // Derivamos la vista actual del parámetro 'view' en la URL
-  const currentView = (searchParams.get('view') as AdminView) || 'users'
+  // Derivamos la vista actual del parámetro 'view' en la URL (Default: Depuración IoT)
+  const currentView = (searchParams.get('view') as AdminView) || 'iot_debug'
 
   const setView = (view: AdminView) => {
     const params = new URLSearchParams(searchParams.toString())
 
-    if (view === 'users') {
-      params.delete('view')
-    } else {
-      params.set('view', view)
-    }
+    params.set('view', view)
     router.replace(`${pathname}?${params.toString()}`)
   }
 
@@ -112,7 +108,7 @@ export function AdminDashboard({ user, users }: Props) {
             onClick={() => setView('iot_debug')}
           >
             <IoBugOutline size={20} />
-            Debugging IoT
+            Depuración IoT
           </button>
         </Card>
       </div>
