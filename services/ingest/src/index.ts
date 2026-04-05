@@ -164,6 +164,7 @@ async function processEnvironmentPacket(source: string, zone: ZoneType, context:
     if (data.phase !== undefined) point.setStringField('phase', String(data.phase))
 
     await writeToInflux(point)
+    Logger.debug(`💾 [ INFLUX ] Guardado Environment (${source}/${zone}): ${Object.keys(data).join(', ')}`)
 
   } catch (e) {
     Logger.error('Error procesando paquete de datos Ambientales (Batch/Single)', e)
@@ -181,7 +182,7 @@ async function processRainEventPacket(source: string, zone: ZoneType, context: s
       .setFloatField('intensity_percent', Number(data.average_intensity_percent))
 
     await writeToInflux(point)
-    Logger.info('🌧️ Evento de lluvia registrado')
+    Logger.success(`🌧️ [RAIN] Evento Finalizado: ${data.duration_seconds}s | Int: ${data.average_intensity_percent}%`)
   } catch (e) {
     Logger.error('Error procesando paquete de datos de Rain Event', e)
   }
@@ -219,6 +220,15 @@ async function processZoneStateEvent(
     .setStringField('value', payload)
 
   await writeToInflux(point)
+
+  // Visibilidad operativa: Anunciar cambios de estado de lluvia
+  if (eventType === 'Rain_State') {
+    if (payload === 'Raining') {
+      Logger.warn('🌧️ [Raining] Lluvia detectada por sensores')
+    } else if (payload === 'Dry') {
+      Logger.info('☀️ [Dry] Lluvia finalizada')
+    }
+  }
 }
 
 // ---- Punto de Entrada ----

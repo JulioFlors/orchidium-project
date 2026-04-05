@@ -277,12 +277,35 @@ export default function MonitoringPage() {
       }
     }
 
-    const lux = Number(current.illuminance)
-    const hour = new Date(current.time).getHours()
+    const lux = Number(current.illuminance) || 0
+    const hour = new Date(current.time || 0).getHours()
+    const minutesSinceLastUpdate = (Date.now() - new Date(current.time || 0).getTime()) / 60000
+
+    // Prioridad 1.5: Desconocido (Datos muy viejos o nulos)
+    if (minutesSinceLastUpdate > 60 || (!current.time && !isRaining)) {
+      return {
+        label: 'Desconocido',
+        icon: <Cloud className="h-6 w-6 text-gray-400" />,
+        color: 'cyan' as const,
+        description: 'Sin datos recientes',
+        status: 'warning' as const,
+      }
+    }
 
     // Prioridad 2: Noche (Lux bajo o horario nocturno)
-    // Umbral: 19:30 a 06:00 o Lux muy bajo (< 50)
+    // Umbral: 20:00 a 06:00 o Lux muy bajo (< 50)
     if (lux < 50 || hour >= 20 || hour < 6) {
+      if (lux < 5 && hour > 7 && hour < 19) {
+        // Caso especial: Es de día pero lux es 0 -> Sensor posiblemente fallido
+        return {
+          label: 'Falla Sensor',
+          icon: <Moon className="h-6 w-6 text-red-400" />,
+          color: 'orange' as const,
+          description: 'Lux 0 en horario diurno',
+          status: 'critical' as const,
+        }
+      }
+
       return {
         label: 'Noche',
         icon: <Moon className="h-6 w-6 text-indigo-300" />,

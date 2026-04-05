@@ -3,8 +3,8 @@
 # Descripción: Firmware dedicado para el control de las electroválvulas, la bomba
 #              y la estación meteorológica exterior (lluvia, iluminancia, presión).
 # Fecha: 05-04-2026
-# Versión: v0.9.0
-# notes_release: [🌦️ Estación Meteorológica / 🛡️ Salud Filtro]: Sensores migrados al dominio Weather_Station. Nueva corrutina 'circuit_pressure_worker' para telemetría de presión por lotes y análisis de salud del filtro. Robustez MQTT optimizada (Diag + Backoff).
+# Versión: v0.9.1
+# notes_release: [🌦️ Estación Meteorológica / 🛡️ Auditoría]: Refactorización masiva a corrutinas independientes basadas en eventos (RAM, Lux, Presión, Lluvia, Salud). Eliminación definitiva de 'unified_audit_task' y 'audit_wake_event' para optimizar RAM. Robustez MQTT optimizada (log_mqtt_exception en handlers individuales).
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib.
@@ -129,8 +129,14 @@ mqtt_message_buffer = []
 # Evento asíncrono para notificar cambios de estado de un actuador
 state_changed = asyncio.Event()
 
-# Evento asíncrono para despertar a la tarea de auditoría instantáneamente
-audit_wake_event = asyncio.Event()
+# Diccionario de Sincronización para Auditorías Independientes
+audit_events = {
+    "lux":      asyncio.Event(),
+    "pressure": asyncio.Event(),
+    "rain":     asyncio.Event(),
+    "ram":      asyncio.Event(),
+    "health":   asyncio.Event()
+}
 
 # Evento asíncrono para despertar a la tarea de procesamiento de mensajes MQTT
 mqtt_msg_event = asyncio.Event()
@@ -386,16 +392,20 @@ def publish_audit_state():
             payload = dumps(payload_dict)
             # 🔒 Pedimos permiso para usar el socket
             async def _publish():
-                async with mqtt_lock:
-                    client.publish(MQTT_TOPIC_AUDIT_STATE, payload.encode('utf-8'), retain=True, qos=1)
+                try:
+                    async with mqtt_lock:
+                        client.publish(MQTT_TOPIC_AUDIT_STATE, payload.encode('utf-8'), retain=True, qos=1)
+                except (MQTTException, OSError) as e:
+                    if DEBUG: log_mqtt_exception("Fallo sincronización estado auditoría", e)
+                    force_disconnect_mqtt()
+                except Exception as e:
+                    if DEBUG: print(f"⚠️ Error inesperado en _publish audit: {e}")
             
             import uasyncio as asyncio # type: ignore
             asyncio.create_task(_publish())
 
-    except (MQTTException, OSError) as e:
-        pass
-    except Exception:
-        pass
+    except Exception as e:
+        if DEBUG: print(f"⚠️ Error preparando payload de auditoría: {e}")
 
 # ---- Función Auxiliar: Uso del disco ----
 def log_disk_usage():
@@ -1026,7 +1036,10 @@ async def mqtt_processor_task():
                     # 🔒 Pedimos permiso para usar el socket
                     async with mqtt_lock:
                         client.publish(MQTT_TOPIC_CMD_RECEIVED, msg, qos=1)
-            except: pass
+            except (MQTTException, OSError) as e:
+                if DEBUG: log_mqtt_exception("Fallo en el ACK del comando", e)
+                force_disconnect_mqtt()
+            except Exception: pass
 
             # ---- 🛡️ Lógica del Sistema de Comandos (/cmd) ----
             if topic == MQTT_TOPIC_CMD:
@@ -1045,7 +1058,8 @@ async def mqtt_processor_task():
                                 force_disconnect_mqtt()
                                 await check_critical_mqtt_errors(e)
                                 await asyncio.sleep(2)
-                    except: pass
+                        collect()
+                    except Exception: pass
                     if DEBUG: print(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo{Colors.RESET}")
                     from utime import sleep # type: ignore
                     sleep(3) # Pausa breve para flush de logs
@@ -1122,10 +1136,13 @@ async def mqtt_processor_task():
                             if action == b"on":
                                 AUDIT_MODE[category] = True
                                 AUDIT_COUNTERS[category] = 0 # Reiniciamos contador efímero
-                                audit_wake_event.set()       # Despertamos la corrutina de auditorias
+                                if category in audit_events:
+                                    audit_events[category].set() # Despertamos la corrutina específica
                                 if DEBUG: print(f"    └─ AUDIT {category.upper()}: {Colors.GREEN}ON{Colors.RESET}")
                             elif action == b"off":
                                 AUDIT_MODE[category] = False
+                                if category in audit_events:
+                                    audit_events[category].clear() # Detenemos la corrutina específica
 
                                 collect()
                                 if DEBUG: print(f"    └─ AUDIT {category.upper()}: {Colors.RED}OFF{Colors.RESET}")
@@ -2257,7 +2274,7 @@ async def circuit_pressure_worker():
             #    Esto garantiza visibilidad cuasi-real-time en la Timeline de la tarea
             if pressure_Batch.count >= 10:
                 async with mqtt_lock:
-                    _flush_batch()
+                        _flush_batch()
 
             # 6. Diagnóstico de Salud del Filtro (Solo durante fase de bombeo)
             if pump_on and (current_ts - last_health_report >= HEALTH_REPORT_INTERVAL):
@@ -2285,89 +2302,94 @@ async def circuit_pressure_worker():
             if DEBUG: print(f"    ├─ ⚠️  Error en circuit_pressure_worker(): {e}")
             await asyncio.sleep(60)
 
-async def unified_audit_task():
-    """
-    #### Corrutina Unificada de Diagnóstico (Event-Driven)
-    Se Mantine dormida hasta que se activa el evento audit_wake_event.
-    Luego ejecuta el ciclo cada 60s exactos, y se vuelve a dormir tras 10 muestras.
+# ---- CORRUTINAS DE AUDITORÍA INDEPENDIENTES (Event-Driven) ----
+async def _audit_worker(category, sample_fn, interval=1):
+    """ Lógica genérica para trabajadores de auditoría.
+        Se mantiene dormida hasta que se activa el evento audit_events[category].
+        Luego ejecuta el ciclo cada 60s exactos, y se vuelve a dormir tras 10 muestras.
     """
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
-    from gc    import collect, mem_alloc, mem_free
     from ujson import dumps
     from utime import time
     from umqtt.simple2 import MQTTException # type: ignore
 
     while True:
+        # MODO SUSPENSIÓN: La tarea se congela hasta que se activa su evento
+        await audit_events[category].wait()
+        
         try:
-            # ---- MODO SUSPENSIÓN ----
-            # Si TODAS las auditorías están apagadas, la tarea se congela aquí.
-            if not any(AUDIT_MODE.values()):
-                await audit_wake_event.wait()
-                audit_wake_event.clear()
-                # Pequeña pausa para asegurar que otras variables asíncronas se asienten
-                await asyncio.sleep_ms(100)
-
-            # ---- LÓGICA DE AUDITORÍA ----
-            audit_packet = {}
             current_ts = time()
-
-            for category, active in AUDIT_MODE.items():
-                if not active: continue
-
-                # --- Muestreo con Timestamp ---
-                if category == "lux" and illuminance_sensor:
-                    val = round(illuminance_sensor.luminance(BH1750.CONT_HIRES_1), 1)
-                    audit_packet["lux"] = {"history": [[current_ts, val]]}
+            val = sample_fn()
+            
+            if val is not None:
+                packet = {category: {"history": [[current_ts, val]]}}
                 
-                elif category == "pressure" and pressure_sensor_analog:
-                    r_sum = sum([pressure_sensor_analog.read() for _ in range(5)])
-                    audit_packet["pressure"] = {"history": [[current_ts, r_sum // 5]]}
-                    if DEBUG: print(f"    └─ 🔍 Presión Cruda: {r_sum // 5} Raw")
+                # Sincronización MQTT con validación de socket
+                if client and getattr(client, 'sock', None):
+                    # 🔒 Pedimos permiso para usar el socket
+                    async with mqtt_lock:
+                        client.publish(MQTT_TOPIC_AUDIT, dumps(packet).encode('utf-8'), qos=0)
                 
-                elif category == "rain" and rain_sensor_analog:
-                    r_sum = sum([rain_sensor_analog.read() for _ in range(5)])
-                    audit_packet["rain"] = {"history": [[current_ts, r_sum // 5]]}
-
-                elif category == "ram":
-                    collect()
-                    audit_packet["ram"] = {"history": [[current_ts, {"f": mem_free(), "a": mem_alloc()}]]}
-
-                elif category == "health" and wlan:
-                    rssi = wlan.status('rssi') if wlan.isconnected() else -120
-                    audit_packet["health"] = {"history": [[current_ts, {"rssi": rssi, "ip": wlan.ifconfig()[0]}]]}
-
-                # Incrementamos el contador DESPUÉS de haber muestreado
                 AUDIT_COUNTERS[category] += 1
+                
+                if DEBUG:
+                    print(f"    ├─ 🔍 Auditoría {category.upper()} #{AUDIT_COUNTERS[category]}: {val}")
 
-            # Sincronización MQTT con validación de socket
-            if audit_packet and client and getattr(client, 'sock', None):
-                # 🔒 Pedimos permiso para usar el socket
-                async with mqtt_lock:
-                    client.publish(MQTT_TOPIC_AUDIT, dumps(audit_packet).encode('utf-8'), qos=0)
-                    if DEBUG: print(f"    ├─ 📦 Paquete de Auditoría Enviado ({len(audit_packet)} items)")
-
-            # Verificacíon del apagado automático
-            for category, active in AUDIT_MODE.items():
-                if active and AUDIT_COUNTERS[category] >= 10:
-                    AUDIT_MODE[category] = False
-                    AUDIT_COUNTERS[category] = 0
-                    if DEBUG: print(f"    └─ Auto-OFF: {category.upper()} (10 muestras alcanzadas)")
-                    publish_audit_state()
-
-            # Despertamos cada 60 segundos 
-            # (Solo si queda alguna auditoría encendida)
-            if any(AUDIT_MODE.values()):
-                await asyncio.sleep(60)
+            # Auto-apagado tras 10 muestras para evitar saturación
+            if AUDIT_COUNTERS[category] >= 10:
+                audit_events[category].clear()
+                AUDIT_MODE[category] = False
+                AUDIT_COUNTERS[category] = 0
+                if DEBUG: print(f"    └─ Auto-OFF: {category.upper()} (10 pts)")
+                publish_audit_state()
 
         except (MQTTException, OSError) as e:
-            if DEBUG: log_mqtt_exception("Error de red en Auditoría Unificada", e)
+            if DEBUG: log_mqtt_exception(f"Error de red en audit_{category}", e)
             force_disconnect_mqtt()
             await check_critical_mqtt_errors(e)
             await asyncio.sleep(5)
         except Exception as e:
-            if DEBUG: print(f"    ├─ ⚠️  Error Unified Audit: {e}")
+            if DEBUG: print(f"⚠️ Error en audit_{category}: {e}")
             await asyncio.sleep(5)
+
+        await asyncio.sleep(interval)
+
+async def audit_ram_task():
+    from gc import collect, mem_alloc, mem_free
+    def sample():
+        collect()
+        return {"f": mem_free(), "a": mem_alloc()}
+    await _audit_worker("ram", sample, interval=2)
+
+async def audit_lux_task():
+    def sample():
+        if illuminance_sensor:
+            return round(illuminance_sensor.luminance(BH1750.CONT_HIRES_1), 1)
+        return None
+    await _audit_worker("lux", sample, interval=1)
+
+async def audit_pressure_task():
+    def sample():
+        if pressure_sensor_analog:
+            return sum([pressure_sensor_analog.read() for _ in range(5)]) // 5
+        return None
+    await _audit_worker("pressure", sample, interval=1)
+
+async def audit_rain_task():
+    def sample():
+        if rain_sensor_analog:
+            return sum([rain_sensor_analog.read() for _ in range(5)]) // 5
+        return None
+    await _audit_worker("rain", sample, interval=1)
+
+async def audit_health_task():
+    def sample():
+        if wlan:
+            rssi = wlan.status('rssi') if wlan.isconnected() else -120
+            return {"rssi": rssi, "ip": wlan.ifconfig()[0]}
+        return None
+    await _audit_worker("health", sample, interval=5)
 
 # ---- CORRUTINA: Programa Principal ----
 async def main():
@@ -2403,10 +2425,15 @@ async def main():
     asyncio.create_task(rain_monitor_task())
     # Gestion de la Estación Meteorológica Exterior (iluminancia)
     asyncio.create_task(illuminance_monitor_task())
-    # Auditoría Unificada
-    asyncio.create_task(unified_audit_task())
     # Monitoreo Unificado de Presión (Reactivo al Riego)
     asyncio.create_task(circuit_pressure_worker())
+
+    # ---- Auditorías Independientes (Event-Driven) ----
+    asyncio.create_task(audit_ram_task())
+    asyncio.create_task(audit_lux_task())
+    asyncio.create_task(audit_pressure_task())
+    asyncio.create_task(audit_rain_task())
+    asyncio.create_task(audit_health_task())
 
     # ---- Watchdog Timer ----
     # Seguridad de hardware: Si el bucle principal se congela, el dispositivo se reinicia.

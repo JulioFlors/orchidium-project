@@ -250,7 +250,9 @@ mqttClient.on('connect', () => {
     'PristinoPlant/Actuator_Controller/cmd/received',
     'PristinoPlant/Actuator_Controller/irrigation/state',
     'PristinoPlant/Actuator_Controller/status',
-    'PristinoPlant/Weather_Station/Exterior/readings'
+    'PristinoPlant/Weather_Station/Exterior/readings',
+    'PristinoPlant/Weather_Station/Exterior/rain/state',
+    'PristinoPlant/Weather_Station/Exterior/rain/event',
   ], { qos: 1 })
 
   // ---- FRECUENCIA DE SEÑAL DE VIDA (HEARTBEAT) ----
@@ -481,6 +483,30 @@ mqttClient.on('message', async (topic, payload) => {
       return
     }
 
+    // 5. Detección en Tiempo Real de Estado de Lluvia (Weather Guard)
+    if (topic === 'PristinoPlant/Weather_Station/Exterior/rain/state') {
+      if (message === 'Raining') {
+        Logger.warn('🌧️ [WeatherGuard] Lluvia detectada por sensores en tiempo real. Evaluación de tareas activas...')
+        
+        // REACCIÓN INMEDIATA: Si hay tareas en curso en zonas exteriores, pausarlas o vigilarlas.
+        // (La lógica de pausa se dispara en el próximo Tick del Scheduler o aquí mismo)
+      } else if (message === 'Dry') {
+        Logger.info('☀️ [WeatherGuard] Los sensores indican que la lluvia ha cesado.')
+      }
+      return
+    }
+
+    // 6. Registro de Fin de Evento de Lluvia
+    if (topic === 'PristinoPlant/Weather_Station/Exterior/rain/event') {
+      try {
+        const data = JSON.parse(message)
+        Logger.success(`🌧️ [WeatherGuard] Evento de lluvia finalizado: ${Math.floor(data.duration_seconds / 60)} min | Intensidad: ${data.average_intensity_percent}%`)
+      } catch (e) {
+        Logger.error('Error parseando Rain Event JSON:', e)
+      }
+      return
+    }
+
   } catch (error) {
     Logger.error('Error procesando QoS Message:', error)
   }
@@ -500,7 +526,7 @@ async function checkRainCondition(zone: ZoneType): Promise<{ shouldCancel: boole
       SELECT SUM("duration_seconds") as total_rain
       FROM "rain_events"
       WHERE time >= now() - interval '24 hours'
-      AND zone = '${zone}'
+      AND zone = 'EXTERIOR'
     `
 
     Logger.debug(`Consultando Lluvia: ${query}`)
