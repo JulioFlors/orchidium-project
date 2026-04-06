@@ -12,13 +12,17 @@ interface MqttState {
   messages: Record<string, { payload: unknown; receivedAt: number }>
   // Set de tópicos a los que estamos suscritos (para evitar duplicados)
   subscriptions: Set<string>
+  // Mapa: payload del mensaje -> timestamp de envío (para seguimiento de ACK)
+  pendingAcks: Record<string, number>
 
   // Acciones
   connect: () => void
   disconnect: () => void
   subscribe: (topic: string) => void
   unsubscribe: (topic: string) => void
-  publish: (topic: string, message: string | object) => void
+  publish: (topic: string, message: string | object, retain?: boolean) => void
+  publishWithAck: (topic: string, message: string | object) => void
+  clearAck: (payload: string) => void
 }
 
 // Configuración desde variables de entorno
@@ -54,6 +58,7 @@ export const useMqttStore = create<MqttState>()(
       status: 'disconnected',
       messages: {},
       subscriptions: new Set(),
+      pendingAcks: {},
 
       connect: () => {
         const { client, status } = get()
@@ -70,7 +75,7 @@ export const useMqttStore = create<MqttState>()(
           return
         }
 
-        console.log(`🔌 [MQTT] Conectando a ${BROKER_URL}...`)
+        console.log(`🔌 [MQTT] Conectando a ${BROKER_URL}`)
         set({ status: 'connecting' })
 
         const mqttClient = mqtt.connect(BROKER_URL, OPTIONS)
@@ -88,7 +93,7 @@ export const useMqttStore = create<MqttState>()(
         })
 
         mqttClient.on('reconnect', () => {
-          console.log('🔄 [MQTT] Reconectando...')
+          console.log('🔄 [MQTT] Reconectando')
           set({ status: 'reconnecting' })
         })
 
@@ -116,15 +121,36 @@ export const useMqttStore = create<MqttState>()(
           }
 
           // Actualizamos el mapa de mensajes
-          set((state) => ({
-            messages: {
+          set((state) => {
+            const newMessages = {
               ...state.messages,
               [topic]: {
                 payload: parsedPayload,
                 receivedAt: Date.now(),
               },
-            },
-          }))
+            }
+
+            // Lógica de Limpieza de ACK
+            // Si el tópico termina en /received, buscamos si coincide con algún pendingAck
+            let newPendingAcks = state.pendingAcks
+
+            if (topic.endsWith('/received')) {
+              const ackPayload =
+                typeof parsedPayload === 'string' ? parsedPayload : JSON.stringify(parsedPayload)
+
+              if (state.pendingAcks[ackPayload]) {
+                const rest = { ...state.pendingAcks }
+
+                delete rest[ackPayload]
+                newPendingAcks = rest
+              }
+            }
+
+            return {
+              messages: newMessages,
+              pendingAcks: newPendingAcks,
+            }
+          })
         })
 
         set({ client: mqttClient })
@@ -134,7 +160,7 @@ export const useMqttStore = create<MqttState>()(
         const { client } = get()
 
         if (client) {
-          console.log('🛑 [MQTT] Desconectando...')
+          console.log('🛑 [MQTT] Desconectando')
           client.end()
           set({ client: null, status: 'disconnected' })
         }
@@ -177,17 +203,47 @@ export const useMqttStore = create<MqttState>()(
         }
       },
 
-      publish: (topic, message) => {
+      publish: (topic, message, retain = false) => {
         const { client } = get()
 
         if (client && client.connected) {
           const payload = typeof message === 'object' ? JSON.stringify(message) : message
 
-          client.publish(topic, payload, { qos: 1 }) // QoS 1 para asegurar entrega comandos
-          console.log(`📤 [MQTT] Enviado a ${topic}:`, payload)
+          // 🛡️ Seguridad: qos 1 para asegurar recepción del mensaje
+          client.publish(topic, payload, { qos: 1, retain })
+          console.log(`📤 [MQTT] Enviado a ${topic}${retain ? ' [RETAINED]' : ''}:`, payload)
         } else {
           console.warn('⚠️ [MQTT] No se puede publicar, cliente desconectado')
         }
+      },
+
+      publishWithAck: (topic, message) => {
+        const { client, publish } = get()
+
+        if (!client || !client.connected) return
+
+        const payload = typeof message === 'object' ? JSON.stringify(message) : message
+
+        // Registramos en el estado de ACKs pendientes
+        set((state) => ({
+          pendingAcks: {
+            ...state.pendingAcks,
+            [payload]: Date.now(),
+          },
+        }))
+
+        // Despachamos (sin retained para acciones robustas)
+        publish(topic, message, false)
+      },
+
+      clearAck: (payload) => {
+        set((state) => {
+          const rest = { ...state.pendingAcks }
+
+          delete rest[payload]
+
+          return { pendingAcks: rest }
+        })
       },
     }),
     { name: 'MqttStore' },

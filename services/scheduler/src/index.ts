@@ -565,6 +565,7 @@ function executeSequence(purpose: TaskPurpose, durationMinutes: number, taskId: 
   const message = JSON.stringify(payload)
   mqttClient.publish(ACTUATOR_TOPIC, message, {
     qos: 1,
+    retain: false, // 🛡️ Seguridad: No retener comandos operativos
     properties: {
       messageExpiryInterval: 300
     }

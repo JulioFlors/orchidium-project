@@ -79,13 +79,12 @@ interface AuditSnapshotResponse {
 }
 
 export function DeviceDebugger() {
-  const { subscribe, publish, messages, status } = useMqttStore()
+  const { subscribe, publishWithAck, messages, status, pendingAcks } = useMqttStore()
 
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>(DEVICES[0].id)
   const [connectivityLogs, setConnectivityLogs] = useState<DeviceLog[]>([])
   const [now, setNow] = useState(() => Date.now())
 
-  const [pendingCommands, setPendingCommands] = useState<string[]>([])
   const [showServices, setShowServices] = useState(false)
   const [showTimeline, setShowTimeline] = useState(false)
 
@@ -208,17 +207,6 @@ export function DeviceDebugger() {
 
   const connectionState = getStatus(statusTopic, selectedDevice.heartbeatTimeoutMs)
 
-  const receivedMsgItem = messages[topicReceived]
-
-  // Limpiador automático del spool de comandos pendientes
-  useEffect(() => {
-    if (receivedMsgItem?.payload) {
-      setTimeout(() => {
-        setPendingCommands((prev) => prev.filter((cmd) => cmd !== String(receivedMsgItem.payload)))
-      }, 0)
-    }
-  }, [receivedMsgItem?.receivedAt, receivedMsgItem?.payload])
-
   // Consultar datos históricos desde PostgreSQL al activar un widget
   const fetchHistoricalData = useCallback(async (device: string, category: string) => {
     try {
@@ -290,8 +278,7 @@ export function DeviceDebugger() {
           const willShow = !prev.includes('nvs')
 
           if (willShow) {
-            publish(topicCmd, 'audit_nvs')
-            setPendingCommands((p) => Array.from(new Set([...p, 'audit_nvs'])))
+            publishWithAck(topicCmd, 'audit_nvs')
 
             return [...prev, 'nvs']
           }
@@ -320,8 +307,7 @@ export function DeviceDebugger() {
             const isCurrentlyActive = hardwareAudits.includes(auditKey)
 
             if (!isCurrentlyActive) {
-              publish(topicCmd, `audit_${auditKey}_on`)
-              setPendingCommands((prev) => Array.from(new Set([...prev, `audit_${auditKey}_on`])))
+              publishWithAck(topicCmd, `audit_${auditKey}_on`)
             }
           }
         }
@@ -329,13 +315,9 @@ export function DeviceDebugger() {
         return
       }
 
-      publish(topicCmd, cmd)
-      setPendingCommands((prev) => Array.from(new Set([...prev, cmd])))
-      if (cmd === 'reset') {
-        setTimeout(() => setPendingCommands((prev) => prev.filter((c) => c !== 'reset')), 5000)
-      }
+      publishWithAck(topicCmd, cmd)
     },
-    [widgetOrder, hardwareAudits, publish, topicCmd, fetchHistoricalData, selectedDevice.id],
+    [widgetOrder, hardwareAudits, publishWithAck, topicCmd, fetchHistoricalData, selectedDevice.id],
   )
 
   const forceRefreshAudit = useCallback(
@@ -372,13 +354,12 @@ export function DeviceDebugger() {
 
       // 3. Enviar comando para nuevas lecturas
       if (auditKey === 'nvs') {
-        publish(topicCmd, 'audit_nvs')
+        publishWithAck(topicCmd, 'audit_nvs')
       } else {
-        publish(topicCmd, `audit_${auditKey}_on`)
+        publishWithAck(topicCmd, `audit_${auditKey}_on`)
       }
-      setPendingCommands((prev) => Array.from(new Set([...prev, `audit_${auditKey}_on`])))
     },
-    [publish, topicCmd, selectedDevice.id],
+    [publishWithAck, topicCmd, selectedDevice.id],
   )
 
   const getDeviceLabel = (id: string) => {
@@ -408,7 +389,6 @@ export function DeviceDebugger() {
         zones={DEVICES.map((d) => d.id)}
         onZoneChanged={(id) => {
           setSelectedDeviceId(id)
-          setPendingCommands([])
           setWidgetOrder([])
           setHistoricalData({})
           setStaleWidgets({})
@@ -420,7 +400,7 @@ export function DeviceDebugger() {
         activeAudits={activeDisplayWidgets}
         hardwarePresence={hardwarePresence}
         isOnline={connectionState === 'online'}
-        isPending={(cmd) => pendingCommands.includes(cmd)}
+        isPending={(cmd) => Boolean(pendingAcks[cmd])}
         showServices={showServices}
         showTimeline={showTimeline}
         onCommand={handleCommand}
@@ -537,6 +517,9 @@ export function DeviceDebugger() {
                       currentPayload={payload}
                       isStale={isStale}
                       receivedAt={messages[unifiedAuditTopic]?.receivedAt}
+                      onClose={() => {
+                        setWidgetOrder((prev) => prev.filter((id) => id !== auditId))
+                      }}
                       onRefresh={() => forceRefreshAudit(auditId)}
                     />
                   )}

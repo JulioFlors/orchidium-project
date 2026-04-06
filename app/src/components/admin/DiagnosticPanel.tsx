@@ -10,6 +10,7 @@ import {
   IoHardwareChipOutline,
   IoWifiOutline,
   IoHeartOutline,
+  IoCloseOutline,
 } from 'react-icons/io5'
 import { IoIosRefresh } from 'react-icons/io'
 import {
@@ -294,6 +295,7 @@ interface AuditConsoleCardProps {
   receivedAt?: number
   isStale?: boolean
   onRefresh?: () => void
+  onClose?: () => void
 }
 
 export function AuditConsoleCard({
@@ -302,6 +304,7 @@ export function AuditConsoleCard({
   receivedAt,
   isStale = false,
   onRefresh,
+  onClose,
 }: AuditConsoleCardProps) {
   const accumulatorRef = useRef<Record<string, unknown>>({})
 
@@ -428,6 +431,23 @@ export function AuditConsoleCard({
   const gradientId = `audit-grad-${activeAudit}`
 
   const renderContent = () => {
+    // Extraer el valor más reciente del lote (Batching compat)
+    let dataForUi = displayPayload
+
+    if (
+      typeof displayPayload === 'object' &&
+      displayPayload !== null &&
+      'history' in displayPayload
+    ) {
+      const h = (displayPayload as { history: unknown[] }).history
+
+      if (Array.isArray(h) && h.length > 0) {
+        const lastPoint = h[h.length - 1]
+
+        dataForUi = Array.isArray(lastPoint) ? lastPoint[1] : lastPoint
+      }
+    }
+
     if (activeAudit === 'nvs') {
       return (
         <pre className="whitespace-pre-wrap text-blue-300">
@@ -438,11 +458,21 @@ export function AuditConsoleCard({
       )
     }
 
-    if (activeAudit === 'ram' && displayPayload && typeof displayPayload === 'object') {
-      const ram = displayPayload as { used: number; total: number; free: number }
+    if (activeAudit === 'ram' && dataForUi && typeof dataForUi === 'object') {
+      // Mapear claves de MicroPython (f: free, a: alloc) a UI (used, total, free)
+      const raw = dataForUi as {
+        f?: number
+        a?: number
+        used?: number
+        total?: number
+        free?: number
+      }
+      const free = raw.free ?? raw.f ?? 0
+      const used = raw.used ?? raw.a ?? 0
+      const total = raw.total ?? free + used
 
-      if (ram.total) {
-        const percent = Math.round((ram.used / ram.total) * 100)
+      if (total > 0) {
+        const percent = Math.round((used / total) * 100)
 
         return (
           <div className="flex flex-col items-center justify-center space-y-4 py-4">
@@ -470,8 +500,8 @@ export function AuditConsoleCard({
               </div>
             </div>
             <div className="flex w-full justify-between border-t border-zinc-800/50 px-6 pt-3 font-mono text-[10px]">
-              <span className="text-emerald-500">Libre: {ram.free}</span>
-              <span className="text-zinc-500 opacity-60">Total: {ram.total}</span>
+              <span className="text-emerald-500">Libre: {Math.round(free / 1024)} KB</span>
+              <span className="text-zinc-500 opacity-60">Total: {Math.round(total / 1024)} KB</span>
             </div>
           </div>
         )
@@ -481,9 +511,9 @@ export function AuditConsoleCard({
     if (activeAudit === 'health' || activeAudit === 'state') {
       return (
         <pre className="leading-relaxed whitespace-pre-wrap text-zinc-300">
-          {typeof displayPayload === 'object' && displayPayload !== null
-            ? JSON.stringify(displayPayload, null, 2)
-            : String(displayPayload)}
+          {typeof dataForUi === 'object' && dataForUi !== null
+            ? JSON.stringify(dataForUi, null, 2)
+            : String(dataForUi)}
         </pre>
       )
     }
@@ -634,6 +664,17 @@ export function AuditConsoleCard({
             >
               <IoIosRefresh size={14} />
             </button>
+
+            {onClose && (
+              <button
+                className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-red-500/10 hover:text-red-500"
+                title="Ocultar Widget"
+                type="button"
+                onClick={onClose}
+              >
+                <IoCloseOutline size={16} />
+              </button>
+            )}
           </div>
         </div>
       </div>

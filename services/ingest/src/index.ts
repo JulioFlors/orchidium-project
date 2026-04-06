@@ -37,18 +37,31 @@ const colors = {
   yellow: '\x1b[93m',
   blue: '\x1b[34m',
   magenta: '\x1b[95m',
+  cyan: '\x1b[96m',
   white: '\x1b[97m',
 }
 
 // ---- Sistema de Logs ----
+const getLogTime = () => {
+  return new Intl.DateTimeFormat('es-VE', {
+    timeZone: 'America/Caracas',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  }).format(new Date())
+}
+
 const Logger = {
-  mqtt: (msg: string) => console.log(`${colors.blue}📡 [ MQTT ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
-  info: (msg: string) => console.log(`${colors.blue}📡 [ INFO ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
-  success: (msg: string) => console.log(`${colors.green}✅ [ DONE ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
-  warn: (msg: string) => console.warn(`${colors.yellow}⚠️ [ WARN ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
-  error: (msg: string, err?: unknown) => console.error(`${colors.red}❌ [ ERROR ]${colors.reset}${colors.white} ${msg}${colors.reset}`, err || ''),
-  debug: (msg: string) => DEBUG && console.log(`${colors.green}🔎 [ DEBUG ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
-  influx: (msg: string) => DEBUG && console.log(`${colors.green}💾 [ INFLUX ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
+  mqtt: (msg: string) => console.log(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.blue} 📡 [ MQTT ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
+  info: (msg: string) => console.log(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.blue} 📡 [ INFO ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
+  success: (msg: string) => console.log(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.green} ✅ [ DONE ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
+  warn: (msg: string) => console.warn(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.yellow} ⚠️ [ WARN ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
+  error: (msg: string, err?: any) => console.error(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.red} ❌ [ ERROR ]${colors.reset}${colors.white} ${msg}${colors.reset}`, err || ''),
+  debug: (msg: string) => DEBUG && console.log(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.cyan} 🔎 [ DEBUG ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
+  influx: (msg: string) => DEBUG && console.log(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.green} 💾 [ INFLUX ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
 }
 
 // ---- Inicialización Atómica (Fail-Fast) ----
@@ -132,11 +145,15 @@ async function processEnvironmentPacket(source: string, zone: ZoneType, context:
         
         const [timestamp, metrics] = entry as [number, Record<string, string | number>]
         
+        // Corrección de Época: MicroPython (2000) vs Unix (1970)
+        // Offset: 946684800 segundos
+        const unixTimestamp = timestamp < 1000000000 ? timestamp + 946684800 : timestamp;
+
         const point = Point.measurement('environment_metrics')
           .setTag('source', source)
           .setTag('zone', zone)
           .setTag('context', context)
-          .setTimestamp(new Date(timestamp * 1000))
+          .setTimestamp(new Date(unixTimestamp * 1000))
 
         if (metrics.temperature !== undefined) point.setFloatField('temperature', Number(metrics.temperature))
         if (metrics.humidity !== undefined) point.setFloatField('humidity', Number(metrics.humidity))

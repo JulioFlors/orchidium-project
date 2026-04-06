@@ -49,6 +49,7 @@ export async function GET(request: Request) {
   `
 
   try {
+    // console.log(`🔍 Query InfluxDB: ${query}`)
     const reader = influxClient.query(query)
     const data = []
 
@@ -64,6 +65,9 @@ export async function GET(request: Request) {
 
       data.push(point)
     }
+
+    // eslint-disable-next-line no-console
+    console.log(`📊 InfluxResults [${zone}/${rangeString}]: ${data.length} puntos encontrados.`)
 
     return NextResponse.json(data)
   } catch (error: unknown) {

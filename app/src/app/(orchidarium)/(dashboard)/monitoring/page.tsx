@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { CloudRain, Droplets, Thermometer, Sun, Cloud, Moon, CloudSun } from 'lucide-react'
 import { FaChartLine } from 'react-icons/fa6'
 
@@ -8,6 +8,7 @@ import { SmartDeviceHeader } from '@/components/dashboard/SmartDeviceHeader'
 import { EnvironmentCard } from '@/components/dashboard/EnvironmentCard'
 import { SensorHistoryChart } from '@/components/dashboard/SensorHistoryChart'
 import { useDeviceHeartbeat } from '@/hooks'
+import { useMqttStore } from '@/store/mqtt/mqtt.store'
 
 interface SensorData {
   [key: string]: string | number | undefined
@@ -92,17 +93,66 @@ export default function MonitoringPage() {
     setSelectedMetric(null)
   }, [zone])
 
-  // Derive current values from the last data point
-  const current =
-    data.length > 0
-      ? data[data.length - 1]
-      : {
-          time: new Date(0).toISOString(),
-          temperature: 0,
-          humidity: 0,
-          illuminance: 0,
-          rain_intensity: 0,
-        }
+  // 0. Integración MQTT en Tiempo Real para el Monitor Ambiental
+  const { messages: mqttMessages } = useMqttStore()
+  const readingsTopic = 'PristinoPlant/Weather_Station/Exterior/readings'
+
+  const mqttReadings = useMemo(() => {
+    const msg = mqttMessages[readingsTopic]
+
+    if (!msg) return null
+    try {
+      // Soportar tanto objetos como strings (formato manual v0.9.9)
+      const payload =
+        typeof msg.payload === 'object' ? msg.payload : JSON.parse(String(msg.payload))
+
+      // Extraer el último punto del historial si existe (formato Batch)
+      if (payload.history && Array.isArray(payload.history)) {
+        const lastPoint = payload.history[payload.history.length - 1]
+
+        return lastPoint[1] as Partial<SensorData>
+      }
+
+      return payload as Partial<SensorData>
+    } catch {
+      return null
+    }
+  }, [mqttMessages, readingsTopic])
+
+  // Derive current values from the last data point (API vs MQTT)
+  const current = useMemo(() => {
+    const base =
+      data.length > 0
+        ? data[data.length - 1]
+        : {
+            time: new Date().toISOString(),
+            temperature: 0,
+            humidity: 0,
+            illuminance: 0,
+            rain_intensity: 0,
+          }
+
+    // Si tenemos datos frescos de MQTT, los sobreponemos a los de la API (polling)
+    if (mqttReadings) {
+      // 🕒 Corrección de Época: MicroPython (2000) vs Unix (1970)
+      // Si el timestamp es sospechosamente bajo (< 1B), aplicamos el offset.
+      let timestamp = Date.now() / 1000
+
+      if (mqttReadings.time) {
+        const rawTime = Number(mqttReadings.time)
+
+        timestamp = rawTime < 1000000000 ? rawTime + 946684800 : rawTime
+      }
+
+      return {
+        ...base,
+        ...mqttReadings,
+        time: new Date(timestamp * 1000).toISOString(),
+      }
+    }
+
+    return base
+  }, [data, mqttReadings])
 
   // 1. Estado de Conexión Unificado (para el Badge y Dashboard) usando el custom hook
   const { connectionState } = useDeviceHeartbeat(statusTopic)
