@@ -194,8 +194,7 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
   * **Light Sleep:** Mantiene RAM/WiFi, menor ahorro (~2mA) pero mantiene MQTT.
   * **Delta Publishing:** Solo publicar cuando el cambio supere un umbral (ej: ΔTemp > 0.5°C).
   * Reducir frecuencia de OTA checks (ej: 1 de cada N boots).
-* [x] **Integración Transductor de Presión:** Desarrollar la logica para detectar el circuito activo y reportarlo en el payload (v0.6.1).
 * [x] **Renombrar Light Intensity a Illuminance:** Uniformar el término técnico en todo el sistema (firmware, ingest, database, frontend) (v0.6.1).
 * [x] **Optimización Status Exterior:** Unificar el status de la estación exterior con el del nodo actuador para ahorrar recursos (v0.6.1).
-* [x] **Migración Sensor Lluvia al Nodo Actuador:** ~~Mover lógica `rain_monitor_task()` del firmware Sensors al firmware Relays.~~ Migrado en v0.6.0. Incluye BH1750 exterior + sensor de gotas de lluvia + transductor de presión. Tópicos MQTT bajo `PristinoPlant/Environmental_Monitoring/Exterior/`.
+* [x] **Migración Sensor Lluvia al Nodo Actuador:** ~~Mover lógica `rain_monitor_task()` del firmware Sensors al firmware Relays.~~ Migrado en v0.6.0. Incluye BH1750 exterior + sensor de gotas de lluvia. Tópicos MQTT bajo `PristinoPlant/Environmental_Monitoring/Exterior/`.
 * [x] **Sensor de Iluminancia externo:** ~~Desarrollar la logica para calcular la diferencia de iluminancia.~~ Implementado en v0.6.0 como `exterior_publish_task()` en el nodo actuador. Publica en `Exterior/readings` para comparar con el BH1750 interior.

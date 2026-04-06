@@ -436,7 +436,7 @@ model DeviceLog {
 model AuditSnapshot {
   id        String   @id @default(uuid())
   device    String // 'actuator' | 'sensors'
-  category  String // 'lux' | 'rain' | 'pressure' | 'ram' | 'health'
+  category  String // 'lux' | 'rain' | 'ram' | 'health'
   data      Json // Payload completo del snapshot
   createdAt DateTime @default(now())
 

@@ -21,6 +21,7 @@ import { DeferredTaskModal } from './ui/DeferredTaskModal'
 
 import { Modal, Badge } from '@/components/ui'
 import { TaskPurposeLabels } from '@/config/mappings'
+import { formatTime12h } from '@/utils'
 
 const fetcher = async (url: string) => {
   const res = await fetch(url)
@@ -155,6 +156,7 @@ export default function QueuePage() {
     id: string
     label: string
     isRoutine?: boolean
+    scheduledAt?: string
   } | null>(null)
   const [cancelReason, setCancelReason] = useState('')
 
@@ -165,7 +167,10 @@ export default function QueuePage() {
       const res = await fetch(`/api/tasks/${cancelTarget.id}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: cancelReason.trim() }),
+        body: JSON.stringify({
+          reason: cancelReason.trim(),
+          scheduledAt: cancelTarget.scheduledAt,
+        }),
       })
 
       if (res.ok) {
@@ -285,14 +290,12 @@ export default function QueuePage() {
                           <span>Duración: {task.duration} min</span>
                           <span>•</span>
                           <span>
-                            {dateObj.toLocaleString('es-VE', {
+                            {dateObj.toLocaleDateString('es-VE', {
                               weekday: 'short',
                               month: 'short',
                               day: 'numeric',
-                              hour: 'numeric',
-                              minute: '2-digit',
-                              hour12: true,
                             })}
+                            , {formatTime12h(dateObj)}
                           </span>
                         </div>
                       </div>
@@ -320,6 +323,7 @@ export default function QueuePage() {
                                 id: task.id,
                                 label: action.label,
                                 isRoutine: task.isRoutine,
+                                scheduledAt: task.scheduledAt,
                               })
                             }
                             onClose={() => setActiveMenuId(null)}

@@ -238,6 +238,7 @@ let heartbeatInterval: NodeJS.Timeout | null = null
 
 // ---- Memoria de Estado para evitar Logs repetitivos ----
 let lastActuatorState = 'unknown'
+let lastRainState: string | null = null
 
 mqttClient.on('connect', () => {
   Logger.success('Conectado a Broker MQTT')
@@ -439,64 +440,21 @@ mqttClient.on('message', async (topic, payload) => {
       return
     }
 
-    // 4. Inteligencia Hidráulica Diágnostica basada en Chunks de Presión
-    if (topic === 'PristinoPlant/Weather_Station/Exterior/readings') {
-      try {
-        const parsed = JSON.parse(message)
-        if (parsed.history && Array.isArray(parsed.history)) {
-          // Obtener la tarea de riego actualmente activa para inyectar logs contextuales
-          const activeIrrigation = await prisma.taskLog.findFirst({
-            where: { status: TaskStatus.IN_PROGRESS },
-            orderBy: { actualStartAt: 'desc' }
-          })
-
-          if (activeIrrigation) {
-             for (const entry of parsed.history) {
-                // Formato RingBuffer: [ts, {"pressure": X, "phase": "MAIN_WATER"}]
-                if (!Array.isArray(entry) || entry.length !== 2) continue
-                const metrics = entry[1]
-
-                if (metrics.pressure !== undefined && metrics.phase) {
-                   const psi = Number(metrics.pressure)
-                   const phase = String(metrics.phase)
-
-                   // Regla: Si está en fase bomba pero la presión es < 5, posible marcha en seco o fallo de apertura.
-                   if (phase === 'BOMBA' && psi < 5) {
-                      Logger.warn(`[Inteligencia Hidráulica] Anomalía en Bomba: Marcha en Seco detectada (${psi} PSI) en la tarea ${activeIrrigation.id.slice(0, 8)}`)
-                      await recordTaskEvent(activeIrrigation.id, TaskStatus.FAILED, `🔴 Error Crítico (Inteligencia Hidráulica): Posible marcha en seco o fallo de solenoide. Presurización fallida (${psi} PSI en fase BOMBA).`)
-                   } 
-                   // Regla: Presión de entrada principal estática buena (SILENCIOSA)
-                   else if (phase === 'MAIN_WATER') {
-                      if (psi < 5) {
-                        Logger.warn(`[Inteligencia Hidráulica] Presión Agua Principal Baja: ${psi} PSI en la tarea ${activeIrrigation.id.slice(0, 8)}`)
-                        await recordTaskEvent(activeIrrigation.id, TaskStatus.IN_PROGRESS, `⚠️ [WARN]: Baja Presión de Entrada Detectada (${psi} PSI). El riego será deficiente si no interviene la bomba secundaria.`)
-                      }
-                      // TODO: Implementar lógica de control una vez calibrado (ej: auto-cancelar si no hay presión)
-                   }
-                }
-             }
-          }
-        }
-      } catch (e) {
-         Logger.error('Error procesando Chunks de Telemetría Exterior (Presión/Fase)', e)
-      }
-      return
-    }
-
-    // 5. Detección en Tiempo Real de Estado de Lluvia (Weather Guard)
+    // 4. Detección en Tiempo Real de Estado de Lluvia (Weather Guard)
     if (topic === 'PristinoPlant/Weather_Station/Exterior/rain/state') {
-      if (message === 'Raining') {
+      if (message === 'Raining' && lastRainState !== 'Raining') {
         Logger.warn('🌧️ [WeatherGuard] Lluvia detectada por sensores en tiempo real. Evaluación de tareas activas.')
         
         // REACCIÓN INMEDIATA: Si hay tareas en curso en zonas exteriores, pausarlas o vigilarlas.
         // (La lógica de pausa se dispara en el próximo Tick del Scheduler o aquí mismo)
-      } else if (message === 'Dry') {
-        Logger.info('☀️ [WeatherGuard] Los sensores indican que la lluvia ha cesado.')
+      } else if (message === 'Dry' && lastRainState === 'Raining') {
+        Logger.info('☀️ [WeatherGuard] Los sensores indican que la lluvia ha cesado (Cambio de estado detectado).')
       }
+      lastRainState = message;
       return
     }
 
-    // 6. Registro de Fin de Evento de Lluvia
+    // 5. Registro de Fin de Evento de Lluvia
     if (topic === 'PristinoPlant/Weather_Station/Exterior/rain/event') {
       try {
         const data = JSON.parse(message)

@@ -11,6 +11,7 @@ import { ToolboxGrid, AuditConsoleCard, HeartbeatCard } from './DiagnosticPanel'
 import { getConnectivityLogs } from '@/actions'
 import { Card, SmartDeviceHeader } from '@/components'
 import { useMqttStore } from '@/store/mqtt/mqtt.store'
+import { formatTime12h } from '@/utils'
 
 interface DeviceConfig {
   id: string
@@ -35,7 +36,7 @@ const DEVICES: DeviceConfig[] = [
   {
     id: 'sensors',
     name: 'Environmental Sensors',
-    description: 'Monitoreo de Zona A (Lux, Lluvia, Presión).',
+    description: 'Monitoreo de Zona A',
     baseTopic: 'PristinoPlant/Environmental_Monitoring/Zona_A',
     hasMaskNvs: true,
     heartbeatTimeoutMs: 60000,
@@ -65,13 +66,7 @@ const SERVICES: DeviceConfig[] = [
 type ConnectionState = 'online' | 'offline' | 'unknown' | 'zombie'
 
 const formatVETime = (timestamp: number | string | Date) => {
-  return new Date(timestamp).toLocaleTimeString('en-US', {
-    timeZone: 'America/Caracas',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: true,
-  })
+  return formatTime12h(timestamp, true)
 }
 
 // Interfaz para los snapshots cargados desde la API
@@ -109,31 +104,6 @@ export function DeviceDebugger() {
 
   const unifiedAuditTopic = `${selectedDevice.baseTopic}/audit`
   const auditStateTopic = `${selectedDevice.baseTopic}/audit/state`
-
-  const hardwarePresence = useMemo(() => {
-    const msg = messages[auditStateTopic]
-
-    if (!msg) return {}
-
-    try {
-      const payload = msg.payload
-      const hwState = (
-        typeof payload === 'object' ? payload : JSON.parse(String(payload))
-      ) as Record<string, boolean>
-
-      const presence: Record<string, boolean> = {}
-
-      Object.entries(hwState).forEach(([key, value]) => {
-        if (key.endsWith('_hw')) {
-          presence[key.replace('_hw', '')] = value
-        }
-      })
-
-      return presence
-    } catch {
-      return {}
-    }
-  }, [messages, auditStateTopic])
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 5000)
@@ -234,7 +204,7 @@ export function DeviceDebugger() {
 
         if (json.snapshots && json.snapshots.length > 0) {
           // Combinar los datos de todos los snapshots
-          const isChartable = ['lux', 'rain', 'pressure'].includes(category)
+          const isChartable = ['lux', 'rain'].includes(category)
 
           if (isChartable) {
             // Para gráficas: combinar los historiales de todos los snapshots
@@ -418,8 +388,6 @@ export function DeviceDebugger() {
       {/* Toolbox Grid */}
       <ToolboxGrid
         activeAudits={activeDisplayWidgets}
-        disableNVS={selectedDevice.hasMaskNvs}
-        hardwarePresence={hardwarePresence}
         isOnline={connectionState === 'online'}
         isPending={(cmd) => pendingCommands.includes(cmd)}
         showServices={showServices}

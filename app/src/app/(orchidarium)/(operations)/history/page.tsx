@@ -23,6 +23,7 @@ import { TaskPurpose, TaskStatus, TaskSource, ZoneType } from '@package/database
 
 import { Badge } from '@/components'
 import { TaskTimelineModal } from '@/components/operations/TaskTimelineModal'
+import { formatTime12h } from '@/utils'
 import { getTaskEvents } from '@/actions/control/control-actions'
 import {
   TaskPurposeLabels,
@@ -164,15 +165,11 @@ function HistoryTaskCard({
                     ['PENDING', 'WAITING_CONFIRMATION'].includes(task.status) && 'opacity-30',
                   )}
                 >
-                  {new Date(
+                  {formatTime12h(
                     (['PENDING', 'WAITING_CONFIRMATION'].includes(task.status)
                       ? task.scheduledAt
                       : task.executedAt) || task.scheduledAt,
-                  ).toLocaleTimeString('es-VE', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    hour12: true,
-                  })}
+                  )}
                 </span>
               </div>
             </div>
@@ -343,6 +340,7 @@ export default function HistoryPage() {
         events={timelineEvents}
         isLoading={isTimelineLoading}
         isOpen={!!selectedTask}
+        scheduledAt={selectedTask?.scheduledAt}
         taskName={
           selectedTask
             ? `${TaskPurposeLabels[selectedTask.purpose]} #${selectedTask.id.substring(0, 8)}`

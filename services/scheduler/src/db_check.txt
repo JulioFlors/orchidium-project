@@ -1,0 +1,9 @@
+﻿async function checkDbConnection() {
+  try {
+    await prisma.\\SELECT 1\
+    Logger.success('Conexión con Base de Datos (PostgreSQL) establecida.')
+  } catch (err) {
+    Logger.error('Fallo crítico: No se pudo conectar a la Base de Datos.', err)
+    process.exit(1)
+  }
+}

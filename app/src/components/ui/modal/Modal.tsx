@@ -126,14 +126,12 @@ export function Modal({
     [onClose],
   )
 
-  // ---- Registrar/Desregistrar listener de teclado ----
+  // ---- Auto-focus al abrir y restaurar al cerrar ----
   useEffect(() => {
     if (!isOpen) return
 
     // Guardar elemento con foco antes de abrir
     previousFocusRef.current = document.activeElement as HTMLElement
-
-    document.addEventListener('keydown', handleKeyDown)
 
     // Auto-focus al primer elemento interactivo del modal
     const timer = setTimeout(() => {
@@ -149,13 +147,23 @@ export function Modal({
     }, 50) // Esperar a que la animación inicie
 
     return () => {
-      document.removeEventListener('keydown', handleKeyDown)
       clearTimeout(timer)
 
       // Restaurar foco al cerrar
       if (previousFocusRef.current) {
         previousFocusRef.current.focus()
       }
+    }
+  }, [isOpen])
+
+  // ---- Registrar/Desregistrar listener de teclado ----
+  useEffect(() => {
+    if (!isOpen) return
+
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
     }
   }, [isOpen, handleKeyDown])
 

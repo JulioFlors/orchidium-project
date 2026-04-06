@@ -109,6 +109,12 @@ Formato: `[Emoji] [tipo] ([área]): [Título Conciso]`
     - Mantener consistencia con el sistema: Temp (Orange), Hum (Blue), Lux (Yellow), Rain (Cyan).
     - Usar estos colores en combinación con `bg-surface` y `text-primary`.
 
+5. **Formato de Tiempo (Time Formatting)**:
+    - TODA hora mostrada en el frontend (Dashboards, Timelines, Gráficos, Heartbeats) DEBE usar el formato de **12 horas** con el sufijo en **minúsculas** exactas: `a. m.` o `p. m.`.
+    - ❌ *Incorrecto:* `PM`, `AM`, `P. M.`, `A. M.`.
+    - ✅ *Correcto:* `10:15 a. m.`, `05:30 p. m.`.
+    - Usar la función utilitaria centralizada `formatTime12h(date)` o asegurar que el constructor `Intl.DateTimeFormat` esté configurado para este requerimiento específico.
+
 ### Paso 8: Estándares de Documentación (Markdown)
 
 Para mantener la limpieza y compatibilidad con linters (MD041, MD022, MD032, MD007, MD009):

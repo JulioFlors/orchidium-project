@@ -25,6 +25,7 @@ import {
 import clsx from 'clsx'
 
 import { Card } from '@/components'
+import { formatTime12h } from '@/utils'
 
 // ---- Mapa de Colores por Herramienta ----
 // Cada key corresponde al identificador único de la herramienta/auditoría.
@@ -53,12 +54,6 @@ const TOOL_COLORS: Record<string, { bg: string; ring: string; border: string; ic
     ring: 'ring-blue-500/10',
     border: 'border-blue-500',
     icon: 'text-blue-500',
-  },
-  pressure: {
-    bg: 'bg-purple-500',
-    ring: 'ring-purple-500/10',
-    border: 'border-purple-500',
-    icon: 'text-purple-500',
   },
   heartbeat: {
     bg: 'bg-red-500',
@@ -90,7 +85,6 @@ const TOOL_COLORS: Record<string, { bg: string; ring: string; border: string; ic
 const AUDIT_CHART_COLORS: Record<string, string> = {
   lux: '#eab308', // yellow-500
   rain: '#3b82f6', // blue-500
-  pressure: '#a855f7', // purple-500
 }
 
 const fallbackColor = {
@@ -154,29 +148,24 @@ function ToolCard({ icon, label, colorKey, onClick, pending, active, disabled }:
 // --- Toolbox Grid ---
 interface ToolboxGridProps {
   isOnline: boolean
-  disableNVS?: boolean
   activeAudits: string[]
+  onCommand: (cmd: string, auditKey: string | null) => void
+  isPending: (cmd: string) => boolean
   showServices: boolean
   showTimeline: boolean
   onToggleServices: () => void
   onToggleTimeline: () => void
-  onCommand: (cmd: string, auditId: string | null) => void
-  isPending: (cmd: string) => boolean
-  onToggleHeartbeat?: () => void
-  hardwarePresence?: Record<string, boolean>
 }
 
 export function ToolboxGrid({
   isOnline,
-  disableNVS,
   activeAudits,
-  showServices,
-  showTimeline,
-  onToggleServices,
-  onToggleTimeline,
   onCommand,
   isPending,
-  hardwarePresence = {},
+  showServices,
+  onToggleServices,
+  showTimeline,
+  onToggleTimeline,
 }: ToolboxGridProps) {
   return (
     <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-3 tds-2xl:grid-cols-4 grid grid-cols-2 gap-4">
@@ -201,13 +190,13 @@ export function ToolboxGrid({
       <ToolCard
         active={activeAudits.includes('lux')}
         colorKey="lux"
-        disabled={!isOnline || hardwarePresence.lux === false}
+        disabled={!isOnline}
         icon={
           <IoSearchOutline
             className={clsx(!activeAudits.includes('lux') && TOOL_COLORS.lux.icon)}
           />
         }
-        label={hardwarePresence.lux === false ? 'Lux (Off)' : 'Lux Meter'}
+        label="Lux Meter"
         pending={isPending('audit_lux_on')}
         onClick={() => onCommand('audit_lux_on', 'lux')}
       />
@@ -215,29 +204,15 @@ export function ToolboxGrid({
       <ToolCard
         active={activeAudits.includes('rain')}
         colorKey="rain"
-        disabled={!isOnline || hardwarePresence.rain === false}
+        disabled={!isOnline}
         icon={
           <IoPulseOutline
             className={clsx(!activeAudits.includes('rain') && TOOL_COLORS.rain.icon)}
           />
         }
-        label={hardwarePresence.rain === false ? 'Rain (Off)' : 'Rain Audit'}
+        label="Rain Audit"
         pending={isPending('audit_rain_on')}
         onClick={() => onCommand('audit_rain_on', 'rain')}
-      />
-
-      <ToolCard
-        active={activeAudits.includes('pressure')}
-        colorKey="pressure"
-        disabled={!isOnline || hardwarePresence.pressure === false}
-        icon={
-          <IoPulseOutline
-            className={clsx(!activeAudits.includes('pressure') && TOOL_COLORS.pressure.icon)}
-          />
-        }
-        label={hardwarePresence.pressure === false ? 'Pr (Off)' : 'Pressure'}
-        pending={isPending('audit_pressure_on')}
-        onClick={() => onCommand('audit_pressure_on', 'pressure')}
       />
 
       <ToolCard
@@ -254,21 +229,19 @@ export function ToolboxGrid({
         onClick={() => onCommand('ui_heartbeat', 'heartbeat')}
       />
 
-      {!disableNVS && (
-        <ToolCard
-          active={activeAudits.includes('nvs')}
-          colorKey="nvs"
-          disabled={!isOnline}
-          icon={
-            <IoCodeSlashOutline
-              className={clsx(!activeAudits.includes('nvs') && TOOL_COLORS.nvs.icon)}
-            />
-          }
-          label="NVS Stack"
-          pending={isPending('audit_nvs')}
-          onClick={() => onCommand('audit_nvs', 'nvs')}
-        />
-      )}
+      <ToolCard
+        active={activeAudits.includes('nvs')}
+        colorKey="nvs"
+        disabled={!isOnline}
+        icon={
+          <IoCodeSlashOutline
+            className={clsx(!activeAudits.includes('nvs') && TOOL_COLORS.nvs.icon)}
+          />
+        }
+        label="NVS Stack"
+        pending={isPending('audit_nvs')}
+        onClick={() => onCommand('audit_nvs', 'nvs')}
+      />
 
       {/* Nuevas Auditorías v0.8.5 */}
       <ToolCard
@@ -335,7 +308,7 @@ export function AuditConsoleCard({
   const [displayPayload, setDisplayPayload] = useState<unknown>(() => {
     if (typeof window === 'undefined' || !activeAudit) return null
 
-    const isChartable = ['lux', 'rain', 'pressure'].includes(activeAudit)
+    const isChartable = ['lux', 'rain'].includes(activeAudit)
 
     if (isChartable) {
       const cached = window.sessionStorage.getItem(`audit_history_${activeAudit}`)
@@ -388,7 +361,7 @@ export function AuditConsoleCard({
         // Error silencioso en parseo de chunks
       }
     } else {
-      const isChartable = ['lux', 'rain', 'pressure'].includes(activeAudit || '')
+      const isChartable = ['lux', 'rain'].includes(activeAudit || '')
 
       if (isChartable) {
         setDisplayPayload((prev: unknown) => {
@@ -443,7 +416,7 @@ export function AuditConsoleCard({
 
   const handleClear = () => {
     if (activeAudit && typeof window !== 'undefined') {
-      const isChartable = ['lux', 'rain', 'pressure'].includes(activeAudit)
+      const isChartable = ['lux', 'rain'].includes(activeAudit)
 
       if (isChartable) {
         window.sessionStorage.removeItem(`audit_history_${activeAudit}`)
@@ -453,7 +426,7 @@ export function AuditConsoleCard({
   }
 
   const timeAgeStr = receivedAt
-    ? `Recibido a las ${new Date(receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
+    ? `Recibido a las ${formatTime12h(receivedAt, true)}`
     : 'Esperando datos...'
 
   const finalDisplay = displayPayload
@@ -525,7 +498,7 @@ export function AuditConsoleCard({
       )
     }
 
-    const isChartable = ['lux', 'rain', 'pressure'].includes(activeAudit || '')
+    const isChartable = ['lux', 'rain'].includes(activeAudit || '')
     const history = (displayPayload as { history?: unknown[] })?.history
 
     if (isChartable && Array.isArray(history) && history.length > 0) {
@@ -536,10 +509,7 @@ export function AuditConsoleCard({
         if (Array.isArray(val) && val.length === 2) {
           const [ts, data] = val
 
-          timeStr =
-            typeof ts === 'number'
-              ? new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-              : String(ts)
+          timeStr = typeof ts === 'number' ? formatTime12h(ts * 1000) : String(ts)
           value = Number(data)
         } else {
           value = Number(val)
@@ -695,14 +665,12 @@ interface HeartbeatCardProps {
 
 const formatVEDateTime = (timestamp: number | string | Date) => {
   const date = new Date(timestamp)
-
-  return date.toLocaleString([], {
+  const dateStr = date.toLocaleDateString([], {
     month: 'short',
     day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
   })
+
+  return `${dateStr}, ${formatTime12h(timestamp)}`
 }
 
 export function HeartbeatCard({ lastSeen }: HeartbeatCardProps) {

@@ -11,6 +11,7 @@ import { motion } from 'motion/react'
 
 import { Modal } from '@/components/ui'
 import { TaskStatusLabels } from '@/config/mappings'
+import { formatTime12h } from '@/utils'
 
 const STATUS_ICONS: Record<string, React.ReactNode> = {
   // 1. Fase de Gestación (Azules y Violetas)
@@ -47,6 +48,7 @@ interface TaskTimelineModalProps {
   taskName: string
   events: TaskEvent[]
   isLoading?: boolean
+  scheduledAt?: string | Date
 }
 
 export function TaskTimelineModal({
@@ -55,7 +57,21 @@ export function TaskTimelineModal({
   taskName,
   events,
   isLoading,
+  scheduledAt,
 }: TaskTimelineModalProps) {
+  let subtitleText = taskName
+
+  if (scheduledAt) {
+    const d = new Date(scheduledAt)
+    const dateStr = d.toLocaleDateString('es-VE', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    })
+
+    subtitleText = `${taskName} - ${dateStr} ${formatTime12h(d)}`
+  }
+
   return (
     <Modal
       footer={
@@ -68,7 +84,7 @@ export function TaskTimelineModal({
         </button>
       }
       isOpen={isOpen}
-      subtitle={taskName}
+      subtitle={subtitleText}
       title="Línea de Tiempo"
       onClose={onClose}
     >
@@ -104,12 +120,7 @@ export function TaskTimelineModal({
                       event.status}
                   </span>
                   <span className="text-secondary font-mono text-[10px] opacity-60">
-                    {new Date(event.timestamp).toLocaleTimeString('es-VE', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                      second: '2-digit',
-                      hour12: true,
-                    })}
+                    {formatTime12h(event.timestamp, true)}
                   </span>
                 </div>
                 <p className="text-secondary text-xs leading-relaxed">

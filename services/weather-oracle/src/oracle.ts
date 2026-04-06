@@ -166,7 +166,7 @@ export async function syncOpenWeatherMap() {
     } catch (error: any) {
         const status = error.response?.status;
         if (status === 401) {
-            Logger.error('Fallo en OpenWeatherMap: API Key inválida o no activada aún (esperar 2h-24h tras registro).');
+            Logger.warn('OpenWeatherMap: API Key inválida o no activada aún (esperar 2h-24h tras registro).');
         } else {
             Logger.error(`Fallo al sincronizar con OpenWeatherMap:`, error.message);
         }
@@ -223,7 +223,8 @@ export async function syncAgroMonitoring() {
             }
         });
 
-        Logger.success(`${source}: Datos de suelo actualizados (Humedad: ${(moisture * 100).toFixed(1)}%)`);
+        const captureDate = timestamp.toLocaleString('es-VE', { timeZone: 'America/Caracas' });
+        Logger.success(`${source}: Captura satelital del [${captureDate}] procesada -> Humedad del suelo: ${(moisture * 100).toFixed(1)}%`);
         return true;
     } catch (error: any) {
         Logger.error('Fallo al sincronizar suelo con AgroMonitoring:', error.message);
@@ -253,6 +254,10 @@ export async function syncAgroHistory() {
         Logger.info(`AgroMonitoring History: Precipitación acumulada 24h: ${data.amount || 0}mm`);
         return true;
     } catch (error: any) {
+        if (error.response?.status === 401) {
+             Logger.warn('AgroMonitoring History (401): Historial inaccesible. Causas probables: Nivel Free de API o polígono en fase de inicialización (24h).');
+             return false;
+        }
         Logger.error('Fallo al sincronizar historial con AgroMonitoring:', error.message);
         return false;
     }

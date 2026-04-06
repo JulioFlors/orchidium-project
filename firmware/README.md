@@ -17,7 +17,6 @@ El objetivo de este firmware es monitorear variables ambientales (temperatura, h
    * [Sensor de Luz Ambiental (BH1750)](#sensor-de-luz-ambiental-bh1750)
    * [Módulo Relé de 4 Canales](#módulo-relé-de-4-canales)
    * [Sensor de Lluvia (MH-RD)](#-sensor-de-lluvia-mh-rd)
-   * [Transductor de Presión de Agua (150 PSI)](#transductor-de-presión-de-agua-150-psi)
 8. [Arquitectura IoT: Procesamiento en el Borde y Lógica Centralizada](#-arquitectura-iot-procesamiento-en-el-borde-y-lógica-centralizada)
 9. [Mantenimiento y Actualizaciones (OTA)](#-mantenimiento-y-actualizaciones-ota)
 
@@ -156,7 +155,9 @@ Se utiliza el comando fs rm para eliminar.
 
 ```bash
 # Eliminar un archivo específico del directorio raíz
+mpremote rm :app.mpy
 mpremote rm :main.py
+mpremote rm :boot.py
 mpremote rm :update_creds.py
 mpremote rm :manifest.json
 mpremote rm :recovery.json
@@ -467,7 +468,7 @@ Cada proyecto de firmware debe incorporar un archivo `manifest.json`. Este archi
   "description": "Actuator Controller Firmware",
   "version": "0.6.0",
   "date": "23-03-2026",
-  "notes_release": "Integración de lluvia y sensor de presión",
+  "notes_release": "Integración de lluvia",
   "files": ["main.py"],
   "libs": ["umqtt", "ota", "secrets", "bh1750"]
 }
@@ -739,30 +740,6 @@ Este sensor detecta la presencia de gotas de agua. Utilizaremos su salida digita
 
 ---
 
-### Transductor de Presión de Agua (150 PSI)
-
-Este transductor analógico mide la presión en la línea de riego, útil para detectar si hay flujo de agua o posibles fugas.
-
-#### 🔌 Conexión con Divisor de Voltaje
-
-> **⚠️ ¡Advertencia!**
-> Este sensor opera a 5V y su señal de salida puede alcanzar hasta 4.5V. Conectar esta señal directamente a un pin del ESP32 **lo dañará permanentemente**, ya que sus pines solo toleran 3.3V. Es **obligatorio** usar un divisor de voltaje.
-
-**Componentes Adicionales:**
-
-* Resistencia 1 (R1): **12kΩ**
-* Resistencia 2 (R2): **22kΩ**
-
-| Cable del Sensor | Conectar a | Pin del ESP32 | Código |
-| :- | :- | :- | :- |
-| **Rojo (`+5V`)** | Alimentación 5V | **`VIN`** | - |
-| **Negro (`GND`)** | Tierra | **`GND`** | - |
-| **Verde (`Signal`)** | Resistencia R1 (12kΩ) | - | - |
-| - | Unión de R1 y R2 | **`GPIO 34`** | `ADC(Pin(34))` |
-| - | Otro extremo de R2 (22kΩ) | **`GND`** | - |
-
----
-
 ## 🧠 Arquitectura IoT: Procesamiento en el Borde y Lógica Centralizada
 
 ---
@@ -846,26 +823,6 @@ Actúa como el **centro de inteligencia y memoria a largo plazo**. Su responsabi
 * **Agregación de Datos de Precipitación:** El backend calcula métricas agregadas como la frecuencia de lluvia (eventos por día/semana) y la duración acumulada en un período determinado.
 
 * **Motor de Reglas para Riego Inteligente:** El núcleo de la lógica de control reside en un motor de reglas que se ejecuta en el servidor. Este motor evalúa las métricas de precipitación acumulada contra umbrales configurables. Una regla central podría ser: *“Si la duración acumulada de lluvia en las últimas 24 horas supera los 30 minutos, entonces, el sistema cancelará o pospondrá automáticamente los próximos ciclos de riego programados”*
-
-#### 💧 Transductor de Presión de Agua (150 PSI)
-
-**Edge (ESP32):**
-
-* **Adquisición:** Lee el voltaje de salida del transductor a través de un conversor analógico-digital (ADC).
-
-* **Procesamiento:** Aplica la función de transferencia para convertir el valor del ADC en una unidad de presión (PSI), compensando el efecto del divisor de voltaje.
-
-* **Publicación:** Transmite el valor de presión calculado en el tópico MQTT correspondiente.
-
-**Backend (Servidor):**
-
-* **Almacenamiento:** Persiste el historial de presión del sistema.
-
-* **Lógica de Decisión y Análisis:**
-
-  * **Validación del Ciclo de Riego:** El sistema correlaciona el estado del riego con la presión del agua. Cuando se envía un comando `ON`, el backend espera un aumento de presión hasta un valor nominal (ej. 45 PSI) en un corto período de tiempo. Si la presión no aumenta, o si cae inesperadamente mientras el sistema está activo, se infiere una falla operativa (ej. bomba de agua inoperativa, obstrucción mayor) y se genera una alerta de mantenimiento.
-
-  * **Detección de Fugas:** Durante los periodos en que el sistema de riego está inactivo (`OFF`), el backend monitorea el valor de presión, que debería mantenerse estable. Si el sistema detecta una caída de presión sostenida a lo largo del tiempo, infiere la presencia de una fuga en la tubería. Al identificar este patrón anómalo, se notifica al usuario para prevenir el desperdicio de agua y posibles daños.
 
 #### 🎮 Módulo Relé (Electroválvulas)
 
@@ -1022,9 +979,8 @@ Edita el archivo `manifest.json` del dispositivo que deseas migrar (ej. `firmwar
       "version": "0.10.1",
       "date": "24-11-2025",
       "files": [
-
- "main.py",
- "<https://raw.githubusercontent.com/TU_USUARIO/ORCHIDIUM/main/firmware/shared/update_creds.py>"
+        "main.py",
+        "<https://raw.githubusercontent.com/TU_USUARIO/ORCHIDIUM/main/firmware/shared/update_creds.py>"
       ]
     }
     ```
@@ -1048,3 +1004,6 @@ Una vez confirmada la migración:
 
 1. **Elimina** `update_creds.py` de tu repositorio GitHub.
 2. Actualiza el `manifest.json` para eliminar la referencia al archivo y sube una nueva versión menor para "limpiar" el estado del manifiesto.
+
+- [x] RingBuffer para Lluvia.
+- [x] RingBuffer para Iluminancia.

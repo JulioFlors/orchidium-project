@@ -90,7 +90,6 @@ Análisis profundo en segundo plano (Data Science agronómico) para predecir y e
 
 * Eficiencia Energética: Implementación de Deep Sleep en nodos remotos.
 * Cálculo de Transmisión de Luz (Malla vs Sol directo).
-* Detección de Anomalías Hidráulicas mediante transductores de presión.
 
 ### 4.3 Gestión de Cuenta
 

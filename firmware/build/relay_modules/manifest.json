@@ -1,9 +1,9 @@
 {
   "name": "Relay Modules",
   "description": "Nodo Actuador + Meteorológica Exterior",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "date": "05-04-2026",
-  "notes_release": "[🌦️ Estación Meteorológica / 🛡️ Salud Filtro]: Sensores migrados al dominio Weather_Station. Nueva corrutina 'circuit_pressure_worker' para telemetría de presión por lotes y análisis de salud del filtro. Robustez MQTT optimizada (Diag + Backoff).",
+  "notes_release": "[🌦️ Estación Meteorológica / 🛡️ Auditoría]: Refactorización masiva a corrutinas independientes basadas en eventos (RAM, Lux, Lluvia, Salud). Eliminación definitiva de 'unified_audit_task' y 'audit_wake_event' para optimizar RAM. Robustez MQTT optimizada (log_mqtt_exception en handlers individuales).",
   "files": [
     "app.mpy",
     "main.py"

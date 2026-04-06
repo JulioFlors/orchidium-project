@@ -11,6 +11,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
     // Leer el motivo de cancelación del body (opcional pero esperado)
     let reason = 'Tarea Cancelada por el Admin antes de iniciar'
+    let scheduledAtOverride: Date | null = null
 
     try {
       const body = await request.json()
@@ -18,10 +19,80 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       if (body.reason && typeof body.reason === 'string') {
         reason = body.reason.trim()
       }
+      if (body.scheduledAt) {
+        scheduledAtOverride = new Date(body.scheduledAt)
+      }
     } catch {
       // Body vacío o no JSON — usar motivo por defecto
     }
 
+    // ---- CASO A: Cancelación de Rutina Programada (Proyección) ----
+    if (id.startsWith('routine-')) {
+      const scheduleId = id.replace('routine-', '')
+
+      const schedule = await prisma.automationSchedule.findUnique({
+        where: { id: scheduleId },
+      })
+
+      if (!schedule) {
+        return NextResponse.json({ error: 'Routine not found' }, { status: 404 })
+      }
+
+      // 1. Usar el Override exacto del cliente (Preferido)
+      // 2. Si no viene, usar Croner como fallback
+      let nextScheduledAt = scheduledAtOverride || new Date()
+
+      if (!scheduledAtOverride) {
+        try {
+          const { Cron } = await import('croner')
+          const job = new Cron(schedule.cronTrigger, { timezone: 'America/Caracas' })
+          const nextRun = job.nextRun()
+
+          if (nextRun) {
+            nextScheduledAt = nextRun
+          }
+        } catch {
+          // Ignorar si hay error en cron
+        }
+      }
+
+      const canceledRoutineLog = await prisma.$transaction(async (tx) => {
+        // 1. Deshabilitar la rutina
+        await tx.automationSchedule.update({
+          where: { id: scheduleId },
+          data: { isEnabled: false },
+        })
+
+        // 2. Crear una entrada CANCELADA "fantasma" en el TaskLog para el historial
+        const task = await tx.taskLog.create({
+          data: {
+            purpose: schedule.purpose,
+            zones: schedule.zones,
+            status: TaskStatus.CANCELLED,
+            source: 'ROUTINE',
+            duration: schedule.durationMinutes,
+            scheduledAt: nextScheduledAt,
+            scheduleId: schedule.id,
+            notes: `Rutina pausada manualmente. Motivo: ${reason}`,
+          },
+        })
+
+        // 3. Registrar el evento
+        await tx.taskEventLog.create({
+          data: {
+            taskId: task.id,
+            status: TaskStatus.CANCELLED,
+            notes: `Rutina pausada manualmente. Motivo: ${reason}`,
+          },
+        })
+
+        return task
+      })
+
+      return NextResponse.json(canceledRoutineLog)
+    }
+
+    // ---- CASO B: Cancelación de Tarea Diferida Tradicional ----
     const updatedTask = await prisma.$transaction(async (tx) => {
       const task = await tx.taskLog.update({
         where: { id },

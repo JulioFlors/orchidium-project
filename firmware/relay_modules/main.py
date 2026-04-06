@@ -1,10 +1,10 @@
 # -----------------------------------------------------------------------------
 # Relay Modules: Actuator Controller Firmware.
 # Descripción: Firmware dedicado para el control de las electroválvulas, la bomba
-#              y la estación meteorológica exterior (lluvia, iluminancia, presión).
+#              y la estación meteorológica exterior (lluvia e iluminancia).
 # Fecha: 05-04-2026
 # Versión: v0.9.1
-# notes_release: [🌦️ Estación Meteorológica / 🛡️ Auditoría]: Refactorización masiva a corrutinas independientes basadas en eventos (RAM, Lux, Presión, Lluvia, Salud). Eliminación definitiva de 'unified_audit_task' y 'audit_wake_event' para optimizar RAM. Robustez MQTT optimizada (log_mqtt_exception en handlers individuales).
+# notes_release: [🌦️ Estación Meteorológica / 🛡️ Auditoría]: Refactorización masiva a corrutinas independientes basadas en eventos (RAM, Lux, Lluvia, Salud). Eliminación definitiva de 'unified_audit_task' y 'audit_wake_event' para optimizar RAM. Robustez MQTT optimizada (log_mqtt_exception en handlers individuales).
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib.
@@ -51,7 +51,7 @@ MAX_BUFFER_SIZE = const(15)
 # [LWT/Status]: Indica si el dispositivo está "online" u "offline" (usado para Last Will).
 MQTT_TOPIC_STATUS         = const(b"PristinoPlant/Actuator_Controller/status")
 
-# [Audit Data]: Canal para streaming de datos unificados (RAM, NVS, Lux history, pressure, etc).
+# [Audit Data]: Canal para streaming de datos unificados (RAM, NVS, Lux history, rain, etc).
 MQTT_TOPIC_AUDIT          = const(b"PristinoPlant/Actuator_Controller/audit")
 
 # [Audit Flag]: Indica qué tareas de auditoría están activas internamente (para sincronización de UI).
@@ -80,9 +80,8 @@ MQTT_TOPIC_RAIN_STATE     = const(b"PristinoPlant/Weather_Station/Exterior/rain/
 # [Rain Measurement]: Envío de fin de evento. Incluye duración (segundos) e intensidad promedio (%).
 MQTT_TOPIC_RAIN_EVENT     = const(b"PristinoPlant/Weather_Station/Exterior/rain/event")
 
-# [Exterior Metrics]: Batch de lecturas ambientales (lux, presión, etc).
+# [Exterior Metrics]: Batch de lecturas ambientales (lux, lluvia, etc).
 MQTT_TOPIC_EXTERIOR_METRICS = const(b"PristinoPlant/Weather_Station/Exterior/readings")
-MQTT_TOPIC_FILTER_STATUS  = const(b"PristinoPlant/Weather_Station/Exterior/filter/status")
 
 # ---- Parámetros LWT (Last Will and Testament) ----
 LWT_TOPIC = MQTT_TOPIC_STATUS
@@ -112,7 +111,6 @@ relays = {}
 # ---- Hardware: Sensores ----
 illuminance_sensor     = None # BH1750 (I2C)
 rain_sensor_analog     = None # Sensor de gotas de lluvia (ADC)
-pressure_sensor_analog = None # Transductor de presión 150PSI (ADC)
 i2c_bus                = None # Bus I2C global para diagnóstico
 BH1750                 = None # Clase del driver del sensor de luz
 
@@ -132,7 +130,6 @@ state_changed = asyncio.Event()
 # Diccionario de Sincronización para Auditorías Independientes
 audit_events = {
     "lux":      asyncio.Event(),
-    "pressure": asyncio.Event(),
     "rain":     asyncio.Event(),
     "ram":      asyncio.Event(),
     "health":   asyncio.Event()
@@ -180,7 +177,6 @@ except ImportError:
 AUDIT_MODE = {
     "rain": False,
     "lux": False,
-    "pressure": False,
     "health": False,
     "ram": False
 }
@@ -189,7 +185,6 @@ AUDIT_MODE = {
 AUDIT_COUNTERS = {
     "rain": 0,
     "lux": 0,
-    "pressure": 0,
     "health": 0,
     "ram": 0
 }
@@ -230,10 +225,19 @@ class RingBuffer:
                 res.append(self.buffer[idx])
         return res
 
+    @property
+    def count(self):
+        """Cuenta los slots ocupados (no-None) del buffer."""
+        if not self.buffer: return 0
+        n = 0
+        for item in self.buffer:
+            if item is not None:
+                n += 1
+        return n
+
 # Buffers de Telemetría
 illuminance_Batch = RingBuffer(10)
-pressure_Batch    = RingBuffer(10)
-rain_Batch        = RingBuffer(20)
+rain_Batch        = RingBuffer(10)
 
 # ---- Función Auxiliar: NVS Manager (Gestión de Estado Persistente optimizada con Caché) ----
 class NVSManager:
@@ -387,7 +391,6 @@ def publish_audit_state():
             payload_dict = AUDIT_MODE.copy()
             payload_dict["lux_hw"]      = illuminance_sensor is not None
             payload_dict["rain_hw"]     = rain_sensor_analog is not None
-            payload_dict["pressure_hw"] = pressure_sensor_analog is not None
             
             payload = dumps(payload_dict)
             # 🔒 Pedimos permiso para usar el socket
@@ -770,7 +773,7 @@ def setup_relays():
 def setup_sensors():
     """Inicializa los sensores cableados al nodo actuador de forma segura."""
     # Gestión de variables globales
-    global illuminance_sensor, rain_sensor_analog, pressure_sensor_analog, i2c_bus, BH1750
+    global illuminance_sensor, rain_sensor_analog, i2c_bus, BH1750
 
     # 1. Sensor de Iluminancia (BH1750 / I2C)
     # [Diagnóstico Exhaustivo]: Prueba múltiples configuraciones, ambas direcciones
@@ -877,7 +880,6 @@ def setup_sensors():
                     for found_addr in devices:
                         if found_addr in BH1750_ADDRS:
                             try:
-                                from bh1750 import BH1750 # type: ignore
                                 illuminance_sensor = BH1750(bus=scan_bus, addr=found_addr)
                                 sleep_ms(180)
                                 lux_test = illuminance_sensor.luminance(BH1750.CONT_HIRES_1)
@@ -913,7 +915,6 @@ def setup_sensors():
 
     # 2. Sensor de Lluvia (Salida Analógica)
     try:
-        from utime import sleep_ms # type: ignore
         adc_rain = ADC(Pin(35))
         adc_rain.atten(ADC.ATTN_11DB) # Rango 0-3.3V
         
@@ -929,6 +930,7 @@ def setup_sensors():
         # Si lee < 1500 en el arranque, se considera desconectado o ruidoso.
         if r_avg > 1500:
             rain_sensor_analog = adc_rain
+            if DEBUG: print(f"💧  Sensor Lluvia: {Colors.CYAN}Conectado{Colors.RESET} (Lectura Raw inicial: {r_avg})")
         else:
             if DEBUG: print(f"❌  Sensor Lluvia: {Colors.RED}Desconectado{Colors.RESET} (Ruido/Antena: {r_avg})")
             rain_sensor_analog = None
@@ -936,29 +938,6 @@ def setup_sensors():
     except Exception as e:
         if DEBUG: print(f"❌  Sensor Lluvia: {Colors.RED}{e}{Colors.RESET}")
         rain_sensor_analog = None
-
-    # 3. Transductor de Presión 150PSI (Salida Analógica)
-    try:
-        from utime import sleep_ms # type: ignore
-        adc_pressure = ADC(Pin(34))
-        adc_pressure.atten(ADC.ATTN_11DB) # Rango 0-3.3V
-        
-        # [Oversampling de Arranque]
-        p_sum = 0
-        for _ in range(10):
-            p_sum += adc_pressure.read()
-            sleep_ms(10)
-        p_avg = p_sum // 10
-
-        # [MODO CALIBRACIÓN]: Forzamos la conexión sin importar si lee 0 o ruido.
-        # Esto permite que la corrutina pressure_audit_task pueda leer el ADC 
-        # y enviarlo por MQTT para descubrir el offset real del hardware.
-        pressure_sensor_analog = adc_pressure
-        if DEBUG: print(f"💧  Transductor Presión: {Colors.CYAN}Modo Calibración{Colors.RESET} (Lectura Raw inicial: {p_avg})")
-
-    except Exception as e:
-        if DEBUG: print(f"❌  Transductor Presión: {Colors.RED}{e}{Colors.RESET}")
-        pressure_sensor_analog = None
 
 # ---- Función Auxiliar: Callback de estado ----
 def sub_status_callback(pid, status):
@@ -1730,7 +1709,7 @@ async def mqtt_connector_task(client_id):
                         client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=0)
                     # Actualizar last_cpacket: si podemos ENVIAR, el socket está vivo
                     client.last_cpacket = ticks_ms()
-                    if DEBUG: print(f"📡  MQTT: {Colors.CYAN}Ping de vida enviado{Colors.RESET}")
+                    # if DEBUG: print(f"📡  MQTT: {Colors.CYAN}Ping de vida enviado{Colors.RESET}")
                     last_manual_ping = now_ms
 
                 # Comprobamos si ha pasado demasiado tiempo desde que OÍMOS al broker
@@ -2012,7 +1991,7 @@ async def rain_monitor_task():
     # Tiempos de Configuración
     INTERVAL_NORMAL = 600 # 10 minutos
     INTERVAL_BURST  = 60  # 1 minuto
-    TARGET_SAMPLES  = 20
+    TARGET_SAMPLES  = 10
 
     # Estado Inicial
     current_interval = INTERVAL_NORMAL
@@ -2027,7 +2006,7 @@ async def rain_monitor_task():
                 await asyncio.sleep(INTERVAL_NORMAL)
                 continue
 
-            # Oversampling no bloqueante (20 muestras cada 50ms = 1s total)
+            # Oversampling no bloqueante (10 muestras cada 50ms = 500ms total)
             raw_sum = 0
             valid_samples = 0
             for _ in range(TARGET_SAMPLES):
@@ -2039,7 +2018,7 @@ async def rain_monitor_task():
                 await asyncio.sleep_ms(50)
 
             if valid_samples == 0:
-                if DEBUG: print(f"    ├─ ⚠️  Lluvia: No hay muestras válidas (0/{TARGET_SAMPLES})")
+                if DEBUG: print(f"\n⚠️  Lluvia: No hay muestras válidas (0/{TARGET_SAMPLES})")
                 await asyncio.sleep(current_interval)
                 continue
 
@@ -2063,7 +2042,7 @@ async def rain_monitor_task():
                     # 🔒 Pedimos permiso para usar el socket
                     async with mqtt_lock:
                         client.publish(MQTT_TOPIC_RAIN_STATE, b"Raining", retain=True, qos=0)
-                if DEBUG: print(f"    ├─ 🌧️  Lluvia INICIADA (Raw: {raw}) | Modo Ráfaga: {INTERVAL_BURST}s")
+                if DEBUG: print(f"\n🌧️  Lluvia INICIADA (Raw: {raw}) | Modo Ráfaga: {INTERVAL_BURST}s")
 
             # ---- ESTADO B: Lloviendo (Acumulando) ----
             elif current_state == 'Raining':
@@ -2082,7 +2061,7 @@ async def rain_monitor_task():
                         async with mqtt_lock:
                             client.publish(MQTT_TOPIC_EXTERIOR_METRICS, payload_batch.encode('utf-8'), qos=0)
                             rain_Batch.clear()
-                            if DEBUG: print(f"    ├─ 🌧️  Enviando Batch de Lluvia Intermedio")
+                            if DEBUG: print(f"\n🌧️  Enviando Batch de Lluvia Intermedio")
 
                 # ---- ESTADO C: Termina la lluvia (Publicación del evento final) ----
                 if raw > RAIN_STOP_VALUE:
@@ -2110,7 +2089,7 @@ async def rain_monitor_task():
                         
                         rain_Batch.clear()
                     
-                    if DEBUG: print(f"    ├─ ☀️  Lluvia TERMINADA. Dur:{duration_sec}s, Int:{avg_int}% | Modo Vigía: {INTERVAL_NORMAL}s")
+                    if DEBUG: print(f"\n⛅  Lluvia TERMINADA. Dur:{duration_sec}s, Int:{avg_int}% | Modo Vigía: {INTERVAL_NORMAL}s")
 
         except (MQTTException, OSError) as e:
             if DEBUG: log_mqtt_exception("Error de red en rain_monitor_task()", e)
@@ -2118,7 +2097,7 @@ async def rain_monitor_task():
             await check_critical_mqtt_errors(e)
             await asyncio.sleep(5)
         except Exception as e:
-            if DEBUG: print(f"    ├─ ⚠️  Error en rain_monitor_task(): {e}")
+            if DEBUG: print(f"\n⚠️  Error en rain_monitor_task(): {e}")
         
         # Pausa pura de CPU (Sin spin-wait)
         await asyncio.sleep(current_interval)
@@ -2164,7 +2143,7 @@ async def illuminance_monitor_task():
                             client.publish(MQTT_TOPIC_EXTERIOR_METRICS, payload_batch.encode('utf-8'), qos=0)
                             last_lux_publish = current_ts
                             illuminance_Batch.clear()
-                            if DEBUG: print(f"    ├─ ☀️  Telemetría Exterior (Iluminancia) Enviada (Lote 10 min)")
+                            if DEBUG: print(f"\n☀️  Telemetría de Iluminancia Exterior Enviada (10 muestras)")
 
         except (MQTTException, OSError) as e:
             if DEBUG: log_mqtt_exception("Error de red en illuminance_monitor_task()", e)
@@ -2172,135 +2151,10 @@ async def illuminance_monitor_task():
             await check_critical_mqtt_errors(e)
             await asyncio.sleep(5)
         except Exception as e:
-            if DEBUG: print(f"    ├─ ⚠️  Error en illuminance_monitor_task(): {e}")
+            if DEBUG: print(f"\n⚠️  Error en illuminance_monitor_task(): {e}")
         
         await asyncio.sleep(60)
 
-async def circuit_pressure_worker():
-    """
-    #### Monitoreo de Presión del Circuito Hidráulico
-    * Estado REPOSO: Duerme en ciclos largos (60s). Sin muestreo. Sin batch.
-    * Fase MAIN_WATER: (Cualquier relé ON, Bomba OFF). Muestreo cada 1s.
-    * Fase BOMBA: (Bomba ON). Primera lectura tras 10s de presurización + Muestreo cada 60s.
-    * Envío por CHUNKS: El batch se envía cada vez que se llena (10 pts) para visibilidad en tiempo real.
-    * Al detectar cierre (todos OFF): Envía remanente del batch → limpia buffer.
-    """
-    # (Optimización de memoria RAM)
-    # Lazy Imports (Importación tardía)
-    from ujson import dumps
-    from utime import time
-    from umqtt.simple2 import MQTTException # type: ignore
-
-    # ---- Umbrales de Calibración: Manómetro (Filtro) ----
-    FILTER_IDEAL_PSI = 45.0          # Presión ideal (PSI) con filtro limpio y bomba activa
-    HEALTH_REPORT_INTERVAL = 300     # 5 min entre reportes de salud del filtro
-    PUMP_PRESSURIZE_DELAY = 10       # Segundos de espera para presurización del circuito
-
-    was_active = False               # Rastreo de si el circuito estaba abierto
-    pump_was_on = False              # Rastreo del estado de la bomba para lectura inicial
-    last_health_report = 0
-
-    def _flush_batch():
-        """Envía el contenido actual del buffer por MQTT y lo limpia."""
-        if pressure_Batch.count == 0:
-            return
-        if not (client and getattr(client, 'sock', None) and wlan and wlan.isconnected()):
-            return
-        try:
-            history_data = [[item[0], {"pressure": item[1][0], "phase": item[1][1]}] for item in pressure_Batch.get_all()]
-            payload_batch = dumps({"history": history_data})
-            client.publish(MQTT_TOPIC_EXTERIOR_METRICS, payload_batch.encode('utf-8'), qos=0)
-            if DEBUG: print(f"    ├─ 💧 Chunk de Presión Enviado ({pressure_Batch.count} pts)")
-        except (MQTTException, OSError) as e:
-            if DEBUG: log_mqtt_exception("Error de red en _flush_batch() de presión", e)
-            force_disconnect_mqtt()
-        pressure_Batch.clear()
-
-    while True:
-        try:
-            if pressure_sensor_analog is None:
-                await asyncio.sleep(60)
-                continue
-
-            # Análisis de estados del hardware
-            # 1. ¿Está la bomba (ID 3) encendida?
-            pump_on = relays.get(3) and relays[3]['state'] == 'ON'
-            # 2. ¿Hay algún riego/circuito abierto (Cualquier relé ON)?
-            circuit_active = any(r['state'] == 'ON' for r in relays.values())
-
-            # ---- LÓGICA DE CIERRE (TRANSICIÓN ACTIVO -> REPOSO) ----
-            if not circuit_active and was_active:
-                was_active = False
-                pump_was_on = False
-
-                # Enviar el remanente acumulado durante el evento de riego
-                async with mqtt_lock:
-                    _flush_batch()
-
-                await asyncio.sleep(60)
-                continue
-
-            # ---- ESTADO REPOSO: Sin relés activos ----
-            if not circuit_active:
-                await asyncio.sleep(60)
-                continue
-
-            # ---- ESTADO ACTIVO (CIRCUITO ABIERTO) ----
-            was_active = True
-            current_ts = time()
-
-            # 3. Determinación de Intervalo Dinámico y Fase Operativa
-            if not pump_on:
-                # Fase de Entrada Principal (Alta Resolución): Captura 1s para ver el diferencial estático del acueducto
-                sample_interval = 1
-                pump_was_on = False
-                current_phase = "MAIN_WATER"
-            else:
-                if not pump_was_on:
-                    # Transición: Bomba recién encendida → esperar presurización del circuito
-                    pump_was_on = True
-                    current_phase = "TRANSICION"
-                    await asyncio.sleep(PUMP_PRESSURIZE_DELAY)
-                else:
-                    current_phase = "BOMBA"
-                # Fase Bomba Estable: Muestreo cada 60s
-                sample_interval = 60
-
-            # 4. Muestreo promediado (ADC) con Oversampling de 5 muestras
-            raw_val = sum([pressure_sensor_analog.read() for _ in range(5)]) // 5
-            pressure_Batch.append([raw_val, current_phase])
-
-            # 5. Envío por Chunks: Cuando el buffer se llena, enviar inmediatamente
-            #    Esto garantiza visibilidad cuasi-real-time en la Timeline de la tarea
-            if pressure_Batch.count >= 10:
-                async with mqtt_lock:
-                        _flush_batch()
-
-            # 6. Diagnóstico de Salud del Filtro (Solo durante fase de bombeo)
-            if pump_on and (current_ts - last_health_report >= HEALTH_REPORT_INTERVAL):
-                # Presión (PSI) = (raw - 405) * 0.0454
-                # (Confirmamos normalidad hidráulica mediante el sensor)
-                psi = max(0, (raw_val - 405) * 0.0454)
-                health = min(100, round((psi / FILTER_IDEAL_PSI) * 100))
-
-                if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
-                    async with mqtt_lock:
-                        payload = dumps({"health": health, "pressure": round(psi, 1)})
-                        client.publish(MQTT_TOPIC_FILTER_STATUS, payload.encode('utf-8'), qos=0)
-                        if DEBUG: print(f"    ├─ 🛡️ Salud Filtro: {health}% ({psi:.1f} PSI)")
-                last_health_report = current_ts
-
-            # Espera dinámica según fase (1s entrada principal | 60s bomba)
-            await asyncio.sleep(sample_interval)
-
-        except (MQTTException, OSError) as e:
-            if DEBUG: log_mqtt_exception("Error de red en bucle circuit_pressure_worker()", e)
-            force_disconnect_mqtt()
-            await check_critical_mqtt_errors(e)
-            await asyncio.sleep(5)
-        except Exception as e:
-            if DEBUG: print(f"    ├─ ⚠️  Error en circuit_pressure_worker(): {e}")
-            await asyncio.sleep(60)
 
 # ---- CORRUTINAS DE AUDITORÍA INDEPENDIENTES (Event-Driven) ----
 async def _audit_worker(category, sample_fn, interval=1):
@@ -2360,28 +2214,21 @@ async def audit_ram_task():
     def sample():
         collect()
         return {"f": mem_free(), "a": mem_alloc()}
-    await _audit_worker("ram", sample, interval=2)
+    await _audit_worker("ram", sample, interval=60)
 
 async def audit_lux_task():
     def sample():
         if illuminance_sensor:
             return round(illuminance_sensor.luminance(BH1750.CONT_HIRES_1), 1)
         return None
-    await _audit_worker("lux", sample, interval=1)
-
-async def audit_pressure_task():
-    def sample():
-        if pressure_sensor_analog:
-            return sum([pressure_sensor_analog.read() for _ in range(5)]) // 5
-        return None
-    await _audit_worker("pressure", sample, interval=1)
+    await _audit_worker("lux", sample, interval=60)
 
 async def audit_rain_task():
     def sample():
         if rain_sensor_analog:
             return sum([rain_sensor_analog.read() for _ in range(5)]) // 5
         return None
-    await _audit_worker("rain", sample, interval=1)
+    await _audit_worker("rain", sample, interval=60)
 
 async def audit_health_task():
     def sample():
@@ -2389,7 +2236,7 @@ async def audit_health_task():
             rssi = wlan.status('rssi') if wlan.isconnected() else -120
             return {"rssi": rssi, "ip": wlan.ifconfig()[0]}
         return None
-    await _audit_worker("health", sample, interval=5)
+    await _audit_worker("health", sample, interval=60)
 
 # ---- CORRUTINA: Programa Principal ----
 async def main():
@@ -2425,13 +2272,10 @@ async def main():
     asyncio.create_task(rain_monitor_task())
     # Gestion de la Estación Meteorológica Exterior (iluminancia)
     asyncio.create_task(illuminance_monitor_task())
-    # Monitoreo Unificado de Presión (Reactivo al Riego)
-    asyncio.create_task(circuit_pressure_worker())
 
     # ---- Auditorías Independientes (Event-Driven) ----
     asyncio.create_task(audit_ram_task())
     asyncio.create_task(audit_lux_task())
-    asyncio.create_task(audit_pressure_task())
     asyncio.create_task(audit_rain_task())
     asyncio.create_task(audit_health_task())
 

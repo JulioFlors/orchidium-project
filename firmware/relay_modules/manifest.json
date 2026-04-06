@@ -3,7 +3,7 @@
   "description": "Nodo Actuador + Meteorológica Exterior",
   "version": "0.9.1",
   "date": "05-04-2026",
-  "notes_release": "[🌦️ Estación Meteorológica / 🛡️ Auditoría]: Refactorización masiva a corrutinas independientes basadas en eventos (RAM, Lux, Presión, Lluvia, Salud). Eliminación definitiva de 'unified_audit_task' y 'audit_wake_event' para optimizar RAM. Robustez MQTT optimizada (log_mqtt_exception en handlers individuales).",
+  "notes_release": "[🌦️ Estación Meteorológica / 🛡️ Auditoría]: Refactorización masiva a corrutinas independientes basadas en eventos (RAM, Lux, Lluvia, Salud). Eliminación definitiva de 'unified_audit_task' y 'audit_wake_event' para optimizar RAM. Robustez MQTT optimizada (log_mqtt_exception en handlers individuales).",
   "files": [
     "app.mpy",
     "main.py"

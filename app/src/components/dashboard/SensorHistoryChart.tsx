@@ -31,7 +31,7 @@ interface CustomTooltipProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   payload?: any[]
   label?: string | number
-  timeFormatter: Intl.DateTimeFormat
+  formatTime: (date: string | number | Date) => string
   color: string
   title: string
   unit: string
@@ -41,7 +41,7 @@ function CustomTooltip({
   active,
   payload,
   label,
-  timeFormatter,
+  formatTime,
   color,
   title,
   unit,
@@ -60,7 +60,7 @@ function CustomTooltip({
     return (
       <div className="bg-surface border-input-outline relative z-50 flex flex-col overflow-visible rounded-lg border p-3 text-xs shadow-md outline-none">
         <span className="text-secondary mb-1 font-medium">
-          {label !== undefined ? timeFormatter.format(new Date(label)) : ''}
+          {label !== undefined ? formatTime(label) : ''}
         </span>
         <span className="text-sm font-semibold" style={{ color }}>
           {title.replace('Histórico ', '')}: {payload[0].value} {unit}
@@ -111,6 +111,13 @@ export function SensorHistoryChart({
   }
 
   const timeFormatter = getTimeFormatter(range)
+
+  // Utilidad para asegurar consistencia del sufijo am/pm (PristinoPlant Estándar)
+  const formatLabelTime = (dateVal: number | string | Date) => {
+    const str = timeFormatter.format(new Date(dateVal))
+
+    return str.replace(/A\.?\s*M\.?/i, 'a. m.').replace(/P\.?\s*M\.?/i, 'p. m.')
+  }
 
   // Generamos un ID único para el gradiente
   const gradientId = `color-${dataKey}`
@@ -219,7 +226,7 @@ export function SensorHistoryChart({
               content={
                 <CustomTooltip
                   color={color}
-                  timeFormatter={timeFormatter}
+                  formatTime={formatLabelTime}
                   title={title}
                   unit={unit}
                 />

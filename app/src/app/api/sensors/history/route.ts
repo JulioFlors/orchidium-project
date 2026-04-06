@@ -58,7 +58,6 @@ export async function GET(request: Request) {
         temperature: row.temperature || 0,
         humidity: row.humidity || 0,
         illuminance: row.illuminance || 0,
-        pressure: row.pressure || 0,
         // (Optional) phase for external metrics diagnostic
         ...(row.phase ? { phase: row.phase } : {}),
       }

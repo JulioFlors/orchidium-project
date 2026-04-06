@@ -96,7 +96,6 @@ const TOPIC_ROUTES: Record<string, PacketProcessor> = {
   // Necesitamos inyectar el 5to argumento (eventType)
   '/status': (s, z, c, p) => processZoneStateEvent(s, z, c, p, 'Device_Status'),
   '/rain/state': (s, z, c, p) => processZoneStateEvent(s, z, c, p, 'Rain_State'),
-  '/filter/status': processFilterHealthPacket,
 }
 
 // ---- Global Influx Client (puntero) ----
@@ -142,7 +141,6 @@ async function processEnvironmentPacket(source: string, zone: ZoneType, context:
         if (metrics.temperature !== undefined) point.setFloatField('temperature', Number(metrics.temperature))
         if (metrics.humidity !== undefined) point.setFloatField('humidity', Number(metrics.humidity))
         if (metrics.illuminance !== undefined) point.setFloatField('illuminance', Number(metrics.illuminance))
-        if (metrics.pressure !== undefined) point.setFloatField('pressure', Number(metrics.pressure))
         if (metrics.rain_intensity !== undefined) point.setFloatField('rain_intensity', Number(metrics.rain_intensity))
         if (metrics.phase !== undefined) point.setStringField('phase', String(metrics.phase))
 
@@ -159,7 +157,6 @@ async function processEnvironmentPacket(source: string, zone: ZoneType, context:
     if (data.temperature !== undefined) point.setFloatField('temperature', Number(data.temperature))
     if (data.humidity !== undefined) point.setFloatField('humidity', Number(data.humidity))
     if (data.illuminance !== undefined) point.setFloatField('illuminance', Number(data.illuminance))
-    if (data.pressure !== undefined) point.setFloatField('pressure', Number(data.pressure))
     if (data.rain_intensity !== undefined) point.setFloatField('rain_intensity', Number(data.rain_intensity))
     if (data.phase !== undefined) point.setStringField('phase', String(data.phase))
 
@@ -188,22 +185,7 @@ async function processRainEventPacket(source: string, zone: ZoneType, context: s
   }
 }
 
-async function processFilterHealthPacket(source: string, zone: ZoneType, context: string, payload: string) {
-  try {
-    const data = JSON.parse(payload)
-    const point = Point.measurement('filter_health')
-      .setTag('source', source)
-      .setTag('zone', zone)
-      .setTag('context', context)
-      .setFloatField('health_percent', Number(data.health))
-      .setFloatField('pressure_reading', Number(data.pressure))
-
-    await writeToInflux(point)
-    Logger.info(`🛡 Salud del filtro: ${data.health}%`)
-  } catch (e) {
-    Logger.error('Error procesando paquete de salud del filtro', e)
-  }
-}
+let lastRainState: string | null = null;
 
 async function processZoneStateEvent(
   source: string,
@@ -221,13 +203,14 @@ async function processZoneStateEvent(
 
   await writeToInflux(point)
 
-  // Visibilidad operativa: Anunciar cambios de estado de lluvia
+  // Visibilidad operativa: Anunciar cambios reales de estado de lluvia
   if (eventType === 'Rain_State') {
-    if (payload === 'Raining') {
+    if (payload === 'Raining' && lastRainState !== 'Raining') {
       Logger.warn('🌧️ [Raining] Lluvia detectada por sensores')
-    } else if (payload === 'Dry') {
-      Logger.info('☀️ [Dry] Lluvia finalizada')
+    } else if (payload === 'Dry' && lastRainState === 'Raining') {
+      Logger.info('☀️ [Dry] Lluvia finalizada (Cambio de estado detectado)')
     }
+    lastRainState = payload;
   }
 }
 

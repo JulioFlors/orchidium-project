@@ -14,7 +14,7 @@ interface SensorData {
   external_illuminance: number
   humidity: number
   illuminance: number
-  phase?: string
+  rain_intensity: number
   temperature: number
   time: string
 }
@@ -25,18 +25,11 @@ interface RainData {
   eventCount: number
 }
 
-interface FilterData {
-  health: number
-  pressure: number
-  status: 'optimal' | 'warning' | 'critical' | 'unknown'
-}
-
-type MetricType = 'temperature' | 'humidity' | 'illuminance' | 'pressure' | 'rain'
+type MetricType = 'temperature' | 'humidity' | 'illuminance' | 'rain_intensity'
 
 export default function MonitoringPage() {
   const [data, setData] = useState<SensorData[]>([])
   const [rainData, setRainData] = useState<RainData | null>(null)
-  const [filterData, setFilterData] = useState<FilterData | null>(null)
   const [initialLoading, setInitialLoading] = useState(true)
   const [range, setRange] = useState('24h')
   const [zone, setZone] = useState('ZONA_A')
@@ -64,10 +57,9 @@ export default function MonitoringPage() {
     const fetchData = async () => {
       try {
         // Parallel data fetching
-        const [histRes, rainRes, filterRes] = await Promise.all([
+        const [histRes, rainRes] = await Promise.all([
           fetch(`/api/sensors/history?range=${range}&zone=${zone}`),
           fetch(`/api/sensors/rain?range=${range}&zone=${zone}`),
-          fetch(`/api/sensors/filter?zone=${zone}`),
         ])
 
         if (histRes.ok) {
@@ -80,12 +72,6 @@ export default function MonitoringPage() {
           const rainJson = await rainRes.json()
 
           setRainData(rainJson)
-        }
-
-        if (filterRes.ok) {
-          const filterJson = await filterRes.json()
-
-          setFilterData(filterJson)
         }
       } catch (error) {
         // eslint-disable-next-line no-console
@@ -115,7 +101,6 @@ export default function MonitoringPage() {
           temperature: 0,
           humidity: 0,
           illuminance: 0,
-          pressure: 0,
           rain_intensity: 0,
         }
 
@@ -157,7 +142,7 @@ export default function MonitoringPage() {
   }
 
   // Simple trend calculation (last vs average of last 5)
-  const calculateTrend = (key: 'temperature' | 'humidity' | 'illuminance' | 'pressure') => {
+  const calculateTrend = (key: 'temperature' | 'humidity' | 'illuminance') => {
     if (data.length < 5) return 'stable'
     const last = Number(data[data.length - 1][key])
     const prev = Number(data[data.length - 5][key])
@@ -205,18 +190,10 @@ export default function MonitoringPage() {
           title: 'Iluminancia',
           icon: <Sun className="h-4 w-4" />,
         }
-      case 'pressure':
-        return {
-          dataKey: 'pressure',
-          color: '#818cf8',
-          unit: 'PSI',
-          title: 'Presión de Agua',
-          icon: <Droplets className="h-4 w-4" />,
-        }
-      case 'rain':
+      case 'rain_intensity':
         return {
           dataKey: 'rain_intensity',
-          color: '#0ea5e9',
+          color: '#3b82f6',
           unit: '%',
           title: 'Intensidad de Lluvia',
           icon: <CloudRain className="h-4 w-4" />,
@@ -436,26 +413,24 @@ export default function MonitoringPage() {
               onClick={() => setSelectedMetric('illuminance')}
             />
 
-            {/* Pressure Card */}
-            <EnvironmentCard
-              color="cyan"
-              description="Transductor 150PSI"
-              hasData={data.length > 0}
-              icon={<Droplets className="h-6 w-6" />}
-              isActive={selectedMetric === 'pressure'}
-              isLoading={initialLoading || isMqttLoading}
-              isOffline={isOffline}
-              status={
-                Number(current.pressure) > 100 || Number(current.pressure) < 5
-                  ? 'warning'
-                  : 'optimal'
-              }
-              title="Presión de Agua"
-              trend={calculateTrend('pressure')}
-              unit="PSI"
-              value={Number(current.pressure).toFixed(1)}
-              onClick={() => setSelectedMetric('pressure')}
-            />
+            {/* Rain Intensity Card (if in Exterior) */}
+            {zone === 'EXTERIOR' && (
+              <EnvironmentCard
+                color="blue"
+                description="Intensidad de LLuvia"
+                hasData={data.length > 0}
+                icon={<CloudRain className="h-6 w-6" />}
+                isActive={selectedMetric === 'rain_intensity'}
+                isLoading={initialLoading || isMqttLoading}
+                isOffline={isOffline}
+                status={Number(current.rain_intensity) > 0 ? 'warning' : 'optimal'}
+                title="Lluvia"
+                trend="stable"
+                unit="%"
+                value={Number(current.rain_intensity).toFixed(0)}
+                onClick={() => setSelectedMetric('rain_intensity')}
+              />
+            )}
 
             {/* Climate Status Card */}
             <EnvironmentCard
@@ -483,33 +458,14 @@ export default function MonitoringPage() {
               }
               hasData={!!rainData}
               icon={<FaChartLine className="h-6 w-6" />}
-              isActive={selectedMetric === 'rain'}
+              isActive={selectedMetric === 'rain_intensity'}
               isLoading={initialLoading || isMqttLoading}
               isOffline={isOffline}
               status="optimal"
               title="Resumen de Lluvia"
               unit=""
               value={!rainData ? '--' : formatDuration(rainData.totalDurationSeconds)}
-              onClick={() => setSelectedMetric('rain')}
-            />
-
-            {/* Filter Health Card */}
-            <EnvironmentCard
-              color={!filterData || filterData.health > 80 ? 'green' : 'orange'}
-              description={
-                filterData ? `Presión de trabajo: ${filterData.pressure} PSI` : 'Bomba inactiva'
-              }
-              hasData={!!filterData}
-              icon={<FaChartLine className="h-6 w-6" />}
-              isActive={false}
-              isLoading={initialLoading || isMqttLoading}
-              isOffline={isOffline}
-              status={filterData?.status === 'unknown' ? undefined : filterData?.status}
-              statusLabel={filterData ? `${filterData.health}%` : 'Óptimo'}
-              title="Salud del Filtro"
-              unit=""
-              value={filterData ? `${filterData.health}%` : '100%'}
-              onClick={() => {}}
+              onClick={() => setSelectedMetric('rain_intensity')}
             />
           </div>
         )}

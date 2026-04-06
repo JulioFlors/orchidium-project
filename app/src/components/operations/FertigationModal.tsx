@@ -3,6 +3,7 @@
 import { IoWarningOutline } from 'react-icons/io5'
 
 import { Modal } from '@/components/ui'
+import { formatTime12h } from '@/utils'
 
 interface WaitingTask {
   id: string
@@ -60,10 +61,7 @@ export function FertigationModal({
               {waitingTasks.map((t) => (
                 <li key={t.id}>
                   {t.schedule?.name || 'Rutina Desconocida'} ({t.purpose}) -{' '}
-                  {new Date(t.scheduledAt).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+                  {formatTime12h(t.scheduledAt)}
                 </li>
               ))}
             </ul>

@@ -23,6 +23,7 @@ Do not migrate animation libraries unless explicitly requested. Apply rules with
 ## when to apply
 
 Reference these guidelines when:
+
 - adding or changing UI animations (CSS, WAAPI, Motion, rAF, GSAP)
 - refactoring janky interactions or transitions
 - implementing scroll-linked motion or reveal-on-scroll
