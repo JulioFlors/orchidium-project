@@ -1,4 +1,4 @@
-import { syncOpenMeteo } from './oracle';
+import { syncOpenMeteo, syncOpenWeatherMap, syncAgroMonitoring, syncAgroHistory } from './oracle';
 import { Cron } from 'croner';
 import { Logger } from './logger';
 
@@ -10,8 +10,13 @@ Logger.info('Iniciando servicio Weather Oracle');
 async function bootstrap() {
     try {
         Logger.info('Iniciando sincronización (Bootstrap)');
-        await syncOpenMeteo();
-        Logger.success('Bootstrap completado satisfactoriamente.');
+        await Promise.allSettled([
+            syncOpenMeteo(),
+            syncOpenWeatherMap(),
+            syncAgroMonitoring(),
+            syncAgroHistory()
+        ]);
+        Logger.success('Bootstrap completado.');
     } catch (error) {
         Logger.error('Error crítico durante el bootstrap:', error);
     }
@@ -21,10 +26,14 @@ async function bootstrap() {
 bootstrap();
 
 // Programar sincronización periódica cada 3 horas.
-// Cron: 0 */3 * * *
 const job = new Cron('0 */3 * * *', async () => {
     Logger.cron(`Iniciando sincronización meteorológica periódica`);
-    await syncOpenMeteo();
+    await Promise.allSettled([
+        syncOpenMeteo(),
+        syncOpenWeatherMap(),
+        syncAgroMonitoring(),
+        syncAgroHistory()
+    ]);
 });
 
 Logger.info(`Servicio inactivo en espera. Próxima ejecución: ${job.nextRun()?.toLocaleString()}`);

@@ -107,7 +107,8 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 * [x] **Scheduler Diferido:** Motor de ejecución backend (Polling DB) e UI para agendar Tareas Diferidas Manuales.
 * [ ] **Scheduler UI (Crons Recurrentes):** Interfaz para gestionar `AutomationSchedule` (rutinas continuas).
 * [ ] **Confirmación de Agroquímicos (Diferido/Automatizado):** Las tareas de Fertirriego y Fumigación programadas (diferidas o cron) deben solicitar confirmación al usuario **1 hora antes** de la ejecución. El usuario confirma que el tanque ha sido preparado. Si no hay confirmación antes de la hora programada, la tarea se cancela automáticamente con nota auditable (`WAITING_CONFIRMATION` → `CANCELLED`). Depende del **Sistema de Notificaciones** (ver sección transversal).
-* [ ] **WeatherGuard Básico:** "Si llovió > X mm, cancelar riego".
+* [x] **WeatherGuard Básico:** "Si llovió > X mm, cancelar riego" o si hay precipitaciones pronosticadas.
+* [x] **Integración Ingest/Scheduler:** Suscripción reactiva a eventos de lluvia (`rain/event`, `rain/state`) para toma de decisiones instantánea.
 
 ### 💡 3.2 Motor de Inferencias (El Cerebro Analítico)
 
@@ -128,11 +129,13 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 
 *Objetivo:* Evitar riegos redundantes y prevenir pudrición de raíces anticipándose al clima.
 
-* [x] **Integración de API Meteorológica:** Conectar el backend a una API externa (Open-Meteo) para Ciudad Guayana.
-* [x] **Algoritmo de Decisión Proactiva/Reactiva:** Crear la lógica en el Scheduler que evalúe dos factores antes de abrir una válvula:
-  * *Reactivo (Local):* Consultar InfluxDB -> ¿La duración de lluvia local en las últimas 24h superó el umbral? (Sensor físico).
-  * *Proactivo (Nube):* Consultar API -> ¿La probabilidad de precipitación (PoP) para las próximas 3 horas es mayor al 70%?
-  * *Acción:* Si cualquiera de las dos es verdadera, cancelar o posponer el riego programado y registrar el motivo en el Log.
+* [x] **Integración de API Meteorológica Atmosférica:** Conectar el backend a APIs externas (Open-Meteo y OpenWeatherMap) para Ciudad Guayana.
+* [x] **Integración de API Agrícola (AgroMonitoring):** Oráculo capaz de leer el estado del suelo (humedad y temperatura a 10cm) mediante polígonos satelitales.
+* [x] **Algoritmo de Decisión Proactiva/Reactiva (Scheduler):** Evaluar múltiples factores antes de abrir una válvula:
+  * *Reactivo (Físico):* Consultar InfluxDB -> ¿La lluvia local en 24h superó el umbral? (Sensor `EXTERIOR`).
+  * *Reactivo (Satelital):* Consultar AgroMonitoring -> ¿El suelo ya tiene suficiente humedad base?
+  * *Proactivo (Nube):* Consultar OWM/Open-Meteo -> ¿La probabilidad de precipitación (PoP) para las próximas 3 horas es mayor al 70%?
+  * *Acción:* Cancelar o posponer riego y auditar el motivo.
 
 ---
 
@@ -146,6 +149,7 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 
 * [x] **Gráficos en Tiempo Real:** Implementar Recharts para Temperatura/Humedad.
 * [x] **Layouts y Accesibilidad:** Refinar Grids, transiciones, eliminación de marcos de enfoque.
+* [x] **Lógica de Clima Inteligente:** Detección de "Falla de Sensor", "Obsoleto" y validación robusta de paleta de colores TDS.
 * [ ] **Micro-Visión (Vista 24h):**
   * [ ] Implementar **Escala Logarítmica** en el eje Y de Iluminancia (para ver sutiles variaciones de 100lx y picos de 60,000lx simultáneamente).
   * [ ] Implementar **Sombreado Contextual** (Fondo gris/azulado) durante las horas del Valle Nocturno y Transición Vespertina.

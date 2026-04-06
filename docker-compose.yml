@@ -135,9 +135,12 @@ services:
       DB_HOST: postgres-local
       DB_USER: ${DB_USER}
 
-      # Ubicación predeterminada: Ciudad Guayana
-      LATITUDE: "8.31"
-      LONGITUDE: "-62.71"
+      # Ubicación y APIs externas
+      LATITUDE: ${LATITUDE}
+      LONGITUDE: ${LONGITUDE}
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY}
+      AGROMONITORING_API_KEY: ${AGROMONITORING_API_KEY}
+      AGROMONITORING_POLY_ID: ${AGROMONITORING_POLY_ID}
 
       NODE_ENV: development
       NODE_OPTIONS: "--dns-result-order=ipv4first"
@@ -198,9 +201,12 @@ services:
       DB_HOST: postgres
       DB_USER: ${DB_USER}
 
-      # Ubicación predeterminada: Ciudad Guayana
-      LATITUDE: "8.31"
-      LONGITUDE: "-62.71"
+      # Ubicación y APIs externas
+      LATITUDE: ${LATITUDE}
+      LONGITUDE: ${LONGITUDE}
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY}
+      AGROMONITORING_API_KEY: ${AGROMONITORING_API_KEY}
+      AGROMONITORING_POLY_ID: ${AGROMONITORING_POLY_ID}
 
       NODE_ENV: development
       NODE_OPTIONS: "--dns-result-order=ipv4first"
@@ -395,9 +401,12 @@ services:
       DB_HOST: ${DB_HOST_SERVERLESS}
       DB_USER: ${DB_USER_SERVERLESS}
 
-      # Ubicación predeterminada: Ciudad Guayana
-      LATITUDE: "8.31"
-      LONGITUDE: "-62.71"
+      # Ubicación y APIs externas
+      LATITUDE: ${LATITUDE}
+      LONGITUDE: ${LONGITUDE}
+      OPENWEATHER_API_KEY: ${OPENWEATHER_API_KEY}
+      AGROMONITORING_API_KEY: ${AGROMONITORING_API_KEY}
+      AGROMONITORING_POLY_ID: ${AGROMONITORING_POLY_ID}
 
       NODE_ENV: development
       NODE_OPTIONS: "--dns-result-order=ipv4first"

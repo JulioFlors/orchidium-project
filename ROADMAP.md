@@ -64,7 +64,7 @@ Interfaz para crear/editar/eliminar rutinas de automatización (`AutomationSched
 
 ### 3.2 WeatherGuard (El Escudo Preventivo)
 
-Algoritmo híbrido que actúa como "guardia de seguridad" antes de cada riego. Cruza la telemetría del sensor de lluvia local (pasado/presente) con las APIs meteorológicas globales (futuro) para cancelar riegos si el suelo ya está húmedo o si se avecina una tormenta, optimizando el agua y previniendo hongos.
+* [x] **Algoritmo de Precisión Híbrida**: Cruza la telemetría del sensor de lluvia local (pasado/presente) con las APIs meteorológicas globales (Open-Meteo/OWM para pronóstico de lluvia futura) y Análisis de Suelos Satelital (AgroMonitoring para medir la humedad actual de la tierra). El sistema cancela riegos si el suelo ya está húmedo o si se avecina una tormenta, optimizando el agua y previniendo enfermedades por exceso de humedad.
 
 ### 3.3 Motor de Inferencias (El Cerebro)
 

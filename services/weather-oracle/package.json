@@ -14,8 +14,9 @@
   "dependencies": {
     "@package/database": "workspace:*",
     "@prisma/client": "7.0.1",
-    "axios": "1.13.6",
+    "axios": "1.14.0",
     "croner": "10.0.1",
+    "dotenv": "17.2.3",
     "pg": "8.16.3",
     "prisma": "7.0.1"
   }

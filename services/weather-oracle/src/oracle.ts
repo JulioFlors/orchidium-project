@@ -17,6 +17,20 @@ function mapWeatherCode(code: number): WeatherCondition {
 }
 
 /**
+ * Mapea los códigos de OpenWeatherMap a nuestro enum WeatherCondition.
+ */
+function mapOWMWeatherCode(code: number): WeatherCondition {
+  if (code >= 200 && code <= 232) return 'STORM';
+  if (code >= 300 && code <= 321) return 'RAIN';
+  if (code >= 500 && code <= 531) return 'RAIN';
+  if (code >= 600 && code <= 622) return 'SNOW';
+  if (code >= 701 && code <= 781) return 'FOG';
+  if (code === 800) return 'CLEAR';
+  if (code >= 801 && code <= 804) return 'CLOUDY';
+  return 'UNKNOWN';
+}
+
+/**
  * Sincroniza el pronóstico horario desde Open-Meteo (Sin API Key).
  */
 export async function syncOpenMeteo() {
@@ -82,14 +96,164 @@ export async function syncOpenMeteo() {
 }
 
 /**
- * TODO: Implementar syncOpenWeatherMap() cuando se proporcione una API Key.
+ * Sincroniza el pronóstico desde OpenWeatherMap (Requiere API Key).
+ * Utiliza el endpoint '5 Day / 3 Hour Forecast'.
  */
 export async function syncOpenWeatherMap() {
     const apiKey = process.env.OPENWEATHER_API_KEY;
+    const lat = process.env.LATITUDE || '8.31';
+    const lon = process.env.LONGITUDE || '-62.71';
+
     if (!apiKey) {
-        Logger.warn('Omitiendo OpenWeatherMap: No se encontró OPENWEATHER_API_KEY.');
+        Logger.warn('Omitiendo OpenWeatherMap: No se encontró OPENWEATHER_API_KEY en .env');
         return false;
     }
-    // Lógica similar a syncOpenMeteo usando One Call API 3.0
-    return false;
+
+    const url = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric&lang=es`;
+
+    Logger.info(`Sincronizando OpenWeatherMap para las coordenadas Lat:${lat} Lon:${lon}...`);
+
+    try {
+        const response = await axios.get(url);
+        const { list } = response.data;
+
+        if (!list || !Array.isArray(list)) {
+            throw new Error('Respuesta inválida de OpenWeatherMap');
+        }
+
+        const source = 'OpenWeatherMap';
+        let upsertCount = 0;
+
+        for (const item of list) {
+            const timestamp = new Date(item.dt * 1000); // OWM usa segundos
+            const temperature = item.main.temp;
+            const humidity = item.main.humidity;
+            
+            // OWM 'pop' (Probability of precipitation) es 0-1
+            const precipProb = item.pop || 0;
+            
+            const weatherCode = item.weather[0]?.id || 0;
+            const condition = mapOWMWeatherCode(weatherCode);
+
+            await prisma.weatherForecast.upsert({
+                where: {
+                    timestamp_source: {
+                        timestamp,
+                        source
+                    }
+                },
+                update: {
+                    temperature,
+                    humidity,
+                    precipProb,
+                    condition,
+                    updatedAt: new Date()
+                },
+                create: {
+                    timestamp,
+                    temperature,
+                    humidity,
+                    precipProb,
+                    condition,
+                    source
+                }
+            });
+            upsertCount++;
+        }
+
+        Logger.success(`${source} resincronizado. ${upsertCount} registros guardados.`);
+        return true;
+    } catch (error: any) {
+        const status = error.response?.status;
+        if (status === 401) {
+            Logger.error('Fallo en OpenWeatherMap: API Key inválida o no activada aún (esperar 2h-24h tras registro).');
+        } else {
+            Logger.error(`Fallo al sincronizar con OpenWeatherMap:`, error.message);
+        }
+        return false;
+    }
+}
+
+/**
+ * Sincroniza datos de suelo (Humedad y Temperatura a 10cm) desde AgroMonitoring.
+ */
+export async function syncAgroMonitoring() {
+    const apiKey = process.env.AGROMONITORING_API_KEY;
+    const polyId = process.env.AGROMONITORING_POLY_ID;
+
+    if (!apiKey || !polyId) {
+        Logger.warn('Omitiendo AgroMonitoring Soil: Falta API Key o PolyID en .env');
+        return false;
+    }
+
+    const url = `http://api.agromonitoring.com/agro/1.0/soil?polyid=${polyId}&appid=${apiKey}`;
+
+    Logger.info(`Consultando datos de suelo en AgroMonitoring (PolyID: ${polyId})...`);
+
+    try {
+        const response = await axios.get(url);
+        const { dt, t10, moisture } = response.data;
+
+        const timestamp = new Date(dt * 1000);
+        const source = 'AgroMonitoring';
+
+        await prisma.weatherForecast.upsert({
+            where: {
+                timestamp_source: {
+                    timestamp,
+                    source
+                }
+            },
+            update: {
+                temperature: t10 - 273.15, // Kelvin to Celsius
+                humidity: 0, // No aplica directamente
+                soilTemp: t10 - 273.15,
+                soilMoisture: moisture,
+                condition: 'UNKNOWN',
+                updatedAt: new Date()
+            },
+            create: {
+                timestamp,
+                temperature: t10 - 273.15,
+                humidity: 0,
+                soilTemp: t10 - 273.15,
+                soilMoisture: moisture,
+                condition: 'UNKNOWN',
+                source
+            }
+        });
+
+        Logger.success(`${source}: Datos de suelo actualizados (Humedad: ${(moisture * 100).toFixed(1)}%)`);
+        return true;
+    } catch (error: any) {
+        Logger.error('Fallo al sincronizar suelo con AgroMonitoring:', error.message);
+        return false;
+    }
+}
+
+/**
+ * Sincroniza historial de precipitación acumulada (últimas 24h).
+ */
+export async function syncAgroHistory() {
+    const apiKey = process.env.AGROMONITORING_API_KEY;
+    const polyId = process.env.AGROMONITORING_POLY_ID;
+
+    if (!apiKey || !polyId) return false;
+
+    const end = Math.floor(Date.now() / 1000);
+    const start = end - (24 * 3600); // 24 horas atrás
+
+    const url = `http://api.agromonitoring.com/agro/1.0/weather/history/accumulated_precipitation?polyid=${polyId}&start=${start}&end=${end}&appid=${apiKey}`;
+
+    try {
+        const response = await axios.get(url);
+        const data = response.data;
+        
+        // El API devuelve un valor único de acumulación en mm
+        Logger.info(`AgroMonitoring History: Precipitación acumulada 24h: ${data.amount || 0}mm`);
+        return true;
+    } catch (error: any) {
+        Logger.error('Fallo al sincronizar historial con AgroMonitoring:', error.message);
+        return false;
+    }
 }

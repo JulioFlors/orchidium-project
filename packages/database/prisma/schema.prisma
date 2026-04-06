@@ -466,6 +466,8 @@ model WeatherForecast {
   precipProb  Float            @default(0) // Probabilidad de precipitación (0-1)
   condition   WeatherCondition @default(UNKNOWN)
   windSpeed   Float?
+  soilTemp    Float? // Temp Suelo (AgroMonitoring)
+  soilMoisture Float? // Humedad Suelo (AgroMonitoring)
 
   source    String // 'OpenWeatherMap', 'Open-Meteo', etc.
   createdAt DateTime @default(now())

@@ -486,7 +486,7 @@ mqttClient.on('message', async (topic, payload) => {
     // 5. Detección en Tiempo Real de Estado de Lluvia (Weather Guard)
     if (topic === 'PristinoPlant/Weather_Station/Exterior/rain/state') {
       if (message === 'Raining') {
-        Logger.warn('🌧️ [WeatherGuard] Lluvia detectada por sensores en tiempo real. Evaluación de tareas activas...')
+        Logger.warn('🌧️ [WeatherGuard] Lluvia detectada por sensores en tiempo real. Evaluación de tareas activas.')
         
         // REACCIÓN INMEDIATA: Si hay tareas en curso en zonas exteriores, pausarlas o vigilarlas.
         // (La lógica de pausa se dispara en el próximo Tick del Scheduler o aquí mismo)
