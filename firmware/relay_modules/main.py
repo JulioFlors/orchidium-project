@@ -18,7 +18,7 @@ from micropython import const
 
 # ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
-DEBUG = True
+DEBUG = False
 
 # ---- Configuración MQTT (Constantes const() para ahorro de RAM) ----
 # El broker esperará ~1.5x este valor antes de desconectar al cliente.
@@ -775,142 +775,79 @@ def setup_sensors():
     # Gestión de variables globales
     global illuminance_sensor, rain_sensor_analog, i2c_bus, BH1750
 
+    # (Optimización de memoria RAM)
+    # Lazy Imports (Importación tardía)
+    from machine import ADC, I2C, Pin, SoftI2C # type: ignore
+    from utime import sleep_ms # type: ignore
+
     # 1. Sensor de Iluminancia (BH1750 / I2C)
-    # [Diagnóstico Exhaustivo]: Prueba múltiples configuraciones, ambas direcciones
-    # (0x23 y 0x5C), SoftI2C y Hardware I2C, y escanea el bus completo si todo falla.
+    # [Diagnóstico Exhaustivo]: Prueba múltiples configuraciones, SoftI2C y Hardware I2C.
     try:
-        # (Optimización de memoria RAM)
-        # Lazy Imports (Importación tardía)
-        from machine import ADC, I2C, Pin, SoftI2C # type: ignore
-        from utime import sleep_ms # type: ignore
-
-        # ---- FASE 0: Diagnóstico eléctrico de los pines I2C ----
-        if DEBUG:
-            print(f"\n☀️  BH1750: {Colors.CYAN}Diagnóstico I2C Exhaustivo{Colors.RESET}")
-            # Leemos el estado eléctrico de SDA y SCL como entradas con pull-up
-            pin_sda = Pin(21, Pin.IN, Pin.PULL_UP)
-            pin_scl = Pin(22, Pin.IN, Pin.PULL_UP)
-            sleep_ms(10)
-            sda_val = pin_sda.value()
-            scl_val = pin_scl.value()
-            res_msg = "✅ OK" if (sda_val == 1 and scl_val == 1) else "⚠️  ALERTA: líneas en LOW (corto o falta Pull-up)"
-            print("    ├─ Pins Eléctricos: SDA(21)={} SCL(22)={} -> {}".format(sda_val, scl_val, res_msg))
-
-        BH1750_ADDRS = [0x23, 0x5C]  # LOW=0x23, HIGH=0x5C
-
-        # Matriz de Failsafe ordenados: (tipo_bus, freq_hz, timeout_us, label)
-        # Priorizamos HW I2C por eficiencia, pero bajamos a SoftI2C para robustez en 10m CAT6.
-        FAILSAFE_CONFIGS = [
-            ("hw",   100000,   0,       "Hardware I2C 100kHz"),
-            ("soft", 50000,    200000,  "SoftI2C 50kHz (Robust)"),
-            ("soft", 10000,    500000,  "SoftI2C 10kHz (Low Speed 10m)"),
-        ]
-
-        MAX_RETRIES = 3
-        SETTLE_MS = 250  # Pausa generosa para estabilización eléctrica
+        # Direcciones I2C estándar del BH1750
+        addr = 0x23 
         sensor_connected = False
 
-        if DEBUG:
-            print(f"\n☀️  BH1750: {Colors.CYAN}Iniciando Failsafe en Cascada{Colors.RESET}")
+        # Configuraciones de bus: (tipo_bus, freq_hz, timeout_us, label)
+        # Probamos primero Hardware I2C y luego SoftI2C si el primero falla.
+        BUS_CONFIGS = [
+            ("hw",   100000,   0,       "Hardware I2C"),
+            ("soft", 50000,    200000,  "SoftI2C Robusto"),
+            ("soft", 10000,    500000,  "SoftI2C Lento (10m)"),
+        ]
 
-        for bus_type, freq, timeout, label in FAILSAFE_CONFIGS:
+        if DEBUG:
+            print(f"\n☀️  Conectando {Colors.YELLOW}BH1750{Colors.RESET}")
+
+        for i, (bus_type, freq, timeout, label) in enumerate(BUS_CONFIGS):
             if sensor_connected:
                 break
 
-            for attempt in range(1, MAX_RETRIES + 1):
-                try:
-                    # Crear bus según nivel de cascada actual
-                    if bus_type == "soft":
-                        i2c_bus = SoftI2C(scl=Pin(22), sda=Pin(21), freq=freq, timeout=timeout)
-                    else:
-                        i2c_bus = I2C(0, scl=Pin(22), sda=Pin(21), freq=freq)
-
-                    # Estabilización eléctrica tras el reset/creación del bus
-                    sleep_ms(SETTLE_MS)
-
-                    # Seleccionamos la dirección por defecto (0x23)
-                    addr = 0x23
-                    
-                    # Ping directo al sensor
-                    i2c_bus.writeto(addr, b'')
-
-                    # Instanciamos el driver (incluye RESET interno)
-                    try:
-                        from bh1750 import BH1750 # type: ignore
-                    except ImportError as e:
-                        if DEBUG: print(f"    ├─ ❌ Error al importar bh1750: {e}")
-                        return
-
-                    illuminance_sensor = BH1750(bus=i2c_bus, addr=addr)
-                    
-                    # Pausa obligatoria para despertar tras reset
-                    sleep_ms(200)
-                    lux_test = illuminance_sensor.luminance(BH1750.CONT_HIRES_1)
-
-                    if DEBUG:
-                        print(f"    └─ ✅ {Colors.GREEN}CONECTADO{Colors.RESET} con [{label}] (Intento {attempt})")
-                        print(f"       Lectura inicial: {Colors.CYAN}{lux_test} lux{Colors.RESET}")
-
-                    sensor_connected = True
-                    break  # Salimos de esta fase de reintentos con éxito
-
-                except OSError:
-                    # Ocurrió un error en esta config. Si es el último intento, seguimos a la siguiente fase de la cascada.
-                    if DEBUG and attempt == MAX_RETRIES:
-                        print(f"    ├─ ⚠️  Fallo [{label}] - Reintentando siguiente nivel")
-                    sleep_ms(SETTLE_MS)
-
-        # ---- FASE 2: Si todo los niveles de la cascada fallaron, escaneo completo del bus ----
-        if not sensor_connected:
-            if DEBUG:
-                print(f"    ├─ Fase 2: {Colors.YELLOW}Escaneando bus I2C completo...{Colors.RESET}")
-
-            # Usamos la config más conservadora para el scan
-            scan_bus = SoftI2C(scl=Pin(22), sda=Pin(21), freq=5000, timeout=1000000)
-            sleep_ms(500)
+            # Determinar prefijo inteligente
+            is_last = (i == len(BUS_CONFIGS) - 1)
+            prefix = "    └─" if is_last else "    ├─"
 
             try:
-                devices = scan_bus.scan()
-                if devices:
-                    hex_list = ', '.join([f"0x{d:02X}" for d in devices])
-                    if DEBUG:
-                        print(f"    ├─ 🔍 {Colors.GREEN}Dispositivos encontrados:{Colors.RESET} [{hex_list}]")
-
-                    # Si encontramos alguna de las direcciones conocidas, intentar de nuevo
-                    for found_addr in devices:
-                        if found_addr in BH1750_ADDRS:
-                            try:
-                                illuminance_sensor = BH1750(bus=scan_bus, addr=found_addr)
-                                sleep_ms(180)
-                                lux_test = illuminance_sensor.luminance(BH1750.CONT_HIRES_1)
-                                i2c_bus = scan_bus
-                                sensor_connected = True
-                                winning_addr = found_addr
-                                if DEBUG:
-                                    print(f"    ├─ ✅ {Colors.GREEN}CONECTADO{Colors.RESET} [Scan Recovery] addr=0x{found_addr:02X}")
-                                    print(f"    └─ Lectura: {Colors.CYAN}{lux_test} lux{Colors.RESET}")
-                                break
-                            except:
-                                pass
+                # Crear bus
+                if bus_type == "soft":
+                    i2c_bus = SoftI2C(scl=Pin(22), sda=Pin(21), freq=freq, timeout=timeout)
                 else:
-                    if DEBUG:
-                        print("    ├─ 🔍 Bus vacío: Ningún dispositivo responde.")
-                        print("    ├─ Tips 10m CAT6:")
-                        print("    │   • Evitar SDA y SCL en el mismo par trenzado (crosstalk).")
-                        print("    │   • Probar Pull-ups externos fuertes (4.7k o 2.2k).")
-                        print("    │   • Verificar VCC (5V en sensor, pero lógica 3.3V).")
-            except Exception as e:
-                if DEBUG:
-                    print(f"    ├─ ⚠️  Error durante scan: {e}")
+                    i2c_bus = I2C(0, scl=Pin(22), sda=Pin(21), freq=freq)
 
-            if not sensor_connected and not illuminance_sensor:
+                sleep_ms(150) # Settle time
+
+                # Intento de comunicación directa
+                i2c_bus.writeto(addr, b'')
+
+                # Importar driver e instanciar
+                try:
+                    from bh1750 import BH1750 # type: ignore
+                except ImportError:
+                    if DEBUG: print(f"{prefix} ❌ Error: no se encontró bh1750.py")
+                    return
+
+                illuminance_sensor = BH1750(bus=i2c_bus, addr=addr)
+                sleep_ms(200)
+                lux_test = illuminance_sensor.luminance(BH1750.CONT_HIRES_1)
+
                 if DEBUG:
-                    print(f"    └─ ❌ {Colors.RED}BH1750 NO DETECTADO{Colors.RESET}")
-                illuminance_sensor = None
-                i2c_bus = None
+                    print(f"    └─ ✅ {Colors.GREEN}Conectado{Colors.RESET} [{label}]")
+                    print(f"       Lectura inicial: {Colors.CYAN}{lux_test} lux{Colors.RESET}")
+
+                sensor_connected = True
+
+            except OSError:
+                if DEBUG:
+                    print(f"{prefix} {Colors.YELLOW}No detectado{Colors.RESET} en [{label}]")
+                continue
+
+        if not sensor_connected:
+            if DEBUG:
+                print(f"❌  Sensor BH1750: {Colors.RED}Desconectado{Colors.RESET}")
+            illuminance_sensor = None
+            i2c_bus = None
 
     except Exception as e:
-        if DEBUG: print(f"❌ Sensor BH1750 Desconectado: {Colors.RED}[{e}]{Colors.RESET}")
+        if DEBUG: print(f"❌  Sensor BH1750: {Colors.RED}[{e}]{Colors.RESET}")
         illuminance_sensor = None
 
     # 2. Sensor de Lluvia (Salida Analógica)
@@ -930,13 +867,13 @@ def setup_sensors():
         # Si lee < 1500 en el arranque, se considera desconectado o ruidoso.
         if r_avg > 1500:
             rain_sensor_analog = adc_rain
-            if DEBUG: print(f"💧  Sensor Lluvia: {Colors.CYAN}Conectado{Colors.RESET} (Lectura Raw inicial: {r_avg})")
+            if DEBUG: print(f"\n💧  Sensor Lluvia: {Colors.CYAN}Conectado{Colors.RESET} (Lectura Raw inicial: {r_avg})")
         else:
-            if DEBUG: print(f"❌  Sensor Lluvia: {Colors.RED}Desconectado{Colors.RESET} (Ruido/Antena: {r_avg})")
+            if DEBUG: print(f"\n❌  Sensor Lluvia: {Colors.RED}Desconectado{Colors.RESET} (Ruido/Antena: {r_avg})")
             rain_sensor_analog = None
 
     except Exception as e:
-        if DEBUG: print(f"❌  Sensor Lluvia: {Colors.RED}{e}{Colors.RESET}")
+        if DEBUG: print(f"\n❌  Sensor Lluvia: {Colors.RED}{e}{Colors.RESET}")
         rain_sensor_analog = None
 
 # ---- Función Auxiliar: Callback de estado ----
@@ -2253,6 +2190,17 @@ async def main():
     # Construye el client_id único
     client_id = f"ESP32-Actuator-Controller-{mac_address}"
 
+    # ---- Watchdog Timer ----
+    # Seguridad de hardware: Si el bucle principal se congela, el dispositivo se reinicia.
+    try:
+        wdt = WDT(timeout=WDT_TIMEOUT_MS)
+        if DEBUG:
+            print(f"🐕  Watchdog: {Colors.YELLOW}{WDT_TIMEOUT_MS//1000} segundos{Colors.RESET}")
+    except Exception as e:
+        if DEBUG:
+            print(f"⚠️  No se pudo iniciar el Watchdog: {e}")
+        wdt = None
+
     # ---- Inicialización del Hardware ----
     setup_relays()
     setup_sensors()
@@ -2278,17 +2226,6 @@ async def main():
     asyncio.create_task(audit_lux_task())
     asyncio.create_task(audit_rain_task())
     asyncio.create_task(audit_health_task())
-
-    # ---- Watchdog Timer ----
-    # Seguridad de hardware: Si el bucle principal se congela, el dispositivo se reinicia.
-    try:
-        wdt = WDT(timeout=WDT_TIMEOUT_MS)
-        if DEBUG:
-            print(f"🐕  Watchdog: {Colors.YELLOW}{WDT_TIMEOUT_MS//1000} segundos{Colors.RESET}")
-    except Exception as e:
-        if DEBUG:
-            print(f"⚠️  No se pudo iniciar el Watchdog: {e}")
-        wdt = None
 
     # ---- Boot Recovery Check ----
     # Verifica si hubo un reinicio durante una tarea activa.

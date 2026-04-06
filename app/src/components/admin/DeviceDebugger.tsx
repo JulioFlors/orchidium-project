@@ -105,6 +105,31 @@ export function DeviceDebugger() {
   const unifiedAuditTopic = `${selectedDevice.baseTopic}/audit`
   const auditStateTopic = `${selectedDevice.baseTopic}/audit/state`
 
+  const hardwarePresence = useMemo(() => {
+    const msg = messages[auditStateTopic]
+
+    if (!msg) return {}
+
+    try {
+      const payload = msg.payload
+      const hwState = (
+        typeof payload === 'object' ? payload : JSON.parse(String(payload))
+      ) as Record<string, boolean>
+
+      const presence: Record<string, boolean> = {}
+
+      Object.entries(hwState).forEach(([key, value]) => {
+        if (key.endsWith('_hw')) {
+          presence[key.replace('_hw', '')] = value
+        }
+      })
+
+      return presence
+    } catch {
+      return {}
+    }
+  }, [messages, auditStateTopic])
+
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 5000)
 
@@ -324,7 +349,7 @@ export function DeviceDebugger() {
         // Error silencioso al limpiar datos
       }
 
-      // 2. Limpiar estado local
+      // 2. Limpiar estado local (React state + SessionStorage)
       setHistoricalData((prev) => {
         const next = { ...prev }
 
@@ -339,6 +364,11 @@ export function DeviceDebugger() {
 
         return next
       })
+
+      // Limpiar caché de SessionStorage para evitar merge con datos viejos
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.removeItem(`audit_history_${auditKey}`)
+      }
 
       // 3. Enviar comando para nuevas lecturas
       if (auditKey === 'nvs') {
@@ -388,6 +418,7 @@ export function DeviceDebugger() {
       {/* Toolbox Grid */}
       <ToolboxGrid
         activeAudits={activeDisplayWidgets}
+        hardwarePresence={hardwarePresence}
         isOnline={connectionState === 'online'}
         isPending={(cmd) => pendingCommands.includes(cmd)}
         showServices={showServices}

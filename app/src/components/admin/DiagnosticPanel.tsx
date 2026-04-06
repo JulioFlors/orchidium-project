@@ -10,7 +10,6 @@ import {
   IoHardwareChipOutline,
   IoWifiOutline,
   IoHeartOutline,
-  IoTrashOutline,
 } from 'react-icons/io5'
 import { IoIosRefresh } from 'react-icons/io'
 import {
@@ -151,6 +150,7 @@ interface ToolboxGridProps {
   activeAudits: string[]
   onCommand: (cmd: string, auditKey: string | null) => void
   isPending: (cmd: string) => boolean
+  hardwarePresence: Record<string, boolean>
   showServices: boolean
   showTimeline: boolean
   onToggleServices: () => void
@@ -162,6 +162,7 @@ export function ToolboxGrid({
   activeAudits,
   onCommand,
   isPending,
+  hardwarePresence,
   showServices,
   onToggleServices,
   showTimeline,
@@ -190,13 +191,13 @@ export function ToolboxGrid({
       <ToolCard
         active={activeAudits.includes('lux')}
         colorKey="lux"
-        disabled={!isOnline}
+        disabled={!isOnline || hardwarePresence.lux === false}
         icon={
           <IoSearchOutline
             className={clsx(!activeAudits.includes('lux') && TOOL_COLORS.lux.icon)}
           />
         }
-        label="Lux Meter"
+        label={hardwarePresence.lux === false ? 'Lux (Off)' : 'Lux Meter'}
         pending={isPending('audit_lux_on')}
         onClick={() => onCommand('audit_lux_on', 'lux')}
       />
@@ -204,13 +205,13 @@ export function ToolboxGrid({
       <ToolCard
         active={activeAudits.includes('rain')}
         colorKey="rain"
-        disabled={!isOnline}
+        disabled={!isOnline || hardwarePresence.rain === false}
         icon={
           <IoPulseOutline
             className={clsx(!activeAudits.includes('rain') && TOOL_COLORS.rain.icon)}
           />
         }
-        label="Rain Audit"
+        label={hardwarePresence.rain === false ? 'Rain (Off)' : 'Rain Audit'}
         pending={isPending('audit_rain_on')}
         onClick={() => onCommand('audit_rain_on', 'rain')}
       />
@@ -414,17 +415,6 @@ export function AuditConsoleCard({
     }
   }, [currentPayload, activeAudit])
 
-  const handleClear = () => {
-    if (activeAudit && typeof window !== 'undefined') {
-      const isChartable = ['lux', 'rain'].includes(activeAudit)
-
-      if (isChartable) {
-        window.sessionStorage.removeItem(`audit_history_${activeAudit}`)
-      }
-    }
-    setDisplayPayload(null)
-  }
-
   const timeAgeStr = receivedAt
     ? `Recibido a las ${formatTime12h(receivedAt, true)}`
     : 'Esperando datos...'
@@ -589,7 +579,7 @@ export function AuditConsoleCard({
 
     return (
       <pre className="flex h-20 items-center justify-center text-center text-zinc-500 italic opacity-50">
-        Esperando flujos continuos de datos...
+        Esperando respuesta del firmware...
       </pre>
     )
   }
@@ -633,17 +623,16 @@ export function AuditConsoleCard({
               className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800/50 hover:text-indigo-400"
               title="Solicitar Actualización"
               type="button"
-              onClick={onRefresh}
+              onClick={() => {
+                // Limpiar estado local antes de solicitar datos frescos
+                if (activeAudit && typeof window !== 'undefined') {
+                  window.sessionStorage.removeItem(`audit_history_${activeAudit}`)
+                }
+                setDisplayPayload(null)
+                onRefresh?.()
+              }}
             >
               <IoIosRefresh size={14} />
-            </button>
-            <button
-              className="rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800/50 hover:text-red-400"
-              title="Limpiar Caché Local"
-              type="button"
-              onClick={handleClear}
-            >
-              <IoTrashOutline size={14} />
             </button>
           </div>
         </div>
