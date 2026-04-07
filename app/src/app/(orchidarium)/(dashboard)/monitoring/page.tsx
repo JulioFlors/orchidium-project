@@ -18,12 +18,22 @@ interface SensorData {
   rain_intensity: number
   temperature: number
   time: string
+  ram_free?: number
+  ram_alloc?: number
+  rssi?: number
 }
 
 interface RainData {
   totalDurationSeconds: number
   averageIntensity: number
   eventCount: number
+}
+
+interface AuditSnapshot {
+  lux?: number
+  rain?: number
+  ram?: { f: number; a: number }
+  health?: { rssi: number; ip: string }
 }
 
 type MetricType = 'temperature' | 'humidity' | 'illuminance' | 'rain_intensity'
@@ -95,29 +105,70 @@ export default function MonitoringPage() {
 
   // 0. Integración MQTT en Tiempo Real para el Monitor Ambiental
   const { messages: mqttMessages } = useMqttStore()
-  const readingsTopic = 'PristinoPlant/Weather_Station/Exterior/readings'
-
   const mqttReadings = useMemo(() => {
-    const msg = mqttMessages[readingsTopic]
+    // 1. Tópico de Lecturas Regulares (Environmental Monitoring / Weather Station)
+    const readingsTopic = 'PristinoPlant/Weather_Station/Exterior/readings'
+    // 2. Tópico de Auditoría Unificada (Actuator Controller)
+    const auditTopic = 'PristinoPlant/Actuator_Controller/audit'
 
-    if (!msg) return null
-    try {
-      // Soportar tanto objetos como strings (formato manual v0.9.9)
-      const payload =
-        typeof msg.payload === 'object' ? msg.payload : JSON.parse(String(msg.payload))
+    const readingsMsg = mqttMessages[readingsTopic]
+    const auditMsg = mqttMessages[auditTopic]
 
-      // Extraer el último punto del historial si existe (formato Batch)
-      if (payload.history && Array.isArray(payload.history)) {
-        const lastPoint = payload.history[payload.history.length - 1]
+    // Consolidación de datos
+    const result: Partial<SensorData> = {}
 
-        return lastPoint[1] as Partial<SensorData>
+    // ─── Proceso de Lecturas Regulares ───
+    if (readingsMsg) {
+      try {
+        const payload =
+          typeof readingsMsg.payload === 'object'
+            ? readingsMsg.payload
+            : JSON.parse(String(readingsMsg.payload))
+
+        if (payload.history && Array.isArray(payload.history)) {
+          const lastPoint = payload.history[payload.history.length - 1]
+
+          Object.assign(result, lastPoint[1])
+        } else {
+          Object.assign(result, payload)
+        }
+      } catch {
+        /* ignore */
       }
-
-      return payload as Partial<SensorData>
-    } catch {
-      return null
     }
-  }, [mqttMessages, readingsTopic])
+
+    // ─── Proceso de Auditoría Unificada (Sobrescribe con mayor frecuencia si existe) ───
+    if (auditMsg) {
+      try {
+        const payload =
+          typeof auditMsg.payload === 'object'
+            ? (auditMsg.payload as AuditSnapshot)
+            : (JSON.parse(String(auditMsg.payload)) as AuditSnapshot)
+
+        // Mapeo directo del Snapshot plano enviado por el ESP32
+        if (payload.lux !== undefined) {
+          result.illuminance = Number(payload.lux)
+        }
+
+        if (payload.rain !== undefined) {
+          result.rain_intensity = Number(payload.rain)
+        }
+
+        if (payload.ram) {
+          result.ram_free = payload.ram.f
+          result.ram_alloc = payload.ram.a
+        }
+
+        if (payload.health) {
+          result.rssi = payload.health.rssi
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    return Object.keys(result).length > 0 ? result : null
+  }, [mqttMessages])
 
   // Derive current values from the last data point (API vs MQTT)
   const current = useMemo(() => {

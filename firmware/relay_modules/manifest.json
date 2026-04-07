@@ -6,6 +6,7 @@
   "notes_release": "[⛅ Estación Meteorológica / 🛡 Robustez MQTT]: Refactorización masiva a corrutinas. Implementación de sistema de ACKs descentralizado y corrección de offset temporal en servicio de ingesta para monitoreo histórico.",
   "files": [
     "app.mpy",
+    "boot.py",
     "main.py"
   ],
   "libs": [

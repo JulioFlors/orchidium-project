@@ -5,15 +5,20 @@ import mqtt, { MqttClient, IClientOptions } from 'mqtt'
 
 import { MqttStatus } from '@/interfaces'
 
+interface PendingAck {
+  topic: string
+  message: string | object
+  timestamp: number
+  retries: number
+}
+
 interface MqttState {
   client: MqttClient | null
   status: MqttStatus
-  // Mapa: Tópico -> { payload, receivedAt }
   messages: Record<string, { payload: unknown; receivedAt: number }>
-  // Set de tópicos a los que estamos suscritos (para evitar duplicados)
   subscriptions: Set<string>
-  // Mapa: payload del mensaje -> timestamp de envío (para seguimiento de ACK)
-  pendingAcks: Record<string, number>
+  pendingAcks: Record<string, PendingAck>
+  retryTimer: ReturnType<typeof setInterval> | null
 
   // Acciones
   connect: () => void
@@ -23,6 +28,8 @@ interface MqttState {
   publish: (topic: string, message: string | object, retain?: boolean) => void
   publishWithAck: (topic: string, message: string | object) => void
   clearAck: (payload: string) => void
+  startRetryLoop: () => void
+  stopRetryLoop: () => void
 }
 
 // Configuración desde variables de entorno
@@ -46,10 +53,12 @@ const OPTIONS: IClientOptions = {
   // Aumentamos el periodo de reconexión para no saturar en caso de fallo
   reconnectPeriod: 5000,
   connectTimeout: 60 * 1000,
-  // Credenciales obligatorias
-  username: process.env.NEXT_PUBLIC_MQTT_USERNAME, // Mapeado a MQTT_USER_FRONTEND en .env
-  password: process.env.NEXT_PUBLIC_MQTT_PASSWORD, // Mapeado a MQTT_PASS_FRONTEND en .env
+  username: process.env.NEXT_PUBLIC_MQTT_USERNAME,
+  password: process.env.NEXT_PUBLIC_MQTT_PASSWORD,
 }
+
+const RETRY_INTERVAL_MS = 60000 // 60 segundos entre reintentos
+const MAX_RETRIES = 20 // 20 minutos de perseverancia
 
 export const useMqttStore = create<MqttState>()(
   devtools(
@@ -59,17 +68,87 @@ export const useMqttStore = create<MqttState>()(
       messages: {},
       subscriptions: new Set(),
       pendingAcks: {},
+      retryTimer: null,
+
+      startRetryLoop: () => {
+        const { retryTimer, stopRetryLoop } = get()
+
+        if (retryTimer) stopRetryLoop()
+
+        const timer = setInterval(() => {
+          const { pendingAcks, client, publish } = get()
+
+          if (!client || !client.connected) return
+
+          const now = Date.now()
+          const acksToClear: string[] = []
+
+          Object.entries(pendingAcks).forEach(([payload, ack]) => {
+            if (ack.retries >= MAX_RETRIES) {
+              console.warn(`❌ [MQTT] Comando fallido tras ${MAX_RETRIES} intentos:`, payload)
+              acksToClear.push(payload)
+
+              return
+            }
+
+            // Solo re-intentar si el tiempo ha pasado Y el cliente está realmente conectado
+            if (now - ack.timestamp >= RETRY_INTERVAL_MS) {
+              if (client?.connected) {
+                console.log(
+                  `🔄 [MQTT] Re-intentando envío (${ack.retries + 1}/${MAX_RETRIES}):`,
+                  payload,
+                )
+
+                publish(ack.topic, ack.message, false)
+
+                set((state) => ({
+                  pendingAcks: {
+                    ...state.pendingAcks,
+                    [payload]: {
+                      ...ack,
+                      timestamp: now,
+                      retries: ack.retries + 1,
+                    },
+                  },
+                }))
+              } else {
+                // Si no hay conexión, simplemente posponemos el chequeo para la siguiente vuelta del interval
+                // para no inflar el contador de retries en el vacío
+              }
+            }
+          })
+
+          if (acksToClear.length > 0) {
+            set((state) => {
+              const next = { ...state.pendingAcks }
+
+              acksToClear.forEach((p) => delete next[p])
+
+              return { pendingAcks: next }
+            })
+          }
+        }, 2000)
+
+        set({ retryTimer: timer })
+      },
+
+      stopRetryLoop: () => {
+        const { retryTimer } = get()
+
+        if (retryTimer) {
+          clearInterval(retryTimer)
+          set({ retryTimer: null })
+        }
+      },
 
       connect: () => {
-        const { client, status } = get()
+        const { client, status, startRetryLoop } = get()
 
         // Evitar reconexiones si ya está intentando o conectado
         if (client || status === 'connected' || status === 'connecting') return
 
         if (!IS_CONFIG_VALID) {
-          console.warn(
-            '⚠️ [MQTT] Configuración incompleta. Revisa las variables de entorno (BROKER/PORT). Conexión omitida.',
-          )
+          console.warn('⚠️ [MQTT] Configuración incompleta.')
           set({ status: 'disconnected' })
 
           return
@@ -83,17 +162,15 @@ export const useMqttStore = create<MqttState>()(
         mqttClient.on('connect', () => {
           console.log('✅ [MQTT] Conectado')
           set({ status: 'connected' })
+          startRetryLoop()
 
           // Resuscribirse a tópicos previos si hubo reconexión
           const { subscriptions } = get()
 
-          subscriptions.forEach((topic) => {
-            mqttClient.subscribe(topic)
-          })
+          subscriptions.forEach((topic) => mqttClient.subscribe(topic))
         })
 
         mqttClient.on('reconnect', () => {
-          console.log('🔄 [MQTT] Reconectando')
           set({ status: 'reconnecting' })
         })
 
@@ -103,11 +180,10 @@ export const useMqttStore = create<MqttState>()(
         })
 
         mqttClient.on('offline', () => {
-          console.log('⚠️ [MQTT] Offline')
           set({ status: 'disconnected' })
         })
 
-        mqttClient.on('message', (topic: string, payload: Buffer) => {
+        mqttClient.on('message', (topic, payload) => {
           const payloadStr = payload.toString()
           let parsedPayload: unknown = payloadStr
 
@@ -120,36 +196,34 @@ export const useMqttStore = create<MqttState>()(
             // Si falla, se queda como string plano
           }
 
-          // Actualizamos el mapa de mensajes
           set((state) => {
             const newMessages = {
               ...state.messages,
-              [topic]: {
-                payload: parsedPayload,
-                receivedAt: Date.now(),
-              },
+              [topic]: { payload: parsedPayload, receivedAt: Date.now() },
             }
 
-            // Lógica de Limpieza de ACK
-            // Si el tópico termina en /received, buscamos si coincide con algún pendingAck
             let newPendingAcks = state.pendingAcks
 
             if (topic.endsWith('/received')) {
-              const ackPayload =
-                typeof parsedPayload === 'string' ? parsedPayload : JSON.stringify(parsedPayload)
+              const ackKey =
+                typeof parsedPayload === 'string'
+                  ? parsedPayload
+                  : typeof parsedPayload === 'object' &&
+                      parsedPayload !== null &&
+                      'cmd' in parsedPayload
+                    ? String((parsedPayload as { cmd: string }).cmd)
+                    : payloadStr
 
-              if (state.pendingAcks[ackPayload]) {
+              if (state.pendingAcks[ackKey]) {
+                console.log(`🎯 [MQTT] ACK Recibido:`, ackKey)
                 const rest = { ...state.pendingAcks }
 
-                delete rest[ackPayload]
+                delete rest[ackKey]
                 newPendingAcks = rest
               }
             }
 
-            return {
-              messages: newMessages,
-              pendingAcks: newPendingAcks,
-            }
+            return { messages: newMessages, pendingAcks: newPendingAcks }
           })
         })
 
@@ -157,10 +231,10 @@ export const useMqttStore = create<MqttState>()(
       },
 
       disconnect: () => {
-        const { client } = get()
+        const { client, stopRetryLoop } = get()
 
         if (client) {
-          console.log('🛑 [MQTT] Desconectando')
+          stopRetryLoop()
           client.end()
           set({ client: null, status: 'disconnected' })
         }
@@ -169,21 +243,15 @@ export const useMqttStore = create<MqttState>()(
       subscribe: (topic) => {
         const { client, subscriptions } = get()
 
-        // Si ya estamos suscritos, no hacemos nada
         if (subscriptions.has(topic)) return
 
-        // Actualizamos el Set localmente
         const newSubscriptions = new Set(subscriptions)
 
         newSubscriptions.add(topic)
         set({ subscriptions: newSubscriptions })
 
-        // Si hay cliente conectado, suscribimos efectivamente
         if (client && client.connected) {
-          console.log(`📡 [MQTT] Suscribiendo a: ${topic}`)
-          client.subscribe(topic, (err: Error | null) => {
-            if (err) console.error(`❌ Error al suscribirse a ${topic}`, err)
-          })
+          client.subscribe(topic)
         }
       },
 
@@ -196,10 +264,7 @@ export const useMqttStore = create<MqttState>()(
           newSubscriptions.delete(topic)
           set({ subscriptions: newSubscriptions })
 
-          if (client && client.connected) {
-            console.log(`🔕 [MQTT] Desuscribiendo de: ${topic}`)
-            client.unsubscribe(topic)
-          }
+          if (client && client.connected) client.unsubscribe(topic)
         }
       },
 
@@ -209,31 +274,29 @@ export const useMqttStore = create<MqttState>()(
         if (client && client.connected) {
           const payload = typeof message === 'object' ? JSON.stringify(message) : message
 
-          // 🛡️ Seguridad: qos 1 para asegurar recepción del mensaje
           client.publish(topic, payload, { qos: 1, retain })
-          console.log(`📤 [MQTT] Enviado a ${topic}${retain ? ' [RETAINED]' : ''}:`, payload)
-        } else {
-          console.warn('⚠️ [MQTT] No se puede publicar, cliente desconectado')
         }
       },
 
       publishWithAck: (topic, message) => {
         const { client, publish } = get()
-
-        if (!client || !client.connected) return
-
         const payload = typeof message === 'object' ? JSON.stringify(message) : message
 
-        // Registramos en el estado de ACKs pendientes
         set((state) => ({
           pendingAcks: {
             ...state.pendingAcks,
-            [payload]: Date.now(),
+            [payload]: {
+              topic,
+              message,
+              timestamp: Date.now(),
+              retries: 0,
+            },
           },
         }))
 
-        // Despachamos (sin retained para acciones robustas)
-        publish(topic, message, false)
+        if (client && client.connected) {
+          publish(topic, message, false)
+        }
       },
 
       clearAck: (payload) => {

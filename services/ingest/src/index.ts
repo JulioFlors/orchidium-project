@@ -303,20 +303,42 @@ async function start() {
       // Persistir paquetes de auditoría en PostgreSQL
       if (topic.endsWith('/audit')) {
         try {
-          const auditPayload = JSON.parse(messageValue) as Record<string, unknown>
+          const auditPayload = JSON.parse(messageValue) as Record<string, { history: [number, number][] }>
 
-          for (const [category, data] of Object.entries(auditPayload)) {
-            if (data && typeof data === 'object') {
+          for (const [category, content] of Object.entries(auditPayload)) {
+            // 1. Persistencia en PostgreSQL (Auditoría de Alta Resolución)
+            if (content && typeof content === 'object') {
               await prisma.auditSnapshot.create({
                 data: {
                   device: 'actuator',
                   category,
-                  data: data as object,
+                  data: content as object,
                 },
               })
             }
+
+            // 2. Persistencia en InfluxDB (Flujo Histórico de la UI)
+            if (content.history && Array.isArray(content.history)) {
+              for (const [timestamp, value] of content.history) {
+                // Corrección de Época: MicroPython (2000) vs Unix (1970)
+                const unixTimestamp = timestamp < 1000000000 ? timestamp + 946684800 : timestamp
+
+                const point = Point.measurement('environment_metrics')
+                  .setTag('source', firmwareSource)
+                  .setTag('zone', ZoneType.EXTERIOR) // La auditoría unificada ocurre en la estación exterior
+                  .setTag('context', 'audit')
+                  .setTimestamp(new Date(unixTimestamp * 1000))
+
+                // Mapeo dinámico de categorías de auditoría a campos de InfluxDB
+                if (category === 'lux') point.setFloatField('illuminance', Number(value))
+                if (category === 'rain') point.setFloatField('rain_intensity', Number(value))
+                if (category === 'ram') point.setFloatField('ram_usage', Number(value))
+
+                await writeToInflux(point)
+              }
+            }
           }
-          Logger.debug(`📋 Auditoría persistida: ${Object.keys(auditPayload).join(', ')}`)
+          Logger.debug(`📋 Auditoría persistida (PG + Influx): ${Object.keys(auditPayload).join(', ')}`)
         } catch (e) {
           Logger.error('Error persistiendo paquete de auditoría', e)
         }

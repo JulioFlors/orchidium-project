@@ -2,9 +2,9 @@
 # Relay Modules: Actuator Controller Firmware.
 # Descripción: Firmware dedicado para el control de las electroválvulas, la bomba
 #              y la estación meteorológica exterior (lluvia e iluminancia).
-# Fecha: 06-04-2026
-# Versión: v0.9.2
-# notes_release: [⛅ Estación Meteorológica / 🛡️ Robustez MQTT]: Refactorización masiva a corrutinas. Implementación de sistema de ACKs descentralizado y corrección de offset temporal en servicio de ingesta para monitoreo histórico.
+# Fecha: 07-04-2026
+# Versión: v0.9.3
+# notes_release: [🛡️ Robustez MQTT / 📦 Envío Consolidado]: Sincronización de todas las auditorías en una única publicación JSON (Captura de Estado) para evitar saturación de red. Eliminación de ACKs duplicados y optimización del flujo de comandos.
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib.
@@ -29,10 +29,10 @@ MQTT_PING_INTERVAL   = const(30) # keepalive//2
 MQTT_CHECK_INTERVAL  = const(1)  # seg
 # tiempo máximo que (connect, check_msg, ping) esperará antes de fallar y lanzar una excepción.
 # Optimizado para redes lentas con latencia de subida >500ms
-MQTT_SOCKET_TIMEOUT  = const(30) # seg
+MQTT_SOCKET_TIMEOUT  = const(15) # seg
 # tiempo máximo que el cliente esperará para que se complete un intercambio completo de mensajes MQTT(QoS) 1
 # [WDT Safety]: Debe ser MENOR que el Watchdog de Hardware (120s)
-MQTT_MESSAGE_TIMEOUT = const(60) # seg
+MQTT_MESSAGE_TIMEOUT = const(30) # seg
 
 # ---- Configuración Resiliencia / Watchdog ----
 # Tiempo máximo sin conexión MQTT/WiFi antes de forzar un Hard Reset (10 minutos)
@@ -415,7 +415,7 @@ class NVSManager:
         cls.flush()
 
 # ---- Función Auxiliar: Sincronizar Estado de RAM (Audit Mode) ----
-def publish_audit_state():
+async def publish_audit_state():
     """Publica el estado de AUDIT_MODE usando formateo de strings para ahorrar RAM."""
     try:
         # Sincronización MQTT con validación de socket
@@ -430,24 +430,20 @@ def publish_audit_state():
                 "true" if rain_sensor_analog else "false"
             )
 
-            # 🔒 Pedimos permiso para usar el socket
-            async def _publish():
-                from umqtt.simple2 import MQTTException # type: ignore
-                try:
-                    async with mqtt_lock:
-                        # Publicamos directo (MQTT convierte string a bytes)
-                        client.publish(MQTT_TOPIC_AUDIT_STATE, payload, retain=True, qos=0)
-                except (MQTTException, OSError) as e:
-                    if DEBUG: log_mqtt_exception("Fallo sincronización estado auditoría", e)
-                    # No invalidamos el cliente desde una tarea secundaria
-                except Exception as e:
-                    if DEBUG: print(f"⚠️ Error inesperado en _publish audit: {e}")
-            
-            import uasyncio as asyncio # type: ignore
-            asyncio.create_task(_publish())
+            from umqtt.simple2 import MQTTException # type: ignore
+            try:
+                # 🔒 Pedimos permiso para usar el socket
+                async with mqtt_lock:
+                    # Publicamos directo (MQTT convierte string a bytes)
+                    client.publish(MQTT_TOPIC_AUDIT_STATE, payload, retain=True, qos=0)
+            except (MQTTException, OSError) as e:
+                if DEBUG: log_mqtt_exception("Fallo sincronización estado auditoría", e)
+                # No invalidamos el cliente desde una tarea secundaria
+            except Exception as e:
+                if DEBUG: print(f"⚠️  Error inesperado en publish_audit_state: {e}")
 
     except Exception as e:
-        if DEBUG: print(f"⚠️ Error preparando payload de auditoría: {e}")
+        if DEBUG: print(f"⚠️  Error preparando payload de auditoría: {e}")
 
 # ---- Función Auxiliar: Uso del disco ----
 def log_disk_usage():
@@ -1100,7 +1096,7 @@ async def mqtt_processor_task():
                                     if was_asleep:
                                         audit_master_event.set()
                                     
-                                    if DEBUG: print(f"    └─ AUDIT {category.upper()}: {Colors.GREEN}ON (Iniciado){Colors.RESET}")
+                                    if DEBUG: print(f"    └─ AUDIT {category.upper()}: {Colors.GREEN}ON{Colors.RESET}")
                                 else:
                                     if DEBUG: print(f"    └─ AUDIT {category.upper()}: Ya está {Colors.GREEN}ON{Colors.RESET}")
                             elif action == b"off":
@@ -1111,7 +1107,8 @@ async def mqtt_processor_task():
                                 collect()
                                 if DEBUG: print(f"    └─ AUDIT {category.upper()}: {Colors.RED}OFF{Colors.RESET}")
                             
-                            publish_audit_state()
+                            await publish_audit_state()
+
                         del category, action
                     del parts
                 del m_low
@@ -2081,7 +2078,7 @@ async def rain_monitor_task():
                                 client.publish(MQTT_TOPIC_EXTERIOR_METRICS, payload_batch, qos=0)
                         
                         rain_Batch.clear()
-                    
+
                     if DEBUG: print(f"\n⛅  Lluvia TERMINADA. Dur:{duration_sec}s, Int:{avg_int}% | Modo Vigía: {INTERVAL_NORMAL}s")
 
         except (MQTTException, OSError) as e:
@@ -2191,13 +2188,16 @@ async def unified_audit_task():
 
                 val = sample_fn()
                 if val is not None:
-                    # Ensamble manual de la categoría en JSON (Zero-Dict)
+                    # Ensamble manual de la categoría en JSON PLANO (Snapshot)
                     if category == "health":
-                        fragments.append('"%s":{"history":[[%d,{"rssi":%d,"ip":"%s"}]]}' % (category, current_ts, val[0], val[1]))
+                        fragments.append('"%s":{"rssi":%d,"ip":"%s"}' % (category, val[0], val[1]))
                     elif category == "ram":
-                        fragments.append('"%s":{"history":[[%d,{"f":%d,"a":%d}]]}' % (category, current_ts, val[0], val[1]))
-                    else:
-                        fragments.append('"%s":{"history":[[%d,%s]]}' % (category, current_ts, str(val)))
+                        fragments.append('"%s":{"f":%d,"a":%d}' % (category, val[0], val[1]))
+                    elif category == "lux":
+                        fragments.append('"%s":%s' % (category, str(val)))
+                    elif category == "rain":
+                        # Enviamos la intensidad actual
+                        fragments.append('"%s":%s' % (category, str(val)))
                     
                     AUDIT_COUNTERS[category] += 1
                     dirty = True
@@ -2210,8 +2210,8 @@ async def unified_audit_task():
                         AUDIT_COUNTERS[category] = 0
                         if category in audit_events:
                             audit_events[category].clear()
-                        if DEBUG: print(f"📡  Auto-OFF: {category.upper()}")
-                        publish_audit_state()
+                        if DEBUG: print(f"\n📡  Auto-OFF: {category.upper()}")
+                        await publish_audit_state()
 
             # ---- 3. Publicación Única (Minimiza contención de Lock y overhead de red) ----
             if dirty and client and getattr(client, 'sock', None):
@@ -2314,17 +2314,26 @@ def stopped_program():
     """
     if DEBUG:
         print(f"\n\n📡  Programa {Colors.GREEN}Detenido{Colors.RESET}")
-    try:
-        shutdown()
-    except:
-        # Apagado físico inmediato de los relés (Safety first)
-        # No usamos la red aquí para evitar el error de mpremote
-        for relay_info in relays.values():
-            try:
-                relay_info['pin'].value(0)
-                relay_info['state'] = 'OFF'
-            except:
-                pass
+
+    # Apagamos todos los actuadores
+    for relay_info in relays.values():
+        try:
+            relay_info['pin'].value(0)
+            relay_info['state'] = 'OFF'
+        except Exception:
+            pass # Ignoramos errores de hardware al apagar
+
+    # Invalidamos el cliente MQTT forzando una reconexión completa.
+    force_disconnect_mqtt()
+
+    # Desconectamos el WiFi.
+    if wlan and wlan.isconnected():
+        try:
+            wlan.disconnect()
+            if DEBUG:
+                print(f"📡  WiFi     {Colors.GREEN}Desconectado{Colors.RESET}\n")
+        except Exception:
+            pass # Ignoramos errores de hardware al apagar
 
 # ---- Punto de Entrada ----
 if __name__ == '__main__':
