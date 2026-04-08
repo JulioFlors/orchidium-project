@@ -195,8 +195,8 @@ export function EnvironmentCard({
           )}
         </div>
 
-        {/* Status / Trend / Offline Indicators */}
-        <div className="mt-4 flex flex-wrap items-center gap-2">
+        {/* Status / Trend / Offline Indicators (Top Right) */}
+        <div className="absolute top-5 right-5 flex items-center gap-2">
           {isLoading ? (
             <div className="bg-primary/10 h-5 w-16 animate-pulse rounded-full" />
           ) : (

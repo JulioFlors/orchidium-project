@@ -3,7 +3,7 @@
 # Descripción: Firmware dedicado para el control de las electroválvulas, la bomba
 #              y la estación meteorológica exterior (lluvia e iluminancia).
 # Fecha: 08-04-2026
-# Versión: v0.9.4
+# Versión: v0.9.5
 # notes_release: [☀️ Sincronización de Iluminancia / 💾 Persistencia NVS]: Implementación de muestreo programado (Día/Noche) mediante eventos asíncronos y guardado en Flash. Sincronización proactiva desde el Scheduler al detectar reconexiones del nodo para asegurar coherencia horaria.
 # ------------------------------- Configuración -------------------------------
 
@@ -104,6 +104,11 @@ IRRIGATION_CIRCUITS = {
     "SOIL_WETTING":   {"source": "main_water",   "line": "soil_wet"},
 }
 
+# Flag de control para la sincronización del monitoreo de iluminancia (Día/Noche)
+# Si es False, se suspende el muestreo del sensor BH1750 para evitar registros de 0 lux.
+# (Se inicializa después de definir NVSManager)
+IS_SAMPLING_LUX = True
+
 # ---- Hardware: Actuadores ----
 # Diccionario que mapea un (actuator_id) a otro diccionario que contiene todos los atributos y el estado de ese actuador.
 relays = {}
@@ -185,19 +190,6 @@ AUDIT_MODE = {
     "health": False,
     "ram": False
 }
-
-# Flag de control para la sincronización del monitoreo de iluminancia (Día/Noche)
-# Si es False, se suspende el muestreo del sensor BH1750 para evitar registros de 0 lux.
-# Cargamos el estado inicial desde NVS para sobrevivir a reinicios.
-_nvs_recovery = NVSManager.load_tasks()
-IS_SAMPLING_LUX = _nvs_recovery.get('lux_sampling', {}).get('enabled', True)
-if IS_SAMPLING_LUX:
-    illuminance_wake_event.set()
-    if DEBUG: print(f"\n☀️  Illuminance Monitor: {Colors.GREEN}Waked{Colors.RESET}")
-else:
-    illuminance_wake_event.clear()
-    if DEBUG: print(f"\n🌙  Illuminance Monitor: {Colors.DIM}Suspended{Colors.RESET}")
-del _nvs_recovery
 
 # Funciones de Muestreo Unificadas para Auditoría (Lazy Reference)
 def get_lux_sample():
@@ -436,6 +428,7 @@ class NVSManager:
                     task['saved_at_epoch'] = int(current_time)
                     cls._cache[str_id] = task
                     cls._dirty = True
+
                     # if DEBUG:
                         # print(f"💾  Backup Creado: ID:{actuator_id} Restan:{int(remaining)}s") # 🔇 Comentado
         
@@ -530,6 +523,18 @@ async def boot_recovery_check():
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
     from utime import localtime, time # type: ignore
+
+    # ---- Inicialización de Sincronización de Iluminancia (Post-NVSManager) ----
+    # Cargamos el estado inicial desde NVS para sobrevivir a reinicios.
+    _nvs_recovery = NVSManager.load_tasks()
+    IS_SAMPLING_LUX = _nvs_recovery.get('lux_sampling', {}).get('enabled', True)
+    if IS_SAMPLING_LUX:
+        illuminance_wake_event.set()
+        if DEBUG: print(f"\n☀️  Illuminance Monitor: {Colors.GREEN}Waked{Colors.RESET}")
+    else:
+        illuminance_wake_event.clear()
+        if DEBUG: print(f"\n🌙  Illuminance Monitor: {Colors.DIM}Suspended{Colors.RESET}")
+    del _nvs_recovery
 
     if DEBUG:
         print(f"\n🔍  {Colors.BLUE}Verificando NVS Recovery{Colors.RESET}")
@@ -2179,16 +2184,15 @@ async def illuminance_monitor_task():
 
     last_lux_publish = time()
 
-    # Esperamos 10s tras el arranque para no colisionar con LWT u otras tareas
-    await asyncio.sleep(10)
-
     while True:
         try:
             # ---- [PROGRAMACIÓN ORIENTADA A EVENTOS] ----
             # Si el monitoreo está desactivado (Sincronización Nocturna), 
             # suspendemos la corrutina hasta recibir la señal del procesador MQTT.
             if not IS_SAMPLING_LUX:
+                if DEBUG: print(f"\n🌙  Illuminance Monitor: {Colors.DIM}Suspended{Colors.RESET}")
                 await illuminance_wake_event.wait()
+                if DEBUG: print(f"\n☀️  Illuminance Monitor: {Colors.GREEN}Waked{Colors.RESET}")
 
             current_ts = time()
 

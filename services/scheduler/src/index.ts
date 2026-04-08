@@ -237,16 +237,76 @@ const mqttClient = mqtt.connect(MQTT_BROKER_URL, {
 
 let heartbeatInterval: NodeJS.Timeout | null = null
 
+// ---- Gestión de Reintentos de Comandos (ACK) ----
+interface PendingCommand {
+  topic: string
+  payload: string
+  attempts: number
+  lastSent: number
+  timer: NodeJS.Timeout | null
+}
+
+class CommandRetryManager {
+  private pending = new Map<string, PendingCommand>()
+  private MAX_ATTEMPTS = 20
+  private RETRY_INTERVAL_MS = 60000
+
+  track(topic: string, payload: string) {
+    const key = `${topic}:${payload}`
+    if (this.pending.has(key)) return
+
+    Logger.debug(`Seguimiento iniciado: ${colors.magenta}${payload}${colors.reset}`)
+    
+    const command: PendingCommand = {
+      topic,
+      payload,
+      attempts: 1,
+      lastSent: Date.now(),
+      timer: setInterval(() => this.retry(key), this.RETRY_INTERVAL_MS)
+    }
+
+    this.pending.set(key, command)
+  }
+
+  confirm(topic: string, payload: string) {
+    const key = `${topic}:${payload}`
+    const command = this.pending.get(key)
+    
+    if (command) {
+      if (command.timer) clearInterval(command.timer)
+      this.pending.delete(key)
+      Logger.success(`Comando confirmado por el nodo: ${colors.magenta}${payload}${colors.reset}`)
+    }
+  }
+
+  private retry(key: string) {
+    const command = this.pending.get(key)
+    if (!command) return
+
+    if (command.attempts >= this.MAX_ATTEMPTS) {
+      Logger.error(`Se agotaron los ${this.MAX_ATTEMPTS} intentos para: ${command.payload}`)
+      if (command.timer) clearInterval(command.timer)
+      this.pending.delete(key)
+      return
+    }
+
+    command.attempts++
+    command.lastSent = Date.now()
+    
+    Logger.warn(`[RETRY ${command.attempts}/${this.MAX_ATTEMPTS}] Reenviando comando: ${colors.magenta}${command.payload}${colors.reset}`)
+    
+    mqttClient.publish(command.topic, command.payload, { qos: 1 })
+  }
+}
+
+const retryManager = new CommandRetryManager()
+
 // ---- Memoria de Estado para evitar Logs repetitivos ----
 let lastActuatorState = 'unknown'
 let lastRainState: string | null = null
-const ACTUATOR_STATUS_TOPIC = 'PristinoPlant/Actuator_Controller/status'
 
 mqttClient.on('connect', () => {
   Logger.success('Conectado a Broker MQTT')
-  
-  // Suscripciones de Control y Monitoreo del Nodo
-  mqttClient.subscribe(ACTUATOR_STATUS_TOPIC)
   
   // Publicar estado del Servicio (Heartbeat/LWT)
   mqttClient.publish(SERVICE_STATUS_TOPIC, 'online', { qos: 1, retain: true })
@@ -292,7 +352,7 @@ mqttClient.on('message', async (topic, payload) => {
 
         // 🔄 RE-SINCRONIZACIÓN REACTIVA: 
         // Si el actuador se conecta (online), forzamos el estado del monitor de iluminancia correcto de inmediato.
-        Logger.info(`${colors.cyan}🔔  Sincronizando monitor de iluminancia${colors.reset}`)
+        Logger.info(`${colors.cyan}Sincronizando monitor de iluminancia${colors.reset}`)
         syncEcoMode()
 
         // Registrar en DB
@@ -359,10 +419,14 @@ mqttClient.on('message', async (topic, payload) => {
         if (taskId) {
           // El modulo leyó formalmente y la encoló.
           await recordTaskEvent(taskId, TaskStatus.ACKNOWLEDGED, 'Comandos recibidos y encolados por el Nodo Actuador.')
+        } else {
+          // Si no hay TaskID, podría ser un comando de sistema (eco del comando crudo)
+          // Verificamos con el retry manager si estamos esperando esta confirmación
+          retryManager.confirm('PristinoPlant/Actuator_Controller/cmd', message)
         }
       } catch (e) {
-        // Ignorar de forma silenciosa comandos de auditoría crudos como "audit_health_on"
-        // ya que este tópico solo nos interesa para extraer el task_id de riegos.
+        // Ignorar errores de parseo si es un comando crudo (audit_, lux_sampling)
+        retryManager.confirm('PristinoPlant/Actuator_Controller/cmd', message)
       }
       return
     }
@@ -593,7 +657,10 @@ function executeSystemCommand(command: string) {
     qos: 1,
     retain: false
   })
-  Logger.info(`Enviando Comando de Sistema: ${colors.magenta}${command}${colors.reset}`)
+  Logger.info(`/cmd> ${colors.magenta}${command}${colors.reset}`)
+  
+  // Registrar para seguimiento de confirmación (Retry System)
+  retryManager.track(SYSTEM_CMD_TOPIC, command)
 }
 
 /**

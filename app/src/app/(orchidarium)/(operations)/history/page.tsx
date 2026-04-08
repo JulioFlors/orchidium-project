@@ -114,10 +114,14 @@ function HistoryTaskCard({
             <h3 className="tds-sm:whitespace-nowrap text-primary text-sm leading-tight font-bold whitespace-nowrap">
               {actionLabel}
             </h3>
-            <Badge className={clsx('shrink-0', statusStyle)} size="sm" variant="status">
-              {statusLabel}
-            </Badge>
           </div>
+          <Badge
+            className={clsx('absolute top-4 right-4 shrink-0', statusStyle)}
+            size="sm"
+            variant="status"
+          >
+            {statusLabel}
+          </Badge>
           <div className="text-secondary mt-1 flex items-center gap-2 text-[11px] font-medium opacity-60">
             <span>{sourceLabel}</span>
             <span className="font-mono">#{task.id.substring(0, 8)}</span>

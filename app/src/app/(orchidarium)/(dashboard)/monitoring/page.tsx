@@ -563,8 +563,8 @@ export default function MonitoringPage() {
               hasData={!!rainData}
               icon={<FaChartLine className="h-6 w-6" />}
               isActive={selectedMetric === 'rain_events'}
-              isLoading={initialLoading || isMqttLoading}
-              isOffline={connectionState === 'offline'}
+              isLoading={initialLoading} // Información histórica, no depende de MQTT
+              isOffline={false} // Siempre disponible (DB)
               status="optimal"
               title="Eventos de Lluvia"
               unit={range === '24h' ? '' : 'Eventos'}
