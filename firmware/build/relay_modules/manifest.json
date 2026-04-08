@@ -1,7 +1,7 @@
 {
   "name": "Relay Modules",
   "description": "Nodo Actuador + Meteorológica Exterior",
-  "version": "0.9.5",
+  "version": "0.9.6",
   "date": "08-04-2026",
   "notes_release": "[☀️ Sincronización de Iluminancia / 💾 Persistencia NVS]: Implementación de muestreo programado (Día/Noche) mediante eventos asíncronos y guardado en Flash. Sincronización proactiva desde el Scheduler al detectar reconexiones del nodo para asegurar coherencia horaria.",
   "files": [

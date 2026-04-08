@@ -253,9 +253,16 @@ class CommandRetryManager {
 
   track(topic: string, payload: string) {
     const key = `${topic}:${payload}`
-    if (this.pending.has(key)) return
-
-    Logger.debug(`Seguimiento iniciado: ${colors.magenta}${payload}${colors.reset}`)
+    
+    // 🔄 SMART RESET: Si ya existe un seguimiento, lo reiniciamos
+    // Esto asegura que tras una reconexión, el contador vuelva a 1.
+    const existing = this.pending.get(key)
+    if (existing) {
+      if (existing.timer) clearInterval(existing.timer)
+      Logger.debug(`Reiniciando seguimiento: ${colors.magenta}${payload}${colors.reset}`)
+    } else {
+      Logger.debug(`Seguimiento iniciado: ${colors.magenta}${payload}${colors.reset}`)
+    }
     
     const command: PendingCommand = {
       topic,
@@ -277,6 +284,15 @@ class CommandRetryManager {
       this.pending.delete(key)
       Logger.success(`Comando confirmado por el nodo: ${colors.magenta}${payload}${colors.reset}`)
     }
+  }
+
+  clear() {
+    if (this.pending.size === 0) return
+    Logger.warn(`[RETRY-GUARD] Limpiando ${this.pending.size} reintentos pendientes por desconexión del nodo.`)
+    for (const [key, command] of this.pending) {
+      if (command.timer) clearInterval(command.timer)
+    }
+    this.pending.clear()
   }
 
   private retry(key: string) {
@@ -352,7 +368,7 @@ mqttClient.on('message', async (topic, payload) => {
 
         // 🔄 RE-SINCRONIZACIÓN REACTIVA: 
         // Si el actuador se conecta (online), forzamos el estado del monitor de iluminancia correcto de inmediato.
-        Logger.info(`${colors.cyan}Sincronizando monitor de iluminancia${colors.reset}`)
+        //Logger.info(`${colors.cyan}Sincronizando monitor de iluminancia${colors.reset}`)
         syncEcoMode()
 
         // Registrar en DB
@@ -406,6 +422,9 @@ mqttClient.on('message', async (topic, payload) => {
         if (interruptedTasks.length > 0) {
           Logger.warn(`Se marcaron ${interruptedTasks.length} tareas como INTERRUMPIDAS debido a la desconexión del Nodo Actuador.`)
         }
+
+        // 🛡️ OFFLINE GUARD: Cancelar todos los reintentos de comandos de sistema
+        retryManager.clear()
       }
       return
     }
@@ -657,7 +676,7 @@ function executeSystemCommand(command: string) {
     qos: 1,
     retain: false
   })
-  Logger.info(`/cmd> ${colors.magenta}${command}${colors.reset}`)
+  Logger.info(`Comando: ${colors.magenta}${command}${colors.reset}`)
   
   // Registrar para seguimiento de confirmación (Retry System)
   retryManager.track(SYSTEM_CMD_TOPIC, command)
