@@ -1004,8 +1004,6 @@ async function initScheduler() {
     executeSystemCommand('lux_sampling:off')
   })
 
-  // Sincronización inicial tras arranque del servicio
-  syncEcoMode()
 }
 
 initScheduler().catch(e => Logger.error(`No se pudo iniciar el Servicio de Scheduler: ${colors.red}${e}${colors.reset}`))
