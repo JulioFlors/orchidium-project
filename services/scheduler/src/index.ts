@@ -69,7 +69,7 @@ const Logger = {
 
   error: (msg: string, err?: any) => console.error(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.red} ❌ [ ERROR ]${colors.reset}${colors.white} ${msg}${colors.reset}`, err || ''),
 
-  debug: (msg: string) => DEBUG && console.log(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.cyan} 🔎 [ DEBUG ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
+  debug: (msg: string) => DEBUG && console.log(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.cyan} 🔎[ DEBUG ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
 
   node: (status: 'ONLINE' | 'OFFLINE') => {
     const isOnline = status === 'ONLINE'
@@ -286,13 +286,19 @@ class CommandRetryManager {
     }
   }
 
+  confirmByTaskId(taskId: string) {
+    for (const [key, command] of this.pending) {
+      if (command.payload.includes(taskId)) {
+        if (command.timer) clearInterval(command.timer)
+        this.pending.delete(key)
+        Logger.debug(`Seguimiento finalizado (TaskID detectado): ${taskId.slice(0, 8)}`)
+      }
+    }
+  }
+
   clear() {
     if (this.pending.size === 0) return
-    Logger.warn(`[RETRY-GUARD] Limpiando ${this.pending.size} reintentos pendientes por desconexión del nodo.`)
-    for (const [key, command] of this.pending) {
-      if (command.timer) clearInterval(command.timer)
-    }
-    this.pending.clear()
+    Logger.debug(`El nodo está offline, pero mantenemos ${this.pending.size} reintentos en cola para cuando regrese.`)
   }
 
   private retry(key: string) {
@@ -404,6 +410,13 @@ mqttClient.on('message', async (topic, payload) => {
           }
         })
 
+        /**
+         * 🔄 HANDOFF DE RESPONSABILIDADES (Capa de Transporte -> Capa de Negocio)
+         * 
+         * Al detectar la desconexión, movemos las tareas activas a un estado de recuperación en DB.
+         * En este punto, el RetryManager debe dejar de insistir con el comando original (viejo)
+         * para evitar colisiones cuando el sistema de reasunción despache el comando nuevo (deuda).
+         */
         for (const task of interruptedTasks) {
           let extraNotes = 'Interrumpida: El Nodo Actuador perdió conexión durante una ventana crítica.'
           let addedMinutes = 0
@@ -414,16 +427,20 @@ mqttClient.on('message', async (topic, payload) => {
             extraNotes = `Interrumpida tras ${addedMinutes} min de riego efectivo.`
           }
 
+          // 1. Limpiamos reintentos del transporte para esta tarea (Handoff)
+          retryManager.confirmByTaskId(task.id)
+
+          // 2. Persistimos el fallo en DB para que sea recuperado por resumeInterruptedTasks()
           await recordTaskEvent(task.id, TaskStatus.FAILED, extraNotes, {
             completedMinutes: { increment: addedMinutes }
           })
         }
 
         if (interruptedTasks.length > 0) {
-          Logger.warn(`Se marcaron ${interruptedTasks.length} tareas como INTERRUMPIDAS debido a la desconexión del Nodo Actuador.`)
+          Logger.warn(`Se marcaron ${interruptedTasks.length} tareas como INTERRUMPIDAS (Handoff completado).`)
         }
-
-        // 🛡️ OFFLINE GUARD: Cancelar todos los reintentos de comandos de sistema
+        
+        // 🛡️ OFFLINE GUARD RELAJADO: No cancelamos, permitimos que el retryManager insista.
         retryManager.clear()
       }
       return
@@ -437,15 +454,18 @@ mqttClient.on('message', async (topic, payload) => {
 
         if (taskId) {
           // El modulo leyó formalmente y la encoló.
-          await recordTaskEvent(taskId, TaskStatus.ACKNOWLEDGED, 'Comandos recibidos y encolados por el Nodo Actuador.')
-        } else {
-          // Si no hay TaskID, podría ser un comando de sistema (eco del comando crudo)
-          // Verificamos con el retry manager si estamos esperando esta confirmación
-          retryManager.confirm('PristinoPlant/Actuator_Controller/cmd', message)
+          await recordTaskEvent(taskId, TaskStatus.ACKNOWLEDGED, 'Nodo Actuador: Comandos recibidos.')
         }
+        
+        // 🔄 CONFIRMACIÓN UNIVERSAL:
+        // Intentamos confirmar el mensaje tanto en el canal de irrigación como en el de sistema.
+        // El retryManager ignorará silenciosamente si la llave topic:payload no existe.
+        retryManager.confirm(ACTUATOR_TOPIC, message)
+        retryManager.confirm(SYSTEM_CMD_TOPIC, message)
+
       } catch (e) {
-        // Ignorar errores de parseo si es un comando crudo (audit_, lux_sampling)
-        retryManager.confirm('PristinoPlant/Actuator_Controller/cmd', message)
+        // Si no es JSON, intentamos confirmar como comando crudo
+        retryManager.confirm(SYSTEM_CMD_TOPIC, message)
       }
       return
     }
@@ -468,6 +488,9 @@ mqttClient.on('message', async (topic, payload) => {
 
         if (state === 'ON') {
           if (taskId) {
+            // Detener reintentos si ya está en progreso
+            retryManager.confirmByTaskId(taskId)
+
            // Actualización Atómica Exacta
             await recordTaskEvent(taskId, TaskStatus.IN_PROGRESS, 'Circuito de Riego abierto.', {
               actualStartAt: new Date()
@@ -663,6 +686,9 @@ function executeSequence(purpose: TaskPurpose, durationMinutes: number, taskId: 
       messageExpiryInterval: 300
     }
   })
+
+  // Registrar para seguimiento de confirmación (Retry System)
+  retryManager.track(ACTUATOR_TOPIC, message)
 
   Logger.info(`Despachando Circuito: ${purpose} (${durationMinutes} min) [Task: ${taskId.slice(0, 8)}]`)
   Logger.debug(`MQTT TX ➜ ${message}`)

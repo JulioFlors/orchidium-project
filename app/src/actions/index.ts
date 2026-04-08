@@ -1,8 +1,12 @@
-export * from './auth/admin-users'
-
 export * from './admin/get-connectivity-logs'
 
+export * from './auth/admin-users'
+
 export * from './auth/verify-email'
+
+export * from './lab/agrochemicals'
+
+export * from './lab/programs'
 
 export * from './navigation/get-plants-navigation'
 

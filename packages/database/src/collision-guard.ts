@@ -21,6 +21,8 @@ export class CollisionGuard {
       'PENDING',
       'WAITING_CONFIRMATION',
       'CONFIRMED',
+      'DISPATCHED',
+      'ACKNOWLEDGED',
       'IN_PROGRESS',
     ]
 

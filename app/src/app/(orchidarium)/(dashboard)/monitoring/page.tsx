@@ -228,9 +228,13 @@ export default function MonitoringPage() {
     const last = Number(data[data.length - 1][key])
     const prev = Number(data[data.length - 5][key])
 
-    if (last > prev + 0.5) return 'up'
+    // ⚡ Umbrales dinámicos por tipo de métrica
+    // Para temperatura/humedad 0.5 es significativo, pero para Lux necesitamos > 150 para evitar "ruido".
+    const threshold = key === 'illuminance' ? 150 : 0.5
 
-    if (last < prev - 0.5) return 'down'
+    if (last > prev + threshold) return 'up'
+
+    if (last < prev - threshold) return 'down'
 
     return 'stable'
   }
@@ -319,12 +323,19 @@ export default function MonitoringPage() {
   const climate = (() => {
     const lux = Number(current.illuminance) || 0
     const rain = Number(current.rain_intensity) || 0
-    const hour = new Date(current.time || 0).getHours()
+    const date = new Date(current.time || 0)
+    const hour = date.getHours()
+    const minutes = date.getMinutes()
+    const timeInHours = hour + minutes / 60
+
+    // Análisis de tendencia
+    const luxTrend = calculateTrend('illuminance')
 
     // Cálculo de frescura del dato
-    const lastUpdate = new Date(current.time || 0).getTime()
+    const lastUpdate = date.getTime()
     const minutesSinceLastUpdate = (Date.now() - lastUpdate) / 60000
 
+    // ---- PRIORIDAD 1: Lluvia ----
     if (rain > 20) {
       return {
         label: 'Lloviendo',
@@ -335,6 +346,7 @@ export default function MonitoringPage() {
       }
     }
 
+    // ---- PRIORIDAD 2: Noche y Fallas de Sensor ----
     if (lux < 50 || hour >= 20 || hour < 6) {
       if (lux < 5 && hour > 7 && hour < 19 && minutesSinceLastUpdate < 10) {
         return {
@@ -355,17 +367,42 @@ export default function MonitoringPage() {
       }
     }
 
+    // ---- PRIORIDAD 3: Inferencia Diurna Avanzada (Cielo / Ocaso / Amanecer) ----
     if (zone === 'EXTERIOR') {
+      // 🌅 Lógica de Amanecer (6:00 - 8:30)
+      if (timeInHours >= 6 && timeInHours <= 8.5 && luxTrend !== 'down') {
+        return {
+          label: 'Amanecer',
+          icon: <Sun className="h-6 w-6 animate-pulse text-amber-300" />,
+          color: 'yellow' as const,
+          description: 'Cielo despejándose',
+          status: 'optimal' as const,
+        }
+      }
+
+      // 🌇 Lógica de Atardecer (17:00 - 19:00)
+      if (timeInHours >= 17 && timeInHours <= 19 && (luxTrend === 'down' || lux < 8000)) {
+        return {
+          label: 'Atardecer',
+          icon: <Sun className="h-6 w-6 text-orange-400" />,
+          color: 'orange' as const,
+          description: 'Despejado / Ocaso',
+          status: 'optimal' as const,
+        }
+      }
+
+      // Luz Indirecta / Nube Densa
       if (lux < 5000) {
         return {
           label: 'Luz Indirecta',
           icon: <Cloud className="h-6 w-6 text-slate-400" />,
           color: 'green' as const,
-          description: 'Amanecer / Atardecer / Nube densa',
+          description: 'Luz Filtrada / Nube densa',
           status: 'optimal' as const,
         }
       }
 
+      // Nublado (Solo si no es atardecer/amanecer)
       if (lux < 25000) {
         return {
           label: 'Nublado',
@@ -394,6 +431,7 @@ export default function MonitoringPage() {
         status: 'warning' as const,
       }
     } else {
+      // Lógica para ZONAS INTERIORES (Basada en umbrales de cultivo)
       if (lux < 10000)
         return {
           label: 'Bajo',

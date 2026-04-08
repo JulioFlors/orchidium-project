@@ -1,9 +1,9 @@
 {
   "name": "Relay Modules",
   "description": "Nodo Actuador + Meteorológica Exterior",
-  "version": "0.9.6",
+  "version": "0.9.7",
   "date": "08-04-2026",
-  "notes_release": "[☀️ Sincronización de Iluminancia / 💾 Persistencia NVS]: Implementación de muestreo programado (Día/Noche) mediante eventos asíncronos y guardado en Flash. Sincronización proactiva desde el Scheduler al detectar reconexiones del nodo para asegurar coherencia horaria.",
+  "notes_release": "[💾 Resiliencia NVS / 🛡️ Boot Recovery]: Implementada limpieza selectiva en NVSManager para proteger configuraciones ante fallos de sincronización horaria. Optimización del ciclo de arranque para evitar condiciones de carrera en sensores y asegurar persistencia estricta del estado de muestreo.",
   "files": [
     "app.mpy",
     "boot.py",

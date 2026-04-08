@@ -3,8 +3,8 @@
 # Descripción: Firmware dedicado para el control de las electroválvulas, la bomba
 #              y la estación meteorológica exterior (lluvia e iluminancia).
 # Fecha: 08-04-2026
-# Versión: v0.9.6
-# notes_release: [☀️ Sincronización de Iluminancia / 💾 Persistencia NVS]: Implementación de muestreo programado (Día/Noche) mediante eventos asíncronos y guardado en Flash. Sincronización proactiva desde el Scheduler al detectar reconexiones del nodo para asegurar coherencia horaria.
+# Versión: v0.9.7
+# notes_release: [💾 Resiliencia NVS / 🛡️ Boot Recovery]: Implementada limpieza selectiva en NVSManager para proteger configuraciones ante fallos de sincronización horaria. Optimización del ciclo de arranque para evitar condiciones de carrera en sensores y asegurar persistencia estricta del estado de muestreo.
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib.
@@ -107,7 +107,7 @@ IRRIGATION_CIRCUITS = {
 # Flag de control para la sincronización del monitoreo de iluminancia (Día/Noche)
 # Si es False, se suspende el muestreo del sensor BH1750 para evitar registros de 0 lux.
 # (Se inicializa después de definir NVSManager)
-IS_SAMPLING_LUX = True
+IS_SAMPLING_LUX = False
 
 # ---- Hardware: Actuadores ----
 # Diccionario que mapea un (actuator_id) a otro diccionario que contiene todos los atributos y el estado de ese actuador.
@@ -372,6 +372,25 @@ class NVSManager:
             cls._dirty = True
 
     @classmethod
+    def clear_all_irrigation_tasks(cls):
+        """Limpia SOLO las tareas de riego (activas o pendientes) sin tocar la config del sistema."""
+        cls._load_cache()
+        if not cls._cache: return
+        
+        # Filtramos las llaves que corresponden a riego
+        keys_to_delete = [
+            k for k, v in cls._cache.items() 
+            if v.get("type") in ["irrigation_run", "delayed_start"]
+        ]
+        
+        if keys_to_delete:
+            for k in keys_to_delete:
+                del cls._cache[k]
+            cls._dirty = True
+            # if DEBUG:
+                # print(f"    ├─ NVS: {len(keys_to_delete)} tareas de riego eliminadas.")
+
+    @classmethod
     def flush(cls):
         """Vuelca la Caché RAM hacia la memoria Flash física SOLO si hubo cambios."""
         if not cls._dirty:
@@ -561,8 +580,11 @@ async def boot_recovery_check():
     if current_year < 2026:
         if DEBUG:
             print(f"    └─ ⚠️  Error: {Colors.RED}No se pudo sincronizar la Hora del Sistema{Colors.RESET}.")
-            print(f"        └─ Cancelando recuperación por seguridad.")
-        NVSManager.clear_task()
+            print(f"        └─ Cancelando recuperación de Riego por seguridad.")
+        
+        # [🛡️ SEGURIDAD]: Solo limpiamos tareas de riego, NO la configuración global.
+        NVSManager.clear_all_irrigation_tasks()
+        NVSManager.flush()
         return
     
     # Ventana de oportunidad (20 min) para recuperar un riego interrumpido.
@@ -2366,6 +2388,11 @@ async def main():
     setup_relays()
     setup_sensors()
 
+    # ---- Boot Recovery Check ----
+    # [CRÍTICO]: Debe ejecutarse ANTES de crear las tareas de monitoreo para 
+    # evitar condiciones de carrera (ej: empezar a muestrear lux antes de cargar el estado off).
+    await boot_recovery_check()
+
     # ---- Tareas Asíncronas ----
     # (Re)conexión WiFi (Prioridad de red)
     asyncio.create_task(wifi_coro())
@@ -2384,11 +2411,6 @@ async def main():
 
     # ---- Auditorías (Unified) ----
     asyncio.create_task(unified_audit_task())
-
-    # ---- Boot Recovery Check ----
-    # Verifica si hubo un reinicio durante una tarea activa.
-    # Restaura la tarea solo si está dentro de la ventana de oportunidad.
-    await boot_recovery_check()
 
     # ---- Bucle de Supervisión y Recolección de Basura ----
     while True:
