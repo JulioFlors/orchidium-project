@@ -36,7 +36,20 @@ const job = new Cron('0 */3 * * *', async () => {
     ]);
 });
 
-Logger.info(`Servicio inactivo en espera. Próxima ejecución: ${job.nextRun()?.toLocaleString()}`);
+const nextRun = job.nextRun();
+if (nextRun) {
+    const formattedDate = new Intl.DateTimeFormat('es-VE', {
+        day: '2-digit',
+        month: 'long',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+        timeZoneName: 'short'
+    }).format(nextRun);
+    Logger.info(`Servicio inactivo en espera. Próxima ejecución: ${formattedDate}`);
+} else {
+    Logger.warn('No se pudo programar la próxima ejecución del cron.');
+}
 
 // Mantener el proceso vivo (aunque croner lo hace, es buena práctica en Node)
 process.on('SIGINT', () => {

@@ -25,3 +25,30 @@ export function formatTime12h(
 
   return `${hours}:${minutesStr} ${ampm}`
 }
+
+export function formatDateLong(dateValue: string | Date | number): string {
+  if (!dateValue) return ''
+
+  const date = new Date(dateValue)
+
+  if (isNaN(date.getTime())) return ''
+
+  const opts: Intl.DateTimeFormatOptions = {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    timeZone: 'America/Caracas',
+  }
+
+  const formatter = new Intl.DateTimeFormat('es-VE', opts)
+  const parts = formatter.formatToParts(date)
+
+  // Capitalizar la primera letra del día
+  const weekday = parts.find((p) => p.type === 'weekday')?.value || ''
+  const weekdayCap = weekday.charAt(0).toUpperCase() + weekday.slice(1)
+
+  const day = parts.find((p) => p.type === 'day')?.value || ''
+  const month = parts.find((p) => p.type === 'month')?.value || ''
+
+  return `${weekdayCap}, ${day} de ${month}`
+}

@@ -2,9 +2,9 @@
 # Relay Modules: Actuator Controller Firmware.
 # Descripción: Firmware dedicado para el control de las electroválvulas, la bomba
 #              y la estación meteorológica exterior (lluvia e iluminancia).
-# Fecha: 07-04-2026
-# Versión: v0.9.3
-# notes_release: [🛡️ Robustez MQTT / 📦 Envío Consolidado]: Sincronización de todas las auditorías en una única publicación JSON (Captura de Estado) para evitar saturación de red. Eliminación de ACKs duplicados y optimización del flujo de comandos.
+# Fecha: 08-04-2026
+# Versión: v0.9.4
+# notes_release: [☀️ Sincronización de Iluminancia / 💾 Persistencia NVS]: Implementación de muestreo programado (Día/Noche) mediante eventos asíncronos y guardado en Flash. Sincronización proactiva desde el Scheduler al detectar reconexiones del nodo para asegurar coherencia horaria.
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib.
@@ -143,6 +143,9 @@ mqtt_msg_event = asyncio.Event()
 # Evento asíncrono para despertar al gestor de temporizadores
 timer_wake_event = asyncio.Event()
 
+# Evento asíncrono para despertar a la corrutina de monitoreo de iluminancia
+illuminance_wake_event = asyncio.Event()
+
 # Candado asíncrono para evitar colisiones en el socket SSL
 mqtt_lock = asyncio.Lock()
 
@@ -183,6 +186,19 @@ AUDIT_MODE = {
     "ram": False
 }
 
+# Flag de control para la sincronización del monitoreo de iluminancia (Día/Noche)
+# Si es False, se suspende el muestreo del sensor BH1750 para evitar registros de 0 lux.
+# Cargamos el estado inicial desde NVS para sobrevivir a reinicios.
+_nvs_recovery = NVSManager.load_tasks()
+IS_SAMPLING_LUX = _nvs_recovery.get('lux_sampling', {}).get('enabled', True)
+if IS_SAMPLING_LUX:
+    illuminance_wake_event.set()
+    if DEBUG: print(f"\n☀️  Illuminance Monitor: {Colors.GREEN}Waked{Colors.RESET}")
+else:
+    illuminance_wake_event.clear()
+    if DEBUG: print(f"\n🌙  Illuminance Monitor: {Colors.DIM}Suspended{Colors.RESET}")
+del _nvs_recovery
+
 # Funciones de Muestreo Unificadas para Auditoría (Lazy Reference)
 def get_lux_sample():
     if illuminance_sensor:
@@ -192,7 +208,19 @@ def get_lux_sample():
 
 def get_rain_sample():
     if rain_sensor_analog:
-        try: return sum([rain_sensor_analog.read() for _ in range(5)]) // 5
+        try:
+            # Umbrales (Sincronizado con rain_monitor_task)
+            RAW_INTENSITY_MIN = 1700 # 100%
+            RAIN_STOP_VALUE   = 2800 # 0%
+            
+            raw = sum([rain_sensor_analog.read() for _ in range(5)]) // 5
+            
+            # Cálculo de Intensidad (0-100%)
+            clamped_raw = max(RAW_INTENSITY_MIN, min(raw, RAIN_STOP_VALUE))
+            delta_max = RAIN_STOP_VALUE - RAW_INTENSITY_MIN
+            intensity = round(((RAIN_STOP_VALUE - clamped_raw) / delta_max) * 100)
+            
+            return intensity
         except: return None
     return None
 
@@ -438,7 +466,9 @@ async def publish_audit_state():
                     client.publish(MQTT_TOPIC_AUDIT_STATE, payload, retain=True, qos=0)
             except (MQTTException, OSError) as e:
                 if DEBUG: log_mqtt_exception("Fallo sincronización estado auditoría", e)
-                # No invalidamos el cliente desde una tarea secundaria
+                # Invalidamos el cliente para que el loop principal detecte el fallo
+                force_disconnect_mqtt()
+                await check_critical_mqtt_errors(e)
             except Exception as e:
                 if DEBUG: print(f"⚠️  Error inesperado en publish_audit_state: {e}")
 
@@ -1111,6 +1141,35 @@ async def mqtt_processor_task():
 
                         del category, action
                     del parts
+                del m_low
+
+            # ---- 🌙 | ☀️ Muestreo Inteligente (lux_sampling:[on | off]) ----
+            elif m_low.startswith(b"lux_sampling:"):
+                parts = m_low.split(b":")
+                if len(parts) == 2:
+                    action = parts[1]
+                    global IS_SAMPLING_LUX
+                    
+                    if action == b"on":
+                        IS_SAMPLING_LUX = True
+                        illuminance_wake_event.set()
+                        if DEBUG: print(f"    └─ Lux Sampling: {Colors.GREEN}ON{Colors.RESET}")
+                    elif action == b"off":
+                        IS_SAMPLING_LUX = False
+                        illuminance_wake_event.clear()
+                        # Al apagar, limpiamos el buffer para no arrastrar basura de 0 lux
+                        illuminance_Batch.clear()
+                        if DEBUG: print(f"    └─ Lux Sampling: {Colors.RED}OFF{Colors.RESET}")
+                    
+                    # Persistencia en NVS
+                    NVSManager.save_task({
+                        "key": "lux_sampling",
+                        "enabled": IS_SAMPLING_LUX,
+                        "type": "system_config"
+                    })
+                    NVSManager.flush()
+                    del action
+                del parts
                 del m_low
 
             # ---- 💦 Lógica de Riego (irrigation/cmd) ----
@@ -1879,6 +1938,7 @@ async def state_publisher_task():
     """
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
+    from gc import collect
     from ujson import dumps # type: ignore
     from umqtt.simple2 import MQTTException # type: ignore
 
@@ -1914,22 +1974,33 @@ async def state_publisher_task():
             print(f"\n📡  Sincronizando {Colors.BLUE}Relays{Colors.RESET}")
 
         try:
-            # Construimos el Snapshot total de estados
-            snapshot = {}
+            # Construcción manual de JSON (Zero-Dict) para el Snapshot
+            # Evita duplicar la estructura de relays en RAM y reduce fragmentación
+            fragments = []
             for r_id, r_info in relays.items():
-                snapshot[r_info['name']] = {
-                    "state": r_info['state'],
-                    "task_id": r_info.get('task_id', ''),
-                    "id": r_id
-                }
+                # Formato: "name":{"state":"ON","task_id":"...","id":1}
+                fragments.append('"%s":{"state":"%s","task_id":"%s","id":%d}' % (
+                    r_info['name'], 
+                    r_info['state'], 
+                    r_info.get('task_id', ''), 
+                    r_id
+                ))
+            
+            payload = "{" + ",".join(fragments) + "}"
+            
+            # Liberamos memoria de la lista temporal antes del Lock/Publish 
+            del fragments
+            collect()
 
             # 🔒 Pedimos permiso para usar el socket
             async with mqtt_lock:
                 # Publicamos SOLO al tópico Unificado (/state)
                 # El frontend (ControlPanel) y el scheduler ya consumen exclusivamente este tópico.
-                # Eliminamos las publicaciones individuales legado para reducir el tiempo
-                # de retención del lock de ~3.5s a ~600ms en redes lentas.
-                client.publish(MQTT_TOPIC_STATE, dumps(snapshot), retain=True, qos=0)
+                client.publish(MQTT_TOPIC_STATE, payload, retain=True, qos=0)
+
+            # Liberamos el payload de la RAM
+            del payload
+            collect()
 
             # Marcamos como publicadas
             for relay_info in updates_pending:
@@ -1943,11 +2014,10 @@ async def state_publisher_task():
 
         except (MQTTException, OSError) as e:
             if DEBUG: log_mqtt_exception("Fallo al publicar el Snapshot de los Relays", e)
-            # NO invalidamos el cliente ante un fallo transitorio.
-            # El state_publisher compite con mqtt_connector tras reconectar.
-            # Si el socket TCP aún no está estable, forzar una reconexión
-            # crea un ciclo infinito de fallos. En su lugar, esperamos
-            # y dejamos que state_changed se vuelva a activar naturalmente.
+            # Invalidamos el cliente inmediatamente.
+            # Si el snapshot falló (MQTT-3), el socket ya no es confiable.
+            force_disconnect_mqtt()
+            await check_critical_mqtt_errors(e)
             await asyncio.sleep(5)
         except Exception as e:
             if DEBUG: print(f"    ⚠️  Error general en Sincronización Relay: {e}")
@@ -2083,7 +2153,8 @@ async def rain_monitor_task():
 
         except (MQTTException, OSError) as e:
             if DEBUG: log_mqtt_exception("Error de red en rain_monitor_task()", e)
-            # No forzamos desconexión global por un fallo en el sensor
+            # Invalidamos el cliente inmediatamente.
+            force_disconnect_mqtt()
             await check_critical_mqtt_errors(e)
             await asyncio.sleep(5)
         except Exception as e:
@@ -2113,6 +2184,12 @@ async def illuminance_monitor_task():
 
     while True:
         try:
+            # ---- [PROGRAMACIÓN ORIENTADA A EVENTOS] ----
+            # Si el monitoreo está desactivado (Sincronización Nocturna), 
+            # suspendemos la corrutina hasta recibir la señal del procesador MQTT.
+            if not IS_SAMPLING_LUX:
+                await illuminance_wake_event.wait()
+
             current_ts = time()
 
             if illuminance_sensor is not None:
@@ -2144,7 +2221,8 @@ async def illuminance_monitor_task():
 
         except (MQTTException, OSError) as e:
             if DEBUG: log_mqtt_exception("Error de red en illuminance_monitor_task()", e)
-            # No forzamos desconexión global por un fallo en el sensor
+            # Invalidamos el cliente inmediatamente.
+            force_disconnect_mqtt()
             await check_critical_mqtt_errors(e)
             await asyncio.sleep(5)
         except Exception as e:
@@ -2222,6 +2300,9 @@ async def unified_audit_task():
                         client.publish(MQTT_TOPIC_AUDIT, payload, qos=0)
                 except Exception as e:
                     if DEBUG: log_mqtt_exception("Fallo publicación Batch de Auditoría", e)
+                    # Invalidamos el cliente inmediatamente.
+                    force_disconnect_mqtt()
+                    await check_critical_mqtt_errors(e)
                 # Liberamos memoria de los fragmentos inmediatamente
                 del fragments, payload
                 collect()

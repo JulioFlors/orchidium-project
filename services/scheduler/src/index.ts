@@ -19,6 +19,7 @@ const MQTT_PASSWORD = process.env.MQTT_PASSWORD || process.env.MQTT_PASS_BACKEND
 
 const MQTT_CLIENT_ID = process.env.MQTT_CLIENT_ID || process.env.MQTT_CLIENT_ID_SCHEDULER || 'Scheduler'
 const ACTUATOR_TOPIC = 'PristinoPlant/Actuator_Controller/irrigation/cmd'
+const SYSTEM_CMD_TOPIC = 'PristinoPlant/Actuator_Controller/cmd'
 
 // Add Service Status Topic for LWT and Heartbeat
 const SERVICE_STATUS_TOPIC = `PristinoPlant/Services/${MQTT_CLIENT_ID}/status`
@@ -239,11 +240,15 @@ let heartbeatInterval: NodeJS.Timeout | null = null
 // ---- Memoria de Estado para evitar Logs repetitivos ----
 let lastActuatorState = 'unknown'
 let lastRainState: string | null = null
+const ACTUATOR_STATUS_TOPIC = 'PristinoPlant/Actuator_Controller/status'
 
 mqttClient.on('connect', () => {
   Logger.success('Conectado a Broker MQTT')
-
-  // Publicar estado de vida apenas conectamos
+  
+  // Suscripciones de Control y Monitoreo del Nodo
+  mqttClient.subscribe(ACTUATOR_STATUS_TOPIC)
+  
+  // Publicar estado del Servicio (Heartbeat/LWT)
   mqttClient.publish(SERVICE_STATUS_TOPIC, 'online', { qos: 1, retain: true })
 
   // Suscribirse a los tópicos de QoS de las tareas del dispositivo de Borde
@@ -284,6 +289,11 @@ mqttClient.on('message', async (topic, payload) => {
       if (message === 'online' && lastActuatorState !== 'online') {
         lastActuatorState = 'online'
         Logger.node('ONLINE')
+
+        // 🔄 RE-SINCRONIZACIÓN REACTIVA: 
+        // Si el actuador se conecta (online), forzamos el estado del monitor de iluminancia correcto de inmediato.
+        Logger.info(`${colors.cyan}🔔  Sincronizando monitor de iluminancia${colors.reset}`)
+        syncEcoMode()
 
         // Registrar en DB
         await prisma.deviceLog.create({
@@ -575,6 +585,39 @@ function executeSequence(purpose: TaskPurpose, durationMinutes: number, taskId: 
   Logger.debug(`MQTT TX ➜ ${message}`)
 }
 
+/**
+ * Envía un comando de sistema (eco, reset, etc) al Nodo Actuador.
+ */
+function executeSystemCommand(command: string) {
+  mqttClient.publish(SYSTEM_CMD_TOPIC, command, {
+    qos: 1,
+    retain: false
+  })
+  Logger.info(`Enviando Comando de Sistema: ${colors.magenta}${command}${colors.reset}`)
+}
+
+/**
+ * Sincroniza el estado del monitoreo de lux basado en la hora actual.
+ * Ciclo Eco: ON (05:00 - 19:00) | OFF (19:00 - 05:00)
+ */
+function syncEcoMode() {
+  const now = new Date();
+  const options: Intl.DateTimeFormatOptions = { 
+    timeZone: 'America/Caracas', 
+    hour: 'numeric', 
+    hour12: false 
+  };
+  const hourString = new Intl.DateTimeFormat('en-US', options).format(now);
+  const hour = parseInt(hourString);
+
+  // Si estamos entre las 5am y las 7pm (19h)
+  if (hour >= 5 && hour < 19) {
+    executeSystemCommand('lux_sampling:on');
+  } else {
+    executeSystemCommand('lux_sampling:off');
+  }
+}
+
 // ---- Ejecutor atómico de una Tarea (TaskLog) ----
 async function processTaskLog(taskLog: any) {
   try {
@@ -861,6 +904,22 @@ async function initScheduler() {
   new Cron('* * * * *', { timezone: "America/Caracas" }, () => {
     checkPendingTasks()
   })
+
+  // ---- SINCRONIZACIÓN DE MONITOREO: Iluminancia (Día/Noche) ----
+  // Despertar sensor a las 5:00 AM
+  new Cron('0 5 * * *', { timezone: "America/Caracas" }, () => {
+    Logger.info('☀  Iniciando muestreo de iluminancia (Amanecer)')
+    executeSystemCommand('lux_sampling:on')
+  })
+
+  // Dormir sensor a las 7:00 PM
+  new Cron('0 19 * * *', { timezone: "America/Caracas" }, () => {
+    Logger.info('🌙  Suspendiendo muestreo de iluminancia (Anochecer)')
+    executeSystemCommand('lux_sampling:off')
+  })
+
+  // Sincronización inicial tras arranque del servicio
+  syncEcoMode()
 }
 
 initScheduler().catch(e => Logger.error(`No se pudo iniciar el Servicio de Scheduler: ${colors.red}${e}${colors.reset}`))

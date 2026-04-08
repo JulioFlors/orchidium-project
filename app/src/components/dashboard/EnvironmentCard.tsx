@@ -16,7 +16,7 @@ export interface EnvironmentCardProps {
   isActive?: boolean
   onClick?: () => void
   className?: string
-  description?: string
+  description?: React.ReactNode
   color?: 'orange' | 'blue' | 'yellow' | 'cyan' | 'purple' | 'green'
   isOffline?: boolean
   isLoading?: boolean
@@ -175,10 +175,8 @@ export function EnvironmentCard({
               {icon}
             </div>
             <div className="flex flex-col gap-0.5">
-              <h3 className="text-secondary group-hover:text-primary text-sm font-semibold transition-colors">
-                {title}
-              </h3>
-              {description && <p className="text-label text-xs">{description}</p>}
+              <h3 className="text-primary text-sm font-semibold transition-colors">{title}</h3>
+              {description && <div className="text-secondary text-xs">{description}</div>}
             </div>
           </div>
         </div>

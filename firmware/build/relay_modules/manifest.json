@@ -1,9 +1,9 @@
 {
   "name": "Relay Modules",
   "description": "Nodo Actuador + Meteorológica Exterior",
-  "version": "0.9.2",
-  "date": "06-04-2026",
-  "notes_release": "[⛅ Estación Meteorológica / 🛡 Robustez MQTT]: Refactorización masiva a corrutinas. Implementación de sistema de ACKs descentralizado y corrección de offset temporal en servicio de ingesta para monitoreo histórico.",
+  "version": "0.9.5",
+  "date": "08-04-2026",
+  "notes_release": "[☀️ Sincronización de Iluminancia / 💾 Persistencia NVS]: Implementación de muestreo programado (Día/Noche) mediante eventos asíncronos y guardado en Flash. Sincronización proactiva desde el Scheduler al detectar reconexiones del nodo para asegurar coherencia horaria.",
   "files": [
     "app.mpy",
     "boot.py",

@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { CloudRain, Droplets, Thermometer, Sun, Cloud, Moon, CloudSun } from 'lucide-react'
+import { CloudRain, Droplets, Thermometer, Sun, Cloud, Moon } from 'lucide-react'
 import { FaChartLine } from 'react-icons/fa6'
 
 import { SmartDeviceHeader } from '@/components/dashboard/SmartDeviceHeader'
@@ -9,6 +9,7 @@ import { EnvironmentCard } from '@/components/dashboard/EnvironmentCard'
 import { SensorHistoryChart } from '@/components/dashboard/SensorHistoryChart'
 import { useDeviceHeartbeat } from '@/hooks'
 import { useMqttStore } from '@/store/mqtt/mqtt.store'
+import { formatTime12h, formatDateLong } from '@/utils/timeFormat'
 
 interface SensorData {
   [key: string]: string | number | undefined
@@ -27,6 +28,7 @@ interface RainData {
   totalDurationSeconds: number
   averageIntensity: number
   eventCount: number
+  events?: { time: string; duration: number; intensity: number }[]
 }
 
 interface AuditSnapshot {
@@ -36,7 +38,7 @@ interface AuditSnapshot {
   health?: { rssi: number; ip: string }
 }
 
-type MetricType = 'temperature' | 'humidity' | 'illuminance' | 'rain_intensity'
+type MetricType = 'temperature' | 'humidity' | 'illuminance' | 'rain_intensity' | 'rain_events'
 
 export default function MonitoringPage() {
   const [data, setData] = useState<SensorData[]>([])
@@ -58,16 +60,17 @@ export default function MonitoringPage() {
       ? 'PristinoPlant/Actuator_Controller/status'
       : `PristinoPlant/Environmental_Monitoring/${formatTopicZone(zone)}/status`
 
-  // Trigger full skeleton reload ONLY when changing zones
+  const { messages: mqttMessages, status } = useMqttStore()
+  const { connectionState } = useDeviceHeartbeat(statusTopic)
+
+  // Polling data para métricas históricas
   useEffect(() => {
     setInitialLoading(true)
   }, [zone])
 
-  // Polling data every 30 seconds para métricas históricas de base de datos
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Parallel data fetching
         const [histRes, rainRes] = await Promise.all([
           fetch(`/api/sensors/history?range=${range}&zone=${zone}`),
           fetch(`/api/sensors/rain?range=${range}&zone=${zone}`),
@@ -93,31 +96,42 @@ export default function MonitoringPage() {
     }
 
     fetchData()
+
     const interval = setInterval(fetchData, 30000)
 
     return () => clearInterval(interval)
   }, [range, zone])
 
-  // Handle metric reset when changing zones to start clean
   useEffect(() => {
     setSelectedMetric(null)
   }, [zone])
 
-  // 0. Integración MQTT en Tiempo Real para el Monitor Ambiental
-  const { messages: mqttMessages } = useMqttStore()
+  const isMqttLoading = useMemo(() => {
+    if (!initialLoading && data.length > 0) return false
+
+    // Si el hook ya determinó que está offline, dejamos de esperar MQTT
+    if (connectionState === 'offline') return false
+
+    const zoneSuffix = formatTopicZone(zone)
+    const readingsTopic = `PristinoPlant/Weather_Station/${zoneSuffix}/readings`
+
+    if (mqttMessages[readingsTopic]) return false
+
+    if (status !== 'connected' && initialLoading) return true
+
+    return initialLoading
+  }, [status, mqttMessages, zone, connectionState, initialLoading, data.length])
+
+  // Procesamiento de lecturas MQTT
   const mqttReadings = useMemo(() => {
-    // 1. Tópico de Lecturas Regulares (Environmental Monitoring / Weather Station)
-    const readingsTopic = 'PristinoPlant/Weather_Station/Exterior/readings'
-    // 2. Tópico de Auditoría Unificada (Actuator Controller)
+    const zoneSuffix = formatTopicZone(zone)
+    const readingsTopic = `PristinoPlant/Weather_Station/${zoneSuffix}/readings`
     const auditTopic = 'PristinoPlant/Actuator_Controller/audit'
 
     const readingsMsg = mqttMessages[readingsTopic]
     const auditMsg = mqttMessages[auditTopic]
-
-    // Consolidación de datos
     const result: Partial<SensorData> = {}
 
-    // ─── Proceso de Lecturas Regulares ───
     if (readingsMsg) {
       try {
         const payload =
@@ -128,6 +142,7 @@ export default function MonitoringPage() {
         if (payload.history && Array.isArray(payload.history)) {
           const lastPoint = payload.history[payload.history.length - 1]
 
+          result.time = String(lastPoint[0])
           Object.assign(result, lastPoint[1])
         } else {
           Object.assign(result, payload)
@@ -137,7 +152,6 @@ export default function MonitoringPage() {
       }
     }
 
-    // ─── Proceso de Auditoría Unificada (Sobrescribe con mayor frecuencia si existe) ───
     if (auditMsg) {
       try {
         const payload =
@@ -145,30 +159,23 @@ export default function MonitoringPage() {
             ? (auditMsg.payload as AuditSnapshot)
             : (JSON.parse(String(auditMsg.payload)) as AuditSnapshot)
 
-        // Mapeo directo del Snapshot plano enviado por el ESP32
-        if (payload.lux !== undefined) {
-          result.illuminance = Number(payload.lux)
-        }
+        if (payload.lux !== undefined) result.illuminance = Number(payload.lux)
 
-        if (payload.rain !== undefined) {
-          result.rain_intensity = Number(payload.rain)
-        }
+        if (payload.rain !== undefined) result.rain_intensity = Number(payload.rain)
 
         if (payload.ram) {
           result.ram_free = payload.ram.f
           result.ram_alloc = payload.ram.a
         }
 
-        if (payload.health) {
-          result.rssi = payload.health.rssi
-        }
+        if (payload.health) result.rssi = payload.health.rssi
       } catch {
         /* ignore */
       }
     }
 
     return Object.keys(result).length > 0 ? result : null
-  }, [mqttMessages])
+  }, [mqttMessages, zone])
 
   // Derive current values from the last data point (API vs MQTT)
   const current = useMemo(() => {
@@ -205,50 +212,24 @@ export default function MonitoringPage() {
     return base
   }, [data, mqttReadings])
 
-  // 1. Estado de Conexión Unificado (para el Badge y Dashboard) usando el custom hook
-  const { connectionState } = useDeviceHeartbeat(statusTopic)
-
-  // 2. Cargando Global:
-  //    - Si la API REST está buscando historial (loading)
-  //    - O si MQTT todavía no nos entrega el estatus ('unknown') PERO solo durante los primeros 3 segundos.
-  //      Esto evita que áreas que no existen se queden en Skeleton eterno.
-  const [hasMqttTimedOut, setHasMqttTimedOut] = useState(false)
-
-  useEffect(() => {
-    setHasMqttTimedOut(false)
-    const timer = setTimeout(() => {
-      setHasMqttTimedOut(true)
-    }, 30000) // 30 segundos de gracia para que MQTT despierte. Coincide con PUBLISH_INTERVAL del firmware.
-
-    return () => clearTimeout(timer)
-  }, [zone])
-
-  const isMqttLoading = connectionState === 'unknown' && !hasMqttTimedOut
-
-  // 2. Estado Offline (para las cards):
-  //    Se considera offline si es explícitamente offline, zombie, o si ya pasó el tiempo de gracia y sigue 'unknown'.
-  const isOffline =
-    connectionState === 'offline' ||
-    connectionState === 'zombie' ||
-    (connectionState === 'unknown' && hasMqttTimedOut)
-
-  // Format rain duration
   const formatDuration = (seconds: number) => {
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
 
-    if (hours > 0) return `${hours}h ${minutes}m`
+    if (hours > 0) return `${hours}h ${minutes} min`
 
-    return `${minutes}m`
+    return `${minutes} min`
   }
 
   // Simple trend calculation (last vs average of last 5)
   const calculateTrend = (key: 'temperature' | 'humidity' | 'illuminance') => {
     if (data.length < 5) return 'stable'
+
     const last = Number(data[data.length - 1][key])
     const prev = Number(data[data.length - 5][key])
 
     if (last > prev + 0.5) return 'up'
+
     if (last < prev - 0.5) return 'down'
 
     return 'stable'
@@ -299,6 +280,29 @@ export default function MonitoringPage() {
           title: 'Intensidad de Lluvia',
           icon: <CloudRain className="h-4 w-4" />,
         }
+      case 'rain_events':
+        return {
+          dataKey: 'duration',
+          color: '#3b82f6',
+          unit: 'min',
+          title: 'Duración',
+          icon: <FaChartLine className="h-4 w-4" />,
+          chartType: 'bar',
+          customData:
+            (rainData?.events || []).map((ev) => {
+              const endDate = new Date(ev.time)
+              const startDate = new Date(endDate.getTime() - ev.duration * 1000)
+
+              return {
+                time: ev.time,
+                duration: Math.round(ev.duration / 60),
+                intensity: ev.intensity,
+                startTime: formatTime12h(startDate),
+                endTime: formatTime12h(endDate),
+                dateLabel: formatDateLong(endDate),
+              }
+            }) || [],
+        }
       default:
         return {
           dataKey: 'temperature',
@@ -312,69 +316,27 @@ export default function MonitoringPage() {
 
   const chartProps = selectedMetric ? getChartProps() : null
 
-  // Lógica de clasificación de iluminancia (basada en docs/specs/02-light-standards-orchids.md)
-  const getInteriorLuxStatus = (
-    val: number,
-  ): { status: 'optimal' | 'warning' | 'critical'; label: string } => {
-    if (val < 10000) return { status: 'warning', label: 'Bajo' }
+  const climate = (() => {
+    const lux = Number(current.illuminance) || 0
+    const rain = Number(current.rain_intensity) || 0
+    const hour = new Date(current.time || 0).getHours()
 
-    if (val <= 45000) return { status: 'optimal', label: 'Óptimo' }
+    // Cálculo de frescura del dato
+    const lastUpdate = new Date(current.time || 0).getTime()
+    const minutesSinceLastUpdate = (Date.now() - lastUpdate) / 60000
 
-    if (val <= 60000) return { status: 'warning', label: 'Alto' }
-
-    return { status: 'critical', label: 'Peligro' }
-  }
-
-  const getExteriorLuxStatus = (
-    val: number,
-  ): { status: 'optimal' | 'warning' | 'critical'; label: string } => {
-    if (val < 20000) return { status: 'optimal', label: 'Sombra' }
-
-    if (val < 60000) return { status: 'optimal', label: 'Nublado' }
-
-    if (val < 90000) return { status: 'optimal', label: 'Soleado' }
-
-    return { status: 'warning', label: 'Extremo' }
-  }
-
-  const intLux = getInteriorLuxStatus(current.illuminance)
-  const extLux = getExteriorLuxStatus(current.illuminance)
-
-  // 3. Lógica de Clima Inteligente (Deducción por sensores + tiempo)
-  const getClimateStatus = () => {
-    // Prioridad 1: Lluvia
-    const isRaining = Number(current.rain_intensity) > 0
-
-    if (isRaining) {
+    if (rain > 20) {
       return {
         label: 'Lloviendo',
         icon: <CloudRain className="h-6 w-6 text-blue-400" />,
         color: 'blue' as const,
-        description: 'Precipitación detectada',
+        description: 'Precipitación activa',
         status: 'warning' as const,
       }
     }
 
-    const lux = Number(current.illuminance) || 0
-    const hour = new Date(current.time || 0).getHours()
-    const minutesSinceLastUpdate = (Date.now() - new Date(current.time || 0).getTime()) / 60000
-
-    // Prioridad 1.5: Desconocido (Datos muy viejos o nulos)
-    if (minutesSinceLastUpdate > 60 || (!current.time && !isRaining)) {
-      return {
-        label: 'Desconocido',
-        icon: <Cloud className="h-6 w-6 text-gray-400" />,
-        color: 'cyan' as const,
-        description: 'Sin datos recientes',
-        status: 'warning' as const,
-      }
-    }
-
-    // Prioridad 2: Noche (Lux bajo o horario nocturno)
-    // Umbral: 20:00 a 06:00 o Lux muy bajo (< 50)
     if (lux < 50 || hour >= 20 || hour < 6) {
-      if (lux < 5 && hour > 7 && hour < 19) {
-        // Caso especial: Es de día pero lux es 0 -> Sensor posiblemente fallido
+      if (lux < 5 && hour > 7 && hour < 19 && minutesSinceLastUpdate < 10) {
         return {
           label: 'Falla Sensor',
           icon: <Moon className="h-6 w-6 text-red-400" />,
@@ -386,73 +348,112 @@ export default function MonitoringPage() {
 
       return {
         label: 'Noche',
-        icon: <Moon className="h-6 w-6 text-indigo-300" />,
-        color: 'blue' as const,
+        icon: <Moon className="h-6 w-6 text-indigo-400" />,
+        color: 'purple' as const,
         description: 'Cielos oscuros',
         status: 'optimal' as const,
       }
     }
 
-    // Prioridad 3: Soleado (Lux alto)
-    if (lux > 25000) {
-      return {
-        label: 'Soleado',
-        icon: <Sun className="h-6 w-6 text-yellow-500" />,
-        color: 'yellow' as const,
-        description: 'Cielos despejados',
-        status: 'optimal' as const,
+    if (zone === 'EXTERIOR') {
+      if (lux < 5000) {
+        return {
+          label: 'Luz Indirecta',
+          icon: <Cloud className="h-6 w-6 text-slate-400" />,
+          color: 'green' as const,
+          description: 'Amanecer / Atardecer / Nube densa',
+          status: 'optimal' as const,
+        }
       }
-    }
 
-    // Prioridad 4: Nublado (Lux medio)
-    if (lux > 2000) {
+      if (lux < 25000) {
+        return {
+          label: 'Nublado',
+          icon: <Cloud className="h-6 w-6 text-slate-300" />,
+          color: 'cyan' as const,
+          description: 'Luz difusa / Cielo cubierto',
+          status: 'optimal' as const,
+        }
+      }
+
+      if (lux < 55000) {
+        return {
+          label: 'Soleado',
+          icon: <Sun className="h-6 w-6 text-yellow-400" />,
+          color: 'yellow' as const,
+          description: 'Radiación directa',
+          status: 'optimal' as const,
+        }
+      }
+
       return {
-        label: 'Nublado',
-        icon: <Cloud className="h-6 w-6 text-gray-400" />,
+        label: 'Extremo',
+        icon: <Sun className="h-6 w-6 text-orange-500" />,
         color: 'orange' as const,
-        description: 'Luz tamizada por nubes',
-        status: 'optimal' as const,
+        description: 'Radiación crítica / Riesgo térmico',
+        status: 'warning' as const,
+      }
+    } else {
+      if (lux < 10000)
+        return {
+          label: 'Bajo',
+          icon: <Cloud className="h-6 w-6 text-slate-400" />,
+          color: 'orange' as const,
+          description: 'Iluminación insuficiente',
+          status: 'warning' as const,
+        }
+
+      if (lux <= 45000)
+        return {
+          label: 'Óptimo',
+          icon: <Sun className="h-6 w-6 text-yellow-400" />,
+          color: 'green' as const,
+          description: 'Rango ideal para crecimiento',
+          status: 'optimal' as const,
+        }
+
+      if (lux <= 60000)
+        return {
+          label: 'Alto',
+          icon: <Sun className="h-6 w-6 text-yellow-500" />,
+          color: 'yellow' as const,
+          description: 'Límite superior recomendado',
+          status: 'warning' as const,
+        }
+
+      return {
+        label: 'Peligro',
+        icon: <Sun className="h-6 w-6 text-red-500" />,
+        color: 'orange' as const,
+        description: 'Estrés lumínico detectado',
+        status: 'critical' as const,
       }
     }
-
-    // Prioridad 5: Atardecer / Sombrío (Lux bajo pero de día)
-    return {
-      label: 'Sombrío',
-      icon: <CloudSun className="h-6 w-6 text-orange-300" />,
-      color: 'orange' as const,
-      description: 'Baja luminosidad / Atardecer',
-      status: 'optimal' as const,
-    }
-  }
-
-  const climate = getClimateStatus()
+  })()
 
   return (
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
       <div className="flex flex-col gap-6">
-        {/* Cabecera Tipo Dynamic Island */}
         <SmartDeviceHeader
           connectionState={connectionState}
           deviceDescription="Condiciones ambientales del orquideario en tiempo real e históricos."
           deviceName="Monitor Ambiental"
           dropdownTitle="Estación Meteorológica"
-          isLoadingStatus={isMqttLoading}
+          //isLoadingStatus={isMqttLoading}
           selectedZone={zone}
-          zones={['ZONA_A', 'EXTERIOR']}
-          onZoneChanged={setZone}
+          zones={['EXTERIOR', 'ZONA_A']}
+          onZoneChanged={(newZone) => setZone(newZone as 'EXTERIOR' | 'ZONA_A')}
         />
 
-        {/* Tarjetas de Parámetros Dinámicas */}
         {zone !== 'EXTERIOR' ? (
           <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-3 tds-xl:gap-6 grid grid-cols-1 gap-5">
-            {/* Temperature Card */}
             <EnvironmentCard
               color="orange"
               hasData={data.length > 0}
               icon={<Thermometer className="h-6 w-6" />}
               isActive={selectedMetric === 'temperature'}
               isLoading={initialLoading || isMqttLoading}
-              isOffline={isOffline}
+              isOffline={connectionState === 'offline'}
               status={current.temperature > 28 || current.temperature < 18 ? 'warning' : 'optimal'}
               title="Temperatura"
               trend={calculateTrend('temperature')}
@@ -461,14 +462,13 @@ export default function MonitoringPage() {
               onClick={() => setSelectedMetric('temperature')}
             />
 
-            {/* Humidity Card */}
             <EnvironmentCard
               color="blue"
               hasData={data.length > 0}
               icon={<Droplets className="h-6 w-6" />}
               isActive={selectedMetric === 'humidity'}
               isLoading={initialLoading || isMqttLoading}
-              isOffline={isOffline}
+              isOffline={connectionState === 'offline'}
               status={current.humidity < 50 ? 'warning' : 'optimal'}
               title="Humedad Relativa"
               trend={calculateTrend('humidity')}
@@ -477,7 +477,6 @@ export default function MonitoringPage() {
               onClick={() => setSelectedMetric('humidity')}
             />
 
-            {/* Illuminance Card (Internal) */}
             <EnvironmentCard
               className="tds-sm:col-span-2 tds-lg:col-span-1"
               color="yellow"
@@ -485,9 +484,8 @@ export default function MonitoringPage() {
               icon={<Sun className="h-6 w-6" />}
               isActive={selectedMetric === 'illuminance'}
               isLoading={initialLoading || isMqttLoading}
-              isOffline={isOffline}
-              status={intLux.status}
-              statusLabel={intLux.label}
+              isOffline={connectionState === 'offline'}
+              status="optimal"
               title="Iluminancia"
               trend={calculateTrend('illuminance')}
               unit="lux"
@@ -497,7 +495,6 @@ export default function MonitoringPage() {
           </div>
         ) : (
           <div className="tds-sm:grid-cols-2 tds-xl:gap-6 grid grid-cols-1 gap-5">
-            {/* External Illuminance Card */}
             <EnvironmentCard
               color="yellow"
               description="Estación Meteorológica"
@@ -505,16 +502,14 @@ export default function MonitoringPage() {
               icon={<Sun className="h-6 w-6" />}
               isActive={selectedMetric === 'illuminance'}
               isLoading={initialLoading || isMqttLoading}
-              isOffline={isOffline}
-              status={extLux.status}
-              statusLabel={extLux.label}
+              isOffline={connectionState === 'offline'}
+              status="optimal"
               title="Iluminancia"
               unit="lux"
               value={Math.round(current.illuminance).toLocaleString()}
               onClick={() => setSelectedMetric('illuminance')}
             />
 
-            {/* Rain Intensity Card (if in Exterior) */}
             {zone === 'EXTERIOR' && (
               <EnvironmentCard
                 color="blue"
@@ -523,7 +518,7 @@ export default function MonitoringPage() {
                 icon={<CloudRain className="h-6 w-6" />}
                 isActive={selectedMetric === 'rain_intensity'}
                 isLoading={initialLoading || isMqttLoading}
-                isOffline={isOffline}
+                isOffline={connectionState === 'offline'}
                 status={Number(current.rain_intensity) > 0 ? 'warning' : 'optimal'}
                 title="Lluvia"
                 trend="stable"
@@ -533,7 +528,6 @@ export default function MonitoringPage() {
               />
             )}
 
-            {/* Climate Status Card */}
             <EnvironmentCard
               hasData
               color={climate.color}
@@ -541,7 +535,7 @@ export default function MonitoringPage() {
               icon={climate.icon}
               isActive={false}
               isLoading={initialLoading || isMqttLoading}
-              isOffline={isOffline}
+              isOffline={connectionState === 'offline'}
               status={climate.status}
               title="Estado del Clima"
               unit=""
@@ -549,30 +543,44 @@ export default function MonitoringPage() {
               onClick={() => {}}
             />
 
-            {/* Rain Statistics Card */}
             <EnvironmentCard
               color="blue"
               description={
-                rainData
-                  ? `${rainData.eventCount} eventos | Prom: ${rainData.averageIntensity}%`
-                  : 'Sin registros'
+                rainData ? (
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold">
+                      {range === '24h'
+                        ? `${rainData.eventCount} eventos`
+                        : formatDuration(rainData.totalDurationSeconds)}
+                    </span>
+                    <span className="text-primary/20">|</span>
+                    <span className="font-semibold">Prom: {rainData.averageIntensity}%</span>
+                  </div>
+                ) : (
+                  'Sin registros'
+                )
               }
               hasData={!!rainData}
               icon={<FaChartLine className="h-6 w-6" />}
-              isActive={selectedMetric === 'rain_intensity'}
+              isActive={selectedMetric === 'rain_events'}
               isLoading={initialLoading || isMqttLoading}
-              isOffline={isOffline}
+              isOffline={connectionState === 'offline'}
               status="optimal"
-              title="Resumen de Lluvia"
-              unit=""
-              value={!rainData ? '--' : formatDuration(rainData.totalDurationSeconds)}
-              onClick={() => setSelectedMetric('rain_intensity')}
+              title="Eventos de Lluvia"
+              unit={range === '24h' ? '' : 'Eventos'}
+              value={
+                !rainData
+                  ? '--'
+                  : range === '24h'
+                    ? formatDuration(rainData.totalDurationSeconds)
+                    : rainData.eventCount
+              }
+              onClick={() => setSelectedMetric('rain_events')}
             />
           </div>
         )}
       </div>
 
-      {/* Main Chart - Full Width */}
       <div className="mt-2 w-full">
         {initialLoading || isMqttLoading ? (
           <div className="border-input-outline bg-surface/50 flex h-[400px] w-full animate-pulse items-center justify-center rounded-xl border border-dashed">
@@ -592,12 +600,13 @@ export default function MonitoringPage() {
           </div>
         ) : chartProps ? (
           <SensorHistoryChart
+            chartType={chartProps.chartType as 'area' | 'bar'}
             color={chartProps.color}
-            data={data}
+            data={chartProps.customData || data}
             dataKey={chartProps.dataKey}
             icon={chartProps.icon}
             range={range}
-            title={`Histórico ${chartProps.title}`}
+            title={chartProps.title}
             unit={chartProps.unit}
             onRangeChange={setRange}
           />

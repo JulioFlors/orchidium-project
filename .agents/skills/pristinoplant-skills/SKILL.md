@@ -22,10 +22,10 @@ Este documento define las directrices, convenciones y flujos de trabajo ESTRICTO
 
 ### Paso 1: Principios Nucleares
 
-1. **Idioma**: Todo en **Español**.
+1. **Idioma**: Todo en **Español**. Esto incluye el bloque de pensamiento (`thought`), el razonamiento interno y cualquier comunicación con el usuario.
 2. **Usuario**: Perfil de aprendizaje. Explicaciones claras.
 3. **Archivos de Chat**: Usar `.txt` para archivos efímeros (context.txt, commit.txt).
-4. **Artefactos**: Todos los documentos generados (`walkthrough.md`, `implementation_plan.md`, `task.md`, etc.) y el **razonamiento** deben estar en **Español**.
+4. **Artefactos**: Todos los documentos generados (`walkthrough.md`, `implementation_plan.md`, `task.md`, etc.) y el **razonamiento** (pensamientos internos) deben estar en **Español**.
 
 ### Paso 2: Flujo de Trabajo de Commits (Estricto)
 

@@ -3,6 +3,8 @@
 import {
   Area,
   AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
@@ -24,6 +26,7 @@ interface SensorHistoryChartProps {
   icon?: React.ReactNode
   range: string
   onRangeChange: (range: string) => void
+  chartType?: 'area' | 'bar'
 }
 
 interface CustomTooltipProps {
@@ -58,15 +61,36 @@ function CustomTooltip({
     const displayPhase = data.phase ? phaseLabels[String(data.phase)] || String(data.phase) : null
 
     return (
-      <div className="bg-surface border-input-outline relative z-50 flex flex-col overflow-visible rounded-lg border p-3 text-xs shadow-md outline-none">
-        <span className="text-secondary mb-1 font-medium">
-          {label !== undefined ? formatTime(label) : ''}
-        </span>
-        <span className="text-sm font-semibold" style={{ color }}>
+      <div className="bg-surface border-input-outline relative z-50 flex flex-col overflow-visible rounded-lg border p-3 text-sm shadow-md outline-none">
+        {!data.dateLabel && (
+          <span className="text-primary mb-1 font-medium">
+            {label !== undefined ? formatTime(label) : ''}
+          </span>
+        )}
+        <span className="font-semibold" style={{ color }}>
           {title.replace('Histórico ', '')}: {payload[0].value} {unit}
         </span>
+
+        {/* Detalles específicos para eventos discretos (ej: Lluvia) */}
+        {data.intensity !== undefined && (
+          <span className="mt-1 flex items-center gap-1.5 font-semibold text-blue-400">
+            Intensidad: {data.intensity}%
+          </span>
+        )}
+
+        {data.startTime && data.endTime && (
+          <span className="text-primary mt-1 font-semibold">
+            {data.startTime} - {data.endTime}
+          </span>
+        )}
+
+        {/* Fecha y Día abajo de la duración (solicitado para barras) */}
+        {data.dateLabel && (
+          <span className="text-primary mt-0.5 block font-semibold">{data.dateLabel}</span>
+        )}
+
         {displayPhase && (
-          <span className="mt-1 inline-flex items-center gap-1.5 text-[9px] font-bold tracking-widest text-cyan-400 uppercase">
+          <span className="mt-1 inline-flex items-center gap-1.5 font-bold tracking-widest text-cyan-400 uppercase">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" />
             Modo: {displayPhase}
           </span>
@@ -88,6 +112,7 @@ export function SensorHistoryChart({
   icon,
   range,
   onRangeChange,
+  chartType = 'area',
 }: SensorHistoryChartProps) {
   // Configuración dinámica del formateador de tiempo / fecha según el rango
   const getTimeFormatter = (r: string) => {
@@ -197,59 +222,94 @@ export function SensorHistoryChart({
       {/* CHART AREA */}
       <div className="h-[280px] w-full">
         <ResponsiveContainer height="100%" width="100%">
-          <AreaChart accessibilityLayer={false} data={data}>
-            <defs>
-              <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
-                <stop offset="5%" stopColor={color} stopOpacity={0.25} />
-                <stop offset="95%" stopColor={color} stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid
-              stroke="var(--color-input-outline)"
-              strokeDasharray="3 3"
-              vertical={false}
-            />
-            <XAxis axisLine={false} dataKey="time" tick={false} tickLine={false} />
-            <YAxis
-              axisLine={false}
-              domain={dataKey === 'humidity' ? [0, 100] : ['auto', 'auto']}
-              fontSize={11}
-              stroke="var(--color-secondary)"
-              tickFormatter={(value) =>
-                value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value.toFixed(1)
-              }
-              tickLine={false}
-              tickMargin={10}
-              width={45}
-            />
-            <Tooltip
-              content={
-                <CustomTooltip
-                  color={color}
-                  formatTime={formatLabelTime}
-                  title={title}
-                  unit={unit}
-                />
-              }
-              cursor={{
-                stroke: color,
-                strokeWidth: 1,
-                strokeDasharray: '4 4',
-                fill: 'transparent',
-              }}
-              wrapperStyle={{ outline: 'none' }}
-            />
-            <Area
-              activeDot={{ style: { outline: 'none' } }}
-              animationDuration={800}
-              dataKey={dataKey}
-              fill={`url(#${gradientId})`}
-              fillOpacity={1}
-              stroke={color}
-              strokeWidth={2}
-              type="monotone"
-            />
-          </AreaChart>
+          {chartType === 'area' ? (
+            <AreaChart accessibilityLayer={false} data={data}>
+              <defs>
+                <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
+                  <stop offset="5%" stopColor={color} stopOpacity={0.25} />
+                  <stop offset="95%" stopColor={color} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid
+                stroke="var(--color-input-outline)"
+                strokeDasharray="3 3"
+                vertical={false}
+              />
+              <XAxis axisLine={false} dataKey="time" tick={false} tickLine={false} />
+              <YAxis
+                axisLine={false}
+                domain={dataKey === 'humidity' ? [0, 100] : ['auto', 'auto']}
+                fontSize={11}
+                stroke="var(--color-secondary)"
+                tickFormatter={(value) =>
+                  value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value.toFixed(1)
+                }
+                tickLine={false}
+                tickMargin={10}
+                width={45}
+              />
+              <Tooltip
+                content={
+                  <CustomTooltip
+                    color={color}
+                    formatTime={formatLabelTime}
+                    title={title}
+                    unit={unit}
+                  />
+                }
+                cursor={{
+                  stroke: color,
+                  strokeWidth: 1,
+                  strokeDasharray: '4 4',
+                  fill: 'transparent',
+                }}
+                wrapperStyle={{ outline: 'none' }}
+              />
+              <Area
+                activeDot={{ style: { outline: 'none' } }}
+                animationDuration={800}
+                dataKey={dataKey}
+                fill={`url(#${gradientId})`}
+                fillOpacity={1}
+                stroke={color}
+                strokeWidth={2}
+                type="monotone"
+              />
+            </AreaChart>
+          ) : (
+            <BarChart accessibilityLayer={false} data={data}>
+              <CartesianGrid
+                stroke="var(--color-input-outline)"
+                strokeDasharray="3 3"
+                vertical={false}
+              />
+              <XAxis axisLine={false} dataKey="time" tick={false} tickLine={false} />
+              <YAxis
+                axisLine={false}
+                fontSize={11}
+                stroke="var(--color-secondary)"
+                tickFormatter={(value) =>
+                  value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value.toFixed(1)
+                }
+                tickLine={false}
+                tickMargin={10}
+                width={45}
+              />
+              <Tooltip
+                content={
+                  <CustomTooltip
+                    color={color}
+                    formatTime={formatLabelTime}
+                    title={title}
+                    unit={unit}
+                  />
+                }
+                cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
+                wrapperStyle={{ outline: 'none' }}
+              />
+              <Bar animationDuration={800} dataKey={dataKey} fill={color} radius={[4, 4, 0, 0]} />
+            </BarChart>
+          )}
         </ResponsiveContainer>
       </div>
 

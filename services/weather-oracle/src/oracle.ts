@@ -255,7 +255,7 @@ export async function syncAgroHistory() {
         return true;
     } catch (error: any) {
         if (error.response?.status === 401) {
-             Logger.warn('AgroMonitoring History (401): Historial inaccesible. Causas probables: Nivel Free de API o polígono en fase de inicialización (24h).');
+             Logger.warn('AgroMonitoring History (401): Acceso denegado. Esta función (Historial de Precipitación) suele requerir un plan de pago (Premium) en AgroMonitoring.');
              return false;
         }
         Logger.error('Fallo al sincronizar historial con AgroMonitoring:', error.message);

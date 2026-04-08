@@ -27,8 +27,8 @@ export async function GET(request: Request) {
       rangeString = '30d'
       break
     case 'all':
-      rangeString = '30d'
-      break // Cloud free tier limit
+      rangeString = '365d'
+      break
     default:
       rangeString = '24h'
   }
@@ -40,11 +40,13 @@ export async function GET(request: Request) {
   // InfluxDB v3 usa SQL.
   // El servicio 'ingest' escribe en la medición "environment_metrics".
 
+  const timeFilter = range === 'all' ? '' : `AND time >= now() - interval '${rangeString}'`
+
   const query = `
     SELECT *
     FROM "environment_metrics"
     WHERE "zone" = '${zone}'
-    AND time >= now() - interval '${rangeString}'
+    ${timeFilter}
     ORDER BY time ASC
   `
 
@@ -59,6 +61,7 @@ export async function GET(request: Request) {
         temperature: row.temperature || 0,
         humidity: row.humidity || 0,
         illuminance: row.illuminance || 0,
+        rain_intensity: row.rain_intensity || 0,
         // (Optional) phase for external metrics diagnostic
         ...(row.phase ? { phase: row.phase } : {}),
       }

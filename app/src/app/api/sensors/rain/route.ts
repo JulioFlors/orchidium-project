@@ -19,15 +19,20 @@ export async function GET(_request: Request) {
     case '30d':
       rangeString = '30d'
       break
+    case 'all':
+      rangeString = '365d'
+      break
     default:
       rangeString = '24h'
   }
+
+  const timeFilter = range === 'all' ? '' : `AND time >= now() - interval '${rangeString}'`
 
   const query = `
     SELECT *
     FROM "rain_events"
     WHERE "zone" = '${zone}'
-    AND time >= now() - interval '${rangeString}'
+    ${timeFilter}
     ORDER BY time ASC
   `
 
