@@ -85,7 +85,7 @@ export async function aggregateDailyStats(targetDate = new Date()) {
       }
 
       // ── 2. Métricas ambientales (24h completas) ─────────────────────────
-      const rawQuery = `SELECT time, temperature, humidity, illuminance FROM "environment_metrics" WHERE "zone" = '${zone}' ${timeFilter}`
+      const rawQuery = `SELECT * FROM "environment_metrics" WHERE "zone" = '${zone}' ${timeFilter}`
 
       // Acumuladores – Temperatura (24h)
       let countTemp = 0, sumTemp = 0, minTemp = Infinity, maxTemp = -Infinity

@@ -95,7 +95,7 @@ async function processDay(zone: ZoneType, dayStart: Date): Promise<void> {
   }
 
   // ── 2. Métricas ambientales ───────────────────────────────────────────────
-  const rawQuery = `SELECT time, temperature, humidity, illuminance FROM "environment_metrics" WHERE "zone" = '${zone}' AND time >= '${dayStart.toISOString()}' AND time < '${dayEnd.toISOString()}' ORDER BY time ASC`
+  const rawQuery = `SELECT * FROM "environment_metrics" WHERE "zone" = '${zone}' AND time >= '${dayStart.toISOString()}' AND time < '${dayEnd.toISOString()}' ORDER BY time ASC`
 
   let countTemp = 0, sumTemp = 0, minTemp = Infinity, maxTemp = -Infinity
   let minTempTime: string | null = null, maxTempTime: string | null = null
