@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
 
+import { RecipesView } from './ui'
+
 import { getPrograms, getAgrochemicals } from '@/actions'
-import { RecipesClient } from '@/components/lab'
 
 export const metadata: Metadata = {
   title: 'Recetas y Programas',
@@ -22,7 +23,7 @@ export default async function RecipesPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <RecipesClient
+      <RecipesView
         availableAgrochemicals={availableAgrochemicals}
         fertilizationPrograms={fertilizationPrograms}
         phytosanitaryPrograms={phytosanitaryPrograms}

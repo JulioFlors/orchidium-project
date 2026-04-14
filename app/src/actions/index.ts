@@ -23,3 +23,9 @@ export * from './product/get-species-by-slug'
 export * from './product/get-species-by-type'
 
 export * from './product/get-stock-by-slug'
+
+export * from './operations/control-actions'
+
+export * from './operations/history-actions'
+
+export * from './operations/queue-actions'

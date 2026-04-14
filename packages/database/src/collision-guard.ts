@@ -86,22 +86,42 @@ export class CollisionGuard {
     const endDate = new Date(now.getTime() + daysToCheck * 24 * 60 * 60 * 1000)
 
     const myDates = this.getCronDates(cronTrigger, now, endDate)
+    const myDurationMs = (durationMinutes + GRACE_WINDOW_MINUTES) * 60000
+
+    // 1. Recopilar todos los intervalos ocupados por otros programas activos
+    const occupiedIntervals: { start: number; end: number; name: string }[] = []
     
     for (const schedule of activeSchedules) {
         const theirDates = this.getCronDates(schedule.cronTrigger, now, endDate)
+        const theirDurationMs = (schedule.durationMinutes + GRACE_WINDOW_MINUTES) * 60000
         
-        for (const myStart of myDates) {
-            const myEnd = new Date(myStart.getTime() + (durationMinutes + GRACE_WINDOW_MINUTES) * 60000)
+        for (const start of theirDates) {
+            occupiedIntervals.push({
+                start: start.getTime(),
+                end: start.getTime() + theirDurationMs,
+                name: schedule.name
+            })
+        }
+    }
+
+    // 2. Ordenar intervalos ocupados por tiempo de inicio para búsqueda eficiente
+    occupiedIntervals.sort((a, b) => a.start - b.start)
+    
+    // 3. Validar mis fechas contra la línea de tiempo ocupada
+    for (const myStart of myDates) {
+        const myStartTime = myStart.getTime()
+        const myEndTime = myStartTime + myDurationMs
+        
+        for (const interval of occupiedIntervals) {
+            // Optimización: si el inicio del intervalo ajeno es posterior a nuestro fin, 
+            // ya no chocamos con este ni con los siguientes (por estar ordenados).
+            if (interval.start >= myEndTime) break
             
-            for (const theirStart of theirDates) {
-                const theirEnd = new Date(theirStart.getTime() + (schedule.durationMinutes + GRACE_WINDOW_MINUTES) * 60000)
-                
-                // Colisión si se cruzan las ventanas
-                if (myStart < theirEnd && theirStart < myEnd) {
-                    return {
-                        hasCollision: true,
-                        details: `Colisión predecible detectada con el programa '${schedule.name}' el ${myStart.toLocaleDateString()} a las ${myStart.toLocaleTimeString()}`
-                    }
+            // Condición de colisión: solapamiento de ventanas
+            if (myStartTime < interval.end && interval.start < myEndTime) {
+                return {
+                    hasCollision: true,
+                    details: `Colisión detectada con '${interval.name}' el ${myStart.toLocaleDateString()} a las ${myStart.toLocaleTimeString()}`
                 }
             }
         }

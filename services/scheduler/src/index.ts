@@ -259,9 +259,9 @@ class CommandRetryManager {
     const existing = this.pending.get(key)
     if (existing) {
       if (existing.timer) clearInterval(existing.timer)
-      Logger.debug(`Reiniciando seguimiento: ${colors.magenta}${payload}${colors.reset}`)
+      Logger.debug(`Sincronización del comando reiniciada: ${colors.magenta}${payload}${colors.reset}`)
     } else {
-      Logger.debug(`Seguimiento iniciado: ${colors.magenta}${payload}${colors.reset}`)
+      Logger.debug(`Iniciando seguimiento de comando: ${colors.magenta}${payload}${colors.reset}`)
     }
     
     const command: PendingCommand = {
@@ -291,7 +291,7 @@ class CommandRetryManager {
       if (command.payload.includes(taskId)) {
         if (command.timer) clearInterval(command.timer)
         this.pending.delete(key)
-        Logger.debug(`Seguimiento finalizado (TaskID detectado): ${taskId.slice(0, 8)}`)
+        Logger.debug(`El nodo confirmó ACK para la tarea (ID: ${taskId.slice(0, 8)})`)
       }
     }
   }
@@ -305,8 +305,13 @@ class CommandRetryManager {
     const command = this.pending.get(key)
     if (!command) return
 
+    // 🛡️ Pausar reintentos si el nodo está offline
+    if (lastActuatorState === 'offline') {
+      return 
+    }
+
     if (command.attempts >= this.MAX_ATTEMPTS) {
-      Logger.error(`Se agotaron los ${this.MAX_ATTEMPTS} intentos para: ${command.payload}`)
+      Logger.error(`Se agotaron los ${this.MAX_ATTEMPTS} intentos de entrega para: ${command.payload}`)
       if (command.timer) clearInterval(command.timer)
       this.pending.delete(key)
       return
@@ -315,7 +320,7 @@ class CommandRetryManager {
     command.attempts++
     command.lastSent = Date.now()
     
-    Logger.warn(`[RETRY ${command.attempts}/${this.MAX_ATTEMPTS}] Reenviando comando: ${colors.magenta}${command.payload}${colors.reset}`)
+    Logger.warn(`Reintentando entrega al nodo (${command.attempts}/${this.MAX_ATTEMPTS}): ${colors.magenta}${command.payload}${colors.reset}`)
     
     mqttClient.publish(command.topic, command.payload, { qos: 1 })
   }
@@ -418,7 +423,7 @@ mqttClient.on('message', async (topic, payload) => {
          * para evitar colisiones cuando el sistema de reasunción despache el comando nuevo (deuda).
          */
         for (const task of interruptedTasks) {
-          let extraNotes = 'Interrumpida: El Nodo Actuador perdió conexión durante una ventana crítica.'
+          let extraNotes = 'Interrumpida: El Nodo Actuador perdió conexión inesperadamente.'
           let addedMinutes = 0
 
           if (task.actualStartAt && task.status === TaskStatus.IN_PROGRESS) {
@@ -437,7 +442,7 @@ mqttClient.on('message', async (topic, payload) => {
         }
 
         if (interruptedTasks.length > 0) {
-          Logger.warn(`Se marcaron ${interruptedTasks.length} tareas como INTERRUMPIDAS (Handoff completado).`)
+          Logger.warn(`Se pausaron ${interruptedTasks.length} tareas para su recuperación automática.`)
         }
         
         // 🛡️ OFFLINE GUARD RELAJADO: No cancelamos, permitimos que el retryManager insista.
@@ -534,7 +539,7 @@ mqttClient.on('message', async (topic, payload) => {
 
             if (finished) {
               const purposeLabel = currentTask?.purpose || 'Tarea'
-              Logger.success(`${purposeLabel} ${taskId.slice(0, 8)} FINISHED (${completedMinutes} min)`)
+              Logger.success(`${purposeLabel} ${taskId.slice(0, 8)} FINALIZADA (${completedMinutes} min)`)
             }
           } 
           else {
@@ -542,13 +547,18 @@ mqttClient.on('message', async (topic, payload) => {
             // Si el relé es 'pump' (Bomba), y tenemos tareas IN_PROGRESS, reportamos el bypass.
             if (name === 'pump') {
                const hoursAgo = new Date(Date.now() - 2 * 3600000)
+               const gracePeriod = new Date(Date.now() - 60000) // 1 minuto de gracia para estabilización
+
                const activeInDb = await prisma.taskLog.findMany({
-                 where: { status: TaskStatus.IN_PROGRESS, scheduledAt: { gte: hoursAgo } }
+                 where: { 
+                   status: TaskStatus.IN_PROGRESS, 
+                   scheduledAt: { gte: hoursAgo, lte: gracePeriod } 
+                 }
                })
 
-               if (activeInDb.length > 0) {
-                 Logger.warn(`⚠️ [SNAPSHOT] Bomba OFF sin TaskID. Manteniendo tareas en IN_PROGRESS (Esperando SLA o ACK de válvulas).`)
-               }
+                if (activeInDb.length > 0) {
+                  Logger.warn(`⚠️ [DESINCRONIZACIÓN] La Bomba no inició tras la ventana de sincronización (60s). Tareas afectadas: ${activeInDb.length}. Verifique Presión/Válvulas.`);
+                }
             }
           }
         }
@@ -873,17 +883,18 @@ async function checkPendingTasks() {
       await processTaskLog(task)
     }
 
-    // 2. Auto-cancelar tareas PENDING expiradas (fuera de la ventana de gracia)
+    // 2. Auto-cancelar tareas expiradas (fuera de la ventana de gracia)
+    // Esto incluye PENDING normales y WAITING_CONFIRMATION (recetas sin confirmación manual)
     const expired = await prisma.taskLog.updateMany({
       where: {
-        status: TaskStatus.PENDING, // 🔴 Se elimina TaskStatus.FAILED
+        status: { in: [TaskStatus.PENDING, TaskStatus.WAITING_CONFIRMATION] },
         scheduledAt: {
           lt: graceWindow
         }
       },
       data: {
         status: TaskStatus.CANCELLED,
-        notes: 'Cancelada: ventana de ejecución expirada.'
+        notes: 'Cancelada: ventana de ejecución o tiempo de confirmación expirado.'
       }
     })
 
@@ -1018,16 +1029,24 @@ async function initScheduler() {
   })
 
   // ---- SINCRONIZACIÓN DE MONITOREO: Iluminancia (Día/Noche) ----
-  // Despertar sensor a las 5:00 AM
-  new Cron('0 5 * * *', { timezone: "America/Caracas" }, () => {
+  // Despertar sensor a las 5:30 AM
+  new Cron('30 5 * * *', { timezone: "America/Caracas" }, () => {
     Logger.info('☀  Iniciando muestreo de iluminancia (Amanecer)')
     executeSystemCommand('lux_sampling:on')
   })
 
   // Dormir sensor a las 7:00 PM
-  new Cron('0 19 * * *', { timezone: "America/Caracas" }, () => {
+  new Cron('* 19 * * *', { timezone: "America/Caracas" }, () => {
     Logger.info('🌙  Suspendiendo muestreo de iluminancia (Anochecer)')
     executeSystemCommand('lux_sampling:off')
+  })
+
+  // Agregación de métricas de telemetría diariamente a las 23:59
+  new Cron('59 23 * * *', { timezone: "America/Caracas" }, () => {
+    Logger.info('📊 Iniciando proceso de agregación de datos de Sensores.')
+    import('./cron/aggregate-daily.js').then((m) => {
+      m.aggregateDailyStats().catch(err => Logger.error('Fallo en aggregateDailyStats', err))
+    })
   })
 
 }

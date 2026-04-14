@@ -34,7 +34,10 @@ export async function getPrograms() {
       fertilizationPrograms,
       phytosanitaryPrograms,
     }
-  } catch {
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Error al obtener programas:', err)
+
     return { ok: false, message: 'No se pudieron cargar los programas' }
   }
 }
@@ -81,7 +84,10 @@ export async function upsertFertilizationProgram(data: {
     revalidatePath('/recipes')
 
     return { ok: true, program }
-  } catch {
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Error al guardar programa de fertilización:', err)
+
     return { ok: false, message: 'Error al guardar el programa de fertilización' }
   }
 }
@@ -125,7 +131,10 @@ export async function upsertPhytosanitaryProgram(data: {
     revalidatePath('/recipes')
 
     return { ok: true, program }
-  } catch {
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Error al guardar programa fitosanitario:', err)
+
     return { ok: false, message: 'Error al guardar el programa fitosanitario' }
   }
 }
@@ -139,7 +148,10 @@ export async function deleteFertilizationProgram(id: string) {
     revalidatePath('/recipes')
 
     return { ok: true }
-  } catch {
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Error al eliminar programa de fertilización:', err)
+
     return { ok: false, message: 'No se pudo eliminar el programa' }
   }
 }
@@ -153,7 +165,10 @@ export async function deletePhytosanitaryProgram(id: string) {
     revalidatePath('/recipes')
 
     return { ok: true }
-  } catch {
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error('Error al eliminar programa fitosanitario:', err)
+
     return { ok: false, message: 'No se pudo eliminar el programa' }
   }
 }

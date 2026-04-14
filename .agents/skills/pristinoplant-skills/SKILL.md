@@ -103,6 +103,7 @@ Formato: `[Emoji] [tipo] ([área]): [Título Conciso]`
 3. **Reglas de Componentes UI**:
     - **Botones**: Todo `<button>` DEBE tener explícitamente `type="button"` (salvo que sea submit).
     - **Estilos Condicionales**: Usar SIEMPRE `clsx` para clases condicionales. Nunca usar ternarios directos en `className` sin envolver.
+    - **Componentización y Sistema de Diseño**: Todo elemento UI relevante y recurrente (inputs, selects, toggles, cards) DEBE ser abstraído en un componente dentro de `src/components/ui`. Está PROHIBIDO el uso de etiquetas HTML puras con clases repetitivas. Esto garantiza la consolidación de nuestra galería de componentes y facilita refactorizaciones globales.
     - **Variables CSS**: Usar las clases de utilidad de Tailwind definidas en el tema (ej. `bg-surface`, `text-primary`, `border-input-outline`) en lugar de valores arbitrarios (`bg-[var(--color-surface)]`) o colores hardcoded (`bg-zinc-900`). Esto asegura limpieza y consistencia.
 
 4. **Colores Semánticos (Sensores)**:

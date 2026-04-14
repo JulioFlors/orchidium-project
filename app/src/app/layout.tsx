@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 
 import './globals.css'
 import { Providers } from '@/components/providers/Providers'
+import { ToastContainer } from '@/components/ui'
 import { textFont } from '@/config/fonts'
 
 export const metadata: Metadata = {
@@ -22,7 +23,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html suppressHydrationWarning lang="es">
       <body className={`${textFont.className} antialiased`}>
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+          <ToastContainer />
+        </Providers>
       </body>
     </html>
   )

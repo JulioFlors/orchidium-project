@@ -91,11 +91,16 @@ Análisis profundo en segundo plano (Data Science agronómico) para predecir y e
 * Eficiencia Energética: Implementación de Deep Sleep en nodos remotos.
 * Cálculo de Transmisión de Luz (Malla vs Sol directo).
 
-### 4.3 Gestión de Cuenta
+### 4.3 Arquitectura Zero-Spinner (Hidratación)
+
+* Implementación sistemática de Hidratación Server-to-Client en todas las vistas de datos.
+* Eliminación de parpadeos y estados de carga iniciales para una experiencia instantánea (Instant Web App).
+
+### 4.4 Gestión de Cuenta
 
 * Perfil de usuario, cambio de contraseña y eliminación de cuenta (GDPR).
 
-### 4.4 Sistema de Notificaciones (Transversal)
+### 4.5 Sistema de Notificaciones (Transversal)
 
 * Integración con Telegram/WhatsApp para notificaciones bidireccionales (alertas, confirmaciones).
 * Web Push Notifications como canal secundario.

@@ -88,9 +88,7 @@
     /* Hover general: #343537 */
     --color-hover: oklch(0.3287 0.0038 264.49);
 
-    /* Inputs: En Gemini, los inputs suelen ser del mismo color que la superficie
-       o ligeramente distintos ("Pilled shaped").
-    */
+    /* Inputs: Un tono ligeramente más oscuro que surface para contraste */
     --color-input: oklch(0.2838 0.0047 264.49);
 
     --color-input-outline: oklch(0.3523 0 264.49);
@@ -182,6 +180,12 @@
   input::placeholder {
     @apply text-secondary/75 font-semibold;
   }
+
+  /* Ocultar icono nativo de reloj en inputs de tiempo */
+  input[type='time']::-webkit-calendar-picker-indicator {
+    display: none;
+    -webkit-appearance: none;
+  }
 }
 
 @layer utilities {
@@ -262,11 +266,11 @@
   }
 
   .focus-input {
-    @apply bg-input w-full rounded px-3 py-2 leading-6 font-medium ease-in-out transition-all;
+    @apply bg-input w-full rounded px-3 py-2 leading-6 font-medium transition-all duration-300 ease-in-out outline-input-outline outline-1 -outline-offset-1;
   }
 
   .focus-input:focus {
-    @apply outline-none border-none ring-input-outline ring-1;
+    @apply outline-accessibility;
   }
 
   /* Focus accesible para las cards de producto.
@@ -485,11 +489,11 @@
 /* ---- Formularios ---- */
 @layer components {
   .form-input {
-    @apply bg-input tracking-wide mt-2 min-h-10 w-full rounded px-3 text-[15px] leading-6 font-semibold transition-colors duration-300;
+    @apply bg-input tracking-wide mt-2 min-h-10 w-full rounded px-3 text-[15px] leading-6 font-semibold transition-all duration-300 ease-in-out outline-input-outline outline-1 -outline-offset-1;
   }
 
   .form-input:focus {
-    @apply border-none outline-1 -outline-offset-1 outline-input-outline;
+    @apply outline-accessibility;
   }
 }
 

@@ -1,11 +1,12 @@
 import type { Metadata } from 'next'
 
+import { SuppliesView } from './ui'
+
 import { getAgrochemicals } from '@/actions'
-import { SuppliesClient } from '@/components/lab'
 
 export const metadata: Metadata = {
   title: 'Insumos Químicos',
-  description: 'Gestión de fertilizantes y fitosanitarios para el cuidado de las orquídeas.',
+  description: 'Gestión del inventario de fertilizantes y fitosanitarios.',
 }
 
 export default async function SuppliesPage() {
@@ -15,7 +16,7 @@ export default async function SuppliesPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <SuppliesClient agrochemicals={agrochemicals} />
+      <SuppliesView agrochemicals={agrochemicals} />
     </div>
   )
 }

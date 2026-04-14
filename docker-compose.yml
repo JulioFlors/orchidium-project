@@ -55,6 +55,7 @@ services:
       - --node-id=node0
       - --object-store=file
       - --data-dir=/var/lib/influxdb3/data
+      - --query-file-limit=1000
       - --http-bind=0.0.0.0:8181
 
   ingest-local:
@@ -243,6 +244,7 @@ services:
       - --node-id=node0
       - --object-store=file
       - --data-dir=/var/lib/influxdb3/data
+      - --query-file-limit=1000
       - --http-bind=0.0.0.0:8181
       - --tls-cert=/ssl/fullchain.pem
       - --tls-key=/ssl/privkey.pem
@@ -310,7 +312,7 @@ services:
       MQTT_PASSWORD: ${MQTT_PASS_BACKEND}
       MQTT_USERNAME: ${MQTT_USER_BACKEND}
 
-      NODE_ENV: development
+      NODE_ENV: production
       NODE_OPTIONS: "--dns-result-order=ipv4first"
 
 

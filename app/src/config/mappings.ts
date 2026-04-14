@@ -41,7 +41,7 @@ export const PotSizeDimensions: Record<PotSize, string> = {
 }
 
 export const ZoneTypeLabels: Record<ZoneType, string> = {
-  [ZoneType.ZONA_A]: 'Zona A',
+  [ZoneType.ZONA_A]: 'Orquideario',
   [ZoneType.ZONA_B]: 'Zona B',
   [ZoneType.ZONA_C]: 'Zona C',
   [ZoneType.ZONA_D]: 'Zona D',
@@ -99,6 +99,19 @@ export const TaskSourceLabels: Record<TaskSource, string> = {
   [TaskSource.MANUAL]: 'Manual',
   [TaskSource.DEFERRED]: 'Diferido',
   [TaskSource.ROUTINE]: 'Rutina',
+}
+
+/**
+ * Mapa de Capacidades (Capability Map)
+ * Define qué zonas físicas tienen hardware instalado para soportar ciertas operaciones.
+ * Actualmente, solo el Orquideario (ZONA_A) cuenta con actuadores de riego.
+ */
+export const ZoneCapabilities: Record<TaskPurpose, ZoneType[]> = {
+  [TaskPurpose.IRRIGATION]: [ZoneType.ZONA_A],
+  [TaskPurpose.FERTIGATION]: [ZoneType.ZONA_A],
+  [TaskPurpose.FUMIGATION]: [ZoneType.ZONA_A],
+  [TaskPurpose.HUMIDIFICATION]: [ZoneType.ZONA_A],
+  [TaskPurpose.SOIL_WETTING]: [ZoneType.ZONA_A],
 }
 
 /**

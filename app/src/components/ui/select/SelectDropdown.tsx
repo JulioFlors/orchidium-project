@@ -17,20 +17,27 @@ interface SelectDropdownProps {
   value: string | number | undefined
   onChange: (value: string | number) => void
   placeholder?: string
+  emptyMessage?: string
   disabled?: boolean
   className?: string
   buttonClassName?: string
   menuClassName?: string
+  error?: boolean | string
 }
 
 const motionProps = {
   initial: { opacity: 0, scale: 0.95, y: -5 },
-  animate: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.15, ease: 'easeOut' as const } },
+  animate: {
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: { duration: 0.15, ease: 'easeOut' as const },
+  },
   exit: { opacity: 0, scale: 0.95, y: -5, transition: { duration: 0.1, ease: 'easeIn' as const } },
 }
 
 /**
- * Dropdown reutilizable basado en Radix/CommandIsland concepts pero puramente Vanilla React.
+ * Dropdown reutilizable basado en Radix/CommandIsland conceptos pero puramente Vanilla React.
  * Aporta navegación por teclado (ArrowUp/Down, Enter, Esc), trampa de foco y
  * animaciones motion integradas.
  */
@@ -40,10 +47,12 @@ export function SelectDropdown({
   value,
   onChange,
   placeholder = 'Seleccionar',
+  emptyMessage = 'No hay opciones disponibles',
   disabled = false,
   className,
   buttonClassName,
   menuClassName,
+  error,
 }: SelectDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [focusedIndex, setFocusedIndex] = useState<number>(-1)
@@ -182,7 +191,7 @@ export function SelectDropdown({
   return (
     <div
       ref={containerRef}
-      className={clsx('relative w-full font-sans', className)}
+      className={clsx('relative w-full font-sans', isOpen && 'z-50', className)}
       onKeyDown={handleKeyDown}
     >
       <button
@@ -190,11 +199,14 @@ export function SelectDropdown({
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         className={clsx(
-          'flex w-full items-center justify-between rounded-md border px-3 py-2 text-sm transition-colors',
-          'focus:ring-opacity-50 focus:ring-2 focus:outline-none',
+          'flex min-h-10 w-full items-center justify-between rounded px-3 py-2 text-sm transition-all duration-300',
+          'outline-1 -outline-offset-1',
+          (isOpen || disabled === false) && 'outline-solid',
+          isOpen ? 'outline-primary z-10' : 'outline-input-outline',
           disabled
-            ? 'bg-canvas-muted text-secondary border-divider cursor-not-allowed'
-            : 'bg-canvas text-primary border-input-outline hover:border-input-outline-hover focus:ring-brand-primary cursor-pointer',
+            ? 'bg-hover-overlay/50 text-secondary border-divider cursor-not-allowed'
+            : 'bg-surface text-primary hover:outline-input-outline-hover focus:outline-primary cursor-pointer',
+          error && 'outline-1! -outline-offset-1! outline-red-500!',
           buttonClassName,
         )}
         disabled={disabled}
@@ -216,37 +228,43 @@ export function SelectDropdown({
             ref={listboxRef}
             aria-activedescendant={focusedIndex >= 0 ? `${id}-option-${focusedIndex}` : undefined}
             className={clsx(
-              'border-input-outline bg-canvas text-black-and-white absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border py-1 shadow-lg',
-              'scrollbar-thin scrollbar-thumb-divider scrollbar-track-transparent',
+              'border-input-outline bg-surface text-black-and-white absolute z-50 mt-1 max-h-60 w-full overflow-x-hidden overflow-y-auto rounded-md border px-1 py-1 shadow-xl',
+              'scrollbar-thin scrollbar-thumb-divider scrollbar-track-transparent outline-none!',
               menuClassName,
             )}
             role="listbox"
             tabIndex={-1}
             {...motionProps}
           >
-            {options.map((option, index) => (
-              <li
-                key={option.value}
-                aria-disabled={option.disabled}
-                aria-selected={value === option.value}
-                className={clsx(
-                  'search-results block w-full cursor-pointer px-3 py-2 text-left text-sm',
-                  option.disabled && 'cursor-not-allowed opacity-50',
-                  focusedIndex === index && !option.disabled && 'focus-bg-canvas',
-                  value === option.value &&
-                    !option.disabled &&
-                    'bg-hover-overlay text-brand-primary font-medium',
-                )}
-                id={`${id}-option-${index}`}
-                role="option"
-                onClick={() => handleSelect(option)}
-                onMouseEnter={() => {
-                  if (!option.disabled) setFocusedIndex(index)
-                }}
-              >
-                {option.label}
+            {options.length === 0 ? (
+              <li className="text-secondary py-3 text-center text-sm font-medium italic opacity-50 select-none">
+                {emptyMessage}
               </li>
-            ))}
+            ) : (
+              options.map((option, index) => (
+                <li
+                  key={option.value}
+                  aria-disabled={option.disabled}
+                  aria-selected={value === option.value}
+                  className={clsx(
+                    'my-0.5 block cursor-pointer rounded-sm px-3 py-1.5 text-left text-sm whitespace-nowrap transition-all',
+                    option.disabled && 'cursor-not-allowed opacity-50',
+                    focusedIndex === index && !option.disabled && 'bg-hover-overlay',
+                    value === option.value &&
+                      !option.disabled &&
+                      'bg-action/10 text-action font-semibold',
+                  )}
+                  id={`${id}-option-${index}`}
+                  role="option"
+                  onClick={() => handleSelect(option)}
+                  onMouseEnter={() => {
+                    if (!option.disabled) setFocusedIndex(index)
+                  }}
+                >
+                  {option.label}
+                </li>
+              ))
+            )}
           </motion.ul>
         )}
       </AnimatePresence>

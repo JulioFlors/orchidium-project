@@ -14,7 +14,7 @@ const nextConfig: NextConfig = {
     },
   },
   reactCompiler: true,
-  transpilePackages: ['@package/database, @service/seeding'],
+  transpilePackages: ['@package/database', '@service/seeding'],
   turbopack: {
     root: path.resolve('..'),
   },

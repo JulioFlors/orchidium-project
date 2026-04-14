@@ -3,8 +3,8 @@
 # Descripción: Firmware dedicado para el control de las electroválvulas, la bomba
 #              y la estación meteorológica exterior (lluvia e iluminancia).
 # Fecha: 08-04-2026
-# Versión: v0.9.7
-# notes_release: [💾 Resiliencia NVS / 🛡️ Boot Recovery]: Implementada limpieza selectiva en NVSManager para proteger configuraciones ante fallos de sincronización horaria. Optimización del ciclo de arranque para evitar condiciones de carrera en sensores y asegurar persistencia estricta del estado de muestreo.
+# Versión: v0.9.8
+# notes_release: [☀️ Monitoreo Orquestado]: Finalizada la integración del ciclo de iluminancia sincronizado reactivamente por el Scheduler.
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib.
@@ -106,8 +106,8 @@ IRRIGATION_CIRCUITS = {
 
 # Flag de control para la sincronización del monitoreo de iluminancia (Día/Noche)
 # Si es False, se suspende el muestreo del sensor BH1750 para evitar registros de 0 lux.
-# (Se inicializa después de definir NVSManager)
-IS_SAMPLING_LUX = False
+# (Se inicializa en ON por defecto; el Scheduler sincronizará el estado real tras conectar)
+IS_SAMPLING_LUX = True
 
 # ---- Hardware: Actuadores ----
 # Diccionario que mapea un (actuator_id) a otro diccionario que contiene todos los atributos y el estado de ese actuador.
@@ -194,7 +194,7 @@ AUDIT_MODE = {
 # Funciones de Muestreo Unificadas para Auditoría (Lazy Reference)
 def get_lux_sample():
     if illuminance_sensor:
-        try: return round(illuminance_sensor.luminance(BH1750.CONT_HIRES_1), 1)
+        try: return round(illuminance_sensor.get_auto_luminance(), 1)
         except: return None
     return None
 
@@ -331,7 +331,9 @@ class NVSManager:
     def save_task(cls, task_data):
         """Agrega o actualiza una tarea en la Caché RAM y levanta la bandera de escritura."""
         cls._load_cache()
-        key = task_data.get('key', str(task_data['actuator_id']))
+        key = task_data.get('key')
+        if key is None:
+            key = str(task_data['actuator_id'])
         cls._cache[key] = task_data
         cls._dirty = True # Hay cambios pendientes de guardar a disco
         # if DEBUG:
@@ -543,24 +545,10 @@ async def boot_recovery_check():
     # Lazy Imports (Importación tardía)
     from utime import localtime, time # type: ignore
 
-    # ---- Inicialización de Sincronización de Iluminancia (Post-NVSManager) ----
-    # Cargamos el estado inicial desde NVS para sobrevivir a reinicios.
-    # 🛡️ IMPORTANTE: Declarar global para que afecte a la corrutina de monitoreo.
-    global IS_SAMPLING_LUX
-    _nvs_recovery = NVSManager.load_tasks()
-    IS_SAMPLING_LUX = _nvs_recovery.get('lux_sampling', {}).get('enabled', True)
-    
-    if IS_SAMPLING_LUX:
-        illuminance_wake_event.set()
-    else:
-        illuminance_wake_event.clear()
-        
-    del _nvs_recovery
-
     if DEBUG:
         print(f"\n🔍  {Colors.BLUE}Verificando NVS Recovery{Colors.RESET}")
 
-    # ---- 2. Restaurar Tareas de Riego ----
+    # ---- Restaurar Tareas de Riego ----
     all_tasks = NVSManager.load_tasks()
     task_count = len(all_tasks)
 
@@ -593,11 +581,11 @@ async def boot_recovery_check():
     # ---- Análisis Temporal (Iterando todas las tareas) ----
     # 2026-Fix: Iteramos sobre los values del diccionario
     for task_data in all_tasks.values():
-        # 🛡️ EXCLUSIÓN: Ignorar configuraciones de sistema (lux_sampling, etc)
+        # 🛡️ EXCLUSIÓN: Ignorar configuraciones de sistema (no hay otra logica activa)
         # dentro de la lógica de restauración de actuadores.
         if task_data.get("type") == "system_config":
             continue
-
+            
         start_epoch = task_data.get("start_epoch", 0)
         duration = task_data.get("duration", 0)
         actuator_id = task_data.get("actuator_id")
@@ -692,7 +680,9 @@ async def boot_recovery_check():
                 # la lógica normal funcione (Caso A).
                 # start_epoch = current, duration = same
                 task_data['start_epoch'] = int(current_time)
-                try: NVSManager.save_task(task_data)
+                try: 
+                    NVSManager.save_task(task_data)
+                    if DEBUG: print(f"    │   └─ NVS: Tarea re-actualizada con nuevo inicio.")
                 except: pass
                 
             else:
@@ -926,7 +916,7 @@ def setup_sensors():
 
                 illuminance_sensor = BH1750(bus=i2c_bus, addr=addr)
                 sleep_ms(200)
-                lux_test = illuminance_sensor.luminance(BH1750.CONT_HIRES_1)
+                lux_test = round(illuminance_sensor.get_auto_luminance(), 1)
 
                 if DEBUG:
                     print(f"    └─ ✅ {Colors.GREEN}Conectado{Colors.RESET} [{label}]")
@@ -1059,8 +1049,11 @@ async def mqtt_processor_task():
 
             # ---- 🛡️ Lógica del Sistema de Comandos (/cmd) ----
             if topic == MQTT_TOPIC_CMD:
-                # Comando: RESET
-                if msg.lower() == b"reset":
+                # Pre-procesamiento de mensaje para ahorrar RAM y ciclos
+                m_low = msg.lower()
+
+                # 1. Comando: RESET
+                if m_low == b"reset":
                     if DEBUG: print(f"    └─ Acción: {Colors.CYAN}Reboot the Device{Colors.RESET}")
                     try:
                         # Sincronización MQTT con validación de socket
@@ -1081,8 +1074,8 @@ async def mqtt_processor_task():
                     sleep(3) # Pausa breve para flush de logs
                     safe_reset()
 
-                # Comando: audit_nvs (Dump recovery.json por Chunks para ahorrar RAM)
-                elif msg.lower() == b"audit_nvs":
+                # 2. Comando: audit_nvs (Dump recovery.json por Chunks)
+                if m_low == b"audit_nvs":
                     if DEBUG: print(f"    └─ Acción: {Colors.CYAN}Dump NVS Content (Chunked){Colors.RESET}")
                     try:
                         tasks = NVSManager.load_tasks()
@@ -1137,9 +1130,7 @@ async def mqtt_processor_task():
                     except Exception as e:
                         if DEBUG: print(f"    └─ ⚠️  Error enviando NVS: {e}")
 
-                # ---- PROCESAMIENTO DE COMANDOS ----
-                # Reconoce y limpia el mensaje en el buffer
-                m_low = msg.lower()
+                # 3. Comandos de Auditoría (Prefix: audit_)
                 if m_low.startswith(b"audit_") and m_low.endswith((b"_on", b"_off")):
                     parts = m_low.split(b"_")
                     if len(parts) == 3:
@@ -1175,35 +1166,29 @@ async def mqtt_processor_task():
 
                         del category, action
                     del parts
-                del m_low
 
-            # ---- 🌙 | ☀️ Muestreo Inteligente (lux_sampling:[on | off]) ----
-            elif m_low.startswith(b"lux_sampling:"):
-                parts = m_low.split(b":")
-                if len(parts) == 2:
-                    action = parts[1]
-                    global IS_SAMPLING_LUX
-                    
-                    if action == b"on":
-                        if DEBUG: print(f"    └─ Lux Sampling: {Colors.GREEN}ON{Colors.RESET}")
-                        IS_SAMPLING_LUX = True
-                        illuminance_wake_event.set()
-                    elif action == b"off":
-                        if DEBUG: print(f"    └─ Lux Sampling: {Colors.RED}OFF{Colors.RESET}")
-                        IS_SAMPLING_LUX = False
-                        illuminance_wake_event.clear()
-                        # Al apagar, limpiamos el buffer para no arrastrar basura de 0 lux
-                        illuminance_Batch.clear()
-                    
-                    # Persistencia en NVS
-                    NVSManager.save_task({
-                        "key": "lux_sampling",
-                        "enabled": IS_SAMPLING_LUX,
-                        "type": "system_config"
-                    })
-                    NVSManager.flush()
-                    del action
-                del parts
+                # 4. Muestreo Inteligente (Prefix: lux_sampling:)
+                if m_low.startswith(b"lux_sampling:"):
+                    parts = m_low.split(b":")
+                    if len(parts) == 2:
+                        action = parts[1]
+                        global IS_SAMPLING_LUX
+                        
+                        if action == b"on":
+                            if DEBUG: print(f"    └─ Bh1750: {Colors.GREEN}ON{Colors.RESET}")
+                            IS_SAMPLING_LUX = True
+                            illuminance_wake_event.set()
+                        elif action == b"off":
+                            if DEBUG: print(f"    └─ Bh1750: {Colors.RED}OFF{Colors.RESET}")
+                            IS_SAMPLING_LUX = False
+                            illuminance_wake_event.clear()
+                            # Al apagar, limpiamos el buffer para no arrastrar basura de 0 lux
+                            illuminance_Batch.clear()
+                        
+                        del action
+                    del parts
+
+                # Cierre de bloque de comandos y limpieza de RAM
                 del m_low
 
             # ---- 💦 Lógica de Riego (irrigation/cmd) ----
@@ -2044,7 +2029,12 @@ async def state_publisher_task():
                 if relay_info['state'] == 'OFF':
                     relay_info['task_id'] = ""
             
-            if DEBUG: print(f"    └─ Snapshot {Colors.GREEN}Enviado{Colors.RESET}")
+            if DEBUG: 
+                active_ids = [r_info.get('task_id') for r_info in relays.values() if r_info['state'] == 'ON' and r_info.get('task_id')]
+                if active_ids:
+                    print(f"    └─ Snapshot {Colors.GREEN}Enviado{Colors.RESET} (Tareas Activas: {len(active_ids)})")
+                else:
+                    print(f"    └─ Snapshot {Colors.GREEN}Enviado{Colors.RESET} (Nodo en Reposo)")
 
         except (MQTTException, OSError) as e:
             if DEBUG: log_mqtt_exception("Fallo al publicar el Snapshot de los Relays", e)
@@ -2212,28 +2202,30 @@ async def illuminance_monitor_task():
     from umqtt.simple2 import MQTTException # type: ignore
 
     last_lux_publish = time()
+    _init_logged = False # Cache de log local para evitar redundancias y errores de atributo
 
     while True:
         try:
             # ---- [PROGRAMACIÓN ORIENTADA A EVENTOS] ----
             # Si el monitoreo está desactivado (Sincronización Nocturna), 
-            # suspendemos la corrutina hasta recibir la señal del procesador MQTT.
+            # suspendemos la corrutina hasta recibir la señal del procesador MQTT o el arranque.
             if not IS_SAMPLING_LUX:
-                if DEBUG: print(f"\n🌙  Illuminance Monitor: {Colors.DIM}Suspended{Colors.RESET}")
-                await illuminance_wake_event.wait()
-                if DEBUG: print(f"\n☀️  Illuminance Monitor: {Colors.GREEN}Waked{Colors.RESET}")
-            else:
-                # Si acabamos de arrancar o despertar y está activo, avisamos una sola vez.
-                # (Se usa el primer ciclo para este log informativo si el sensor está presente)
-                if DEBUG and not getattr(illuminance_monitor_task, '_init_logged', False):
-                    print(f"\n☀️  Illuminance Monitor: {Colors.GREEN}Waked{Colors.RESET}")
-                    illuminance_monitor_task._init_logged = True
+                if DEBUG and _init_logged:
+                    print(f"\n🌙  Illuminance Monitor: {Colors.DIM}Suspended{Colors.RESET}")
+                    _init_logged = False
 
+                await illuminance_wake_event.wait()
+            
+            # Al llegar aquí (por arranque o despertar), si no hemos logueado el estado activo, lo hacemos.
+            if DEBUG and not _init_logged:
+                print(f"\n☀️  Illuminance Monitor: {Colors.GREEN}Waked{Colors.RESET}")
+                _init_logged = True
+            
             current_ts = time()
 
             if illuminance_sensor is not None:
-                # Lectura de sensor BH1750 en modo de alta resolución continua
-                lux_val = round(illuminance_sensor.luminance(BH1750.CONT_HIRES_1), 1)
+                # Lectura de sensor BH1750 con auto-escala dinámica
+                lux_val = round(illuminance_sensor.get_auto_luminance(), 1)
                 illuminance_Batch.append(lux_val)
                 
                 # Publicar Batch cada 10 minutos (600 segundos)

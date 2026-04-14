@@ -1,7 +1,15 @@
 import type { Metadata } from 'next'
 
+import { headers } from 'next/headers'
+
+import { auth } from '@/lib/auth'
 import { Footer, Sidebar, Header } from '@/components'
-import { getPlantsNavigation, getSearchSuggestions } from '@/actions'
+import {
+  getPlantsNavigation,
+  getSearchSuggestions,
+  type SearchSuggestion,
+  type PlantsNavData,
+} from '@/actions'
 
 export const metadata: Metadata = {
   title: {
@@ -11,10 +19,14 @@ export const metadata: Metadata = {
 }
 
 export default async function ShopLayout({ children }: { children: React.ReactNode }) {
-  // Usamos Promise.all para cargar todos los datos en paralelo.
-  const [suggestions, plantsNavData] = await Promise.all([
+  // Usamos Promise.all para cargar todos los datos en paralelo (incluyendo la sesión para hidratar el sidebar)
+  // Tipamos el resultado con las interfaces reales para evitar errores de asignación en Header y Sidebar
+  const [suggestions, plantsNavData, session] = (await Promise.all([
     getSearchSuggestions(),
     getPlantsNavigation(),
+    auth.api.getSession({
+      headers: await headers(),
+    }),
   ]).catch((err) => {
     // eslint-disable-next-line no-console
     console.warn(
@@ -22,14 +34,15 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
       err,
     )
 
-    return [[], []]
-  })
+    // Devolvemos valores por defecto consistentes (null para session)
+    return [[], [], null]
+  })) as [SearchSuggestion[], PlantsNavData[], Record<string, unknown> | null]
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <Header plantsNavData={plantsNavData} suggestions={suggestions} />
+      <Header plantsNavData={plantsNavData || []} suggestions={suggestions || []} />
 
-      <Sidebar suggestions={suggestions} />
+      <Sidebar session={session} suggestions={suggestions || []} />
 
       <main className="tds-sm:mx-9 tds-xl:mx-12 mx-6 mt-14 grow">{children}</main>
 

@@ -67,6 +67,8 @@ interface ScheduleInput {
   cronTrigger: string // e.g., "0 16 * * *"
   durationMinutes: number
   zones: ZoneType[]
+  fertilizationProgramId?: string | null
+  phytosanitaryProgramId?: string | null
 }
 
 /**
@@ -96,6 +98,12 @@ export async function upsertSchedule(data: ScheduleInput) {
           cronTrigger: data.cronTrigger,
           durationMinutes: data.durationMinutes,
           zones: data.zones,
+          fertilizationProgram: data.fertilizationProgramId
+            ? { connect: { id: data.fertilizationProgramId } }
+            : { disconnect: true },
+          phytosanitaryProgram: data.phytosanitaryProgramId
+            ? { connect: { id: data.phytosanitaryProgramId } }
+            : { disconnect: true },
         },
       })
     } else {
@@ -106,6 +114,12 @@ export async function upsertSchedule(data: ScheduleInput) {
           cronTrigger: data.cronTrigger,
           durationMinutes: data.durationMinutes,
           zones: data.zones,
+          fertilizationProgram: data.fertilizationProgramId
+            ? { connect: { id: data.fertilizationProgramId } }
+            : undefined,
+          phytosanitaryProgram: data.phytosanitaryProgramId
+            ? { connect: { id: data.phytosanitaryProgramId } }
+            : undefined,
         },
       })
     }

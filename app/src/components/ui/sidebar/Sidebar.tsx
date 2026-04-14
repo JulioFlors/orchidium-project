@@ -6,6 +6,7 @@ import { IoCloseOutline, IoChevronBackOutline } from 'react-icons/io5'
 import { motion, AnimatePresence } from 'motion/react'
 import { useRef, useEffect } from 'react'
 import clsx from 'clsx'
+import { SWRConfig } from 'swr'
 
 import { handleAccessibility, motionProps, OrchidariumSidebar, ShopSidebar } from '@/components'
 import { adminRoutes, shopRoutes } from '@/config'
@@ -14,9 +15,10 @@ import { useUIStore } from '@/store'
 
 interface Props {
   suggestions?: SearchSuggestion[]
+  session?: Record<string, unknown> | null
 }
 
-export function Sidebar({ suggestions = [] }: Props) {
+export function Sidebar({ suggestions = [], session }: Props) {
   // ----- Hooks ----
   const { isOrchidarium } = useNavigationContext()
 
@@ -176,7 +178,9 @@ export function Sidebar({ suggestions = [] }: Props) {
 
             {/* ---- Sidebar Content (Scrollable) ---- */}
             <div className="mx-8 flex flex-1 flex-col items-start overflow-x-hidden pb-4 text-left">
-              {isOrchidarium ? <OrchidariumSidebar /> : <ShopSidebar suggestions={suggestions} />}
+              <SWRConfig value={{ fallback: { 'auth-session': session } }}>
+                {isOrchidarium ? <OrchidariumSidebar /> : <ShopSidebar suggestions={suggestions} />}
+              </SWRConfig>
             </div>
           </motion.nav>
         )}

@@ -41,8 +41,8 @@ interface ModalProps {
   onClose: () => void
   /** Título del modal (obligatorio para accesibilidad) */
   title: string
-  /** Subtítulo opcional */
-  subtitle?: string
+  /** Subtítulo opcional (soporta texto o contenido estructurado) */
+  subtitle?: ReactNode
   /** Icono decorativo junto al título */
   icon?: ReactNode
   /** Tamaño del contenedor */
@@ -184,18 +184,18 @@ export function Modal({
       >
         {/* ---- Header ---- */}
         <div className="border-input-outline flex items-center justify-between border-b px-6 py-4">
-          <div className="flex items-center gap-2">
-            {icon && <span className="text-secondary">{icon}</span>}
-            <div>
-              <h2 className="text-primary text-lg font-semibold" id="modal-title">
+          <div className="flex min-w-0 flex-1 items-center gap-2 pr-10">
+            {icon && <span className="text-secondary shrink-0">{icon}</span>}
+            <div className="min-w-0">
+              <h2 className="text-primary line-clamp-2 text-lg font-semibold" id="modal-title">
                 {title}
               </h2>
-              {subtitle && <p className="text-secondary text-xs">{subtitle}</p>}
+              {subtitle && <div className="text-secondary truncate text-xs">{subtitle}</div>}
             </div>
           </div>
           <button
             aria-label="Cerrar modal"
-            className="text-secondary hover:bg-hover-overlay rounded-full p-2 transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+            className="text-secondary hover:bg-hover-overlay focus-visible:ring-accessibility cursor-pointer rounded-full p-1.5 shadow-none! transition-colors outline-none! focus:outline-none! focus-visible:ring-2 focus-visible:outline-none!"
             type="button"
             onClick={onClose}
           >
@@ -204,7 +204,21 @@ export function Modal({
         </div>
 
         {/* ---- Body ---- */}
-        <div className={clsx('max-h-[70vh] overflow-y-auto p-6', bodyClassName)}>{children}</div>
+        <div
+          className={clsx('group relative flex min-h-0 flex-col', !footer && 'rounded-b-[inherit]')}
+        >
+          <div
+            aria-label="Contenido del modal"
+            className={clsx(
+              'peer relative max-h-[70vh] overflow-y-auto p-6 outline-none focus:outline-none focus-visible:outline-none',
+              !footer && 'rounded-b-[inherit]',
+              bodyClassName,
+            )}
+            role="document"
+          >
+            {children}
+          </div>
+        </div>
 
         {/* ---- Footer (opcional) ---- */}
         {footer && (

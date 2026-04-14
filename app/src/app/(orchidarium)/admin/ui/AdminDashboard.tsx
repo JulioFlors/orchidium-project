@@ -7,9 +7,10 @@ import { IoPeopleOutline, IoSettingsOutline, IoBugOutline } from 'react-icons/io
 import clsx from 'clsx'
 
 import { UsersTable } from './UsersTable'
+import { DeviceDebugger } from './components'
 
 import { LogoutButton } from '@/app/(shop)/account/ui/LogoutButton'
-import { Card, DeviceDebugger, Badge } from '@/components'
+import { Card, Badge } from '@/components'
 
 interface Props {
   user: {

@@ -9,6 +9,7 @@ import { IoChevronForwardOutline } from 'react-icons/io5'
 import { TbPlant } from 'react-icons/tb'
 import { usePathname, useSearchParams } from 'next/navigation'
 import { AnimatePresence, motion } from 'motion/react'
+import useSWR from 'swr'
 
 import { authClient } from '@/lib/auth-client'
 import { PersonIcon, SearchBox, ThemeToggle, buttonVariants } from '@/components'
@@ -23,9 +24,15 @@ export function ShopSidebar({ suggestions = [] }: Props) {
   // ----- Hooks -----
   const pathname = usePathname()
   const searchParams = useSearchParams()
+
+  // Hidratación SWR: Obtenemos el fallback del servidor sin pasar props por niveles
+  const { data: serverSession } = useSWR('auth-session')
+
   // Better Auth SDK: Hook para obtener la sesión en componentes cliente
-  // Se actualiza automáticamente cuando cambia el estado de autenticación
-  const { data: session, isPending } = authClient.useSession()
+  const { data: clientSession, isPending } = authClient.useSession()
+
+  // Priorizamos la sesión del servidor para el primer renderizado (hidratación)
+  const session = serverSession || clientSession
 
   // ----- Store (Zustand) -----
   const closeSidebar = useUIStore((state) => state.closeSidebar)
@@ -34,11 +41,11 @@ export function ShopSidebar({ suggestions = [] }: Props) {
 
   // ----- Helpers de Auth -----
   const isAuthenticated = !!session?.user
-  // @ts-expect-error: Role might not be typed yet without generation, but exists in DB
-  const isAdmin = session?.user?.role?.toUpperCase() === 'ADMIN'
+  const isAdmin = (session?.user as { role?: string })?.role?.toUpperCase() === 'ADMIN'
 
   // ---- WAITING For data ----
-  if (isPending) {
+  // Solo mostramos skeletons si NO tenemos sesión del servidor Y el cliente aún está cargando
+  if (isPending && !serverSession) {
     return (
       <div className="flex h-full w-full flex-col">
         <div className="flex w-full flex-1 flex-col">

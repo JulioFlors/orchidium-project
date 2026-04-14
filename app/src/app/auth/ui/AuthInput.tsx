@@ -26,10 +26,9 @@ export const AuthInput = forwardRef<HTMLInputElement, AuthInputProps>(
           <input
             ref={ref}
             className={clsx(
-              // Usamos tu clase .form-input definida en globals.css
               'form-input mt-0 transition-all duration-300',
               icon ? 'pl-10' : '',
-              error ? 'ring-2 ring-red-500 focus:outline-none' : '',
+              error ? 'outline-1 -outline-offset-1 outline-red-500' : '',
               className,
             )}
             {...props}

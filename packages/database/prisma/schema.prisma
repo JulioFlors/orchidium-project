@@ -343,8 +343,8 @@ model AutomationSchedule {
   fertilizationProgram   FertilizationProgram? @relation(fields: [fertilizationProgramId], references: [id])
   fertilizationProgramId String?
 
-  phytosanitaryProgram   PhytosanitaryProgram? @relation(fields: [phytosanetaryProgramId], references: [id])
-  phytosanetaryProgramId String?
+  phytosanitaryProgram   PhytosanitaryProgram? @relation(fields: [phytosanitaryProgramId], references: [id])
+  phytosanitaryProgramId String?
 
   taskLogs TaskLog[]
 
@@ -399,17 +399,52 @@ model DailyEnvironmentStat {
 
   avgTemperature Float
   minTemperature Float
+  minTempTime    String?
   maxTemperature Float
+  maxTempTime    String?
 
   avgHumidity Float
   minHumidity Float
+  minHumTime  String?
   maxHumidity Float
+  maxHumTime  String?
 
-  avgIlluminance     Float
-  maxIlluminance     Float
+  avgIlluminance Float
+  minIlluminance Float
+  minIllumTime   String?
+  maxIlluminance Float
+  maxIllumTime   String?
+
   lightDurationHours Float
+  totalRainDuration  Int
 
-  totalRainDuration Int
+  // ---- Métricas Botánicas Derivadas ---- //
+
+  /// Daily Light Integral (mol/m²/d) — Integral de luz fotosintética acumulada en el fotoperiodo.
+  /// Lux → PPFD (×0.018) → DLI. Ideal para Cattleya: 12-15 mol/m²/d.
+  dli Float?
+
+  /// Déficit de Presión de Vapor promedio diurno (kPa). Ideal orquídeas: 0.8–1.2 kPa.
+  vpdAvg Float?
+  vpdMin Float?
+  vpdMax Float?
+
+  /// Diferencial Térmico Día-Noche (°C). Ideal Cattleya: 5-8°C para inducir floración.
+  dif Float?
+  /// Temperatura promedio diurna (08:00–16:00 hora local)
+  avgTempDay Float?
+  /// Temperatura promedio nocturna (20:00–06:00 hora local)
+  avgTempNight Float?
+
+  /// Horas con HR > 85% en período nocturno — indicador de riesgo de Botrytis/hongos
+  highHumidityHours Float?
+
+  /// Balance hídrico: minutos totales de riego ejecutado en el día
+  irrigationMinutes Int?
+  /// Balance hídrico: minutos totales de nebulización ejecutada en el día
+  nebulizationMinutes Int?
+  /// Conteo total de eventos de agua (riego + lluvia + nebulización)
+  totalWaterEvents Int?
 
   createdAt DateTime @default(now())
 

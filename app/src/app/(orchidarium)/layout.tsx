@@ -35,7 +35,7 @@ export default async function OchidariumLayout({ children }: { children: React.R
     <div className="flex min-h-dvh flex-col">
       <Header />
 
-      <Sidebar />
+      <Sidebar session={session} />
 
       <main className="tds-sm:mx-9 tds-xl:mx-12 mx-6 mt-14 grow">{children}</main>
 

@@ -1,3 +1,4 @@
+import clsx from 'clsx'
 import { ReactNode } from 'react'
 
 interface Props {
@@ -9,9 +10,9 @@ interface Props {
 
 export function FormField({ label, htmlFor, children, className }: Props) {
   return (
-    <div className={className}>
+    <div className={clsx('flex flex-col gap-1.5', className)}>
       <label
-        className="text-label text-[13.5px] leading-5 font-semibold tracking-wide"
+        className="text-secondary w-fit cursor-pointer text-sm leading-5 font-semibold tracking-wide"
         htmlFor={htmlFor}
       >
         {label}

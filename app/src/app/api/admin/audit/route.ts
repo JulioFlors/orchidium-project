@@ -27,7 +27,8 @@ export async function GET(request: Request) {
   // Consultar snapshots vigentes
   const snapshots = await prisma.auditSnapshot.findMany({
     where: { device, category },
-    orderBy: { createdAt: 'asc' },
+    take: 200,
+    orderBy: { createdAt: 'desc' },
   })
 
   return NextResponse.json({ snapshots })
