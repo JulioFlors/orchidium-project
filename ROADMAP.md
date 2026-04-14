@@ -23,8 +23,8 @@ Implementación de sistemas CRUD completos para modelar la realidad biológica.
 
 Gestión de los insumos necesarios para el mantenimiento de la vida.
 
-* **Agroquímicos:** Inventario de Fertilizantes y Fitosanitarios.
-* **Programas:** Definición de "Recetas" (Programas de Fertilización y Fumigación) que agrupan ciclos de aplicación.
+* [x] **Agroquímicos:** Inventario de Fertilizantes y Fitosanitarios.
+* [x] **Programas:** Definición de "Recetas" (Programas de Fertilización y Fumigación) que agrupan ciclos de aplicación.
 
 ### 1.3 Control de Acceso (RBAC)
 

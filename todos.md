@@ -14,7 +14,7 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 * [ ] **InfluxDB VPS (Cubo Histórico):** Migrar de Cloud a instancia VPS propia.
   * [ ] Eliminar política de retención de 30 días.
   * [ ] Crear *Continuous Queries* (o Tareas en Flux/SQL) para realizar **Downsampling**: Resumir datos crudos (minuto a minuto) en un bucket secundario con resoluciones horarias (max, min, mean) para consultas de meses/años sin penalizar el rendimiento.
-* [ ] **Dominio y SSL (Cloudflare):** Configurar dominio personalizado y proxy en Cloudflare para obtener HTTPS gratuito y seguro sin gestionar certificados en el VPS.
+* [x] **Dominio y SSL (VPS/Certbot):** Configurar dominio personalizado y generar certificados mediante Certbot (Let's Encrypt) en el VPS para habilitar HTTPS de forma nativa (sin proxy de Cloudflare).
 
 ### 🚀 0.2 Despliegue de Servicios (Backend)
 

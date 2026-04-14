@@ -9,13 +9,15 @@ import {
   IoShieldCheckmarkOutline,
   IoCalendarOutline,
   IoRepeatOutline,
+  IoCreateOutline,
+  IoTrashOutline,
 } from 'react-icons/io5'
 import { MdOutlineHistoryToggleOff } from 'react-icons/md'
 
 import { ProgramForm } from './components'
 
 import { deleteFertilizationProgram, deletePhytosanitaryProgram } from '@/actions'
-import { Button, Modal, Badge } from '@/components'
+import { Button, Modal, Badge, ActionMenu } from '@/components'
 
 // Interfaces para los programas con sus ciclos poblados
 interface ProgramCycle {
@@ -63,7 +65,7 @@ export function RecipesView({
   })
 
   // fix_this: delete isDeleting
-  const [isDeleting, startTransition] = useTransition()
+  const [, startTransition] = useTransition()
 
   const handleOpenNew = (type: ModalType) => {
     setModalState({ isOpen: true, type, selectedData: null })
@@ -145,6 +147,22 @@ export function RecipesView({
                       <span>{program.weeklyFrequency} vez/semana</span>
                     </div>
                   </div>
+
+                  <ActionMenu
+                    items={[
+                      {
+                        label: 'Editar',
+                        icon: <IoCreateOutline />,
+                        onClick: () => handleOpenEdit('fertilization', program),
+                      },
+                      {
+                        label: 'Eliminar',
+                        icon: <IoTrashOutline />,
+                        onClick: () => handleDelete('fertilization', program.id),
+                        variant: 'danger',
+                      },
+                    ]}
+                  />
                 </div>
 
                 <div className="mt-6">
@@ -222,6 +240,22 @@ export function RecipesView({
                       <span>{program.monthlyFrequency} vez/mes</span>
                     </div>
                   </div>
+
+                  <ActionMenu
+                    items={[
+                      {
+                        label: 'Editar',
+                        icon: <IoCreateOutline />,
+                        onClick: () => handleOpenEdit('phytosanitary', program),
+                      },
+                      {
+                        label: 'Eliminar',
+                        icon: <IoTrashOutline />,
+                        onClick: () => handleDelete('phytosanitary', program.id),
+                        variant: 'danger',
+                      },
+                    ]}
+                  />
                 </div>
 
                 <div className="mt-6">

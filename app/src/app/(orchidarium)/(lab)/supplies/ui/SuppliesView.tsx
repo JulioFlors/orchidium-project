@@ -3,14 +3,21 @@
 import type { Agrochemical } from '@package/database'
 
 import React, { useState, useTransition } from 'react'
-import { IoAddOutline, IoPricetagsOutline, IoFlaskOutline, IoLeafOutline } from 'react-icons/io5'
+import {
+  IoAddOutline,
+  IoPricetagsOutline,
+  IoFlaskOutline,
+  IoLeafOutline,
+  IoCreateOutline,
+  IoTrashOutline,
+} from 'react-icons/io5'
 import { MdOutlineHistoryToggleOff } from 'react-icons/md'
 import { clsx } from 'clsx'
 
 import { AgrochemicalForm } from './components'
 
 import { deleteAgrochemical } from '@/actions'
-import { Modal, Badge, Button } from '@/components'
+import { Modal, Badge, Button, ActionMenu } from '@/components'
 
 interface Props {
   agrochemicals: Agrochemical[]
@@ -102,6 +109,22 @@ export function SuppliesView({ agrochemicals }: Props) {
                     </p>
                   </div>
                 </div>
+
+                <ActionMenu
+                  items={[
+                    {
+                      label: 'Editar',
+                      icon: <IoCreateOutline />,
+                      onClick: () => handleOpenEdit(agro),
+                    },
+                    {
+                      label: 'Eliminar',
+                      icon: <IoTrashOutline />,
+                      onClick: () => handleDelete(agro.id),
+                      variant: 'danger',
+                    },
+                  ]}
+                />
               </div>
 
               <div className="mt-6 flex items-center justify-between border-t border-black/5 pt-4 dark:border-white/5">
