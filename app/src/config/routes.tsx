@@ -76,10 +76,8 @@ export const adminRoutes: AdminRoute[] = [
         name: 'Estación Meteorológica',
         url: '/monitoring',
         icon: <IoHardwareChipOutline />,
-        description: 'Telemetría cruda y gráficas de diagnostico (Voltaje, RSSI, Lux, RH, T)',
+        description: 'Telemetría cruda y gráficas de diagnostico',
       },
-      // NOTA: El historial queda en Operaciones. El Gemelo Digital ("Inteligencia
-      // Agronómica" en /orchidarium) es accesible únicamente por el logo Pristinoplant.
     ],
   },
   {

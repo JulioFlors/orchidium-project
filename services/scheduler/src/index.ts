@@ -1076,6 +1076,13 @@ async function initScheduler() {
     })
   })
 
+  // Motor de Inferencia Botánica (Cada 15 minutos)
+  new Cron('*/15 * * * *', { timezone: "America/Caracas" }, () => {
+    import('./cron/inference-engine.js').then((m) => {
+      m.runInferenceEngine().catch(err => Logger.error('Fallo en runInferenceEngine', err))
+    })
+  })
+
 }
 
 initScheduler().catch(e => Logger.error(`No se pudo iniciar el Servicio de Scheduler: ${colors.red}${e}${colors.reset}`))

@@ -36,7 +36,7 @@ export function OracleDecisionCard({ forecast }: { forecast: OracleForecast | un
   }
 
   return (
-    <div className="from-surface to-surface/80 relative flex h-full flex-col gap-5 overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br p-6">
+    <div className="from-surface to-surface/80 relative flex h-full flex-col gap-5 overflow-hidden rounded-xl border border-white/10 bg-linear-to-br p-6">
       <div className="absolute top-0 right-0 p-4 opacity-10">
         <FaCloudSunRain className="h-32 w-32" />
       </div>
