@@ -4,7 +4,7 @@ import { clsx } from 'clsx'
 import { motion, useMotionTemplate, useMotionValue } from 'motion/react'
 import { MouseEvent, useRef, useState } from 'react'
 
-import { BorderTrail } from '@/components'
+import { BorderTrail, StatusCircleIcon } from '@/components'
 
 export interface EnvironmentCardProps {
   title: string
@@ -154,21 +154,22 @@ export function EnvironmentCard({
       <div className="relative flex h-full flex-1 flex-col justify-between p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3.5">
-            <div
+            <StatusCircleIcon
+              glow
               className={clsx(
-                'bg-surface flex h-10 w-10 shrink-0 items-center justify-center rounded-full border shadow-sm transition-colors duration-300',
-                !isActive && 'border-input-outline',
                 selectedColor.text,
-                `group-hover:bg-[rgba(${selectedColor.bgRaw},0.1)]`,
                 selectedColor.border,
+                !isActive && 'border-input-outline',
                 isActive && `bg-[rgba(${selectedColor.bgRaw},0.1)]`,
+                `group-hover:bg-[rgba(${selectedColor.bgRaw},0.1)]`,
               )}
+              glowColor={selectedColor.bgRaw}
+              icon={icon}
               style={{
                 borderColor: isActive ? `rgba(${selectedColor.bgRaw}, 0.5)` : undefined,
               }}
-            >
-              {icon}
-            </div>
+              variant="surface"
+            />
             <div className="flex min-w-0 flex-col gap-0.5">
               <h3
                 className="text-primary text-sm leading-tight font-semibold whitespace-normal transition-colors"

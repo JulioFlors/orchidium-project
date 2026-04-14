@@ -53,7 +53,7 @@ export async function GET(_request: Request) {
         if (row.time instanceof Date) {
           timeStr = row.time.toISOString()
         } else if (typeof row.time === 'bigint' || typeof row.time === 'number') {
-          const ms = Number(BigInt(row.time) / 1000000n)
+          const ms = Number(BigInt(row.time) / BigInt(1000000))
 
           timeStr = new Date(ms).toISOString()
         } else {

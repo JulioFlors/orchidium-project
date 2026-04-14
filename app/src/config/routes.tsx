@@ -1,5 +1,4 @@
 import {
-  IoBarChartOutline,
   IoCalendarOutline,
   IoConstructOutline,
   IoFlaskOutline,
@@ -9,7 +8,6 @@ import {
   IoLeafOutline,
   IoListOutline,
   IoPricetagsOutline,
-  IoWarningOutline,
   IoWaterOutline,
 } from 'react-icons/io5'
 
@@ -69,29 +67,19 @@ export const shopRoutes: ShopRoute[] = [
 
 export const adminRoutes: AdminRoute[] = [
   {
-    slug: 'dashboard',
-    name: 'Dashboard',
+    slug: 'monitoring',
+    name: 'Monitoreo',
     icon: <IoGridOutline size={20} />,
     layout: 'informational',
     items: [
       {
-        name: 'Resumen General',
-        url: '/orchidarium',
-        icon: <IoBarChartOutline />,
-        description: 'KPIs globales y estado del sistema',
-      },
-      {
-        name: 'Monitor Ambiental',
+        name: 'Estación Meteorológica',
         url: '/monitoring',
         icon: <IoHardwareChipOutline />,
-        description: 'Sensores en tiempo real por zona',
+        description: 'Telemetría cruda y gráficas de diagnostico (Voltaje, RSSI, Lux, RH, T)',
       },
-      {
-        name: 'Alertas',
-        url: '/alerts',
-        icon: <IoWarningOutline />,
-        description: 'Notificaciones críticas y avisos',
-      },
+      // NOTA: El historial queda en Operaciones. El Gemelo Digital ("Inteligencia
+      // Agronómica" en /orchidarium) es accesible únicamente por el logo Pristinoplant.
     ],
   },
   {

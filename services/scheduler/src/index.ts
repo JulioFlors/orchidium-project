@@ -858,16 +858,17 @@ async function runTask(scheduleId: string) {
   }
 }
 
-// ---- Motor de Polling para Tareas Diferidas (PENDING) ----
+// ---- Motor de Polling para Tareas Diferidas (PENDING / AUTHORIZED) ----
 async function checkPendingTasks() {
   try {
     const now = new Date()
     const graceWindow = new Date(Date.now() - 20 * 60000)
+    const agrochemGraceWindow = new Date(Date.now() - 60 * 60000) // 1h para agroquímicos
 
     // 1. Ejecutar tareas PENDING dentro de la ventana de gracia (últimos 20 min)
     const activeTasks = await prisma.taskLog.findMany({
       where: {
-        status: TaskStatus.PENDING, // 🔴 Se elimina TaskStatus.FAILED para evitar bucles
+        status: TaskStatus.PENDING,
         scheduledAt: {
           lte: now,
           gte: graceWindow
@@ -883,22 +884,48 @@ async function checkPendingTasks() {
       await processTaskLog(task)
     }
 
-    // 2. Auto-cancelar tareas expiradas (fuera de la ventana de gracia)
-    // Esto incluye PENDING normales y WAITING_CONFIRMATION (recetas sin confirmación manual)
-    const expired = await prisma.taskLog.updateMany({
+    // 1.5 Ejecutar tareas AUTHORIZED (agroquímicos confirmados por el usuario)
+    const authorizedTasks = await prisma.taskLog.findMany({
       where: {
-        status: { in: [TaskStatus.PENDING, TaskStatus.WAITING_CONFIRMATION] },
-        scheduledAt: {
-          lt: graceWindow
-        }
+        status: TaskStatus.AUTHORIZED,
+      },
+      orderBy: { scheduledAt: 'asc' }
+    })
+
+    if (authorizedTasks.length > 0) Logger.success(`✅ Polling: ${authorizedTasks.length} tarea(s) de agroquímicos confirmadas. Ejecutando.`);
+
+    for (const task of authorizedTasks) {
+      Logger.info(`🧪 Iniciando Agroquímico Confirmado (ID: ${task.id.slice(0, 8)})`)
+      await processTaskLog(task)
+    }
+
+    // 2. Auto-cancelar tareas PENDING expiradas (fuera de la ventana de 20 min)
+    const expiredPending = await prisma.taskLog.updateMany({
+      where: {
+        status: TaskStatus.PENDING,
+        scheduledAt: { lt: graceWindow }
       },
       data: {
         status: TaskStatus.CANCELLED,
-        notes: 'Cancelada: ventana de ejecución o tiempo de confirmación expirado.'
+        notes: 'Cancelada: ventana de ejecución expirada (20 min).'
       }
     })
 
-    if (expired.count > 0) Logger.warn(`🗑️ ${expired.count} tarea(s) expirada(s) auto-canceladas.`)
+    if (expiredPending.count > 0) Logger.warn(`🗑️ ${expiredPending.count} tarea(s) PENDING expirada(s) auto-canceladas.`)
+
+    // 2.5 Auto-cancelar tareas WAITING_CONFIRMATION expiradas (fuera de la ventana de 1h)
+    const expiredConfirmation = await prisma.taskLog.updateMany({
+      where: {
+        status: TaskStatus.WAITING_CONFIRMATION,
+        scheduledAt: { lt: agrochemGraceWindow }
+      },
+      data: {
+        status: TaskStatus.CANCELLED,
+        notes: 'Cancelada: el usuario no confirmó la preparación del tanque en 1 hora.'
+      }
+    })
+
+    if (expiredConfirmation.count > 0) Logger.warn(`🧪🗑️ ${expiredConfirmation.count} tarea(s) de agroquímicos sin confirmación auto-canceladas.`)
 
     // 3. Auto-fallar tareas DISPATCHED sin ACK (Timeout de 5 min)
     const ackTimeout = new Date(Date.now() - 5 * 60000)

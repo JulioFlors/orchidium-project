@@ -212,12 +212,12 @@ async function processDay(zone: ZoneType, dayStart: Date): Promise<void> {
         status: 'COMPLETED',
         actualStartAt: { gte: dayStart, lt: dayEnd },
       },
-      select: { purpose: true, actualStartAt: true, completedAt: true },
+      select: { purpose: true, actualStartAt: true, completedMinutes: true },
     })
 
     for (const task of taskLogs) {
-      if (!task.actualStartAt || !task.completedAt) continue
-      const durationMin = Math.round((task.completedAt.getTime() - task.actualStartAt.getTime()) / 60000)
+      if (!task.actualStartAt) continue
+      const durationMin = task.completedMinutes
       const purposeStr = String(task.purpose || '').toUpperCase()
 
       if (purposeStr.includes('NEBUL') || purposeStr.includes('HUMIDIF')) {
