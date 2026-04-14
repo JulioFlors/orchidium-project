@@ -54,13 +54,13 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
   * [ ] `Table.tsx`: Sistema de tablas componibles (`Table`, `TableHeader`, `TableRow`, `TableHead`, `TableBody`, `TableCell`).
   * [ ] `Badge.tsx`: Píldoras indicadoras de estado.
   * [ ] Reemplazar las implementaciones ad-hoc en vistas existentes (ej. `AdminDashboard.tsx`) para asegurar que el sistema se adapte bien antes de construir el CRUD.
-* [ ] **Página `/supplies` (Catálogo de Agroquímicos):**
-  * [ ] Tabla universal para listar `Agrochemical` (Nombre, Tipo, Propósito, Instrucciones).
-  * [ ] Modal/Panel unificado para **Crear/Editar** insumos (Fertilizante/Fitosanitario).
-  * [ ] Lógica de Server Actions (`createSupply`, `updateSupply`, `deleteSupply`).
-* [ ] **Página `/recipes` (Programas de Cultivo):**
-  * [ ] Interfaces para listar `FertilizationProgram` y `PhytosanitaryProgram`.
-  * [ ] Componente Constructor de Recetas: Permitir añadir N pasos (Cycles) y seleccionar el Agroquímico y Sequencia con un selector unificado.
+* [x] **Página `/supplies` (Catálogo de Agroquímicos):**
+  * [x] Tabla universal para listar `Agrochemical` (Nombre, Tipo, Propósito, Instrucciones).
+  * [x] Modal/Panel unificado para **Crear/Editar** insumos (Fertilizante/Fitosanitario).
+  * [x] Lógica de Server Actions (`createSupply`, `updateSupply`, `deleteSupply`).
+* [x] **Página `/recipes` (Programas de Cultivo):**
+  * [x] Interfaces para listar `FertilizationProgram` y `PhytosanitaryProgram`.
+  * [x] Componente Constructor de Recetas: Permitir añadir N pasos (Cycles) y seleccionar el Agroquímico y Sequencia con un selector unificado.
 
 ### 👥 1.4 Gestión de Usuarios
 
@@ -114,15 +114,16 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 
 > Ver especificaciones en `docs/specs/04-environmental-inference-engine.md`
 
-* [ ] **Fase 3.2.1 - Estabilización de Tiempo Real (Smooth Data):**
-  * [ ] Modificar la API/WebSocket de telemetría para que retorne Medias Móviles Simples (SMA de 10-15 min) en vez de lecturas crudas puras (elimina parpadeos UI por nubes/reflejos).
-* [ ] **Fase 3.2.2 - Agregación de VPD:**
-  * [ ] Backend: Añadir cálculo de Déficit de Presión de Vapor (VPD) combinando Temp/Humedad para inferir transpiración de fluidos en las orquídeas.
-* [ ] **Fase 3.2.3 - Worker de Agregación Diaria (CRON 23:55):**
-  * [ ] Crear script/servicio independiente para Downsampling de InfluxDB.
-  * [ ] Calcular métricas botánicas: DLI (Daily Light Integral) convirtiendo Lux a PPFD, y DIF (Salto Térmico Día-Noche).
-  * [ ] Calcular Riesgo Epidemiológico: "Horas de Humedad Foliar" consecutivas (>85% HR sin salto térmico).
-  * [ ] Persistir resumen procesado diario en base de datos central.
+* [x] **Fase 3.2.1 - Estabilización de Tiempo Real (Smooth Data):**
+  * [x] Modificar la API/WebSocket de telemetría para que retorne Medias Móviles Simples (SMA de 10-15 min) en vez de lecturas crudas puras (elimina parpadeos UI por nubes/reflejos).
+* [x] **Fase 3.2.2 - Agregación de VPD:**
+  * [x] Backend: Añadir cálculo de Déficit de Presión de Vapor (VPD) combinando Temp/Humedad para inferir transpiración de fluidos en las orquídeas.
+* [x] **Fase 3.2.3 - Worker de Agregación Diaria (CRON 23:55):**
+  * [x] Crear script/servicio independiente para Downsampling de InfluxDB.
+  * [x] Calcular métricas botánicas: DLI (Daily Light Integral) convirtiendo Lux a PPFD, y DIF (Salto Térmico Día-Noche).
+  * [x] Calcular Riesgo Epidemiológico: "Horas de Humedad Foliar" consecutivas (>85% HR sin salto térmico).
+  * [x] Persistir resumen procesado diario en base de datos central.
+* [x] **Motor de Inferencias (v1):** Implementado lazo cerrado de decisión cruzando InfluxDB + Postgres (VWC) + Pronóstico.
 * [ ] **Machine Learning Ligero:** Función para cruzar avistamientos de plagas (Fase 1.1) con los históricos de InfluxDB.
 
 ### 🌤️ 3.3 WeatherGuard (Inteligencia Predictiva Híbrida)

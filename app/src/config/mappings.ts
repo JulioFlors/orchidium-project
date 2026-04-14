@@ -99,6 +99,7 @@ export const TaskSourceLabels: Record<TaskSource, string> = {
   [TaskSource.MANUAL]: 'Manual',
   [TaskSource.DEFERRED]: 'Diferido',
   [TaskSource.ROUTINE]: 'Rutina',
+  [TaskSource.INFERENCE]: 'Inferencia',
 }
 
 /**

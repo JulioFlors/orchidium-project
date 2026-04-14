@@ -68,11 +68,10 @@ Interfaz para crear/editar/eliminar rutinas de automatización (`AutomationSched
 
 ### 3.3 Motor de Inferencias (El Cerebro)
 
-Análisis profundo en segundo plano (Data Science agronómico) para predecir y evaluar.
-
-* **Segmentación Circadiana:** Comprensión de las 4 fases del día (Valle Nocturno, Rampa Matutina, Pico Diurno, Transición Vespertina).
-* **Métricas Complejas:** Cálculo diario del DLI (Daily Light Integral) discriminando luz solar de artificial, y VPD (Déficit de Presión de Vapor).
-* **Predicción Epidemiológica:** Cruce del historial ambiental con el "Diario Biológico" para alertar sobre condiciones propensas a hongos o plagas específicas.
+* [x] **Inference Engine (v1):** Implementación de lazo cerrado de decisión cruzando telemetría InfluxDB (SMA), VWC (AgroMonitoring) y Pronóstico (Open-Meteo).
+* [ ] **Segmentación Circadiana:** Comprensión de las 4 fases del día (Valle Nocturno, Rampa Matutina, Pico Diurno, Transición Vespertina).
+* [ ] **Métricas Complejas:** Cálculo diario del DLI (Daily Light Integral) discriminando luz solar de artificial, y VPD (Déficit de Presión de Vapor).
+* [ ] **Predicción Epidemiológica:** Cruce del historial ambiental con el "Diario Biológico" para alertar sobre condiciones propensas a hongos o plagas específicas.
 
 ---
 

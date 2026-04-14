@@ -79,7 +79,7 @@ enum TaskSource {
   MANUAL
   DEFERRED
   ROUTINE
-  ORACLE_INFERENCE
+  INFERENCE
 }
 
 enum TaskPurpose {

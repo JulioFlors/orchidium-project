@@ -147,3 +147,12 @@ Para garantizar la seguridad total de la base de datos de producción y evitar r
     - **Población**: Si es necesario, ejecutar `pnpm db:seed` en local para rellenar datos.
     - **Distribución**: Commit del esquema y las migraciones SQL a `main`.
     - **Despliegue**: Ejecutar `./deploy.sh` en el VPS para actualizar el código y el Prisma Client.
+
+### Paso 10: Mantenimiento Proactivo de Bitácoras (Trazabilidad)
+
+El Agente DEBE actuar como un escriba autónomo y actualizar los archivos de trazabilidad conforme el proyecto avanza, sin necesidad de que el usuario se lo recuerde en cada prompt:
+
+1. **`ROADMAP.md`**: Actualizar la visión general (Macro) cuando se completen fases de sprints, hitos de la arquitectura o dominios completos de la aplicación.
+2. **`todos.md`**: Actualizar la lista de micro-tareas e issues técnicos a medida que se descubran, se pospongan o culminen durante el ciclo de vida de un request.
+3. **`commit.txt`**: Alimentar progresivamente este archivo con los changelogs usando el formato de Conventional Commits.
+4. **NO hacer autodeploy ni commits no consentidos**: El agente únicamente manipula el contenido en texto (Markdown y TXT) reflejando el progreso y preparándolo para el commit, asegurando que ninguna tarea ejecutada quede fuera del radar, pero deja la ejecución del despliegue explícito y el versionamiento (`git commit` final y push) a manos del usuario.

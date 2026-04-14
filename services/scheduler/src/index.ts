@@ -1076,8 +1076,8 @@ async function initScheduler() {
     })
   })
 
-  // Motor de Inferencia Botánica (Cada 15 minutos)
-  new Cron('*/15 * * * *', { timezone: "America/Caracas" }, () => {
+  // Motor de Inferencia Botánica (Cada 30 minutos)
+  new Cron('*/30 * * * *', { timezone: "America/Caracas" }, () => {
     import('./cron/inference-engine.js').then((m) => {
       m.runInferenceEngine().catch(err => Logger.error('Fallo en runInferenceEngine', err))
     })

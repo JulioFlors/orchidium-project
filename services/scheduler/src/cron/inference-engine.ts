@@ -1,7 +1,40 @@
 import { InfluxDBClient } from '@influxdata/influxdb3-client'
 import { prisma, TaskPurpose, TaskSource, ZoneType } from '@package/database'
-import { v4 as uuidv4 } from 'uuid'
-import { Logger } from '../logger'
+import crypto from 'node:crypto'
+
+// ---- colors for Logs ----
+const colors = {
+  reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  red: '\x1b[91m',
+  green: '\x1b[92m',
+  yellow: '\x1b[93m',
+  blue: '\x1b[34m',
+  magenta: '\x1b[95m',
+  cyan: '\x1b[96m',
+  white: '\x1b[97m',
+}
+
+const getLogTime = () => {
+  return new Intl.DateTimeFormat('es-VE', {
+    timeZone: 'America/Caracas',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  }).format(new Date())
+}
+
+const Logger = {
+  info: (msg: string) => console.log(`${colors.blue}ℹ [INFO]${colors.reset} [${getLogTime()}] ${msg}`),
+  success: (msg: string) => console.log(`${colors.green}✔ [SUCCESS]${colors.reset} [${getLogTime()}] ${msg}`),
+  warn: (msg: string) => console.log(`${colors.yellow}⚠ [WARN]${colors.reset} [${getLogTime()}] ${msg}`),
+  error: (msg: string, err?: any) => console.error(`${colors.red}✖ [ERROR]${colors.reset} [${getLogTime()}] ${msg}`, err || ''),
+  mqtt: (msg: string) => console.log(`${colors.magenta}📡 [MQTT]${colors.reset} [${getLogTime()}] ${msg}`),
+  db: (msg: string) => console.log(`${colors.cyan}🗄️ [DB]${colors.reset} [${getLogTime()}] ${msg}`),
+}
 
 // ---- Configuración ----
 const INFLUX_URL = process.env.INFLUX_URL || process.env.INFLUX_URL_CLOUD || process.env.INFLUX_URL_LOCAL || 'http://localhost:8181'
@@ -57,14 +90,14 @@ export async function runInferenceEngine() {
       return
     }
 
-    // 2. Obtener la telemetría térmica de los últimos 15 minutos en el interior (InfluxDB)
+    // 2. Obtener la telemetría térmica de los últimos 30 minutos en el interior (InfluxDB)
     // Buscamos promedios para evadir picos transitorios (ej. alguien abrió una puerta caliente).
     const query = `
       SELECT 
         AVG(temperature) as avg_temp, 
         AVG(humidity) as avg_hum 
       FROM "environment_metrics" 
-      WHERE time >= now() - interval '15 minutes'
+      WHERE time >= now() - interval '30 minutes'
       AND "zone" != 'EXTERIOR'
     `
     const stream = influxClient.query(query)
@@ -89,8 +122,8 @@ export async function runInferenceEngine() {
     // 3. Revisar Cooldown de tareas autónomas para evitar loops infinitos
     const recentTask = await prisma.taskLog.findFirst({
       where: {
-        source: TaskSource.ORACLE_INFERENCE,
-        createdAt: { gte: new Date(now.getTime() - LIMITS.COOLDOWN_MINUTES * 60000) }
+        source: TaskSource.INFERENCE,
+        scheduledAt: { gte: new Date(now.getTime() - LIMITS.COOLDOWN_MINUTES * 60000) }
       }
     })
 
@@ -126,14 +159,14 @@ export async function runInferenceEngine() {
 
     // 5. Inyección a Postgres si hay decisión
     if (selectedPurpose) {
-      const taskId = uuidv4()
+      const taskId = crypto.randomUUID()
       await prisma.taskLog.create({
         data: {
           id: taskId,
           // Lo programamos inmediatamente (PENDING se recogerá en el loop de los próximos 60segs)
           scheduledAt: new Date(), 
           status: 'PENDING',
-          source: TaskSource.ORACLE_INFERENCE,
+          source: TaskSource.INFERENCE,
           purpose: selectedPurpose,
           zones: [ZoneType.ZONA_A, ZoneType.ZONA_B, ZoneType.ZONA_C, ZoneType.ZONA_D], // Por defecto toda el area cultivable
           duration: selectedDuration,
