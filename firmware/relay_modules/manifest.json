@@ -1,9 +1,9 @@
 {
   "name": "Relay Modules",
   "description": "Nodo Actuador + Meteorológica Exterior",
-  "version": "0.9.8",
-  "date": "08-04-2026",
-  "notes_release": "[☀️ Monitoreo Orquestado]: Finalizada la integración del ciclo de iluminancia sincronizado reactivamente por el Scheduler.",
+  "version": "0.9.9",
+  "date": "15-04-2026",
+  "notes_release": "[📡 Red]: Detección de Sesiones Zombie: Eliminado el falso positivo en el latido manual MQTT (last_cpacket). El nodo ahora detecta correctamente las caídas de red silenciosas basándose en el PINGRESP del broker, resolviendo las desconexiones por timeout. [📡 Core] Desbloqueo del Event Loop: Optimizado el monkey-patch de escritura robusta en umqtt. Se redujo el backoff de 300ms a 20ms para evitar la asfixia del planificador de uasyncio y la congelación de los actuadores durante ráfagas de red.",
   "files": [
     "app.mpy",
     "boot.py",

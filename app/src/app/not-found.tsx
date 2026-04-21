@@ -50,7 +50,6 @@ export default function NotFoundPage() {
           setSuggestions(suggestionsData)
           setPlantsNavData(navData)
         } catch (err) {
-          // eslint-disable-next-line no-console
           console.error('🚨 Error recovering navigation data:', err)
         }
       }

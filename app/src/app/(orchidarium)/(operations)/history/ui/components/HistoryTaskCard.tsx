@@ -52,7 +52,7 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
   EXPIRED: <IoCloseCircleOutline />,
   CANCELLED: <IoWarningOutline />,
   SKIPPED: <IoHourglassOutline />,
-  WAITING_CONFIRMATION: <IoHourglassOutline className="animate-pulse" />,
+  WAITING_CONFIRMATION: <IoHourglassOutline />,
 }
 
 export function HistoryTaskCard({
@@ -72,8 +72,6 @@ export function HistoryTaskCard({
       className="bg-surface border-input-outline group hover:bg-hover-overlay tds-sm:flex-row tds-sm:items-center relative flex cursor-pointer flex-col gap-4 rounded-xl border p-4 shadow-sm transition-all"
       role="button"
       tabIndex={0}
-      whileHover={{ y: -1 }}
-      whileTap={{ scale: 0.99 }}
       onClick={() => onClickAction(task)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -91,19 +89,19 @@ export function HistoryTaskCard({
             variant="vibrant"
           />
 
-          <div className="flex flex-1 flex-col overflow-hidden text-left">
-            <div className="tds-xs:flex-row tds-xs:items-center tds-xs:gap-x-2 tds-xs:gap-y-0 flex flex-col gap-y-1">
-              <h3 className="text-primary tds-xs:order-1 tds-xs:truncate tds-xs:whitespace-nowrap order-2 text-[15px] leading-tight font-bold whitespace-normal">
+          <div className="flex flex-1 flex-col gap-y-1 overflow-hidden text-left">
+            <div className="tds-xs:flex-row tds-xs:items-center tds-xs:gap-x-2 tds-xs:gap-y-0 tds-xs:flex contents">
+              <h3 className="text-primary tds-xs:order-1 tds-xs:truncate tds-xs:whitespace-nowrap order-1 text-[15px] leading-tight font-bold whitespace-normal">
                 {actionLabel}
               </h3>
-              <div className="tds-xs:order-2 order-1 flex">
+              <div className="tds-xs:order-2 order-3 flex">
                 <Badge className={clsx('shrink-0', statusStyle)} size="sm" variant="status">
                   {statusLabel}
                 </Badge>
               </div>
             </div>
 
-            <div className="text-secondary order-3 mt-1 flex items-center gap-2 text-[11px] font-medium opacity-60">
+            <div className="text-secondary tds-xs:mt-1 order-2 flex items-center gap-2 text-[11px] font-medium opacity-60">
               <span>{sourceLabel}</span>
               <span className="font-mono">#{task.id.substring(0, 8)}</span>
             </div>

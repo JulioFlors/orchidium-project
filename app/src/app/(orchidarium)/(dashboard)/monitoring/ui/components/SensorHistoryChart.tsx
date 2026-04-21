@@ -264,13 +264,27 @@ export function SensorHistoryChart({
   let avg = 0
 
   if (count > 0) {
-    const values = data.map((d) => Number(d[dataKey] || 0))
-    const minValues = isMacro ? data.map((d) => Number(d[`min_${dataKey}`] || 0)) : values
-    const maxValues = isMacro ? data.map((d) => Number(d[`max_${dataKey}`] || 0)) : values
+    let statsData = data
 
-    min = Math.min(...minValues)
-    max = Math.max(...maxValues)
-    avg = values.reduce((sum, val) => sum + val, 0) / count
+    if (dataKey === 'illuminance') {
+      // Filtrar por horario diurno (8 AM - 4 PM) para estadísticas de luz
+      statsData = data.filter((d) => {
+        const date = new Date(String(d.time))
+        const hour = date.getHours()
+
+        return hour >= 8 && hour < 16
+      })
+    }
+
+    const values = statsData.map((d) => Number(d[dataKey] || 0))
+    const minValues = isMacro ? statsData.map((d) => Number(d[`min_${dataKey}`] || 0)) : values
+    const maxValues = isMacro ? statsData.map((d) => Number(d[`max_${dataKey}`] || 0)) : values
+
+    if (values.length > 0) {
+      min = Math.min(...minValues)
+      max = Math.max(...maxValues)
+      avg = values.reduce((sum, val) => sum + val, 0) / values.length
+    }
   }
 
   const formatStat = (val: number) => {

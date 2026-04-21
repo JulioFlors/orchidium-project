@@ -25,7 +25,7 @@ export default function ErrorPage({ error }: ErrorProps) {
     document.title = 'PristinoPlant | Error'
 
     // Loguear el error en la consola del navegador para que tú (el dev) sepas qué pasó
-    // eslint-disable-next-line no-console
+
     console.error('🚨 Application Error:', error)
 
     const pathname = window.location.pathname
@@ -57,7 +57,6 @@ export default function ErrorPage({ error }: ErrorProps) {
           setSuggestions(suggestionsData)
           setPlantsNavData(navData)
         } catch (err) {
-          // eslint-disable-next-line no-console
           console.error('🚨 Error recovering navigation data:', err)
         }
       }

@@ -23,7 +23,6 @@ export const verifyEmailInDb = async (email: string) => {
       message: 'Usuario encontrado',
     }
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.log(error)
 
     return {

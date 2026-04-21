@@ -101,6 +101,11 @@
       "sourceType": "github",
       "computedHash": "72af4a036d417d6eaef7478eca2f28e760631fb78db822ba34a9c706797aab62"
     },
+    "markdown-formatter": {
+      "source": "markpitt/claude-skills",
+      "sourceType": "github",
+      "computedHash": "f38531560456974dbfd95813d5928b2910df8440c566fcfd2a978ec07650d9dd"
+    },
     "responsive-design": {
       "source": "wshobson/agents",
       "sourceType": "github",

@@ -6,6 +6,7 @@ import { IoLogOutOutline } from 'react-icons/io5'
 import clsx from 'clsx'
 
 import { Backdrop } from '@/components'
+import { clearAuditData } from '@/lib/audit-storage'
 import { authClient } from '@/lib/auth-client'
 
 export function LogoutButton() {
@@ -18,6 +19,7 @@ export function LogoutButton() {
     await authClient.signOut({
       fetchOptions: {
         onSuccess: () => {
+          clearAuditData()
           router.push('/auth/login')
         },
       },

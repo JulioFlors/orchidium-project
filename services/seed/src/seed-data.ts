@@ -659,7 +659,7 @@ export const initialData: SeedData = {
         'Fertilizante NPK cristalino rico en nitrógeno con microelementos, adecuado como complemento al abonado o para aplicar en las fases de crecimiento vegetativo dónde se consume nitrógeno.',
       type: 'FERTILIZANTE',
       purpose: 'DESARROLLO',
-      preparation: '1 gramo por litro de agua',
+      preparation: '1 g/L',
     },
     {
       name: 'Nitrifort M935',

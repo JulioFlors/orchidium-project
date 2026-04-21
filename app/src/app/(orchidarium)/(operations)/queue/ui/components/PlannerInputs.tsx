@@ -2,7 +2,7 @@ import { Controller, Control, UseFormRegister, FieldValues, Path, useWatch } fro
 import clsx from 'clsx'
 
 import { SelectDropdown } from '@/components'
-import { TaskPurposeLabels } from '@/config/mappings'
+import { TaskPurposeLabels, ZoneType, ZoneTypeLabels } from '@/config/mappings'
 
 const ACTION_MAP = {
   IRRIGATION: { label: TaskPurposeLabels.IRRIGATION },
@@ -26,16 +26,12 @@ interface InputProps<T extends FieldValues> {
 export function PlannerCircuitSelect<T extends FieldValues>({
   control,
   name,
-  label = 'Circuito',
   error,
-}: Omit<InputProps<T>, 'register'>) {
+}: Omit<InputProps<T>, 'register' | 'label'>) {
   if (!control) return null
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-secondary text-sm font-medium" htmlFor={name}>
-        {label}
-      </label>
       <Controller
         control={control}
         name={name}
@@ -55,7 +51,7 @@ export function PlannerCircuitSelect<T extends FieldValues>({
         )}
       />
       {error && (
-        <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
+        <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-500">
           {error}
         </span>
       )}
@@ -69,16 +65,12 @@ export function PlannerCircuitSelect<T extends FieldValues>({
 export function PlannerZoneSelect<T extends FieldValues>({
   control,
   name,
-  label = 'Zona',
   error,
-}: Omit<InputProps<T>, 'register'>) {
+}: Omit<InputProps<T>, 'register' | 'label'>) {
   if (!control) return null
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-secondary text-sm font-medium" htmlFor={name}>
-        {label}
-      </label>
       <Controller
         control={control}
         name={name}
@@ -86,14 +78,14 @@ export function PlannerZoneSelect<T extends FieldValues>({
           <SelectDropdown
             {...rest}
             id={name}
-            options={[{ label: 'ZONA A', value: 'ZONA_A' }]}
+            options={[{ label: ZoneTypeLabels[ZoneType.ZONA_A], value: ZoneType.ZONA_A }]}
             value={value}
             onChange={onChange}
           />
         )}
       />
       {error && (
-        <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
+        <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-500">
           {error}
         </span>
       )}
@@ -108,19 +100,15 @@ export function PlannerDurationInput<T extends FieldValues>({
   control,
   register,
   name,
-  label = 'Duración',
   error,
-}: InputProps<T>) {
-  // Observamos el valor reactivamente evadiendo colisiones de re-renders no memoizados.
+}: Omit<InputProps<T>, 'label'>) {
+  // Observamos el valor reactivamente
   const durationValue = useWatch({ control, name })
 
   if (!control || !register) return null
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-secondary text-sm font-medium" htmlFor={name}>
-        {label}
-      </label>
       <div className="relative isolate flex w-full items-center">
         <div className="relative flex w-full items-center">
           <input
@@ -128,7 +116,7 @@ export function PlannerDurationInput<T extends FieldValues>({
             className={clsx(
               'focus-input peer w-full border text-sm',
               error
-                ? 'border-transparent outline -outline-offset-1 outline-red-800/75 dark:outline-red-400/75'
+                ? 'border-red-500/50 outline -outline-offset-1 outline-red-500/50'
                 : 'border-input-outline',
             )}
             id={name}
@@ -147,7 +135,7 @@ export function PlannerDurationInput<T extends FieldValues>({
 
         {/* Etiqueta dinámica "min" adyacente */}
         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center px-3">
-          {/* Espaciador invisible que simula el ancho del texto ingresado */}
+          {/* Espaciador invisible */}
           <span className="invisible text-sm">{durationValue}</span>
           {/* El texto real visible */}
           {durationValue ? (
@@ -158,7 +146,7 @@ export function PlannerDurationInput<T extends FieldValues>({
         </div>
       </div>
       {error && (
-        <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
+        <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-500">
           {error}
         </span>
       )}

@@ -38,6 +38,7 @@ export interface Species {
   }
 
   variants: ProductVariant[]
+  isFlowering?: boolean
 }
 
 export interface CartProduct {

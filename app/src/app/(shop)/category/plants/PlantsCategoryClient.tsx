@@ -1,88 +1,45 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useMemo } from 'react'
 
 import { ProductGrid, Title, Subtitle } from '@/components'
-import { getPaginatedSpeciesWithImages } from '@/actions'
-import { PlantType, ShopRoute, Species, ShopCategory } from '@/interfaces'
-
-// Re-using the slug to plant type mapping
-const slugToPlantType: Record<string, PlantType> = {
-  orchids: 'ORCHID',
-  adenium_obesum: 'ADENIUM_OBESUM',
-  cactus: 'CACTUS',
-  succulents: 'SUCCULENT',
-  bromeliads: 'BROMELIAD',
-}
-
-interface Props {
-  route: ShopRoute
-}
+import { Species, ShopRoute, ShopCategory } from '@/interfaces'
 
 interface CategorySection {
   category: ShopCategory
   speciesByGenus: Record<string, Species[]>
 }
 
-export default function PlantsCategoryClient({ route }: Props) {
-  const [categoriesData, setCategoriesData] = useState<CategorySection[]>([])
-  const [loading, setLoading] = useState(true)
+interface Props {
+  route: ShopRoute
+  initialCategoriesData: CategorySection[]
+}
 
-  useEffect(() => {
-    async function loadInitialData() {
-      // For each category in the route, fetch its first page
-      const initialData = await Promise.all(
-        (route.categories || []).map(async (category) => {
-          const type = slugToPlantType[category.slug.toLowerCase()]
-
-          if (!type) return null
-
-          const { species } = await getPaginatedSpeciesWithImages({
-            plantType: type,
-            take: 50, // Large enough for initial view
-            page: 1,
-          })
-
-          if (species.length === 0) return null
-
-          // Group by genus
-          const speciesByGenus = species.reduce((acc: Record<string, Species[]>, s) => {
-            const genus = s.genus.name
-
-            if (!acc[genus]) acc[genus] = []
-            acc[genus].push(s as unknown as Species)
-
-            return acc
-          }, {})
-
-          return {
-            category,
-            speciesByGenus,
-          }
-        }),
-      )
-
-      setCategoriesData(initialData.filter((item): item is CategorySection => item !== null))
-
-      setLoading(false)
-    }
-
-    loadInitialData()
-  }, [route])
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <div className="border-primary h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
-
-        <span className="text-secondary mt-4 animate-pulse text-sm font-medium">Cargando</span>
-      </div>
-    )
-  }
+export default function PlantsCategoryClient({ initialCategoriesData }: Props) {
+  // Extraemos todas las especies que están en floración de todas las subcategorías
+  const floweringSpecies = useMemo(() => {
+    return initialCategoriesData
+      .flatMap((data) => Object.values(data.speciesByGenus).flat())
+      .filter((species) => species.isFlowering)
+  }, [initialCategoriesData])
 
   return (
     <>
-      {categoriesData.map((data, catIndex) => (
+      {/* Sección destacada: En Floración (Solo si hay ejemplares) */}
+      {floweringSpecies.length > 0 && (
+        <div className="mb-12 scroll-mt-30">
+          <Title className="ml-1 text-pink-500!" title="En Floración" />
+          <Subtitle
+            className="ml-1 w-[calc(100%-8px)]! px-0"
+            subtitle="Ejemplares listos para disfrutar su belleza máxima"
+          />
+          <ProductGrid index={0} products={floweringSpecies} />
+
+          <div className="mx-1 mt-8 border-b border-white/5" />
+        </div>
+      )}
+
+      {initialCategoriesData.map((data, catIndex) => (
         <div
           key={data.category.slug}
           className="scroll-mt-30"

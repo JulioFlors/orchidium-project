@@ -27,7 +27,6 @@ export const getPaginatedUsers = async (limit: number = 50, skip: number = 0) =>
       users,
     }
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error('Error al obtener usuarios:', err)
 
     return { ok: false, message: 'Error al obtener usuarios' }
@@ -58,7 +57,6 @@ export const changeUserRole = async (userId: string, newRole: string) => {
 
     return { ok: true }
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error('Error al cambiar rol de usuario:', err)
 
     return { ok: false, message: 'No se pudo actualizar el rol' }
@@ -85,7 +83,6 @@ export const deleteUser = async (userId: string) => {
 
     return { ok: true }
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error('Error al eliminar usuario:', err)
 
     return { ok: false, message: 'Error al eliminar usuario' }

@@ -45,8 +45,13 @@ export function OracleDecisionCard({ forecast }: { forecast: OracleForecast | un
         <div className="bg-primary/20 border-primary/30 rounded-lg border p-2.5">
           <FaSatelliteDish className="text-primary h-5 w-5 animate-pulse" />
         </div>
-        <div>
-          <h2 className="text-lg font-bold tracking-tight">Weather Oracle</h2>
+        <div className="flex flex-1 flex-col">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold tracking-tight">Weather Oracle</h2>
+            <div className="bg-secondary/10 text-secondary rounded-full border border-white/5 px-2 py-0.5 text-[9px] font-bold tracking-widest uppercase">
+              Actualizado: cada 3h
+            </div>
+          </div>
           <p className="text-secondary text-xs font-medium tracking-wide">
             ASISTENTE DE DECISIONES AGRONÓMICAS
           </p>

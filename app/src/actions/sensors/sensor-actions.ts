@@ -310,7 +310,6 @@ export async function getRainHistory(range = '24h', zone = 'EXTERIOR') {
       }
     }
 
-    // eslint-disable-next-line no-console
     console.error('Error querying InfluxDB (Rain Events):', error)
 
     return { success: false, error: `Error de telemetría (Lluvia): ${msg}` }

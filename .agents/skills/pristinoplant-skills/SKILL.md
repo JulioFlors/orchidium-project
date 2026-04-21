@@ -5,6 +5,9 @@ description: Protocolo maestro de desarrollo. Define convenciones git, manejo de
 
 # Protocolo de Desarrollo Pristinoplant
 
+> [!IMPORTANT]
+> **ESTÁNDARES DE MARKDOWN (PASO 8)**: Es mandatorio cumplir con el espaciado de encabezados y listas. El sistema de linting ahora está unificado bajo ESLint; asegúrate de ejecutar `pnpm lint:fix` antes de cualquier entrega importante.
+
 Este documento define las directrices, convenciones y flujos de trabajo ESTRICTOS para el desarrollo del proyecto "Pristinoplant".
 
 ## Cuándo Usar esta Habilidad

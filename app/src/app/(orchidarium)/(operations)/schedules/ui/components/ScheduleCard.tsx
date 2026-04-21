@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { clsx } from 'clsx'
-import { IoTimeOutline, IoPencilOutline, IoTrashOutline } from 'react-icons/io5'
+import { IoTimeOutline, IoSettingsOutline, IoCloseOutline } from 'react-icons/io5'
 import { RxStopwatch } from 'react-icons/rx'
 import { MdLayers } from 'react-icons/md'
 
@@ -26,6 +26,7 @@ interface ScheduleCardProps {
   onToggle: (id: string, currentStatus: boolean) => void
   icon: React.ReactNode
   colorClassName: string
+  isLoading?: boolean
 }
 
 export function ScheduleCard({
@@ -35,6 +36,7 @@ export function ScheduleCard({
   onToggle,
   icon,
   colorClassName,
+  isLoading = false,
 }: ScheduleCardProps) {
   // Helper para convertir el formato Cron "0 16 * * *" a "16:00" y luego a AM/PM
   const formatCronTime = (cronStr: string) => {
@@ -53,14 +55,14 @@ export function ScheduleCard({
   const menuItems: ActionMenuItem[] = [
     {
       label: 'Editar',
-      icon: <IoPencilOutline />,
+      icon: <IoSettingsOutline />,
       onClick: () => onEdit(schedule),
     },
     {
       label: 'Eliminar',
-      icon: <IoTrashOutline />,
+      icon: <IoCloseOutline />,
       onClick: () => onDelete(schedule.id),
-      variant: 'danger',
+      variant: 'destructive',
     },
   ]
 
@@ -69,6 +71,7 @@ export function ScheduleCard({
       className={clsx(
         'bg-surface border-input-outline group relative flex flex-col gap-4 rounded-xl border p-4 shadow-sm transition-all',
         !schedule.isEnabled && 'opacity-60 grayscale-[0.5]',
+        isLoading && 'pointer-events-none opacity-50',
       )}
     >
       <div className="flex items-start justify-between">
@@ -94,6 +97,7 @@ export function ScheduleCard({
             <input
               checked={schedule.isEnabled}
               className="peer sr-only"
+              disabled={isLoading}
               type="checkbox"
               onChange={() => onToggle(schedule.id, schedule.isEnabled)}
             />

@@ -34,7 +34,6 @@ export async function GET(request: Request) {
 
     return NextResponse.json(tasks)
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.error('Error fetching history tasks:', error)
 
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })

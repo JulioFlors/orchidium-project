@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { ActuatorCard, FertigationModal } from './components'
 
+import { ZoneType } from '@/config/mappings'
 import {
   createManualTask,
   cancelManualTask,
@@ -16,7 +17,7 @@ import {
 import { useMqttStore } from '@/store'
 import { IrrigationCommand } from '@/interfaces'
 import { useDeviceHeartbeat, useToast } from '@/hooks'
-import { DeviceViewHeader } from '@/components'
+import { Heading, DeviceStatus } from '@/components'
 
 // Definición de Tópicos
 const TOPIC_PREFIX = 'PristinoPlant/Actuator_Controller'
@@ -282,7 +283,9 @@ export function ControlView() {
 
     if (isTurningOn) {
       try {
-        const dbRes = await createManualTask(circuitName, Math.floor(DEFAULT_DURATION_SEC / 60))
+        const dbRes = await createManualTask(circuitName, Math.floor(DEFAULT_DURATION_SEC / 60), [
+          ZoneType.ZONA_A,
+        ])
 
         if (dbRes.success && dbRes.taskId) {
           taskId = dbRes.taskId
@@ -344,17 +347,19 @@ export function ControlView() {
   const isOffline = connectionState === 'offline'
 
   return (
-    <div className="space-y-6">
-      <DeviceViewHeader
-        connectionState={connectionState}
-        deviceDescription="Control directo sobre los actuadores del orquideario. Utilice estas herramientas para mantenimiento, pruebas o correcciones puntuales del microclima."
-        deviceName="Centro de Control"
-        gridClassName="grid-cols-1 gap-4 tds-sm:grid-cols-2 tds-lg:grid-cols-4"
-        isLoadingStatus={isConnecting}
-        selectedZone="ZONA_A"
-        titleClassName="col-span-1 tds-sm:col-span-2 tds-lg:col-span-3"
-        zoneMapping={{ ZONA_A: 'Controlador' }}
-        zones={['ZONA_A']}
+    <div className="flex flex-col gap-6">
+      <Heading
+        action={
+          <DeviceStatus
+            connectionState={connectionState}
+            isLoadingStatus={isConnecting}
+            selectedZone={ZoneType.ZONA_A}
+            zoneMapping={{ [ZoneType.ZONA_A]: 'Controlador' }}
+            zones={[ZoneType.ZONA_A]}
+          />
+        }
+        description="Acciona manualmente los circuitos de riego para regular las condiciones ambientales del orquideario."
+        title="Centro de Control"
       />
 
       {/* Grid de Control */}

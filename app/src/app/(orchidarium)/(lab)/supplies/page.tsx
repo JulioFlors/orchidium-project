@@ -14,9 +14,5 @@ export default async function SuppliesPage() {
 
   const agrochemicals = result.ok ? result.agrochemicals || [] : []
 
-  return (
-    <div className="container mx-auto px-4 py-8">
-      <SuppliesView agrochemicals={agrochemicals} />
-    </div>
-  )
+  return <SuppliesView agrochemicals={agrochemicals} />
 }

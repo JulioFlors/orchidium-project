@@ -21,7 +21,6 @@ export const getSearchSuggestions = async (): Promise<SearchSuggestion[]> => {
 
     return species
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.error('Error fetching search suggestions:', error)
 
     return []

@@ -16,6 +16,7 @@ import {
 import { Modal, Button, FormField, Input } from '@/components/ui'
 import { upsertSchedule } from '@/actions/planner/schedule-actions'
 import { getPrograms } from '@/actions/lab/programs'
+import { ZoneType, ZoneTypeLabels } from '@/config/mappings'
 
 // Zod Schema
 const programSchema = z.object({
@@ -27,8 +28,10 @@ const programSchema = z.object({
   ),
   time: z.string().regex(/^([01]\d|2[0-3]):?([0-5]\d)$/, 'Hora inválida (HH:mm)'),
   duration: z.coerce.number().min(1, 'Mínimo 1 minuto').max(25, 'Máximo 25 minutos'),
-  zone: z.literal('ZONA_A', {
-    errorMap: () => ({ message: 'La única zona habilitada es la ZONA A' }),
+  zone: z.literal(ZoneType.ZONA_A, {
+    errorMap: () => ({
+      message: `La única zona habilitada es el ${ZoneTypeLabels[ZoneType.ZONA_A]}`,
+    }),
   }),
   fertilizationProgramId: z.string().optional(),
   phytosanitaryProgramId: z.string().optional(),
@@ -100,10 +103,10 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
       purpose: '' as 'HUMIDIFICATION',
       time: '',
       duration: '' as unknown as number,
-      zone: 'ZONA_A',
+      zone: ZoneType.ZONA_A,
       fertilizationProgramId: '',
       phytosanitaryProgramId: '',
-      days: [0, 1, 2, 3, 4, 5, 6],
+      days: [],
     },
   })
 
@@ -147,7 +150,7 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
           purpose: initialData.purpose,
           time: cronToTime(initialData.cronTrigger),
           duration: initialData.durationMinutes,
-          zone: (initialData.zones?.[0] || 'ZONA_A') as 'ZONA_A',
+          zone: ZoneType.ZONA_A,
           fertilizationProgramId: initialData.fertilizationProgramId || '',
           phytosanitaryProgramId: initialData.phytosanitaryProgramId || '',
           days: cronToDays(initialData.cronTrigger),
@@ -159,10 +162,10 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
           purpose: '' as 'HUMIDIFICATION',
           time: '',
           duration: '' as unknown as number,
-          zone: 'ZONA_A',
+          zone: ZoneType.ZONA_A,
           fertilizationProgramId: '',
           phytosanitaryProgramId: '',
-          days: [0, 1, 2, 3, 4, 5, 6],
+          days: [],
         } as ProgramFormInputs)
       }
     }

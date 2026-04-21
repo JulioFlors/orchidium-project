@@ -17,38 +17,22 @@
  * ============================================================
  */
 
-import { InfluxDBClient } from '@influxdata/influxdb3-client'
 import { prisma, ZoneType } from '@package/database'
 
-// ── Config ────────────────────────────────────────────────────────────────────
-const INFLUX_URL =
-  process.env.INFLUX_URL || process.env.INFLUX_URL_CLOUD || process.env.INFLUX_URL_LOCAL || 'http://localhost:8181'
-const INFLUX_TOKEN = process.env.INFLUX_TOKEN || process.env.INFLUX_TOKEN_SERVERLESS
-const INFLUX_BUCKET = process.env.INFLUX_BUCKET || 'telemetry'
+import { Logger } from '../lib/logger'
+import { influxClient } from '../lib/influx'
 
+// ── Config ────────────────────────────────────────────────────────────────────
 const BACKFILL_DAYS = parseInt(process.env.BACKFILL_DAYS || '30', 10)
 const BACKFILL_ZONE = process.env.BACKFILL_ZONE as ZoneType | undefined
 const DRY_RUN = process.env.BACKFILL_DRY_RUN === 'true'
-
-const parsedUrl = new URL(INFLUX_URL)
-if (
-  (parsedUrl.hostname === 'influxdb' || parsedUrl.hostname === 'localhost') &&
-  !parsedUrl.hostname.endsWith('influxdata.com')
-) {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
-}
-
-const influxClient = new InfluxDBClient({
-  host: INFLUX_URL,
-  token: INFLUX_TOKEN,
-  database: INFLUX_BUCKET,
-})
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function rowTimeToDate(rawTime: unknown): Date {
   if (rawTime instanceof Date) return rawTime
   const s = String(rawTime)
+
   return s.length > 13 ? new Date(Number(s.substring(0, 13))) : new Date(Number(s))
 }
 
@@ -59,15 +43,22 @@ function localHourCaracas(d: Date): number {
 function toCaracasTimeStr(isoStr: string | null): string | null {
   if (!isoStr) return null
   const d = new Date(isoStr)
+
   if (isNaN(d.getTime())) return null
-  return d.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Caracas' })
+
+  return d.toLocaleTimeString('es-VE', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Caracas',
+  })
 }
 
-const safeAvg = (sum: number, count: number) => count > 0 ? Number((sum / count).toFixed(2)) : 0
-const safeInf = (v: number) => (v === Infinity || v === -Infinity) ? 0 : Number(v.toFixed(2))
+const safeAvg = (sum: number, count: number) => (count > 0 ? Number((sum / count).toFixed(2)) : 0)
+const safeInf = (v: number) => (v === Infinity || v === -Infinity ? 0 : Number(v.toFixed(2)))
 
 function calculateVPD(tempC: number, humidityPercent: number): number {
   const svp = 0.6108 * Math.exp((17.27 * tempC) / (tempC + 237.3))
+
   return Number((svp * (1 - humidityPercent / 100)).toFixed(3))
 }
 
@@ -75,6 +66,7 @@ function calculateVPD(tempC: number, humidityPercent: number): number {
 
 async function processDay(zone: ZoneType, dayStart: Date): Promise<void> {
   const dayEnd = new Date(dayStart)
+
   dayEnd.setDate(dayEnd.getDate() + 1)
 
   const isExterior = zone === 'EXTERIOR'
@@ -82,10 +74,12 @@ async function processDay(zone: ZoneType, dayStart: Date): Promise<void> {
 
   // ── 1. Lluvia ─────────────────────────────────────────────────────────────
   let totalRain = 0
+
   if (isExterior) {
     try {
       const rainQuery = `SELECT SUM(duration_seconds) as total_rain FROM "rain_events" WHERE "zone" = '${zone}' AND time >= '${dayStart.toISOString()}' AND time < '${dayEnd.toISOString()}'`
       const rainStream = influxClient.query(rainQuery)
+
       for await (const row of rainStream) {
         totalRain = Number(row.total_rain || 0)
       }
@@ -97,25 +91,47 @@ async function processDay(zone: ZoneType, dayStart: Date): Promise<void> {
   // ── 2. Métricas ambientales ───────────────────────────────────────────────
   const rawQuery = `SELECT * FROM "environment_metrics" WHERE "zone" = '${zone}' AND time >= '${dayStart.toISOString()}' AND time < '${dayEnd.toISOString()}' ORDER BY time ASC`
 
-  let countTemp = 0, sumTemp = 0, minTemp = Infinity, maxTemp = -Infinity
-  let minTempTime: string | null = null, maxTempTime: string | null = null
+  let countTemp = 0,
+    sumTemp = 0,
+    minTemp = Infinity,
+    maxTemp = -Infinity
+  let minTempTime: string | null = null,
+    maxTempTime: string | null = null
 
-  let countHum = 0, sumHum = 0, minHum = Infinity, maxHum = -Infinity
-  let minHumTime: string | null = null, maxHumTime: string | null = null
+  let countHum = 0,
+    sumHum = 0,
+    minHum = Infinity,
+    maxHum = -Infinity
+  let minHumTime: string | null = null,
+    maxHumTime: string | null = null
 
-  let countLum = 0, sumLum = 0, minLum = Infinity, maxLum = -Infinity
-  let minLumTime: string | null = null, maxLumTime: string | null = null
+  let countLum = 0,
+    sumLum = 0,
+    minLum = Infinity,
+    maxLum = -Infinity
+  let minLumTime: string | null = null,
+    maxLumTime: string | null = null
 
   // Botánicos
-  let dliAccumulator = 0, lastLuxTime: Date | null = null
-  let vpdSum = 0, vpdCount = 0, vpdMin = Infinity, vpdMax = -Infinity
-  let sumTempDay = 0, countTempDay = 0, sumTempNight = 0, countTempNight = 0
-  let highHumStreakMinutes = 0, maxHighHumStreakMinutes = 0, lastHumTime: Date | null = null
+  let dliAccumulator = 0,
+    lastLuxTime: Date | null = null
+  let vpdSum = 0,
+    vpdCount = 0,
+    vpdMin = Infinity,
+    vpdMax = -Infinity
+  let sumTempDay = 0,
+    countTempDay = 0,
+    sumTempNight = 0,
+    countTempNight = 0
+  let highHumStreakMinutes = 0,
+    maxHighHumStreakMinutes = 0,
+    lastHumTime: Date | null = null
 
   let rowCount = 0
 
   try {
     const stream = influxClient.query(rawQuery)
+
     for await (const row of stream) {
       rowCount++
       const tDate = rowTimeToDate(row.time)
@@ -127,27 +143,50 @@ async function processDay(zone: ZoneType, dayStart: Date): Promise<void> {
       // Temperatura (24h)
       if (row.temperature != null) {
         const v = Number(row.temperature)
+
         if (!isNaN(v)) {
-          sumTemp += v; countTemp++
-          if (v < minTemp) { minTemp = v; minTempTime = tIso }
-          if (v > maxTemp) { maxTemp = v; maxTempTime = tIso }
-          if (isDaytime) { sumTempDay += v; countTempDay++ }
-          if (isNighttime) { sumTempNight += v; countTempNight++ }
+          sumTemp += v
+          countTemp++
+          if (v < minTemp) {
+            minTemp = v
+            minTempTime = tIso
+          }
+          if (v > maxTemp) {
+            maxTemp = v
+            maxTempTime = tIso
+          }
+          if (isDaytime) {
+            sumTempDay += v
+            countTempDay++
+          }
+          if (isNighttime) {
+            sumTempNight += v
+            countTempNight++
+          }
         }
       }
 
       // Humedad (24h)
       if (row.humidity != null) {
         const v = Number(row.humidity)
+
         if (!isNaN(v)) {
-          sumHum += v; countHum++
-          if (v < minHum) { minHum = v; minHumTime = tIso }
-          if (v > maxHum) { maxHum = v; maxHumTime = tIso }
+          sumHum += v
+          countHum++
+          if (v < minHum) {
+            minHum = v
+            minHumTime = tIso
+          }
+          if (v > maxHum) {
+            maxHum = v
+            maxHumTime = tIso
+          }
 
           // Riesgo epidemiológico
           if (isNighttime && v > 85) {
             if (lastHumTime) {
               const deltaMin = (tDate.getTime() - lastHumTime.getTime()) / 60000
+
               if (deltaMin > 0 && deltaMin < 15) {
                 highHumStreakMinutes += deltaMin
                 if (highHumStreakMinutes > maxHighHumStreakMinutes) {
@@ -164,9 +203,12 @@ async function processDay(zone: ZoneType, dayStart: Date): Promise<void> {
           // VPD diurno
           if (isDaytime && row.temperature != null) {
             const tempV = Number(row.temperature)
+
             if (!isNaN(tempV)) {
               const vpd = calculateVPD(tempV, v)
-              vpdSum += vpd; vpdCount++
+
+              vpdSum += vpd
+              vpdCount++
               if (vpd < vpdMin) vpdMin = vpd
               if (vpd > vpdMax) vpdMax = vpd
             }
@@ -177,16 +219,25 @@ async function processDay(zone: ZoneType, dayStart: Date): Promise<void> {
       // Iluminancia (solo 08:00–16:00)
       if (row.illuminance != null && isDaytime) {
         const v = Number(row.illuminance)
+
         if (!isNaN(v)) {
-          sumLum += v; countLum++
-          if (v < minLum) { minLum = v; minLumTime = tIso }
-          if (v > maxLum) { maxLum = v; maxLumTime = tIso }
+          sumLum += v
+          countLum++
+          if (v < minLum) {
+            minLum = v
+            minLumTime = tIso
+          }
+          if (v > maxLum) {
+            maxLum = v
+            maxLumTime = tIso
+          }
 
           // DLI
           if (lastLuxTime) {
             const deltaSeconds = (tDate.getTime() - lastLuxTime.getTime()) / 1000
+
             if (deltaSeconds > 0 && deltaSeconds < 900) {
-              dliAccumulator += (v * 0.018) * deltaSeconds
+              dliAccumulator += v * 0.018 * deltaSeconds
             }
           }
           lastLuxTime = tDate
@@ -194,17 +245,21 @@ async function processDay(zone: ZoneType, dayStart: Date): Promise<void> {
       }
     }
   } catch (err) {
-    console.error(`  ✗ [${dayLabel}] [${zone}] Error InfluxDB:`, (err as Error).message)
+    Logger.error(`[${dayLabel}] [${zone}] Error InfluxDB`, err)
+
     return
   }
 
   if (rowCount === 0) {
-    console.log(`  ~ [${dayLabel}] [${zone}] Sin datos. Skipping.`)
+    Logger.warn(`[${dayLabel}] [${zone}] Sin datos. Skipping.`)
+
     return
   }
 
   // ── 3. Balance hídrico desde TaskLog ──────────────────────────────────────
-  let irrigationMinutes = 0, nebulizationMinutes = 0, totalWaterEvents = 0
+  let irrigationMinutes = 0,
+    nebulizationMinutes = 0,
+    totalWaterEvents = 0
 
   try {
     const taskLogs = await prisma.taskLog.findMany({
@@ -239,12 +294,20 @@ async function processDay(zone: ZoneType, dayStart: Date): Promise<void> {
   const vpdMinFinal = vpdMin !== Infinity ? Number(vpdMin.toFixed(3)) : null
   const vpdMaxFinal = vpdMax !== -Infinity ? Number(vpdMax.toFixed(3)) : null
   const avgTempDay = countTempDay > 0 ? Number((sumTempDay / countTempDay).toFixed(2)) : null
-  const avgTempNight = countTempNight > 0 ? Number((sumTempNight / countTempNight).toFixed(2)) : null
-  const dif = avgTempDay !== null && avgTempNight !== null ? Number((avgTempDay - avgTempNight).toFixed(2)) : null
-  const highHumidityHours = maxHighHumStreakMinutes > 0 ? Number((maxHighHumStreakMinutes / 60).toFixed(1)) : null
+  const avgTempNight =
+    countTempNight > 0 ? Number((sumTempNight / countTempNight).toFixed(2)) : null
+  const dif =
+    avgTempDay !== null && avgTempNight !== null
+      ? Number((avgTempDay - avgTempNight).toFixed(2))
+      : null
+  const highHumidityHours =
+    maxHighHumStreakMinutes > 0 ? Number((maxHighHumStreakMinutes / 60).toFixed(1)) : null
 
   if (DRY_RUN) {
-    console.log(`  [DRY-RUN] [${dayLabel}] [${zone}] rows=${rowCount} DLI=${dli} VPD=${vpdAvg} DIF=${dif}`)
+    console.log(
+      `  [DRY-RUN] [${dayLabel}] [${zone}] rows=${rowCount} DLI=${dli} VPD=${vpdAvg} DIF=${dif}`,
+    )
+
     return
   }
 
@@ -285,8 +348,8 @@ async function processDay(zone: ZoneType, dayStart: Date): Promise<void> {
     update: coreData,
   })
 
-  console.log(
-    `  ✓ [${dayLabel}] [${zone}] rows=${rowCount} DLI=${dli} VPD=${vpdAvg} DIF=${dif} riego=${irrigationMinutes}min OK`,
+  Logger.success(
+    `[${dayLabel}] [${zone}] rows=${rowCount} DLI=${dli} VPD=${vpdAvg} DIF=${dif} riego=${irrigationMinutes}min OK`,
   )
 }
 
@@ -296,14 +359,16 @@ async function main() {
   const allZones: ZoneType[] = ['EXTERIOR', 'ZONA_A']
   const zones = BACKFILL_ZONE ? [BACKFILL_ZONE] : allZones
 
-  console.log('════════════════════════════════════════════════════════')
-  console.log(`  BACKFILL: ${BACKFILL_DAYS} días × ${zones.join(', ')}`)
-  if (DRY_RUN) console.log('  ⚠️  MODO DRY-RUN — No se escribirá en Postgres')
-  console.log('════════════════════════════════════════════════════════')
+  Logger.info('════════════════════════════════════════════════════════')
+  Logger.info(`  BACKFILL: ${BACKFILL_DAYS} días × ${zones.join(', ')}`)
+  if (DRY_RUN) Logger.warn('  ⚠️  MODO DRY-RUN — No se escribirá en Postgres')
+  Logger.info('════════════════════════════════════════════════════════')
 
   const now = new Date()
+
   for (let offset = BACKFILL_DAYS; offset >= 1; offset--) {
     const dayStart = new Date(now)
+
     dayStart.setDate(dayStart.getDate() - offset)
     dayStart.setHours(0, 0, 0, 0)
 
@@ -312,9 +377,9 @@ async function main() {
     }
   }
 
-  console.log('════════════════════════════════════════════════════════')
-  console.log('  Backfill completado.')
-  console.log('════════════════════════════════════════════════════════')
+  Logger.info('════════════════════════════════════════════════════════')
+  Logger.success('  Backfill completado.')
+  Logger.info('════════════════════════════════════════════════════════')
 
   await prisma.$disconnect()
   await influxClient.close()

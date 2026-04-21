@@ -2,9 +2,9 @@
 # Relay Modules: Actuator Controller Firmware.
 # Descripción: Firmware dedicado para el control de las electroválvulas, la bomba
 #              y la estación meteorológica exterior (lluvia e iluminancia).
-# Fecha: 08-04-2026
-# Versión: v0.9.8
-# notes_release: [☀️ Monitoreo Orquestado]: Finalizada la integración del ciclo de iluminancia sincronizado reactivamente por el Scheduler.
+# Fecha: 15-04-2026
+# Versión: v0.9.9
+# notes_release: [📡 Red]: Detección de Sesiones Zombie: Eliminado el falso positivo en el latido manual MQTT (last_cpacket). El nodo ahora detecta correctamente las caídas de red silenciosas basándose en el PINGRESP del broker, resolviendo las desconexiones por timeout. [📡 Core] Desbloqueo del Event Loop: Optimizado el monkey-patch de escritura robusta en umqtt. Se redujo el backoff de 300ms a 20ms para evitar la asfixia del planificador de uasyncio y la congelación de los actuadores durante ráfagas de red.
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib.
@@ -1535,8 +1535,8 @@ async def mqtt_connector_task(client_id):
                     raise MQTTException(3) # Timeout de escritura (Evita el WDT Crash)
                 
                 # El búfer está lleno, esperamos antes de reintentar.
-                # 300ms da tiempo al stack TCP para drenar en redes lentas (>500ms latencia)
-                sleep_ms(300)
+                # 20ms da tiempo al stack TCP para drenar en redes lentas (>500ms latencia)
+                sleep_ms(20)
                 continue
             
             if written == 0:
@@ -1767,8 +1767,9 @@ async def mqtt_connector_task(client_id):
                         # qos=0: Fire-and-forget (idempotente, tolerante a pérdida)
                         client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=0)
                     # Actualizar last_cpacket: si podemos ENVIAR, el socket está vivo
-                    client.last_cpacket = ticks_ms()
-                    # if DEBUG: print(f"📡  MQTT: {Colors.CYAN}Ping de vida enviado{Colors.RESET}")
+                    # ❌ ELIMINADA: client.last_cpacket = ticks_ms()
+                    # Dejamos que check_msg() detecte el PINGRESP real del servidor.
+
                     last_manual_ping = now_ms
 
                 # Comprobamos si ha pasado demasiado tiempo desde que OÍMOS al broker
@@ -1917,6 +1918,7 @@ async def timer_manager_task():
 
         current_time = time() # tiempo actual
         timers_to_keep = [] # lista auxiliar
+        expired_relays = [] # lista de actuadores que terminaron en este ciclo
 
         # Revisamos cada temporizador
         for actuator_id, end_time in active_irrigation_timers:
@@ -1929,11 +1931,9 @@ async def timer_manager_task():
                     target_relay['pin'].value(0) # Apaga el relé | active-HIGH
                     target_relay['state'] = "OFF" # Reestablece el state en el Diccionario de Relays
                     state_changed.set() # Notifica el cambio de estado
-
-                    # Log del evento automático
-                    if DEBUG:
-                        print(f"\n⏰  {Colors.YELLOW}Temporizador Finalizado{Colors.RESET}")
-                        print(f"    └─ Acción: Apagando {Colors.MAGENTA}{target_relay['name']}{Colors.RESET}")
+                    
+                    # Guardamos el nombre para el log agrupado
+                    expired_relays.append(target_relay['name'])
                     
                     # ---- Limpieza de Bitácora (NVS) ----
                     # La tarea terminó exitosamente, borramos el registro ESPECÍFICO.
@@ -1945,9 +1945,16 @@ async def timer_manager_task():
         # Actualizamos la lista global solo con los pendientes
         active_irrigation_timers = timers_to_keep
 
-        # ---- Escritura Física en Disco ----
-        # Si algún timer terminó y borró tareas de la caché, consolidamos en disco.
-        NVSManager.flush()
+        # ---- Notificación de Logs Agrupados ----
+        if expired_relays:
+            if DEBUG:
+                print(f"\n⏰  {Colors.YELLOW}Temporizador Finalizado{Colors.RESET}")
+                for name in expired_relays:
+                    print(f"    └─ Acción: Apagando {Colors.MAGENTA}{name}{Colors.RESET}")
+            
+            # ---- Escritura Física en Disco ----
+            # Si algún timer terminó y borró tareas de la caché, consolidamos en disco.
+            NVSManager.flush()
 
 # ---- CORRUTINA: Publicación de Estado ----
 async def state_publisher_task():
@@ -2032,7 +2039,7 @@ async def state_publisher_task():
             if DEBUG: 
                 active_ids = [r_info.get('task_id') for r_info in relays.values() if r_info['state'] == 'ON' and r_info.get('task_id')]
                 if active_ids:
-                    print(f"    └─ Snapshot {Colors.GREEN}Enviado{Colors.RESET} (Tareas Activas: {len(active_ids)})")
+                    print(f"    └─ Snapshot {Colors.GREEN}Enviado{Colors.RESET} (Relays Activos: {len(active_ids)})")
                 else:
                     print(f"    └─ Snapshot {Colors.GREEN}Enviado{Colors.RESET} (Nodo en Reposo)")
 

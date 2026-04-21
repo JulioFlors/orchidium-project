@@ -1,7 +1,6 @@
 import { InfluxDBClient, Point } from '@influxdata/influxdb3-client'
 import mqtt from 'mqtt'
-
-import { prisma, ZoneType } from '@package/database'
+import { prisma, ZoneType, Prisma } from '@package/database'
 
 // ---- Cargar variables de entorno ----
 // La carga de variables de entorno se gestiona externamente.
@@ -12,7 +11,12 @@ import { prisma, ZoneType } from '@package/database'
 const DEBUG = process.env.NODE_ENV !== 'production'
 
 // ---- Configuración MQTT ----
-const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || process.env.MQTT_BROKER_URL_CLOUD || process.env.MQTT_BROKER_URL_SERVERLESS || process.env.MQTT_BROKER_URL_LOCAL || ''
+const MQTT_BROKER_URL =
+  process.env.MQTT_BROKER_URL ||
+  process.env.MQTT_BROKER_URL_CLOUD ||
+  process.env.MQTT_BROKER_URL_SERVERLESS ||
+  process.env.MQTT_BROKER_URL_LOCAL ||
+  ''
 
 const MQTT_USERNAME = process.env.MQTT_USERNAME || process.env.MQTT_USER_BACKEND || ''
 const MQTT_PASSWORD = process.env.MQTT_PASSWORD || process.env.MQTT_PASS_BACKEND || ''
@@ -24,7 +28,12 @@ const BASE_TOPIC_PREFIX = 'PristinoPlant'
 const SERVICE_STATUS_TOPIC = `PristinoPlant/Services/${MQTT_CLIENT_ID}/status`
 
 // ---- Configuración InfluxDB ----
-const INFLUX_URL = process.env.INFLUX_URL || process.env.INFLUX_URL_CLOUD || process.env.INFLUX_URL_SERVERLESS || process.env.INFLUX_URL_LOCAL || ''
+const INFLUX_URL =
+  process.env.INFLUX_URL ||
+  process.env.INFLUX_URL_CLOUD ||
+  process.env.INFLUX_URL_SERVERLESS ||
+  process.env.INFLUX_URL_LOCAL ||
+  ''
 const INFLUX_TOKEN = process.env.INFLUX_TOKEN || process.env.INFLUX_TOKEN_SERVERLESS || ''
 const INFLUX_BUCKET = process.env.INFLUX_BUCKET || 'telemetry'
 
@@ -55,13 +64,46 @@ const getLogTime = () => {
 }
 
 const Logger = {
-  mqtt: (msg: string) => console.log(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.blue} 📡 [ MQTT ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
-  info: (msg: string) => console.log(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.blue} 📡 [ INFO ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
-  success: (msg: string) => console.log(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.green} ✅ [ DONE ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
-  warn: (msg: string) => console.warn(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.yellow} ⚠️ [ WARN ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
-  error: (msg: string, err?: any) => console.error(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.red} ❌ [ ERROR ]${colors.reset}${colors.white} ${msg}${colors.reset}`, err || ''),
-  debug: (msg: string) => DEBUG && console.log(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.cyan} 🔎 [ DEBUG ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
-  influx: (msg: string) => DEBUG && console.log(`${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.green} 💾 [ INFLUX ]${colors.reset}${colors.white} ${msg}${colors.reset}`),
+  mqtt: (msg: string) =>
+    console.log(
+      `${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.blue} 📡 [ MQTT ]${colors.reset}${colors.white} ${msg}${colors.reset}`,
+    ),
+  info: (msg: string) =>
+    console.log(
+      `${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.blue} 📡 [ INFO ]${colors.reset}${colors.white} ${msg}${colors.reset}`,
+    ),
+  success: (msg: string) =>
+    console.log(
+      `${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.green} ✅ [ DONE ]${colors.reset}${colors.white} ${msg}${colors.reset}`,
+    ),
+  warn: (msg: string) =>
+    console.warn(
+      `${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.yellow} ⚠️ [ WARN ]${colors.reset}${colors.white} ${msg}${colors.reset}`,
+    ),
+  error: (msg: string, err?: unknown) => {
+    console.error(
+      `${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.red} ❌ [ ERROR ]${colors.reset}${colors.white} ${msg}${colors.reset}`,
+    )
+    if (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError) {
+        console.error(`       ╰─> [PRISMA ${err.code}] ${err.message}`)
+      } else if (err instanceof Error) {
+        console.error(`       ╰─> ${err.message}`)
+      } else {
+        console.error(`       ╰─> ${String(err)}`)
+      }
+    }
+  },
+  debug: (msg: string) =>
+    DEBUG &&
+    console.log(
+      `${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.cyan} 🔎 [ DEBUG ]${colors.reset}${colors.white} ${msg}${colors.reset}`,
+    ),
+  influx: (msg: string) =>
+    DEBUG &&
+    console.log(
+      `${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.green} 💾 [ INFLUX ]${colors.reset}${colors.white} ${msg}${colors.reset}`,
+    ),
 }
 
 // ---- Inicialización Atómica (Fail-Fast) ----
@@ -96,7 +138,7 @@ type PacketProcessor = (
   source: string,
   zone: ZoneType,
   context: string,
-  payload: string
+  payload: string,
 ) => Promise<void>
 
 // ---- Mapa de rutas (Routing map) ----
@@ -112,14 +154,15 @@ const TOPIC_ROUTES: Record<string, PacketProcessor> = {
 }
 
 // ---- Global Influx Client (puntero) ----
-let influxClient: InfluxDBClient;
+let influxClient: InfluxDBClient
 
-// ---- Utils ---- 
+// ---- Utils ----
 function mapZoneSlugToZoneType(zoneSlug: string): ZoneType | undefined {
   if (zoneSlug === 'Actuator_Controller') return undefined
 
   // Normalizar a Mayúsculas (Para coincidir con ZoneType)
   const zoneType = zoneSlug.toUpperCase() as ZoneType
+
   return Object.values(ZoneType).includes(zoneType) ? zoneType : undefined
 }
 
@@ -135,19 +178,24 @@ async function writeToInflux(point: Point) {
 
 // ---- Procesadores de Paquetes JSON ----
 
-async function processEnvironmentPacket(source: string, zone: ZoneType, context: string, payload: string) {
+async function processEnvironmentPacket(
+  source: string,
+  zone: ZoneType,
+  context: string,
+  payload: string,
+) {
   try {
     const data = JSON.parse(payload)
 
     if (data.history && Array.isArray(data.history)) {
       for (const entry of data.history) {
         if (!Array.isArray(entry) || entry.length !== 2) continue
-        
+
         const [timestamp, metrics] = entry as [number, Record<string, string | number>]
-        
+
         // Corrección de Época: MicroPython (2000) vs Unix (1970)
         // Offset: 946684800 segundos
-        const unixTimestamp = timestamp < 1000000000 ? timestamp + 946684800 : timestamp;
+        const unixTimestamp = timestamp < 1000000000 ? timestamp + 946684800 : timestamp
 
         const point = Point.measurement('environment_metrics')
           .setTag('source', source)
@@ -155,14 +203,19 @@ async function processEnvironmentPacket(source: string, zone: ZoneType, context:
           .setTag('context', context)
           .setTimestamp(new Date(unixTimestamp * 1000))
 
-        if (metrics.temperature !== undefined) point.setFloatField('temperature', Number(metrics.temperature))
-        if (metrics.humidity !== undefined) point.setFloatField('humidity', Number(metrics.humidity))
-        if (metrics.illuminance !== undefined) point.setFloatField('illuminance', Number(metrics.illuminance))
-        if (metrics.rain_intensity !== undefined) point.setFloatField('rain_intensity', Number(metrics.rain_intensity))
+        if (metrics.temperature !== undefined)
+          point.setFloatField('temperature', Number(metrics.temperature))
+        if (metrics.humidity !== undefined)
+          point.setFloatField('humidity', Number(metrics.humidity))
+        if (metrics.illuminance !== undefined)
+          point.setFloatField('illuminance', Number(metrics.illuminance))
+        if (metrics.rain_intensity !== undefined)
+          point.setFloatField('rain_intensity', Number(metrics.rain_intensity))
         if (metrics.phase !== undefined) point.setStringField('phase', String(metrics.phase))
 
         await writeToInflux(point)
       }
+
       return
     }
 
@@ -174,18 +227,25 @@ async function processEnvironmentPacket(source: string, zone: ZoneType, context:
     if (data.temperature !== undefined) point.setFloatField('temperature', Number(data.temperature))
     if (data.humidity !== undefined) point.setFloatField('humidity', Number(data.humidity))
     if (data.illuminance !== undefined) point.setFloatField('illuminance', Number(data.illuminance))
-    if (data.rain_intensity !== undefined) point.setFloatField('rain_intensity', Number(data.rain_intensity))
+    if (data.rain_intensity !== undefined)
+      point.setFloatField('rain_intensity', Number(data.rain_intensity))
     if (data.phase !== undefined) point.setStringField('phase', String(data.phase))
 
     await writeToInflux(point)
-    Logger.debug(`💾 [ INFLUX ] Guardado Environment (${source}/${zone}): ${Object.keys(data).join(', ')}`)
-
+    Logger.debug(
+      `💾 [ INFLUX ] Guardado Environment (${source}/${zone}): ${Object.keys(data).join(', ')}`,
+    )
   } catch (e) {
     Logger.error('Error procesando paquete de datos Ambientales (Batch/Single)', e)
   }
 }
 
-async function processRainEventPacket(source: string, zone: ZoneType, context: string, payload: string) {
+async function processRainEventPacket(
+  source: string,
+  zone: ZoneType,
+  context: string,
+  payload: string,
+) {
   try {
     const data = JSON.parse(payload)
     const point = Point.measurement('rain_events')
@@ -196,20 +256,22 @@ async function processRainEventPacket(source: string, zone: ZoneType, context: s
       .setFloatField('intensity_percent', Number(data.average_intensity_percent))
 
     await writeToInflux(point)
-    Logger.success(`🌧️ [RAIN] Evento Finalizado: ${data.duration_seconds}s | Int: ${data.average_intensity_percent}%`)
+    Logger.success(
+      `🌧️ [RAIN] Evento Finalizado: ${data.duration_seconds}s | Int: ${data.average_intensity_percent}%`,
+    )
   } catch (e) {
     Logger.error('Error procesando paquete de datos de Rain Event', e)
   }
 }
 
-let lastRainState: string | null = null;
+let lastRainState: string | null = null
 
 async function processZoneStateEvent(
   source: string,
   zone: ZoneType,
   context: string,
   payload: string,
-  eventType: string
+  eventType: string,
 ) {
   const point = Point.measurement('system_events')
     .setTag('source', source)
@@ -227,7 +289,7 @@ async function processZoneStateEvent(
     } else if (payload === 'Dry' && lastRainState === 'Raining') {
       Logger.info('☀️ [Dry] Lluvia finalizada (Cambio de estado detectado)')
     }
-    lastRainState = payload;
+    lastRainState = payload
   }
 }
 
@@ -258,8 +320,8 @@ async function start() {
       topic: SERVICE_STATUS_TOPIC,
       payload: Buffer.from('offline'),
       qos: 1,
-      retain: true
-    }
+      retain: true,
+    },
   })
 
   let heartbeatInterval: NodeJS.Timeout | null = null
@@ -274,6 +336,7 @@ async function start() {
     }, 300000)
 
     const topicToSubscribe = `${BASE_TOPIC_PREFIX}/#`
+
     client.subscribe(topicToSubscribe, (err) => {
       if (!err) {
         Logger.mqtt(`Suscrito al árbol de tópicos ${colors.blue}${topicToSubscribe}${colors.reset}`)
@@ -297,34 +360,12 @@ async function start() {
           .setTag('context', 'status')
           .setTag('event_type', 'Device_Status')
           .setStringField('value', messageValue)
+
         await writeToInflux(point)
       }
 
-      // Persistir paquetes de auditoría en PostgreSQL (Diagnóstico)
-      if (topic.endsWith('/audit')) {
-        try {
-          const auditPayload = JSON.parse(messageValue) as Record<string, unknown>
+      const hasSensorData = Object.keys(TOPIC_ROUTES).some((suffix) => topic.endsWith(suffix))
 
-          for (const [category, content] of Object.entries(auditPayload)) {
-            // Persistencia en PostgreSQL (Auditoría de Salud/Diagnóstico)
-            if (content !== undefined && content !== null) {
-              await prisma.auditSnapshot.create({
-                data: {
-                  device: 'actuator',
-                  category,
-                  data: (typeof content === 'object' ? content : { value: content }) as object,
-                },
-              })
-            }
-          }
-          Logger.debug(`📋 Auditoría persistida en PG: ${Object.keys(auditPayload).join(', ')}`)
-        } catch (e) {
-          Logger.error('Error persistiendo paquete de auditoría en PostgreSQL', e)
-        }
-        return
-      }
-      
-      const hasSensorData = Object.keys(TOPIC_ROUTES).some(suffix => topic.endsWith(suffix))
       if (!hasSensorData) return
     }
 
@@ -337,8 +378,10 @@ async function start() {
           .setTag('event_type', 'Service_Status')
           .setTag('service_name', serviceName)
           .setStringField('value', messageValue)
+
         await writeToInflux(point)
       }
+
       return
     }
 
@@ -348,13 +391,16 @@ async function start() {
 
       if (!zone) {
         Logger.warn(`Zona desconocida: ${zoneSlug}`)
+
         return
       }
 
-      const matchingSuffix = Object.keys(TOPIC_ROUTES).find(suffix => topic.endsWith(suffix))
+      const matchingSuffix = Object.keys(TOPIC_ROUTES).find((suffix) => topic.endsWith(suffix))
+
       if (matchingSuffix) {
         const processor = TOPIC_ROUTES[matchingSuffix]
         const context = matchingSuffix.replace(/^\//, '')
+
         await processor(firmwareSource, zone, context, messageValue)
       } else {
         Logger.warn(`No hay ruta definida para el tópico: ${topic}`)
@@ -375,7 +421,7 @@ async function start() {
   })
 }
 
-start().catch(err => {
+start().catch((err) => {
   Logger.error('Error fatal detectado al arrancar el servicio Ingest:', err)
   process.exit(1)
 })

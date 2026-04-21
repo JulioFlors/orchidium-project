@@ -20,17 +20,19 @@ interface Props {
     role: string
   }
   users: User[]
+  initialView: AdminView
 }
 
-type AdminView = 'users' | 'iot_debug'
+export type AdminView = 'users' | 'iot_debug'
 
-export function AdminDashboard({ user, users }: Props) {
+export function AdminDashboard({ user, users, initialView }: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  // Derivamos la vista actual del parámetro 'view' en la URL (Default: Depuración IoT)
-  const currentView = (searchParams.get('view') as AdminView) || 'iot_debug'
+  // Sincronizamos con los parámetros de la URL para cambios posteriores,
+  // pero usamos initialView para el renderizado inicial inmediato.
+  const currentView = (searchParams.get('view') as AdminView) || initialView
 
   const setView = (view: AdminView) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -89,18 +91,6 @@ export function AdminDashboard({ user, users }: Props) {
           <button
             className={clsx(
               'focus-sidebar-content flex w-full justify-start! gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition-all',
-              currentView === 'users' ? 'bg-surface/60 text-primary shadow-sm' : 'text-secondary',
-            )}
-            type="button"
-            onClick={() => setView('users')}
-          >
-            <IoPeopleOutline size={20} />
-            Gestión de Usuarios
-          </button>
-
-          <button
-            className={clsx(
-              'focus-sidebar-content flex w-full justify-start! gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition-all',
               currentView === 'iot_debug'
                 ? 'bg-surface/60 text-primary shadow-sm'
                 : 'text-secondary',
@@ -110,6 +100,18 @@ export function AdminDashboard({ user, users }: Props) {
           >
             <IoBugOutline size={20} />
             Depuración IoT
+          </button>
+
+          <button
+            className={clsx(
+              'focus-sidebar-content flex w-full justify-start! gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition-all',
+              currentView === 'users' ? 'bg-surface/60 text-primary shadow-sm' : 'text-secondary',
+            )}
+            type="button"
+            onClick={() => setView('users')}
+          >
+            <IoPeopleOutline size={20} />
+            Gestión de Usuarios
           </button>
         </Card>
       </div>

@@ -12,12 +12,14 @@ Este documento define la estrategia de alto nivel dividida en 4 fases de ingenie
 
 ### 1.1 Catálogo y Trazabilidad (Inventario)
 
-Implementación de sistemas CRUD completos para modelar la realidad biológica.
+Implementación de sistemas CRUD completos para modelar la realidad biológica y comercial (rutas `/genus`, `/species`, `/plants`, `/store`).
 
-* **Taxonomía:** Gestión de Géneros y Especies (La base genética).
-* **Activos Vivos:** Gestión de Plantas individuales (Gemelos Digitales) con rastreo de estado y ubicación.
-* **Diario Biológico:** Registro de eventos del ciclo de vida (Floraciones, Plagas, Hongos) cruzados con los Gemelos Digitales.
-* **Tienda:** Gestión de Variantes de Producto (Lógica de venta y stock).
+* **Taxonomía Base:** CRUD de Géneros (`Genus`) y Especies (`Species`).
+* **Pipeline de Imágenes (AOT):** Sistema de compresión en Cliente (`browser` -> `WebP` sub-300KB) -> Hosting Dedicado en VPS. Cero consumo Vercel Image Optimization quota.
+* **Activos Vivos:** Gestión de Plantas individuales (Gemelos Digitales) con rastreo de estado e ID (`Plant`).
+* [x] **Diario Biológico:** Registro de eventos del ciclo de vida (Floraciones, Plagas) cruzados con los Gemelos Digitales para análisis ambiental.
+* **Tienda (E-commerce):** Gestión de Variantes Comerciales (`ProductVariant`), cruzando Taxonomía con Ventas.
+* [x] **Tienda (Sync):** Integración de estados biológicos en el catálogo comercial (Etiquetas y secciones dinámicas).
 
 ### 1.2 Recursos del Laboratorio
 

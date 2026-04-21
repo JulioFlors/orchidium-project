@@ -1,17 +1,18 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import {
-  IoCheckmarkCircle,
-  IoAlertCircle,
-  IoInformationCircle,
-  IoWarning,
-  IoClose,
+  IoCheckmarkCircleOutline,
+  IoAlertCircleOutline,
+  IoInformationCircleOutline,
+  IoWarningOutline,
+  IoCloseOutline,
 } from 'react-icons/io5'
 import { clsx } from 'clsx'
 
 import { useToastStore, type ToastType } from '@/store/toast/toast.store'
+import { StatusCircleIcon, type GlowVariant } from '@/components'
 
 interface ToastProps {
   id: string
@@ -19,63 +20,131 @@ interface ToastProps {
   type: ToastType
 }
 
-const TOAST_CONFIG = {
+const TOAST_CONFIG: Record<
+  ToastType,
+  {
+    icon: React.ReactNode
+    glowVariant: GlowVariant
+    gradientBorder: string
+    spotlight: string
+    iconColor: string
+  }
+> = {
   success: {
-    icon: <IoCheckmarkCircle className="h-5 w-5 text-emerald-500" />,
-    className: 'border-emerald-500/20 bg-emerald-500/5 text-emerald-700 dark:text-emerald-400',
+    icon: <IoCheckmarkCircleOutline />,
+    glowVariant: 'green',
+    gradientBorder: 'via-green-500/10 to-green-500/50',
+    spotlight: 'bg-green-500/10 group-hover:bg-green-500/20',
+    iconColor: 'text-green-500',
   },
   error: {
-    icon: <IoAlertCircle className="h-5 w-5 text-red-500" />,
-    className: 'border-red-500/20 bg-red-500/5 text-red-700 dark:text-red-400',
+    icon: <IoAlertCircleOutline />,
+    glowVariant: 'red',
+    gradientBorder: 'via-red-500/10 to-red-500/50',
+    spotlight: 'bg-red-500/10 group-hover:bg-red-500/20',
+    iconColor: 'text-red-500',
   },
   info: {
-    icon: <IoInformationCircle className="h-5 w-5 text-blue-500" />,
-    className: 'border-blue-500/20 bg-blue-500/5 text-blue-700 dark:text-blue-400',
+    icon: <IoInformationCircleOutline />,
+    glowVariant: 'blue',
+    gradientBorder: 'via-blue-500/10 to-blue-500/50',
+    spotlight: 'bg-blue-500/10 group-hover:bg-blue-500/20',
+    iconColor: 'text-blue-500',
   },
   warning: {
-    icon: <IoWarning className="h-5 w-5 text-amber-500" />,
-    className: 'border-amber-500/20 bg-amber-500/5 text-amber-700 dark:text-amber-400',
+    icon: <IoWarningOutline />,
+    glowVariant: 'orange',
+    gradientBorder: 'via-amber-500/10 to-amber-500/50',
+    spotlight: 'bg-amber-500/10 group-hover:bg-amber-500/20',
+    iconColor: 'text-amber-500',
   },
 }
 
-export function Toast({ id, message, type, duration = 4000 }: ToastProps & { duration?: number }) {
+export function Toast({ id, message, type }: ToastProps) {
   const { removeToast } = useToastStore()
+  const [timeLeft, setTimeLeft] = useState(10000) // 10 segundos iniciales
   const [isPaused, setIsPaused] = useState(false)
   const config = TOAST_CONFIG[type]
 
+  const handlePause = useCallback(() => setIsPaused(true), [])
+  const handleResume = useCallback(() => {
+    setIsPaused(false)
+    setTimeLeft(10000) // Reiniciar a 10 segundos al perder foco/hover
+  }, [])
+
+  // Orquestador del tiempo: solo decrementa.
+  // Optimizamos eliminando timeLeft de dependencias para evitar recrear el intervalo cada 100ms.
   useEffect(() => {
-    if (duration <= 0 || isPaused) return
+    if (isPaused) return
 
-    const timer = setTimeout(() => {
+    const interval = setInterval(() => {
+      setTimeLeft((prev) => (prev > 0 ? prev - 100 : 0))
+    }, 100)
+
+    return () => clearInterval(interval)
+  }, [isPaused])
+
+  // Orquestador de salida: ejecuta la remoción fuera del ciclo de actualización de timeLeft
+  useEffect(() => {
+    if (timeLeft <= 0) {
       removeToast(id)
-    }, duration)
-
-    return () => clearTimeout(timer)
-  }, [id, duration, isPaused, removeToast])
+    }
+  }, [timeLeft, id, removeToast])
 
   return (
     <motion.div
       layout
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      className={clsx(
-        'group relative flex items-center gap-3 rounded-xl border p-4 shadow-lg backdrop-blur-md transition-all',
-        config.className,
-      )}
+      className="group pointer-events-auto relative overflow-hidden rounded-xl p-px shadow-xl transition-all duration-300 hover:shadow-2xl"
       exit={{ opacity: 0, scale: 0.95, y: 10 }}
       initial={{ opacity: 0, y: 20, scale: 0.95 }}
       role="alert"
-      onMouseEnter={() => setIsPaused(true)}
-      onMouseLeave={() => setIsPaused(false)}
+      onBlur={handleResume}
+      onFocus={handlePause}
+      onMouseEnter={handlePause}
+      onMouseLeave={handleResume}
     >
-      <div className="shrink-0">{config.icon}</div>
-      <p className="flex-1 text-sm leading-tight font-medium">{message}</p>
-      <button
-        className="text-primary/20 hover:text-primary/50 -mr-1 rounded-full p-1 transition-colors"
-        type="button"
-        onClick={() => removeToast(id)}
-      >
-        <IoClose className="h-4 w-4" />
-      </button>
+      {/* Capa de Borde Degradado */}
+      <div
+        className={clsx(
+          'pointer-events-none absolute inset-0 bg-linear-to-tr from-transparent transition-opacity duration-500',
+          config.gradientBorder,
+        )}
+      />
+
+      {/* Contenido Principal */}
+      <div className="bg-surface relative flex items-center gap-4 rounded-[inherit] px-4 py-3.5 backdrop-blur-md">
+        {/* Efecto Spotlight (Reflector) */}
+        <div
+          className={clsx(
+            'pointer-events-none absolute -top-12 -right-12 h-32 w-32 rounded-full blur-2xl transition-all duration-500 group-hover:blur-3xl',
+            config.spotlight,
+          )}
+        />
+
+        <StatusCircleIcon
+          glow
+          className="relative z-10 shrink-0"
+          colorClassName={config.iconColor}
+          glowVariant={config.glowVariant}
+          icon={config.icon}
+          size="sm"
+          variant="vibrant"
+        />
+
+        <p className="text-primary relative z-10 flex-1 text-sm leading-tight font-medium">
+          {message}
+        </p>
+
+        <button
+          aria-label="Cerrar notificación"
+          className="text-primary hover:bg-hover-overlay focus-visible:ring-accessibility relative z-10 cursor-pointer rounded-full p-1.5 transition-colors outline-none! focus-visible:ring-2"
+          type="button"
+          onClick={() => removeToast(id)}
+        >
+          <IoCloseOutline className="h-5 w-5" />
+        </button>
+      </div>
     </motion.div>
   )
 }

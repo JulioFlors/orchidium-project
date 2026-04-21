@@ -7,7 +7,8 @@ import useSWR from 'swr'
 
 import { EnvironmentCard, SensorHistoryChart } from './components'
 
-import { DeviceViewHeader } from '@/components'
+import { ZoneType } from '@/config/mappings'
+import { Heading, DeviceStatus } from '@/components'
 import { useDeviceHeartbeat, useToast } from '@/hooks'
 import { useMqttStore } from '@/store/mqtt/mqtt.store'
 import { formatTime12h, formatDateLong } from '@/utils/timeFormat'
@@ -56,7 +57,7 @@ export function MonitoringView() {
     rain_intensity: '24h',
     rain_events: '24h',
   })
-  const [zone, setZone] = useState('EXTERIOR')
+  const [zone, setZone] = useState<string>(ZoneType.EXTERIOR)
   const [selectedMetric, setSelectedMetric] = useState<MetricType | null>(null)
   const [now, setNow] = useState(0)
 
@@ -116,7 +117,7 @@ export function MonitoringView() {
     error: rainError,
     isLoading: isRainLoading,
   } = useSWR<RainData>(
-    zone === 'EXTERIOR'
+    zone === ZoneType.EXTERIOR
       ? `/api/sensors/rain?range=${metricRanges['rain_events']}&zone=${zone}`
       : null,
     fetcher,
@@ -150,7 +151,7 @@ export function MonitoringView() {
   }
 
   const statusTopic =
-    zone === 'EXTERIOR'
+    zone === ZoneType.EXTERIOR
       ? 'PristinoPlant/Actuator_Controller/status'
       : `PristinoPlant/Environmental_Monitoring/${formatTopicZone(zone)}/status`
 
@@ -197,7 +198,6 @@ export function MonitoringView() {
           Object.assign(result, payload)
         }
       } catch (err) {
-        // eslint-disable-next-line no-console
         console.error('Error parseando lectura MQTT:', err)
       }
     }
@@ -354,7 +354,7 @@ export function MonitoringView() {
   const climate = ((): {
     label: string
     icon: React.ReactNode
-    color: 'blue' | 'purple' | 'orange' | 'yellow' | 'green' | 'cyan'
+    color: 'blue' | 'purple' | 'orange' | 'yellow' | 'green' | 'cyan' | 'red'
     description: string
     status: 'optimal' | 'warning' | 'critical'
   } => {
@@ -457,14 +457,14 @@ export function MonitoringView() {
       return {
         label: 'Falla Sensor',
         icon: <Moon className="h-6 w-6 text-red-400" />,
-        color: 'orange' as const,
+        color: 'red' as const,
         description: 'Lux 0 en horario diurno',
         status: 'critical' as const,
       }
     }
 
-    if (zone === 'EXTERIOR') {
-      if (lux < 5000) {
+    if (zone === ZoneType.EXTERIOR) {
+      if (lux < 15000) {
         return {
           label: 'Luz Indirecta',
           icon: <Cloud className="h-6 w-6 text-slate-400" />,
@@ -473,7 +473,7 @@ export function MonitoringView() {
           status: 'optimal' as const,
         }
       }
-      if (lux < 25000) {
+      if (lux < 30000) {
         return {
           label: 'Nublado',
           icon: <Cloud className="h-6 w-6 text-slate-300" />,
@@ -482,7 +482,7 @@ export function MonitoringView() {
           status: 'optimal' as const,
         }
       }
-      if (lux < 55000) {
+      if (lux < 60000) {
         return {
           label: 'Soleado',
           icon: <Sun className="h-6 w-6 text-yellow-400" />,
@@ -492,12 +492,22 @@ export function MonitoringView() {
         }
       }
 
+      if (lux < 75000) {
+        return {
+          label: 'Extremo',
+          icon: <Sun className="h-6 w-6 text-orange-500" />,
+          color: 'orange' as const,
+          description: 'Radiación crítica',
+          status: 'warning' as const,
+        }
+      }
+
       return {
-        label: 'Extremo',
-        icon: <Sun className="h-6 w-6 text-orange-500" />,
-        color: 'orange' as const,
-        description: 'Radiación crítica / Riesgo térmico',
-        status: 'warning' as const,
+        label: 'Peligro',
+        icon: <Sun className="h-6 w-6 text-red-400" />,
+        color: 'red' as const,
+        description: 'Riesgo de Deshidratación',
+        status: 'critical' as const,
       }
     } else {
       if (lux < 10000)
@@ -520,15 +530,15 @@ export function MonitoringView() {
         return {
           label: 'Alto',
           icon: <Sun className="h-6 w-6 text-yellow-500" />,
-          color: 'yellow' as const,
+          color: 'orange' as const,
           description: 'Límite superior recomendado',
           status: 'warning' as const,
         }
 
       return {
         label: 'Peligro',
-        icon: <Sun className="h-6 w-6 text-red-500" />,
-        color: 'orange' as const,
+        icon: <Sun className="h-6 w-6 text-red-400" />,
+        color: 'red' as const,
         description: 'Estrés lumínico detectado',
         status: 'critical' as const,
       }
@@ -536,22 +546,26 @@ export function MonitoringView() {
   })()
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
+    <div className="tds-sm:px-0 mx-auto mt-9 flex w-full max-w-7xl flex-col gap-8 px-4 pb-12">
       <div className="flex flex-col gap-6">
-        <DeviceViewHeader
-          connectionState={connectionState}
-          deviceDescription="Condiciones ambientales del orquideario en tiempo real e históricos."
-          deviceName="Monitor Ambiental"
-          dropdownTitle="Estación Meteorológica"
-          selectedZone={zone}
-          zones={['EXTERIOR', 'ZONA_A']}
-          onZoneChanged={(newZone) => {
-            setZone(newZone as 'EXTERIOR' | 'ZONA_A')
-            setSelectedMetric(null)
-          }}
+        <Heading
+          action={
+            <DeviceStatus
+              connectionState={connectionState}
+              dropdownTitle="Estación Meteorológica"
+              selectedZone={zone}
+              zones={[ZoneType.EXTERIOR, ZoneType.ZONA_A]}
+              onZoneChanged={(newZone) => {
+                setZone(newZone)
+                setSelectedMetric(null)
+              }}
+            />
+          }
+          description="Condiciones ambientales del orquideario en tiempo real e históricos."
+          title="Monitor Ambiental"
         />
 
-        {zone !== 'EXTERIOR' ? (
+        {zone !== ZoneType.EXTERIOR ? (
           <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-3 tds-xl:gap-6 grid grid-cols-1 gap-5">
             <EnvironmentCard
               color="orange"

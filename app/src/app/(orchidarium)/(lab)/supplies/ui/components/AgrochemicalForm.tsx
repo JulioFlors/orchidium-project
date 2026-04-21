@@ -8,7 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 
 import { createAgrochemical, updateAgrochemical } from '@/actions'
-import { FormField, Button, SelectDropdown, Input, Textarea } from '@/components/ui'
+import { FormField, Button, SelectDropdown, Input, Textarea, Modal } from '@/components/ui'
 
 const agrochemicalSchema = z.object({
   name: z.string().min(3, 'El nombre debe tener al menos 3 caracteres'),
@@ -21,12 +21,13 @@ const agrochemicalSchema = z.object({
 type FormValues = z.infer<typeof agrochemicalSchema>
 
 interface Props {
-  initialData?: Agrochemical | null
+  isOpen: boolean
+  onClose: () => void
   onSuccess: () => void
-  onCancel: () => void
+  initialData?: Agrochemical | null
 }
 
-export function AgrochemicalForm({ initialData, onSuccess, onCancel }: Props) {
+export function AgrochemicalForm({ isOpen, onClose, onSuccess, initialData }: Props) {
   const [isPending, startTransition] = useTransition()
 
   const {
@@ -89,6 +90,7 @@ export function AgrochemicalForm({ initialData, onSuccess, onCancel }: Props) {
 
       if (result.ok) {
         onSuccess()
+        onClose()
       } else {
         alert(result.message || 'Error al procesar la solicitud')
       }
@@ -96,77 +98,84 @@ export function AgrochemicalForm({ initialData, onSuccess, onCancel }: Props) {
   }
 
   return (
-    <form className="space-y-5" onSubmit={handleSubmit(onSubmit)}>
-      <FormField htmlFor="name" label="Nombre del Insumo">
-        <Input
-          error={errors.name?.message}
-          id="name"
-          placeholder="Ej: Osmocote Plus"
-          type="text"
-          {...register('name')}
-        />
-      </FormField>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <FormField htmlFor="type" label="Tipo">
-          <Controller
-            control={control}
-            name="type"
-            render={({ field }) => (
-              <SelectDropdown
-                options={[
-                  { label: 'Fertilizante', value: AgrochemicalType.FERTILIZANTE },
-                  { label: 'Fitosanitario', value: AgrochemicalType.FITOSANITARIO },
-                ]}
-                value={field.value}
-                onChange={field.onChange}
-              />
-            )}
+    <Modal
+      isOpen={isOpen}
+      size="md"
+      title={initialData ? 'Editar Insumo' : 'Nuevo Insumo'}
+      onClose={onClose}
+    >
+      <form className="flex flex-col gap-6" onSubmit={handleSubmit(onSubmit)}>
+        <FormField htmlFor="name" label="Nombre">
+          <Input
+            error={errors.name?.message}
+            id="name"
+            placeholder=""
+            type="text"
+            {...register('name')}
           />
         </FormField>
 
-        <FormField htmlFor="purpose" label="Propósito">
-          <Controller
-            control={control}
-            name="purpose"
-            render={({ field }) => (
-              <SelectDropdown
-                options={purposeOptions}
-                value={field.value}
-                onChange={field.onChange}
-              />
-            )}
+        <div className="grid grid-cols-2 gap-4">
+          <FormField htmlFor="type" label="Tipo">
+            <Controller
+              control={control}
+              name="type"
+              render={({ field }) => (
+                <SelectDropdown
+                  options={[
+                    { label: 'Fertilizante', value: AgrochemicalType.FERTILIZANTE },
+                    { label: 'Fitosanitario', value: AgrochemicalType.FITOSANITARIO },
+                  ]}
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+              )}
+            />
+          </FormField>
+
+          <FormField htmlFor="purpose" label="Propósito">
+            <Controller
+              control={control}
+              name="purpose"
+              render={({ field }) => (
+                <SelectDropdown
+                  options={purposeOptions}
+                  value={field.value}
+                  onChange={field.onChange}
+                />
+              )}
+            />
+          </FormField>
+        </div>
+
+        <FormField htmlFor="preparation" label="Preparación">
+          <Input
+            error={errors.preparation?.message}
+            id="preparation"
+            placeholder="ml/L"
+            type="text"
+            {...register('preparation')}
           />
         </FormField>
-      </div>
 
-      <FormField htmlFor="preparation" label="Preparación / Dosis">
-        <Input
-          error={errors.preparation?.message}
-          id="preparation"
-          placeholder="Ej: 1 gramo por litro de agua"
-          type="text"
-          {...register('preparation')}
-        />
-      </FormField>
+        <FormField htmlFor="description" label="Notas">
+          <Textarea
+            error={errors.description?.message}
+            id="description"
+            placeholder="Beneficios y advertencias de uso."
+            {...register('description')}
+          />
+        </FormField>
 
-      <FormField htmlFor="description" label="Descripción / Notas">
-        <Textarea
-          error={errors.description?.message}
-          id="description"
-          placeholder="Indique los beneficios o advertencias de uso..."
-          {...register('description')}
-        />
-      </FormField>
-
-      <div className="flex justify-end gap-3 pt-2">
-        <Button variant="ghost" onClick={onCancel}>
-          Cancelar
-        </Button>
-        <Button isLoading={isPending} type="submit">
-          {initialData ? 'Actualizar' : 'Guardar'}
-        </Button>
-      </div>
-    </form>
+        <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+          <Button variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button isLoading={isPending} type="submit">
+            {initialData ? 'Actualizar' : 'Guardar'}
+          </Button>
+        </div>
+      </form>
+    </Modal>
   )
 }

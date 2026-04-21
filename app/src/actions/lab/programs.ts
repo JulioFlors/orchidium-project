@@ -35,7 +35,6 @@ export async function getPrograms() {
       phytosanitaryPrograms,
     }
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error('Error al obtener programas:', err)
 
     return { ok: false, message: 'No se pudieron cargar los programas' }
@@ -85,7 +84,6 @@ export async function upsertFertilizationProgram(data: {
 
     return { ok: true, program }
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error('Error al guardar programa de fertilización:', err)
 
     return { ok: false, message: 'Error al guardar el programa de fertilización' }
@@ -132,7 +130,6 @@ export async function upsertPhytosanitaryProgram(data: {
 
     return { ok: true, program }
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error('Error al guardar programa fitosanitario:', err)
 
     return { ok: false, message: 'Error al guardar el programa fitosanitario' }
@@ -149,7 +146,6 @@ export async function deleteFertilizationProgram(id: string) {
 
     return { ok: true }
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error('Error al eliminar programa de fertilización:', err)
 
     return { ok: false, message: 'No se pudo eliminar el programa' }
@@ -166,7 +162,6 @@ export async function deletePhytosanitaryProgram(id: string) {
 
     return { ok: true }
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error('Error al eliminar programa fitosanitario:', err)
 
     return { ok: false, message: 'No se pudo eliminar el programa' }

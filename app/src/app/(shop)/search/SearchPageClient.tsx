@@ -41,7 +41,6 @@ export default function SearchPageClient({ results: initialResults, searchTerm }
               setOffset((prev) => prev + nextResults.length)
             }
           } catch (error) {
-            // eslint-disable-next-line no-console
             console.error('Error cargando más resultados:', error)
           } finally {
             setIsLoading(false)

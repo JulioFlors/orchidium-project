@@ -1,13 +1,20 @@
-import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
 
-import { AdminDashboard } from './ui/AdminDashboard'
+import { AdminDashboard, type AdminView } from './ui/AdminDashboard'
 
 import { getPaginatedUsers } from '@/actions'
 import { auth } from '@/lib/auth'
 
-export default async function AdminPage() {
+interface Props {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}
+
+export default async function AdminPage({ searchParams }: Props) {
+  // ---- Obtenemos los parámetros de búsqueda (Next.js 15) ----
+  const params = await searchParams
+  const initialView = (params.view as AdminView) || ('iot_debug' as AdminView)
+
   // ---- Obtenemos los datos de la session ----
   const session = await auth.api.getSession({
     headers: await headers(),
@@ -36,10 +43,12 @@ export default async function AdminPage() {
   }
 
   return (
-    <div className="mx-auto mt-8 max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      <Suspense fallback={<div>Cargando</div>}>
-        <AdminDashboard user={safeUser} users={users} />
-      </Suspense>
+    <div className="tds-sm:px-0 mx-auto mt-9 flex w-full max-w-7xl flex-col gap-8 px-4 pb-12">
+      {/* 
+          Eliminamos el Suspense con fallback "Cargando" aquí
+          para que el servidor entregue la página completa con los datos inyectados.
+       */}
+      <AdminDashboard initialView={initialView} user={safeUser} users={users} />
     </div>
   )
 }

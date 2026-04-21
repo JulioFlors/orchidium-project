@@ -2,16 +2,16 @@
 
 import { useState } from 'react'
 import useSWR from 'swr'
-import { IoWaterOutline, IoFlaskOutline, IoAddOutline } from 'react-icons/io5'
+import { IoWaterOutline, IoFlaskOutline, IoAddOutline, IoCalendarOutline } from 'react-icons/io5'
 import { PiSprayBottle } from 'react-icons/pi'
-import { MdDewPoint, MdOutlineHistoryToggleOff } from 'react-icons/md'
+import { MdDewPoint } from 'react-icons/md'
 
 import { ScheduleFormModal, ScheduleCard } from './components'
 
 import { useToast } from '@/hooks'
 import { getSchedules, toggleSchedule, deleteSchedule } from '@/actions/planner/schedule-actions'
 import { TaskPurposeLabels } from '@/config/mappings'
-import { Button } from '@/components'
+import { Button, Heading } from '@/components'
 
 const ACTION_MAP: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
   IRRIGATION: {
@@ -56,6 +56,7 @@ interface AutomationSchedule {
 export function SchedulesView() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingSchedule, setEditingSchedule] = useState<AutomationSchedule | null>(null)
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set())
   const { success, error } = useToast()
 
   // SWR para cargar las rutinas vía Server Action envuelta en una Promise simple
@@ -70,13 +71,18 @@ export function SchedulesView() {
   const { data: schedules = [], isLoading, mutate } = useSWR('schedules', fetcher)
 
   const handleToggle = async (id: string, currentStatus: boolean) => {
+    // Bloquear si ya está en proceso
+    if (pendingIds.has(id)) return
+
+    setPendingIds((prev) => new Set(prev).add(id))
+
     try {
       const res = await toggleSchedule(id, !currentStatus)
 
       if (res.success) {
         success('Estado de rutina actualizado')
 
-        mutate()
+        await mutate()
       } else {
         error(res.error || 'No se pudo actualizar la rutina')
       }
@@ -85,6 +91,14 @@ export function SchedulesView() {
         'Error al conectar con el servidor: ' +
           (err instanceof Error ? err.message : 'Error desconocido'),
       )
+    } finally {
+      setPendingIds((prev) => {
+        const next = new Set(prev)
+
+        next.delete(id)
+
+        return next
+      })
     }
   }
 
@@ -120,71 +134,68 @@ export function SchedulesView() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-primary text-2xl font-bold tracking-tight antialiased">
-            Programas Automáticos
-          </h1>
-          <p className="text-secondary mt-1 text-sm">
-            Configura y ajusta las pautas diarias recurrentes de irrigación automatizada.
-          </p>
-        </div>
-        <div className="w-full shrink-0 sm:w-auto">
-          <Button
-            className="flex w-full items-center justify-center gap-2 sm:w-auto"
-            onClick={openNewModal}
-          >
-            <IoAddOutline className="h-5 w-5" /> Nueva Rutina
-          </Button>
-        </div>
+    <div className="tds-sm:px-0 mx-auto mt-9 flex w-full max-w-7xl flex-col gap-8 px-4 pb-12">
+      <div className="flex flex-col gap-6">
+        <Heading
+          action={
+            <Button
+              className="tds-sm:w-auto flex w-full items-center justify-center gap-2"
+              onClick={openNewModal}
+            >
+              <IoAddOutline className="h-5 w-5" /> Nueva Rutina
+            </Button>
+          }
+          description="Planes de irrigación, nutrición y fertirriego programados periódicamente para el mantenimiento automatizado."
+          title="Rutinas de Cultivo"
+        />
+
+        {isLoading ? (
+          <div className="border-input-outline flex h-48 flex-col items-center justify-center gap-4 rounded-xl border border-dashed">
+            <div className="text-primary h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            <span className="text-primary animate-pulse text-sm font-medium">
+              Cargando programas...
+            </span>
+          </div>
+        ) : schedules.length === 0 ? (
+          <div className="border-input-outline bg-surface/50 flex flex-col items-center justify-center rounded-xl border border-dashed p-16 shadow-sm">
+            <IoCalendarOutline className="text-secondary/20 mb-3 h-16 w-16" />
+            <p className="text-secondary text-base font-medium">No hay rutinas activas</p>
+            <p className="text-secondary mt-1 text-sm opacity-60">
+              Aún no has configurado ninguna tarea recurrente para este orquideario.
+            </p>
+          </div>
+        ) : (
+          <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-3 grid grid-cols-1 gap-4">
+            {schedules.map((schedule: AutomationSchedule) => {
+              const action = ACTION_MAP[schedule.purpose] || ACTION_MAP.IRRIGATION
+
+              return (
+                <ScheduleCard
+                  key={schedule.id}
+                  colorClassName={action.color}
+                  icon={action.icon}
+                  isLoading={pendingIds.has(schedule.id)}
+                  schedule={schedule}
+                  onDelete={handleDelete}
+                  onEdit={openEditModal}
+                  onToggle={handleToggle}
+                />
+              )
+            })}
+          </div>
+        )}
+
+        {/* Modal Reutilizable */}
+        <ScheduleFormModal
+          initialData={editingSchedule}
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          onSuccess={() => {
+            success(editingSchedule ? 'Rutina actualizada' : 'Rutina creada con éxito')
+            mutate()
+          }}
+        />
       </div>
-
-      {isLoading ? (
-        <div className="border-input-outline flex h-48 flex-col items-center justify-center gap-4 rounded-xl border border-dashed">
-          <div className="text-primary h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
-          <span className="text-primary animate-pulse text-sm font-medium">
-            Cargando programas...
-          </span>
-        </div>
-      ) : schedules.length === 0 ? (
-        <div className="border-input-outline bg-surface/50 flex flex-col items-center justify-center rounded-xl border border-dashed p-10">
-          <MdOutlineHistoryToggleOff className="text-secondary/30 mb-2 h-12 w-12" />
-          <p className="text-primary font-medium">No hay rutinas programadas</p>
-          <p className="text-secondary mt-1 text-sm">
-            Crea tu primer programa de riego automatizado
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {schedules.map((schedule: AutomationSchedule) => {
-            const action = ACTION_MAP[schedule.purpose] || ACTION_MAP.IRRIGATION
-
-            return (
-              <ScheduleCard
-                key={schedule.id}
-                colorClassName={action.color}
-                icon={action.icon}
-                schedule={schedule}
-                onDelete={handleDelete}
-                onEdit={openEditModal}
-                onToggle={handleToggle}
-              />
-            )
-          })}
-        </div>
-      )}
-
-      {/* Modal Reutilizable */}
-      <ScheduleFormModal
-        initialData={editingSchedule}
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSuccess={() => {
-          success(editingSchedule ? 'Rutina actualizada' : 'Rutina creada con éxito')
-          mutate()
-        }}
-      />
     </div>
   )
 }

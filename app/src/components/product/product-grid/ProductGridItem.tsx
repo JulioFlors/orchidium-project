@@ -4,7 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 
 import { ProductVariant, Species } from '@/interfaces/'
-import { StockLabel } from '@/components'
+import { StockLabel, FloweringLabel } from '@/components'
 import { useImageColor } from '@/hooks/useImageColor'
 
 interface Props {
@@ -95,6 +95,9 @@ export function ProductGridItem({ product, index }: Props) {
 
           {/* Etiqueta de Agotado: Se muestra si NINGUNA variante tiene stock */}
           {!hasStock && <StockLabel />}
+
+          {/* Etiqueta de Floración: Se muestra si hay al menos una planta en floración activa */}
+          {product.isFlowering && <FloweringLabel />}
         </div>
       </div>
 

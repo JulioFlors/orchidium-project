@@ -91,7 +91,6 @@ export async function GET(_request: Request) {
       })
     }
 
-    // eslint-disable-next-line no-console
     console.error('Error querying Rain Events:', error)
 
     return NextResponse.json(

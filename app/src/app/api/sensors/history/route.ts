@@ -141,7 +141,6 @@ export async function GET(request: Request) {
 
       return NextResponse.json(data)
     } catch (error) {
-      // eslint-disable-next-line no-console
       console.error('Error querying InfluxDB (short range):', error)
 
       return NextResponse.json({ error: 'Error al obtener datos de los sensores' }, { status: 500 })
@@ -225,7 +224,11 @@ export async function GET(request: Request) {
     const hasTodayInPg = pgData.some((d) => d.date.getTime() === todayStart.getTime())
 
     if (!hasTodayInPg) {
-      const timeFilter = `AND time >= '${todayStart.toISOString()}'`
+      const isIlluminanceQuery = fieldsToQuery.includes('illuminance')
+      // Para iluminancia, solo consideramos el horario diurno (8 AM - 4 PM)
+      const hourFilter = isIlluminanceQuery ? 'AND EXTRACT(HOUR FROM time) BETWEEN 8 AND 15' : ''
+      const timeFilter = `AND time >= '${todayStart.toISOString()}' ${hourFilter}`
+
       const fieldsSql = fieldsToQuery
         .map((f) => `AVG(${f}) as ${f}, MIN(${f}) as min_${f}, MAX(${f}) as max_${f}`)
         .join(', ')
@@ -253,7 +256,6 @@ export async function GET(request: Request) {
 
     return NextResponse.json(allData)
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.error('Error in PostgreSQL + InfluxDB Hybrid Query:', error)
 
     return NextResponse.json({ error: 'Error al obtener historial' }, { status: 500 })

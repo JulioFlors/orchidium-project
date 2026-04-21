@@ -143,6 +143,7 @@ model Plant {
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   FloweringEvent FloweringEvent[]
+  pestSightings  PestSighting[]
   location       Location?        @relation(fields: [locationId], references: [id], onDelete: Cascade)
   species        Species          @relation(fields: [speciesId], references: [id], onDelete: Cascade)
 
@@ -313,17 +314,6 @@ model DeviceLog {
   @@index([timestamp])
 }
 
-model AuditSnapshot {
-  id        String   @id @default(uuid())
-  device    String
-  category  String
-  data      Json
-  createdAt DateTime @default(now())
-
-  @@index([device, category])
-  @@index([createdAt])
-}
-
 model WeatherForecast {
   id           String           @id @default(uuid())
   timestamp    DateTime
@@ -457,4 +447,49 @@ enum WeatherCondition {
   FOG
   SNOW
   UNKNOWN
+}
+
+model Pest {
+  id          String         @id @default(uuid())
+  name        String         @unique
+  description String?
+  category    PestCategory
+  sightings   PestSighting[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model PestSighting {
+  id         String       @id @default(uuid())
+  pestId     String?
+  pestName   String? // Para registros rápidos o plagas no catalogadas
+  zone       ZoneType
+  severity   Severity     @default(LOW)
+  notes      String?
+  capturedAt DateTime     @default(now())
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  plantId    String?
+  pest       Pest?        @relation(fields: [pestId], references: [id])
+  plant      Plant?       @relation(fields: [plantId], references: [id])
+
+  @@index([zone])
+  @@index([pestId])
+  @@index([plantId])
+}
+
+enum PestCategory {
+  INSECT
+  FUNGUS
+  BACTERIA
+  MITE
+  VIRUS
+  OTHER
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
 }

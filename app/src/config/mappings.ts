@@ -1,4 +1,18 @@
 import {
+  Role,
+  Severity,
+  PlantType,
+  PotSize,
+  ZoneType,
+  TableType,
+  AgrochemicalType,
+  AgrochemicalPurpose,
+  TaskStatus,
+  TaskPurpose,
+  TaskSource,
+} from '@package/database/enums'
+
+export {
   PlantType,
   PotSize,
   ZoneType,
@@ -9,11 +23,19 @@ import {
   Role,
   TaskPurpose,
   TaskSource,
-} from '@package/database/enums'
+  Severity,
+}
 
 export const RoleLabels: Record<Role, string> = {
   [Role.ADMIN]: 'Administrador',
   [Role.USER]: 'Usuario',
+}
+
+export const SeverityLabels: Record<Severity, string> = {
+  [Severity.LOW]: 'Baja',
+  [Severity.MEDIUM]: 'Media',
+  [Severity.HIGH]: 'Alta',
+  [Severity.CRITICAL]: 'Crítica',
 }
 
 export const PlantTypeLabels: Record<PlantType, string> = {
@@ -47,6 +69,11 @@ export const ZoneTypeLabels: Record<ZoneType, string> = {
   [ZoneType.ZONA_D]: 'Zona D',
   [ZoneType.EXTERIOR]: 'Exterior',
 }
+
+export const ZONE_OPTIONS = Object.values(ZoneType).map((z) => ({
+  label: ZoneTypeLabels[z],
+  value: z,
+}))
 
 export const TableTypeLabels: Record<TableType, string> = {
   [TableType.MESA_1]: 'Mesa 1',
@@ -139,4 +166,21 @@ export const TaskStatusStyles: Record<TaskStatus, string> = {
   [TaskStatus.CANCELLED]: 'text-orange-600',
   [TaskStatus.FAILED]: 'text-red-500',
   [TaskStatus.EXPIRED]: 'text-red-500',
+}
+
+/**
+ * Estilos visuales asociados al propósito del agroquímico.
+ * Define la identidad cromática de la sustancia en la UI.
+ */
+export const AgrochemicalPurposeStyles: Record<AgrochemicalPurpose, string> = {
+  // Fertilizantes
+  [AgrochemicalPurpose.DESARROLLO]: 'text-green-500',
+  [AgrochemicalPurpose.FLORACION]: 'text-violet-500',
+  [AgrochemicalPurpose.MANTENIMIENTO]: 'text-blue-500',
+
+  // Fitosanitarios
+  [AgrochemicalPurpose.ACARICIDA]: 'text-orange-500',
+  [AgrochemicalPurpose.BACTERICIDA]: 'text-red-500',
+  [AgrochemicalPurpose.FUNGICIDA]: 'text-amber-500',
+  [AgrochemicalPurpose.INSECTICIDA]: 'text-rose-600',
 }

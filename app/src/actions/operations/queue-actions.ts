@@ -74,7 +74,6 @@ export async function getQueueTasks() {
             routineName: schedule.name,
           }
         } catch (err) {
-          // eslint-disable-next-line no-console
           console.error(`Cron inválido para rutina ${schedule.name}:`, err)
 
           return null
@@ -99,7 +98,6 @@ export async function getQueueTasks() {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error)
 
-    // eslint-disable-next-line no-console
     console.error('Error fetching planner queue (server action):', error)
 
     return {

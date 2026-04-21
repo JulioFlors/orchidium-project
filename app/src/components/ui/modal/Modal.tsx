@@ -27,10 +27,10 @@ const FOCUSABLE_SELECTORS = [
 
 // ---- Tamaños del modal ----
 const SIZE_MAP = {
-  sm: 'max-w-sm',
-  md: 'max-w-md',
-  lg: 'max-w-lg',
-  xl: 'max-w-xl',
+  sm: 'max-w-sm md:w-[384px]',
+  md: 'max-w-md md:w-[448px]',
+  lg: 'max-w-lg md:w-[512px]',
+  xl: 'max-w-xl md:w-[576px]',
 } as const
 
 // ---- Props ----

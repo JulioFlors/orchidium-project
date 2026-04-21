@@ -2,42 +2,28 @@
 
 import { type Agrochemical } from '@package/database'
 import React, { useState, useTransition } from 'react'
-import {
-  IoAddOutline,
-  IoFlaskOutline,
-  IoLeafOutline,
-  IoShieldCheckmarkOutline,
-  IoCalendarOutline,
-  IoRepeatOutline,
-  IoCreateOutline,
-  IoTrashOutline,
-} from 'react-icons/io5'
+import { IoAddOutline } from 'react-icons/io5'
 import { MdOutlineHistoryToggleOff } from 'react-icons/md'
 
-import { ProgramForm } from './components'
+import { type ProgramCycle } from './components'
+import { ProgramForm, ProgramCard } from './components'
 
 import { deleteFertilizationProgram, deletePhytosanitaryProgram } from '@/actions'
-import { Button, Modal, Badge, ActionMenu } from '@/components'
+import { Button, Heading } from '@/components'
 
 // Interfaces para los programas con sus ciclos poblados
-interface ProgramCycle {
-  id: string
-  sequence: number
-  agrochemical: Agrochemical
-  agrochemicalId: string
-}
 
 interface FertilizationProgramWithCycles {
   id: string
   name: string
-  weeklyFrequency: number
+  weeklyFrequency?: number
   productsCycle: ProgramCycle[]
 }
 
 interface PhytosanitaryProgramWithCycles {
   id: string
   name: string
-  monthlyFrequency: number
+  monthlyFrequency?: number
   productsCycle: ProgramCycle[]
 }
 
@@ -94,33 +80,22 @@ export function RecipesView({
   }
 
   return (
-    <div className="flex flex-col gap-12">
+    <div className="tds-sm:px-0 mx-auto mt-9 flex w-full max-w-7xl flex-col gap-8 px-4 pb-12">
       {/* SECCIÓN: FERTILIZACIÓN */}
       <section className="flex flex-col gap-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-canvas border-input-outline flex h-12 w-12 items-center justify-center rounded-xl border text-purple-500 shadow-sm">
-              <IoLeafOutline className="h-6 w-6" />
-            </div>
-            <div>
-              <h2 className="text-primary text-xl font-bold tracking-tight antialiased">
-                Programas de Fertilización
-              </h2>
-              <p className="text-secondary text-sm">
-                Mezclas de nutrientes para el crecimiento y floración.
-              </p>
-            </div>
-          </div>
-          <div className="w-full shrink-0 sm:w-auto">
+        <Heading
+          action={
             <Button
-              className="flex w-full items-center justify-center gap-2 sm:w-auto"
+              className="tds-sm:w-auto flex w-full items-center justify-center gap-2"
               variant="primary"
               onClick={() => handleOpenNew('fertilization')}
             >
-              <IoAddOutline className="h-5 w-5" /> Nueva Receta
+              <IoAddOutline className="size-5" /> Nueva Receta
             </Button>
-          </div>
-        </div>
+          }
+          description="Ciclos de aplicación de nutrientes para el desarrollo, mantenimiento y floración de las orquideas."
+          title="Programas de Fertilización"
+        />
 
         {fertilizationPrograms.length === 0 ? (
           <div className="border-input-outline bg-surface/50 flex flex-col items-center justify-center rounded-xl border border-dashed p-10">
@@ -128,61 +103,15 @@ export function RecipesView({
             <p className="text-secondary text-sm">No hay programas de fertilización definidos.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-3 grid grid-cols-1 gap-4">
             {fertilizationPrograms.map((program) => (
-              <div
+              <ProgramCard
                 key={program.id}
-                className="bg-surface border-input-outline group hover:bg-hover-overlay flex flex-col justify-between rounded-xl border p-5 shadow-sm transition-all"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3
-                      className="text-primary line-clamp-1 text-sm font-bold"
-                      title={program.name}
-                    >
-                      {program.name}
-                    </h3>
-                    <div className="text-secondary mt-1 flex items-center gap-1.5 text-[10px] font-bold tracking-wider uppercase opacity-60">
-                      <IoRepeatOutline className="h-3 w-3" />
-                      <span>{program.weeklyFrequency} vez/semana</span>
-                    </div>
-                  </div>
-
-                  <ActionMenu
-                    items={[
-                      {
-                        label: 'Editar',
-                        icon: <IoCreateOutline />,
-                        onClick: () => handleOpenEdit('fertilization', program),
-                      },
-                      {
-                        label: 'Eliminar',
-                        icon: <IoTrashOutline />,
-                        onClick: () => handleDelete('fertilization', program.id),
-                        variant: 'danger',
-                      },
-                    ]}
-                  />
-                </div>
-
-                <div className="mt-6">
-                  <span className="text-secondary text-[9px] font-bold tracking-tighter uppercase opacity-40">
-                    Ciclo de Productos
-                  </span>
-                  <div className="mt-1.5 flex flex-wrap gap-1">
-                    {program.productsCycle.map((pc) => (
-                      <Badge
-                        key={pc.id}
-                        className="font-mono text-[9px]"
-                        size="sm"
-                        variant="outline"
-                      >
-                        {pc.agrochemical.name}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              </div>
+                program={program}
+                type="fertilization"
+                onDelete={handleDelete}
+                onEdit={handleOpenEdit}
+              />
             ))}
           </div>
         )}
@@ -190,30 +119,19 @@ export function RecipesView({
 
       {/* SECCIÓN: FITOSANITARIOS */}
       <section className="flex flex-col gap-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-canvas border-input-outline flex h-12 w-12 items-center justify-center rounded-xl border text-emerald-500 shadow-sm">
-              <IoShieldCheckmarkOutline className="h-6 w-6" />
-            </div>
-            <div>
-              <h2 className="text-primary text-xl font-bold tracking-tight antialiased">
-                Programas Fitosanitarios
-              </h2>
-              <p className="text-secondary text-sm">
-                Ciclos de prevención y tratamiento (Plagas/Hongos).
-              </p>
-            </div>
-          </div>
-          <div className="w-full shrink-0 sm:w-auto">
+        <Heading
+          action={
             <Button
-              className="flex w-full items-center justify-center gap-2 sm:w-auto"
+              className="tds-sm:w-auto flex w-full items-center justify-center gap-2"
               variant="primary"
               onClick={() => handleOpenNew('phytosanitary')}
             >
-              <IoAddOutline className="h-5 w-5" /> Nuevo Programa
+              <IoAddOutline className="size-5" /> Nuevo Programa
             </Button>
-          </div>
-        </div>
+          }
+          description="Ciclos de prevención y tratamiento contra plagas, hongos y virus."
+          title="Programas Fitosanitarios"
+        />
 
         {phytosanitaryPrograms.length === 0 ? (
           <div className="border-input-outline bg-surface/50 flex flex-col items-center justify-center rounded-xl border border-dashed p-10">
@@ -221,84 +139,28 @@ export function RecipesView({
             <p className="text-secondary text-sm">No hay programas fitosanitarios definidos.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-3 grid grid-cols-1 gap-4">
             {phytosanitaryPrograms.map((program) => (
-              <div
+              <ProgramCard
                 key={program.id}
-                className="bg-surface border-input-outline group hover:bg-hover-overlay flex flex-col justify-between rounded-xl border p-5 shadow-sm transition-all"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3
-                      className="text-primary line-clamp-1 text-sm font-bold"
-                      title={program.name}
-                    >
-                      {program.name}
-                    </h3>
-                    <div className="text-secondary mt-1 flex items-center gap-1.5 text-[10px] font-bold tracking-wider uppercase opacity-60">
-                      <IoCalendarOutline className="h-3 w-3" />
-                      <span>{program.monthlyFrequency} vez/mes</span>
-                    </div>
-                  </div>
-
-                  <ActionMenu
-                    items={[
-                      {
-                        label: 'Editar',
-                        icon: <IoCreateOutline />,
-                        onClick: () => handleOpenEdit('phytosanitary', program),
-                      },
-                      {
-                        label: 'Eliminar',
-                        icon: <IoTrashOutline />,
-                        onClick: () => handleDelete('phytosanitary', program.id),
-                        variant: 'danger',
-                      },
-                    ]}
-                  />
-                </div>
-
-                <div className="mt-6">
-                  <span className="text-secondary text-[9px] font-bold tracking-tighter uppercase opacity-40">
-                    Ciclo de Productos
-                  </span>
-                  <div className="mt-1.5 flex flex-wrap gap-1">
-                    {program.productsCycle.map((pc) => (
-                      <Badge
-                        key={pc.id}
-                        className="font-mono text-[9px]"
-                        size="sm"
-                        variant="outline"
-                      >
-                        {pc.agrochemical.name}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              </div>
+                program={program}
+                type="phytosanitary"
+                onDelete={handleDelete}
+                onEdit={handleOpenEdit}
+              />
             ))}
           </div>
         )}
       </section>
 
-      <Modal
-        icon={<IoFlaskOutline className="h-5 w-5" />}
+      <ProgramForm
+        availableAgrochemicals={availableAgrochemicals}
+        initialData={modalState.selectedData}
         isOpen={modalState.isOpen}
-        size="lg"
-        subtitle={
-          modalState.type === 'fertilization' ? 'Programa de Nutrientes' : 'Programa Fitosanitario'
-        }
-        title={modalState.selectedData ? 'Editar Receta' : 'Nueva Receta'}
+        type={modalState.type}
         onClose={() => setModalState((s) => ({ ...s, isOpen: false }))}
-      >
-        <ProgramForm
-          availableAgrochemicals={availableAgrochemicals}
-          initialData={modalState.selectedData}
-          type={modalState.type}
-          onCancel={() => setModalState((s) => ({ ...s, isOpen: false }))}
-          onSuccess={() => setModalState((s) => ({ ...s, isOpen: false }))}
-        />
-      </Modal>
+        onSuccess={() => setModalState((s) => ({ ...s, isOpen: false }))}
+      />
     </div>
   )
 }

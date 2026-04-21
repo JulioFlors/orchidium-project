@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function ControlPage() {
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+    <div className="tds-sm:px-0 mx-auto mt-9 flex w-full max-w-7xl flex-col gap-8 px-4 pb-12">
       <ControlView />
     </div>
   )

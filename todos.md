@@ -10,7 +10,11 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 
 ### ☁️ 0.1 Almacenamiento y Base de Datos
 
-* [ ] **Vercel Blob / S3:** Implementar subida de imágenes de plantas a almacenamiento en la nube (Vercel Blob) en lugar de `public/local`, para persistencia en despliegues serverless.
+* [ ] **Pipeline de Imágenes AOT (VPS Media Storage):**
+  * [ ] Cliente: Implementar `browser-image-compression` para convertir crudos (JPG/PNG) a `WebP` sub-300KB (Max 1920px) AOT (Ahead of Time) antes de subir.
+  * [ ] Backend/VPS: Configurar contenedor o endpoint en VPS para recibir ficheros WebP y servirlos como ficheros estáticos.
+  * [ ] Frontend: Atar URL pública generada por el VPS a modelo Prisma (`SpeciesImage`).
+  * [ ] *Mitigación Marzo:* Esto oficializa el workaround, manteniendo `unoptimized: true` en NextConfig. Consumo Vercel quota = 0.
 * [ ] **InfluxDB VPS (Cubo Histórico):** Migrar de Cloud a instancia VPS propia.
   * [ ] Eliminar política de retención de 30 días.
   * [ ] Crear *Continuous Queries* (o Tareas en Flux/SQL) para realizar **Downsampling**: Resumir datos crudos (minuto a minuto) en un bucket secundario con resoluciones horarias (max, min, mean) para consultas de meses/años sin penalizar el rendimiento.
@@ -28,20 +32,24 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 
 ### 🌿 1.1 Gestión de Inventario (Taxonomía y Activos)
 
-* [ ] **Sistema de Géneros (`Genus`):** CRUD completo con validación.
+* [ ] **Sistema de Géneros (`Genus`):** CRUD universal en ruta `/genus`.
 * [ ] **Sistema de Especies (`Species`):**
-  * [ ] CRUD con Slug autogenerado.
-  * [ ] Integración con componente de carga de imágenes (Vercel Blob).
-* [ ] **Sistema de Plantas (`Plant`):** CRUD de activos vivos (Gemelo Digital).
-* [ ] **Diario Biológico (Eventos):** CRUD para registrar "Avistamientos de Plagas", "Infección Fúngica" y "Floraciones". Este registro alimentará el Motor de Inferencias.
+  * [ ] CRUD central en `/species` (Editor Slug, Metadatos).
+  * [ ] Integración Uploader Múltiple: Dropzone con Compresión Cliente WebP -> POST a VPS -> Prisma `SpeciesImage`.
+* [ ] **Gestión de Tienda (`ProductVariant`):**
+  * [ ] CRUD en `/store`. Vinculación Taxonomía -> Variantes comerciales (Precio, Stock Crítico).
+* [ ] **Sistema de Plantas (`Plant`):** CRUD Activos (Gemelo Digital) en `/plants`.
+* [ ] **Diario Biológico (Eventos):** CRUD completo para registrar "Avistamientos de Plagas" y "Floraciones". Incluye búsqueda in-situ y persistencia atómica.
+* [ ] **Cierre de Ciclos:** Implementar lógica para marcar el fin de una floración (endDate) y resolución de plagas.
+* [ ] **Visibilidad Histórica:** Dashboard para visualizar la línea de tiempo biológica cruzada con telemetría.
 
 ### 🌸 1.2 Tienda & Lógica de Negocio
 
 * [ ] **CRUD Variantes (`ProductVariant`):** Gestión de precios y stock.
-* [ ] **Mejoras UI Tienda:**
-  * [ ] Filtro/sección para agrupar plantas con **Floración Activa** (Sincronizado con el Diario Biológico).
-  * [ ] Cuando no estén agrupadas, aplicar label "Floración" (similar visualmente al label "Agotado") a los productos correspondientes.
-  * [ ] Distintivo visual en la card de producto.
+* [x] **Mejoras UI Tienda:**
+  * [x] Filtro/sección para agrupar plantas con **Floración Activa** (Sincronizado con el Diario Biológico).
+  * [x] Aplicar label "Floración" (FloweringLabel) a los productos correspondientes.
+  * [x] Distintivo visual en la card de producto.
 
 ### 🧪 1.3 Gestión de Laboratorio (Insumos y Recetas)
 

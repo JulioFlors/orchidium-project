@@ -1,13 +1,20 @@
 import type { Metadata } from 'next'
 
+import { ShopView } from './ui/ShopView'
+
+import { getStoreData } from '@/actions'
+
 export const metadata: Metadata = {
-  title: 'Gestión de Tienda',
+  title: 'Gestor de Tienda',
 }
 
-export default function ShopmanagerPage() {
+export default async function ShopManagerPage() {
+  const result = await getStoreData()
+  const species = result.species || []
+
   return (
-    <div>
-      <h1>(inventory)/shop-manager Page</h1>
-    </div>
+    <main className="p-4 sm:p-8">
+      <ShopView initialData={species} />
+    </main>
   )
 }

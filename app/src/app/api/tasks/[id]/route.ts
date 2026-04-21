@@ -57,11 +57,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       }
 
       const canceledRoutineLog = await prisma.$transaction(async (tx) => {
-        // 1. Deshabilitar la rutina
-        await tx.automationSchedule.update({
-          where: { id: scheduleId },
-          data: { isEnabled: false },
-        })
+        // 1. (Omitido) Ya no deshabilitamos la rutina completa, solo cancelamos esta ejecución específica
+        // creando un registro CANCELLED que servirá de marcador para el Scheduler.
 
         // 2. Crear una entrada CANCELADA "fantasma" en el TaskLog para el historial
         const task = await tx.taskLog.create({
@@ -73,7 +70,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
             duration: schedule.durationMinutes,
             scheduledAt: nextScheduledAt,
             scheduleId: schedule.id,
-            notes: `Rutina pausada manualmente. Motivo: ${reason}`,
+            notes: `Rutina cancelada manualmente. Motivo: ${reason}`,
           },
         })
 
@@ -82,7 +79,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
           data: {
             taskId: task.id,
             status: TaskStatus.CANCELLED,
-            notes: `Rutina pausada manualmente. Motivo: ${reason}`,
+            notes: `Rutina cancelada manualmente. Motivo: ${reason}`,
           },
         })
 
@@ -116,7 +113,6 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
     return NextResponse.json(updatedTask)
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.error('Error cancelando tarea diferida:', error)
 
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })

@@ -47,7 +47,6 @@ export async function getHistoryTasks(limit = 20, offset = 0) {
       data,
     }
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.error('Error fetching history tasks (server action):', error)
 
     return {

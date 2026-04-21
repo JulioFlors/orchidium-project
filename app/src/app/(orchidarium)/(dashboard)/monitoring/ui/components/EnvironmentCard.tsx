@@ -17,7 +17,7 @@ export interface EnvironmentCardProps {
   onClick?: () => void
   className?: string
   description?: React.ReactNode
-  color?: 'orange' | 'blue' | 'yellow' | 'cyan' | 'purple' | 'green'
+  color?: 'orange' | 'blue' | 'yellow' | 'cyan' | 'purple' | 'green' | 'red'
   isOffline?: boolean
   isLoading?: boolean
   hasData?: boolean
@@ -56,16 +56,25 @@ export function EnvironmentCard({
   const statusColors = {
     optimal: 'text-green-500',
     warning: 'text-yellow-500',
-    critical: 'text-red-500',
+    critical: 'text-red-400',
   }
 
   const colorStyles = {
+    red: {
+      text: 'text-red-400',
+      bgRaw: '240, 128, 128',
+      border: 'group-hover:border-red-400/50',
+      stroke: '#F08080',
+      bgClass: 'bg-red-400',
+      glowVariant: 'red' as const,
+    },
     orange: {
       text: 'text-orange-500',
       bgRaw: '249, 115, 22',
       border: 'group-hover:border-orange-500/50',
       stroke: '#f97316',
       bgClass: 'bg-orange-500',
+      glowVariant: 'orange' as const,
     },
     blue: {
       text: 'text-blue-500',
@@ -73,6 +82,7 @@ export function EnvironmentCard({
       border: 'group-hover:border-blue-500/50',
       stroke: '#3b82f6',
       bgClass: 'bg-blue-500',
+      glowVariant: 'blue' as const,
     },
     yellow: {
       text: 'text-yellow-400',
@@ -80,6 +90,7 @@ export function EnvironmentCard({
       border: 'group-hover:border-yellow-400/50',
       stroke: '#facc15',
       bgClass: 'bg-yellow-400',
+      glowVariant: 'yellow' as const,
     },
     cyan: {
       text: 'text-cyan-400',
@@ -87,6 +98,7 @@ export function EnvironmentCard({
       border: 'group-hover:border-cyan-400/50',
       stroke: '#22d3ee',
       bgClass: 'bg-cyan-400',
+      glowVariant: 'cyan' as const,
     },
     purple: {
       text: 'text-purple-500',
@@ -94,6 +106,7 @@ export function EnvironmentCard({
       border: 'group-hover:border-purple-500/50',
       stroke: '#a855f7',
       bgClass: 'bg-purple-500',
+      glowVariant: 'violet' as const,
     },
     green: {
       text: 'text-green-500',
@@ -101,6 +114,7 @@ export function EnvironmentCard({
       border: 'group-hover:border-green-500/50',
       stroke: '#22c55e',
       bgClass: 'bg-green-500',
+      glowVariant: 'green' as const,
     },
   }
 
@@ -156,18 +170,11 @@ export function EnvironmentCard({
           <div className="flex min-w-0 items-center gap-3.5">
             <StatusCircleIcon
               glow
-              className={clsx(
-                selectedColor.text,
-                selectedColor.border,
-                !isActive && 'border-input-outline',
-                isActive && `bg-[rgba(${selectedColor.bgRaw},0.1)]`,
-                `group-hover:bg-[rgba(${selectedColor.bgRaw},0.1)]`,
-              )}
-              glowColor={selectedColor.bgRaw}
+              active={isActive}
+              className={clsx(selectedColor.text)}
+              glowVariant={selectedColor.glowVariant}
               icon={icon}
-              style={{
-                borderColor: isActive ? `rgba(${selectedColor.bgRaw}, 0.5)` : undefined,
-              }}
+              size="md"
               variant="surface"
             />
             <div className="flex min-w-0 flex-col gap-0.5">

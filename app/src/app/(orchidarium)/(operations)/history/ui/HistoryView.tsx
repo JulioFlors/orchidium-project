@@ -10,6 +10,7 @@ import { TaskTimelineModal, HistoryTaskCard } from './components'
 
 import { getTaskEvents } from '@/actions/operations/control-actions'
 import { TaskPurposeLabels } from '@/config/mappings'
+import { Heading } from '@/components'
 
 const fetcher = async (url: string) => {
   const res = await fetch(url)
@@ -137,16 +138,11 @@ export function HistoryView() {
   })
 
   return (
-    <div className="mx-auto mt-9 flex w-full max-w-7xl flex-col gap-8 pb-12">
-      <div>
-        <h1 className="text-primary flex items-center gap-2 text-2xl font-bold tracking-tight antialiased">
-          Historial de Operaciones
-        </h1>
-        <p className="text-secondary mt-1 text-sm">
-          Registro auditable de todas las tareas del sistema de riego: manuales, diferidas y
-          automatizadas.
-        </p>
-      </div>
+    <div className="tds-sm:px-0 mx-auto mt-9 flex w-full max-w-7xl flex-col gap-8 px-4 pb-12">
+      <Heading
+        description="Registro auditable de todas las tareas del sistema de riego: manuales, diferidas y automatizadas."
+        title="Historial de Operaciones"
+      />
 
       {isLoading && tasks.length === 0 ? (
         <div className="flex flex-col items-center justify-center gap-4 py-20">

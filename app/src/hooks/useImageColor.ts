@@ -169,7 +169,6 @@ export function getDominantVibrantColor(imgElement: HTMLImageElement): RGB | nul
 
     return hslToRgb(avgH, boostedS, boostedL)
   } catch (e) {
-    // eslint-disable-next-line no-console
     console.error('Error extrayendo color dominante de la imagen:', e)
 
     return null

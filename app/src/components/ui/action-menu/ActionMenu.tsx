@@ -14,7 +14,7 @@ export interface ActionMenuItem {
   label: string
   icon: React.ReactNode
   onClick: (e: React.MouseEvent) => void
-  variant?: 'default' | 'danger'
+  variant?: 'default' | 'destructive'
 }
 
 interface ActionMenuProps {
@@ -97,12 +97,12 @@ export function ActionMenu({
         aria-haspopup="menu"
         aria-label="Opciones"
         className={cn(
-          'focus-visible:ring-black-and-white flex h-9 w-9 cursor-pointer items-center justify-center rounded-full transition-all focus-visible:ring-2 focus-visible:outline-none active:scale-95',
+          'focus-visible:ring-black-and-white flex h-9 w-9 cursor-pointer items-center justify-center rounded-full transition-all focus-visible:ring-2 focus-visible:outline-none',
           'text-secondary hover:text-primary hover:bg-black/5 dark:hover:bg-white/10',
           hoverOnly &&
             (isOpen
               ? 'opacity-100'
-              : 'md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100'),
+              : 'tds-xl:opacity-0 tds-xl:group-hover:opacity-100 tds-xl:focus-within:opacity-100'),
           isOpen && 'bg-black/5 opacity-100 dark:bg-white/10',
           triggerClassName,
         )}
@@ -113,9 +113,9 @@ export function ActionMenu({
         }}
       >
         {/* Mobile: Vertical Dots (Always reachable but user says vertical) */}
-        <IoEllipsisVertical className="h-4 w-4 md:hidden" />
+        <IoEllipsisVertical className="tds-sm:hidden h-4 w-4" />
         {/* Desktop: Horizontal Dots */}
-        <IoEllipsisHorizontal className="hidden h-4 w-4 md:block" />
+        <IoEllipsisHorizontal className="tds-sm:block hidden h-4 w-4" />
       </button>
 
       {/* Dropdown Menu */}
@@ -123,7 +123,7 @@ export function ActionMenu({
         {isOpen && (
           <motion.div
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="border-input-outline bg-surface absolute right-0 z-50 mt-1 w-max min-w-40 origin-top-right overflow-hidden rounded-xl border py-1.5 shadow-xl"
+            className="border-input-outline bg-surface absolute right-0 z-1 mt-1 w-max min-w-40 origin-top-right overflow-hidden rounded-md border py-1.5 shadow-xl"
             exit={{ opacity: 0, scale: 0.95, y: 5 }}
             initial={{ opacity: 0, scale: 0.95, y: 5 }}
             role="menu"
@@ -133,9 +133,9 @@ export function ActionMenu({
               <button
                 key={item.label}
                 className={cn(
-                  'flex w-full cursor-pointer items-center px-3 py-2 text-left text-sm whitespace-nowrap transition-colors outline-none',
+                  'mx-1.5 flex w-[calc(100%-0.75rem)] cursor-pointer items-center rounded-md px-3 py-2 text-left text-sm whitespace-nowrap transition-colors outline-none',
                   'hover:bg-hover-overlay focus:bg-hover-overlay',
-                  item.variant === 'danger' ? 'text-red-500' : 'text-primary',
+                  item.variant === 'destructive' ? 'text-red-500' : 'text-primary',
                 )}
                 role="menuitem"
                 tabIndex={0}
@@ -148,8 +148,8 @@ export function ActionMenu({
               >
                 <span
                   className={cn(
-                    'mr-2.5 h-4 w-4 shrink-0',
-                    item.variant === 'danger' ? 'text-red-500' : 'text-secondary',
+                    'mr-2.5 flex size-4.5 shrink-0 items-center justify-center [&>svg]:size-full',
+                    item.variant === 'destructive' ? 'text-red-500' : 'text-secondary',
                   )}
                 >
                   {item.icon}

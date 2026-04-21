@@ -49,6 +49,20 @@ export const getPaginatedSpeciesWithImages = async ({
           },
         },
         variants: true,
+        // Detectar si hay al menos una planta de esta especie con floración activa
+        plants: {
+          where: {
+            FloweringEvent: {
+              some: {
+                endDate: null,
+              },
+            },
+          },
+          select: {
+            id: true,
+          },
+          take: 1,
+        },
       },
       // Aplicamos la condición de filtro
       where: whereCondition,
@@ -71,11 +85,11 @@ export const getPaginatedSpeciesWithImages = async ({
           ...specie,
           // Convertimos el array de objetos {url: string} a un array de strings
           images: specie.images.map((image) => image.url),
+          isFlowering: specie.plants.length > 0,
         }
       }),
     }
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.error('Error fetching paginated species:', error)
     throw new Error('No se pudieron cargar las especies.')
   }

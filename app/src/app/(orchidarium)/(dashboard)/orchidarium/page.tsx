@@ -7,15 +7,15 @@ import { PendingTasksBanner } from '../../ui/PendingTasksBanner'
 
 import { BotanicalInsightsGrid } from './ui/BotanicalInsightsGrid'
 import { OracleDecisionCard } from './ui/OracleDecisionCard'
+import { QuickActionsGrid } from './ui/QuickActionsGrid'
 
 import { auth } from '@/lib/auth'
-import {
-  getLatestBotanicalInsights,
-  getLatestOracleForecast,
-} from '@/actions/insights/insight-actions'
+import { ZoneType, ZoneTypeLabels } from '@/config/mappings'
+import { getLatestBotanicalInsights, getLatestOracleForecast, BotanicalInsights } from '@/actions'
+import { Heading } from '@/components'
 
 export const metadata: Metadata = {
-  title: 'Gemelo Digital',
+  title: 'Centro de Inteligencia Agronómica',
   description: 'Salud botánica, insights agronómicos y oráculo climático.',
 }
 
@@ -28,45 +28,46 @@ export default async function OrchidariumDashboardPage() {
     redirect('/auth/login?callbackUrl=/orchidarium')
   }
 
-  // Obtenemos de forma paralela los insights y el pronóstico satelital
+  // Obtenemos de forma paralela los insights de la Zona A y el pronóstico satelital
   const [insightsRes, oracleRes] = await Promise.all([
-    getLatestBotanicalInsights('EXTERIOR'), // Por defecto asumimos la zona principal o se puede abstraer
+    getLatestBotanicalInsights(ZoneType.ZONA_A),
     getLatestOracleForecast(),
   ])
 
-  return (
-    <div className="mx-auto mt-9 flex w-full max-w-7xl flex-col gap-8 pb-12">
-      <div>
-        <h1 className="text-primary flex items-center gap-2 text-2xl font-bold tracking-tight antialiased">
-          Centro de Inteligencia Agronómica
-        </h1>
-        <p className="text-secondary mt-1 text-sm">
-          Resumen procesado de las últimas 24 horas y notificaciones de acciones operativas
-          requeridas.
-        </p>
-      </div>
+  const zoneLabel = ZoneTypeLabels[ZoneType.ZONA_A]
 
-      <div className="flex flex-col gap-8">
-        {/* Sección de Acción / Notificaciones delimitada */}
+  return (
+    <div className="tds-sm:px-0 mx-auto mt-9 flex w-full max-w-7xl flex-col gap-8 px-4 pb-12">
+      <Heading
+        description={`Monitoreo proactivo del ${zoneLabel} Principal y decisiones asistidas por el Oráculo.`}
+        title="Centro de Inteligencia Agronómica"
+      />
+
+      <div className="flex flex-col gap-10">
         <section className="flex flex-col gap-4">
           <PendingTasksBanner />
         </section>
 
-        {/* Scorecards */}
-        <section className="flex flex-col gap-4">
-          <h2 className="border-b border-white/5 pb-2 text-lg font-semibold">
-            Salud de la Planta (Último Día)
-          </h2>
+        {/* Scorecard Zona A */}
+        <div className="flex flex-col gap-12">
           {insightsRes.success && insightsRes.data ? (
-            <BotanicalInsightsGrid data={insightsRes.data} />
+            <section className="flex flex-col gap-5">
+              <div className="flex items-center gap-3 border-b border-white/5 pb-2">
+                <h2 className="text-lg font-bold tracking-tight uppercase">{zoneLabel}</h2>
+                <div className="bg-primary/10 text-primary h-fit rounded-full px-2 py-0.5 text-[10px] font-bold tracking-widest uppercase">
+                  Estación Automatizada
+                </div>
+              </div>
+              <BotanicalInsightsGrid data={insightsRes.data as BotanicalInsights} />
+            </section>
           ) : (
-            <div className="bg-surface/30 rounded-xl border border-dashed border-white/10 p-4 text-center">
+            <div className="bg-surface/30 rounded-xl border border-dashed border-white/10 p-12 text-center">
               <p className="text-secondary">
-                {insightsRes.error || 'Aun no hay datos botánicos acumulados.'}
+                {insightsRes.error || `Aun no hay datos botánicos acumulados para el ${zoneLabel}.`}
               </p>
             </div>
           )}
-        </section>
+        </div>
 
         <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* Oráculo */}
@@ -78,16 +79,9 @@ export default async function OrchidariumDashboardPage() {
             )}
           </section>
 
-          {/* Panel Futuro (Para integración de recetas o control de inventario/crecimiento) */}
-          <section className="bg-surface/20 flex flex-col items-center justify-center gap-4 rounded-xl border border-white/5 p-6 text-center">
-            <div className="bg-surface/50 mb-2 flex h-16 w-16 items-center justify-center rounded-full border border-white/10">
-              <span className="text-2xl">🌱</span>
-            </div>
-            <h3 className="font-semibold text-white">Diario de Fenología (Próximamente)</h3>
-            <p className="text-secondary max-w-sm text-sm">
-              Aquí registraremos los ciclos de floración de tus orquídeas para cruzarlo con el DIF y
-              el DLI.
-            </p>
+          {/* Panel de Acciones Biológicas */}
+          <section className="flex flex-col gap-4">
+            <QuickActionsGrid />
           </section>
         </div>
       </div>

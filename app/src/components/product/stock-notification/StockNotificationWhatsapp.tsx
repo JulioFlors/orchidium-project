@@ -58,7 +58,7 @@ export function StockNotificationWhatsapp({ productName }: Props) {
     setIsSubmitting(true)
 
     // --- SIMULACIÓN DE LLAMADA AL BACKEND ---
-    // eslint-disable-next-line no-console
+
     console.log('Enviando datos para notificación por WhatsApp:', {
       userName,
       phoneNumber,

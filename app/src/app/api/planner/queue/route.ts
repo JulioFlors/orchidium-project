@@ -24,6 +24,8 @@ export async function GET() {
       scheduledAt: task.scheduledAt.toISOString(),
       status: task.status,
       isRoutine: false,
+      notes: task.notes,
+      source: task.source,
     }))
 
     // 2. Fetch enabled automation schedules
@@ -75,7 +77,6 @@ export async function GET() {
 
     return NextResponse.json(combinedTasks)
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.error('Error fetching planner queue:', error)
 
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })

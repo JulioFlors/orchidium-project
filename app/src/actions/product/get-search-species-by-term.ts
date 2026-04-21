@@ -65,7 +65,6 @@ export const getSearchSpeciesByTerm = async (
       }
     })
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.error('Error searching species:', error)
 
     return []

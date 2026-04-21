@@ -53,7 +53,7 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
     if (!selectedVariant) return
 
     // TODO: Conectar con Zustand (Cart Store) aquí
-    // eslint-disable-next-line no-console
+
     console.log('Agregando al carrito:', {
       variant: selectedVariant,
       quantity: quantity,

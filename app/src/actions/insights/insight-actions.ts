@@ -28,7 +28,7 @@ export interface OracleForecast {
  * Obtiene los insights botánicos más recientes (ayer o hace unos días) de una zona específica.
  */
 export async function getLatestBotanicalInsights(
-  zone: ZoneType = 'EXTERIOR',
+  zone: ZoneType = ZoneType.EXTERIOR,
 ): Promise<{ success: boolean; data?: BotanicalInsights; error?: string }> {
   try {
     // Buscamos el registro pre-agregado más reciente (usualmente el de ayer insertado a las 23:55)
@@ -38,7 +38,7 @@ export async function getLatestBotanicalInsights(
     })
 
     if (!stat) {
-      return { success: false, error: 'No hay datos botánicos históricos disponibles.' }
+      return { success: false, error: `No hay datos botánicos históricos para la zona ${zone}.` }
     }
 
     return {
@@ -63,7 +63,42 @@ export async function getLatestBotanicalInsights(
 }
 
 /**
- * Obtiene el último pronóstico capturado por el Oráculo del Clima.
+ * Obtiene los insights más recientes de TODAS las zonas disponibles.
+ */
+export async function getAllLatestBotanicalInsights(): Promise<{
+  success: boolean
+  data?: Record<string, BotanicalInsights>
+  error?: string
+}> {
+  try {
+    const zones: ZoneType[] = [ZoneType.ZONA_A, ZoneType.ZONA_B, ZoneType.EXTERIOR]
+    const results: Record<string, BotanicalInsights> = {}
+
+    const insights = await Promise.all(
+      zones.map(async (zone) => {
+        const res = await getLatestBotanicalInsights(zone)
+
+        return { zone, res }
+      }),
+    )
+
+    for (const { zone, res } of insights) {
+      if (res.success && res.data) {
+        results[zone] = res.data
+      }
+    }
+
+    return { success: true, data: results }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error)
+
+    return { success: false, error: `Error leyendo lista de insights: ${msg}` }
+  }
+}
+
+/**
+ * Obtiene el último pronóstico capturado por el Oráculo del Clima,
+ * fusionando el clima general con la última lectura de suelo satelital.
  */
 export async function getLatestOracleForecast(): Promise<{
   success: boolean
@@ -71,11 +106,24 @@ export async function getLatestOracleForecast(): Promise<{
   error?: string
 }> {
   try {
-    const forecast = await prisma.weatherForecast.findFirst({
-      orderBy: { createdAt: 'desc' },
+    // 1. Obtener el pronóstico más reciente (Open-Meteo u OpenWeatherMap)
+    const latestGeneral = await prisma.weatherForecast.findFirst({
+      where: {
+        source: { in: ['Open-Meteo', 'OpenWeatherMap'] },
+      },
+      orderBy: { timestamp: 'desc' },
     })
 
-    if (!forecast) {
+    // 2. Obtener la última lectura de suelo (AgroMonitoring)
+    const latestSoil = await prisma.weatherForecast.findFirst({
+      where: {
+        source: 'AgroMonitoring',
+        soilMoisture: { not: null },
+      },
+      orderBy: { timestamp: 'desc' },
+    })
+
+    if (!latestGeneral) {
       return {
         success: false,
         error: 'No hay datos del oráculo meteorológico en la base de datos.',
@@ -85,13 +133,13 @@ export async function getLatestOracleForecast(): Promise<{
     return {
       success: true,
       data: {
-        timestamp: forecast.timestamp,
-        temperature: forecast.temperature,
-        humidity: forecast.humidity,
-        precipProb: forecast.precipProb,
-        condition: forecast.condition,
-        soilMoisture: forecast.soilMoisture,
-        windSpeed: forecast.windSpeed,
+        timestamp: latestGeneral.timestamp,
+        temperature: latestGeneral.temperature,
+        humidity: latestGeneral.humidity,
+        precipProb: latestGeneral.precipProb,
+        condition: latestGeneral.condition,
+        soilMoisture: latestSoil?.soilMoisture ?? null,
+        windSpeed: latestGeneral.windSpeed,
       },
     }
   } catch (error) {

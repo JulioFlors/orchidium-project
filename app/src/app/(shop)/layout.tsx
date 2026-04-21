@@ -28,7 +28,6 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
       headers: await headers(),
     }),
   ]).catch((err) => {
-    // eslint-disable-next-line no-console
     console.warn(
       '⚠️ Error al obtener los datos (shop)/layout (la base de datos podría estar caída):',
       err,

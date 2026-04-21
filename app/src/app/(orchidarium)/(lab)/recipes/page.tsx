@@ -22,12 +22,10 @@ export default async function RecipesPage() {
     : []
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <RecipesView
-        availableAgrochemicals={availableAgrochemicals}
-        fertilizationPrograms={fertilizationPrograms}
-        phytosanitaryPrograms={phytosanitaryPrograms}
-      />
-    </div>
+    <RecipesView
+      availableAgrochemicals={availableAgrochemicals}
+      fertilizationPrograms={fertilizationPrograms}
+      phytosanitaryPrograms={phytosanitaryPrograms}
+    />
   )
 }

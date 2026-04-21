@@ -18,7 +18,6 @@ export async function GET() {
 
     return NextResponse.json(tasks)
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.error('Error fetching pending tasks:', error)
 
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
@@ -67,7 +66,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json(taskLog, { status: 201 })
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.error('Error creating deferred task:', error)
 
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })

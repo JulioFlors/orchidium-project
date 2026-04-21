@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import prisma, { type TaskPurpose, type ZoneType, CollisionGuard } from '@package/database'
+import prisma, { TaskPurpose, ZoneType, CollisionGuard } from '@package/database'
 
 // Mapeo inverso de Frontend -> Backend
 const CIRCUIT_TO_PURPOSE: Record<string, TaskPurpose> = {
@@ -19,7 +19,7 @@ const CIRCUIT_TO_PURPOSE: Record<string, TaskPurpose> = {
 export async function createManualTask(
   circuit: string,
   durationMinutes: number,
-  zone: ZoneType = 'ZONA_A',
+  zones: ZoneType[] = [ZoneType.ZONA_A],
 ) {
   try {
     const purpose = CIRCUIT_TO_PURPOSE[circuit]
@@ -46,7 +46,7 @@ export async function createManualTask(
           scheduledAt: new Date(),
           executedAt: new Date(),
           duration: durationMinutes,
-          zones: [zone],
+          zones: zones,
           notes: 'Ejecución manual desde el Panel de Control',
         },
       })

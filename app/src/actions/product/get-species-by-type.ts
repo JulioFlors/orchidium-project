@@ -42,7 +42,6 @@ export const getSpeciesByType = async (plantType: PlantType) => {
       }
     })
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.error('Error fetching species by type:', error)
 
     // En lugar de lanzar un error que crashee la página,

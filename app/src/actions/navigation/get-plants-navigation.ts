@@ -37,7 +37,6 @@ export const getPlantsNavigation = async (): Promise<PlantsNavData[]> => {
 
     return navigationItems
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.error('Error fetching genus navigation data:', error)
 
     return []

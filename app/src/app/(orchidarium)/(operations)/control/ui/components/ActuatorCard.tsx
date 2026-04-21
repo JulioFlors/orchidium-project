@@ -22,13 +22,13 @@ export function ActuatorCard({
   color = 'blue',
   isDeviceOnline = true,
 }: ActuatorCardProps) {
-  // Mapa de colores para estados activos
+  // Mapa de colores para estados activos (Sin sombras dinámicas)
   const colorMap = {
-    blue: 'bg-blue-500 shadow-blue-500/50',
-    green: 'bg-green-500 shadow-green-500/50',
-    amber: 'bg-amber-500 shadow-amber-500/50',
-    purple: 'bg-purple-500 shadow-purple-500/50',
-    cyan: 'bg-cyan-500 shadow-cyan-500/50',
+    blue: 'bg-blue-600 dark:bg-blue-500/20 dark:border-blue-500/30',
+    green: 'bg-green-600 dark:bg-green-500/20 dark:border-green-500/30',
+    amber: 'bg-amber-600 dark:bg-amber-500/20 dark:border-amber-500/30',
+    purple: 'bg-purple-600 dark:bg-purple-500/20 dark:border-purple-500/30',
+    cyan: 'bg-cyan-600 dark:bg-cyan-500/20 dark:border-cyan-500/30',
   }
 
   const activeClass = isActive ? colorMap[color] : 'bg-zinc-800'
@@ -36,7 +36,7 @@ export function ActuatorCard({
   return (
     <div
       className={clsx(
-        'relative flex flex-col items-center justify-center gap-4 overflow-hidden rounded-lg p-6 shadow-sm transition-all duration-300 select-none',
+        'relative flex flex-col items-center justify-center gap-4 overflow-hidden rounded-lg p-6 transition-all duration-300 select-none',
 
         // --- Estado Deshabilitado o Cargando ---
         isDisabled
@@ -45,9 +45,9 @@ export function ActuatorCard({
 
         // --- Estado Activo vs Inactivo (Solo si habilitado) ---
         !isDisabled && isActive
-          ? clsx('transform text-white hover:scale-[1.02] hover:shadow-lg', activeClass)
+          ? clsx('border-transparent text-white', activeClass)
           : !isDisabled
-            ? 'border border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:bg-zinc-800/80'
+            ? 'border border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:bg-zinc-800/80'
             : '',
       )}
       onClick={() => {
@@ -55,14 +55,8 @@ export function ActuatorCard({
         onToggle()
       }}
     >
-      {/* Icono Principal */}
-      <div
-        className={clsx(
-          'text-4xl',
-          isActive ? 'scale-110' : '',
-          'transition-transform duration-300',
-        )}
-      >
+      {/* Icono Principal (Sin Escala) */}
+      <div className={clsx('text-4xl transition-all duration-300')}>
         {isLoading ? (
           <div className="h-9 w-9 animate-spin rounded-full border-2 border-current border-t-transparent" />
         ) : (

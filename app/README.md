@@ -19,7 +19,7 @@
   * **Descripción:** Fertilizante NPK cristalino rico en nitrógeno con microelementos, adecuado como complemento al abonado o para aplicar en las fases de crecimiento vegetativo dónde se consume nitrógeno.
   * **Propósito:** Fertilización
   * **Tipo:** Desarrollo
-  * **Preparación:** 1 gramo por litro de agua
+  * **Preparación:** 1 g/L
 
 * ##### **Nitrifort M935**
 

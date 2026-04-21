@@ -21,6 +21,7 @@ COPY tsconfig.base.json ./
 
 # Copia los package.json de cada workspace
 COPY packages/database/package.json ./packages/database/
+COPY packages/eslint-config/package.json ./packages/eslint-config/
 COPY services/scheduler/package.json ./services/scheduler/
 
 
@@ -33,6 +34,7 @@ RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
 
 # Copia el código fuente
 COPY packages/database/ ./packages/database/
+COPY packages/eslint-config/ ./packages/eslint-config/
 COPY services/scheduler/ ./services/scheduler/
 
 # Genera el cliente de Prisma (URL dummy para validación)

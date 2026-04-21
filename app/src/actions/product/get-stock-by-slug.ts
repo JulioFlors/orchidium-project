@@ -19,7 +19,6 @@ export const getStockBySlug = async (slug: string): Promise<number> => {
 
     return species.variants.reduce((total, variant) => total + variant.quantity, 0)
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.error(`Error al obtener el stock de ${slug}: ${error}`)
 
     return 0

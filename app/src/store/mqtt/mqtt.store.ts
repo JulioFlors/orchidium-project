@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 import mqtt, { MqttClient, IClientOptions } from 'mqtt'
@@ -43,10 +42,8 @@ const IS_CONFIG_VALID = Boolean(MQTT_BROKER && MQTT_PORT)
 const BROKER_URL = IS_CONFIG_VALID ? `${MQTT_PROTOCOL}://${MQTT_BROKER}:${MQTT_PORT}` : ''
 
 const OPTIONS: IClientOptions = {
-  // Deshabilitamos el keepalive explícito para evitar el error "Keepalive timeout" en consola
-  // y confiamos en el transporte WebSocket/TCP o en la desconexión por error.
-  keepalive: 0,
-  clientId: `Orchidium-Web-${Math.random().toString(16).substring(2, 8)}`,
+  keepalive: 60,
+  clientId: `Orchidarium-Web-${Math.random().toString(16).substring(2, 8)}`,
   protocolId: 'MQTT',
   protocolVersion: 5,
   clean: true,

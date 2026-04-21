@@ -4,11 +4,11 @@ import * as z from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import clsx from 'clsx'
-import { MdOutlineHistoryToggleOff } from 'react-icons/md'
 
 import { PlannerCircuitSelect, PlannerZoneSelect, PlannerDurationInput } from './PlannerInputs'
 
-import { Modal } from '@/components/ui'
+import { ZoneType, ZoneTypeLabels } from '@/config/mappings'
+import { Modal, Button, FormField, Input } from '@/components/ui'
 
 // Zod Schema idéntico al del planificador
 const plannerSchema = z.object({
@@ -16,8 +16,10 @@ const plannerSchema = z.object({
     ['IRRIGATION', 'FERTIGATION', 'FUMIGATION', 'HUMIDIFICATION', 'SOIL_WETTING'] as const,
     { errorMap: () => ({ message: 'Debes seleccionar un circuito' }) },
   ),
-  zone: z.literal('ZONA_A', {
-    errorMap: () => ({ message: 'La única zona habilitada es la ZONA A' }),
+  zone: z.literal(ZoneType.ZONA_A, {
+    errorMap: () => ({
+      message: `La única zona habilitada es el ${ZoneTypeLabels[ZoneType.ZONA_A]}`,
+    }),
   }),
   duration: z.coerce
     .number({ invalid_type_error: 'Debe ser un número válido' })
@@ -58,7 +60,7 @@ export function DeferredTaskModal({ isOpen, onClose, onSubmitSuccess }: Props) {
   } = useForm<PlannerFormInputs>({
     resolver: zodResolver(plannerSchema),
     defaultValues: {
-      zone: 'ZONA_A',
+      zone: ZoneType.ZONA_A,
       scheduledAt: '',
       notes: '',
     },
@@ -77,93 +79,73 @@ export function DeferredTaskModal({ isOpen, onClose, onSubmitSuccess }: Props) {
   }
 
   return (
-    <Modal
-      icon={<MdOutlineHistoryToggleOff className="h-5 w-5" />}
-      isOpen={isOpen}
-      title="Nueva Tarea Diferida"
-      onClose={handleClose}
-    >
+    <Modal isOpen={isOpen} size="md" title="Nueva Tarea Diferida" onClose={handleClose}>
       <form className="flex flex-col gap-5" onSubmit={handleSubmit(submitHandler)}>
         <div className="grid grid-cols-2 gap-4">
-          <PlannerCircuitSelect control={control} error={errors.purpose?.message} name="purpose" />
-          <PlannerZoneSelect control={control} error={errors.zone?.message} name="zone" />
+          <FormField htmlFor="purpose" label="Circuito">
+            <PlannerCircuitSelect
+              control={control}
+              error={errors.purpose?.message}
+              name="purpose"
+            />
+          </FormField>
+          <FormField htmlFor="zone" label="Zona">
+            <PlannerZoneSelect control={control} error={errors.zone?.message} name="zone" />
+          </FormField>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-secondary text-sm font-medium" htmlFor="scheduledAt">
-              Fecha y Hora
-            </label>
-            <input
-              className={clsx(
-                'focus-input border text-sm',
-                errors.scheduledAt
-                  ? 'border-transparent outline -outline-offset-1 outline-red-800/75 dark:outline-red-400/75'
-                  : 'border-input-outline',
-              )}
+          <FormField htmlFor="scheduledAt" label="Fecha y Hora">
+            <Input
+              error={errors.scheduledAt?.message}
               id="scheduledAt"
-              // Ajuste de Zona Horaria: toISOString() devuelve UTC (Londres).
-              // Restamos el desfase local (en ms) para obtener una cadena ISO que represente la hora local real del usuario.
+              // Ajuste de Zona Horaria
               min={new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000)
                 .toISOString()
                 .slice(0, 16)}
               type="datetime-local"
               {...register('scheduledAt')}
             />
-            {errors.scheduledAt && (
-              <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
-                {errors.scheduledAt.message}
-              </span>
-            )}
-          </div>
+          </FormField>
 
-          <PlannerDurationInput
-            control={control}
-            error={errors.duration?.message}
-            name="duration"
-            register={register}
-          />
+          <FormField htmlFor="duration" label="Duración">
+            <PlannerDurationInput
+              control={control}
+              error={errors.duration?.message}
+              name="duration"
+              register={register}
+            />
+          </FormField>
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label className="text-secondary text-sm font-medium" htmlFor="notes">
-            Notas / Justificación <span className="text-secondary/50 font-normal">(Opcional)</span>
-          </label>
+        <FormField htmlFor="notes" label="Notas / Justificación">
           <textarea
             className={clsx(
-              'focus-input border text-sm',
+              'focus-input mt-1.5 w-full resize-none border text-sm',
               errors.notes
-                ? 'border-transparent outline -outline-offset-1 outline-red-800/75 dark:outline-red-400/75'
+                ? 'border-red-500/50 outline -outline-offset-1 outline-red-500/50'
                 : 'border-input-outline',
             )}
             id="notes"
-            placeholder=""
+            placeholder="Opcional..."
             rows={2}
             {...register('notes')}
           />
           {errors.notes && (
-            <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
+            <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-500">
               {errors.notes.message}
             </span>
           )}
-        </div>
+        </FormField>
 
         {/* Footer Actions */}
-        <div className="mt-2 flex justify-end gap-3">
-          <button
-            className="focus-visible:ring-accessibility rounded-md px-4 py-2.5 text-sm font-medium transition-colors hover:bg-black/5 focus-visible:ring-2 focus-visible:outline-none dark:hover:bg-white/5"
-            type="button"
-            onClick={handleClose}
-          >
+        <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+          <Button variant="ghost" onClick={handleClose}>
             Cancelar
-          </button>
-          <button
-            className="bg-action hover:bg-action/90 focus-visible:ring-accessibility rounded-md px-6 py-2.5 text-sm font-medium text-white transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-70"
-            disabled={isSubmitting}
-            type="submit"
-          >
+          </Button>
+          <Button isLoading={isSubmitting} type="submit">
             {isSubmitting ? 'Agendando...' : 'Agendar Tarea'}
-          </button>
+          </Button>
         </div>
       </form>
     </Modal>

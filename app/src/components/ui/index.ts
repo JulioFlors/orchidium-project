@@ -10,7 +10,9 @@ export * from './button/Button'
 
 export * from './card/Card'
 
-export * from './device-view-header/DeviceViewHeader'
+export * from './image-uploader/ImageUploader'
+
+export * from './device-status/DeviceStatus'
 
 export * from './footer/Footer'
 
@@ -21,6 +23,8 @@ export * from './header/animation'
 export * from './header/Header.utils'
 
 export * from './header/Header'
+
+export * from './heading/Heading'
 
 export * from './header/Navbar'
 

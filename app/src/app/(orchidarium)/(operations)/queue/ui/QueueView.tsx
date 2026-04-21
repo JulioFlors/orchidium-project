@@ -1,18 +1,23 @@
 'use client'
 
-import { useState, useEffect, cloneElement, isValidElement } from 'react'
-import clsx from 'clsx'
+import { useState, useEffect } from 'react'
 import useSWR from 'swr'
-import { IoWaterOutline, IoFlaskOutline, IoCloseOutline, IoWarningOutline } from 'react-icons/io5'
-import { PiSprayBottle } from 'react-icons/pi'
+import {
+  IoCloseOutline,
+  IoWarningOutline,
+  IoAddOutline,
+  IoFlaskOutline,
+  IoWaterOutline,
+} from 'react-icons/io5'
 import { MdDewPoint, MdOutlineHistoryToggleOff } from 'react-icons/md'
+import { PiSprayBottle } from 'react-icons/pi'
 
-import { DeferredTaskModal, TaskStatusBadge, type PlannerFormInputs } from './components'
+import { DeferredTaskModal, QueueTaskCard, type PlannerFormInputs } from './components'
 
-import { Modal, Badge, ActionMenu } from '@/components/ui'
+import { Modal, Button, Heading } from '@/components/ui'
 import { useToast } from '@/hooks'
-import { TaskPurposeLabels } from '@/config/mappings'
-import { formatTime12h } from '@/utils'
+import { TaskPurpose, TaskPurposeLabels, ZoneType } from '@/config/mappings'
+import { type GlowVariant } from '@/components/ui/status-circle/StatusCircleIcon'
 
 const fetcher = async (url: string) => {
   const res = await fetch(url)
@@ -23,9 +28,6 @@ const fetcher = async (url: string) => {
   return json
 }
 
-type TaskPurpose = 'IRRIGATION' | 'FERTIGATION' | 'FUMIGATION' | 'HUMIDIFICATION' | 'SOIL_WETTING'
-type ZoneType = 'ZONA_A' | 'ZONA_B' | 'ZONA_C' | 'ZONA_D'
-
 interface PendingTask {
   id: string
   purpose: TaskPurpose
@@ -35,47 +37,48 @@ interface PendingTask {
   status: string
   isRoutine?: boolean
   routineName?: string
+  notes?: string
+  source?: string
 }
 
 const ACTION_MAP: Record<
   TaskPurpose,
-  { label: string; icon: React.ReactNode; color: string; hex: string }
+  { label: string; icon: React.ReactNode; color: string; glowVariant: GlowVariant }
 > = {
   IRRIGATION: {
     label: TaskPurposeLabels.IRRIGATION,
-    icon: <IoWaterOutline className="h-5 w-5" />,
+    icon: <IoWaterOutline />,
     color: 'text-blue-500',
-    hex: '#3b82f6',
+    glowVariant: 'blue',
   },
   HUMIDIFICATION: {
     label: TaskPurposeLabels.HUMIDIFICATION,
-    icon: <PiSprayBottle className="h-5 w-5" />,
+    icon: <PiSprayBottle />,
     color: 'text-cyan-500',
-    hex: '#22d3ee',
+    glowVariant: 'cyan',
   },
   SOIL_WETTING: {
     label: TaskPurposeLabels.SOIL_WETTING,
-    icon: <MdDewPoint className="h-5 w-5" />,
+    icon: <MdDewPoint />,
     color: 'text-emerald-500',
-    hex: '#10b981',
+    glowVariant: 'green',
   },
   FERTIGATION: {
     label: TaskPurposeLabels.FERTIGATION,
-    icon: <IoFlaskOutline className="h-5 w-5" />,
+    icon: <IoFlaskOutline />,
     color: 'text-purple-500',
-    hex: '#a855f7',
+    glowVariant: 'violet',
   },
   FUMIGATION: {
     label: TaskPurposeLabels.FUMIGATION,
-    icon: <IoFlaskOutline className="h-5 w-5" />,
+    icon: <IoFlaskOutline />,
     color: 'text-orange-500',
-    hex: '#f97316',
+    glowVariant: 'orange',
   },
 }
 
 export function QueueView() {
   const [isDeferredModalOpen, setIsDeferredModalOpen] = useState(false)
-  const [hoveredCardId, setHoveredCardId] = useState<string | null>(null)
   const { success, error } = useToast()
 
   const {
@@ -164,27 +167,20 @@ export function QueueView() {
   }
 
   return (
-    <div className="mx-auto mt-9 flex w-full max-w-7xl flex-col gap-8 pb-12">
+    <div className="tds-sm:px-0 mx-auto mt-9 flex w-full max-w-7xl flex-col gap-8 px-4 pb-12">
       <div className="flex flex-col gap-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-primary text-2xl font-bold tracking-tight antialiased">
-              Cola de Ejecución
-            </h1>
-            <p className="text-secondary mt-1 text-sm">
-              Vista detallada de la línea de tiempo de tareas únicas bajo observación.
-            </p>
-          </div>
-          <div className="w-full shrink-0 sm:w-auto">
-            <button
-              className="bg-action hover:bg-action/90 focus-visible:ring-accessibility flex w-full items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium text-white transition-colors focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none sm:w-auto sm:py-2"
-              type="button"
+        <Heading
+          action={
+            <Button
+              className="tds-sm:w-auto flex w-full items-center justify-center gap-2"
               onClick={() => setIsDeferredModalOpen(true)}
             >
-              <MdOutlineHistoryToggleOff className="h-5 w-5" /> Nueva Tarea Diferida
-            </button>
-          </div>
-        </div>
+              <IoAddOutline className="h-5 w-5" /> Nueva Tarea
+            </Button>
+          }
+          description="Vista detallada de la línea de tiempo de tareas únicas bajo observación."
+          title="Cola de Ejecución"
+        />
 
         <DeferredTaskModal
           isOpen={isDeferredModalOpen}
@@ -207,110 +203,15 @@ export function QueueView() {
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {tasks.map((task) => {
-                const dateObj = new Date(task.scheduledAt)
-                const isPast = dateObj < new Date()
-                const isCancellable = task.status === 'PENDING'
-                const isHovered = hoveredCardId === task.id
-                const action = ACTION_MAP[task.purpose]
-
-                return (
-                  <div
-                    key={task.id}
-                    className={clsx(
-                      'relative flex flex-col justify-between gap-4 rounded-xl border p-4 shadow-sm transition-all sm:flex-row sm:items-center',
-                      'bg-surface border-input-outline cursor-default',
-                      isHovered && 'bg-hover-overlay border-primary/20',
-                      task.status === 'IN_PROGRESS' && 'border-amber-500/30 bg-amber-500/5',
-                      task.status === 'CONFIRMED' && 'border-blue-500/30 bg-blue-500/5',
-                      task.status === 'PENDING' && isPast && 'border-yellow-500/20 bg-yellow-500/5',
-                    )}
-                    onBlur={() => setHoveredCardId(null)}
-                    onFocus={() => setHoveredCardId(task.id)}
-                    onMouseEnter={() => setHoveredCardId(task.id)}
-                    onMouseLeave={() => setHoveredCardId(null)}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div
-                        className={clsx(
-                          'relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors duration-300',
-                          isHovered && 'border',
-                        )}
-                        style={{
-                          borderColor: action.hex,
-                          background: isHovered
-                            ? `radial-gradient(circle at center, ${action.hex}44 0%, ${action.hex}15 100%)`
-                            : `radial-gradient(circle at center, ${action.hex}25 0%, transparent 70%)`,
-                        }}
-                      >
-                        {isValidElement(action.icon)
-                          ? cloneElement(
-                              action.icon as React.ReactElement<{ style?: React.CSSProperties }>,
-                              {
-                                style: {
-                                  color: isHovered ? 'var(--color-text-primary)' : action.hex,
-                                },
-                              },
-                            )
-                          : action.icon}
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-primary flex items-center gap-2 text-sm font-medium">
-                          {action.label}
-                          <Badge className="border-none bg-black/5 dark:bg-white/10" size="sm">
-                            {task.zones.join(', ')}
-                          </Badge>
-                          <TaskStatusBadge isPast={isPast} status={task.status} />
-                        </span>
-                        <div className="text-secondary mt-1 flex items-center gap-2 text-xs">
-                          <span>Duración: {task.duration} min</span>
-                          <span>•</span>
-                          <span>
-                            {dateObj.toLocaleDateString('es-VE', {
-                              weekday: 'short',
-                              month: 'short',
-                              day: 'numeric',
-                            })}
-                            , {formatTime12h(dateObj)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="ml-auto flex items-center gap-4 sm:ml-0">
-                      {task.isRoutine && (
-                        <div className="text-secondary flex items-center gap-2 rounded-md bg-black/5 px-3 py-1.5 text-xs font-semibold dark:bg-white/5">
-                          <MdOutlineHistoryToggleOff className="h-4 w-4" />
-                          {task.routineName}
-                        </div>
-                      )}
-
-                      {isCancellable && (
-                        <ActionMenu
-                          items={[
-                            {
-                              label: 'Cancelar tarea',
-                              icon: <IoCloseOutline className="text-red-500" />,
-                              onClick: () =>
-                                setCancelTarget({
-                                  id: task.id,
-                                  label: action.label,
-                                  isRoutine: task.isRoutine,
-                                  scheduledAt: task.scheduledAt,
-                                }),
-                              variant: 'danger',
-                            },
-                          ]}
-                          triggerClassName={clsx(
-                            'transition-opacity duration-200',
-                            isHovered ? 'opacity-100' : 'opacity-0',
-                          )}
-                        />
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
+              {tasks.map((task) => (
+                <QueueTaskCard
+                  key={task.id}
+                  colorClassName={ACTION_MAP[task.purpose].color}
+                  icon={ACTION_MAP[task.purpose].icon}
+                  task={task}
+                  onCancel={setCancelTarget}
+                />
+              ))}
             </div>
           )}
         </div>
@@ -362,25 +263,23 @@ export function QueueView() {
             />
           </div>
 
-          <div className="flex justify-end gap-3">
-            <button
-              className="focus-visible:ring-accessibility rounded-md px-4 py-2 text-sm font-medium transition-colors hover:bg-black/5 focus-visible:ring-2 focus-visible:outline-none dark:hover:bg-white/5"
-              type="button"
+          <div className="border-input-outline -mx-6 mt-2 -mb-6 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+            <Button
+              variant="ghost"
               onClick={() => {
                 setCancelTarget(null)
                 setCancelReason('')
               }}
             >
               Volver
-            </button>
-            <button
-              className="focus-visible:ring-accessibility rounded-md bg-red-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-red-500 focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            </Button>
+            <Button
               disabled={!cancelReason.trim()}
-              type="button"
+              variant="destructive"
               onClick={handleCancelConfirm}
             >
               Cancelar Tarea
-            </button>
+            </Button>
           </div>
         </div>
       </Modal>

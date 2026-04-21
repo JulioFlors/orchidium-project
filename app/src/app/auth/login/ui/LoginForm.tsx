@@ -88,7 +88,6 @@ export function LoginForm() {
         setError('email', { type: 'manual', message: message })
       }
     } catch (error) {
-      // eslint-disable-next-line no-console
       console.error(error)
       setError('email', { type: 'manual', message: 'Error verificando correo' })
     } finally {

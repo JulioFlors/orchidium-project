@@ -1,0 +1,212 @@
+import mqtt from 'mqtt'
+import { TaskPurpose } from '@package/database'
+
+import { Logger } from './logger'
+
+// ---- Configuración MQTT ----
+export const MQTT_BROKER_URL =
+  process.env.MQTT_BROKER_URL ||
+  process.env.MQTT_BROKER_URL_CLOUD ||
+  process.env.MQTT_BROKER_URL_LOCAL ||
+  ''
+const MQTT_USERNAME = process.env.MQTT_USERNAME || process.env.MQTT_USER_BACKEND || ''
+const MQTT_PASSWORD = process.env.MQTT_PASSWORD || process.env.MQTT_PASS_BACKEND || ''
+
+export const MQTT_CLIENT_ID = process.env.MQTT_CLIENT_ID || 'Scheduler'
+
+export const ACTUATOR_TOPIC = 'PristinoPlant/Actuator_Controller/irrigation/cmd'
+
+export const SYSTEM_CMD_TOPIC = 'PristinoPlant/Actuator_Controller/cmd'
+
+export const SERVICE_STATUS_TOPIC = `PristinoPlant/Services/${MQTT_CLIENT_ID}/status`
+
+const colors = {
+  reset: '\x1b[0m',
+  magenta: '\x1b[95m',
+}
+
+// ---- Cliente MQTT ----
+export const mqttClient = mqtt.connect(MQTT_BROKER_URL, {
+  clientId: MQTT_CLIENT_ID,
+  protocolVersion: 5,
+  username: MQTT_USERNAME,
+  password: MQTT_PASSWORD,
+  protocol: MQTT_BROKER_URL.startsWith('mqtts') ? 'mqtts' : 'mqtt',
+  rejectUnauthorized: true,
+  servername: new URL(MQTT_BROKER_URL).hostname,
+  will: {
+    topic: SERVICE_STATUS_TOPIC,
+    payload: Buffer.from('offline'),
+    qos: 1,
+    retain: true,
+  },
+})
+
+// ---- Gestión de Reintentos de Comandos (ACK) ----
+interface PendingCommand {
+  topic: string
+  payload: string
+  attempts: number
+  lastSent: number
+  timer: NodeJS.Timeout | null
+}
+
+class CommandRetryManager {
+  private pending = new Map<string, PendingCommand>()
+  private MAX_ATTEMPTS = 20
+  private RETRY_INTERVAL_MS = 60000
+  public lastActuatorState = 'unknown'
+
+  track(topic: string, payload: string) {
+    const key = `${topic}:${payload}`
+    const existing = this.pending.get(key)
+
+    if (existing) {
+      if (existing.timer) clearInterval(existing.timer)
+      Logger.debug(
+        `Sincronización del comando reiniciada: ${colors.magenta}${payload}${colors.reset}`,
+      )
+    } else {
+      Logger.debug(`Iniciando seguimiento de comando: ${colors.magenta}${payload}${colors.reset}`)
+    }
+
+    const command: PendingCommand = {
+      topic,
+      payload,
+      attempts: 1,
+      lastSent: Date.now(),
+      timer: setInterval(() => this.retry(key), Math.max(1, this.RETRY_INTERVAL_MS)),
+    }
+
+    this.pending.set(key, command)
+  }
+
+  confirm(topic: string, payload: string) {
+    const key = `${topic}:${payload}`
+    const command = this.pending.get(key)
+
+    if (command) {
+      if (command.timer) clearInterval(command.timer)
+      this.pending.delete(key)
+      Logger.success(`Comando confirmado por el nodo: ${colors.magenta}${payload}${colors.reset}`)
+    }
+  }
+
+  confirmByTaskId(taskId: string) {
+    for (const [key, command] of this.pending) {
+      if (command.payload.includes(taskId)) {
+        if (command.timer) clearInterval(command.timer)
+        this.pending.delete(key)
+        Logger.debug(`El nodo confirmó ACK para la tarea (ID: ${taskId.slice(0, 8)})`)
+      }
+    }
+  }
+
+  clear() {
+    if (this.pending.size === 0) return
+    Logger.debug(
+      `El nodo está offline, pero mantenemos ${this.pending.size} reintentos en cola para cuando regrese.`,
+    )
+  }
+
+  private retry(key: string) {
+    const command = this.pending.get(key)
+
+    if (!command) return
+
+    if (this.lastActuatorState === 'offline') return
+
+    if (command.attempts >= this.MAX_ATTEMPTS) {
+      Logger.error(
+        `Se agotaron los ${this.MAX_ATTEMPTS} intentos de entrega para: ${command.payload}`,
+      )
+      if (command.timer) clearInterval(command.timer)
+      this.pending.delete(key)
+
+      return
+    }
+
+    command.attempts++
+    command.lastSent = Date.now()
+    Logger.warn(
+      `Reintentando entrega al nodo (${command.attempts}/${this.MAX_ATTEMPTS}): ${colors.magenta}${command.payload}${colors.reset}`,
+    )
+    mqttClient.publish(command.topic, command.payload, { qos: 1 })
+  }
+}
+
+export const retryManager = new CommandRetryManager()
+let lastLuxState: 'on' | 'off' | null = null
+
+/**
+ * Envía un comando de circuito al Nodo Actuador.
+ */
+export function executeSequence(purpose: TaskPurpose, durationMinutes: number, taskId: string) {
+  const durationSec = durationMinutes * 60
+
+  const payload = {
+    circuit: purpose,
+    state: 'ON',
+    duration: durationSec,
+    task_id: taskId,
+  }
+
+  const message = JSON.stringify(payload)
+
+  mqttClient.publish(ACTUATOR_TOPIC, message, {
+    qos: 1,
+    retain: false,
+    properties: {
+      messageExpiryInterval: 300,
+    },
+  })
+
+  retryManager.track(ACTUATOR_TOPIC, message)
+
+  Logger.info(
+    `Despachando Circuito: ${purpose} (${durationMinutes} min) [Task: ${taskId.slice(0, 8)}]`,
+  )
+}
+
+/**
+ * Envía un comando de sistema (eco, reset, etc) al Nodo Actuador.
+ */
+export function executeSystemCommand(command: string) {
+  mqttClient.publish(SYSTEM_CMD_TOPIC, command, {
+    qos: 1,
+    retain: false,
+  })
+  Logger.info(`Comando: ${colors.magenta}${command}${colors.reset}`)
+  retryManager.track(SYSTEM_CMD_TOPIC, command)
+}
+
+/**
+ * Sincroniza el estado del monitoreo de lux basado en la hora actual.
+ */
+export function syncEcoMode() {
+  const now = new Date()
+  const options: Intl.DateTimeFormatOptions = {
+    timeZone: 'America/Caracas',
+    hour: 'numeric',
+    hour12: false,
+  }
+  const hourString = new Intl.DateTimeFormat('en-US', options).format(now)
+  const hour = parseInt(hourString)
+
+  const targetState = hour >= 5 && hour < 19 ? 'on' : 'off'
+
+  if (lastLuxState === targetState) {
+    // Ya estamos en el estado correcto, no spamear al broker.
+    return
+  }
+
+  lastLuxState = targetState
+
+  if (targetState === 'on') {
+    Logger.info('☀  Iniciando muestreo de iluminancia (Amanecer)')
+    executeSystemCommand('lux_sampling:on')
+  } else {
+    Logger.info('🌙  Suspendiendo muestreo de iluminancia (Anochecer)')
+    executeSystemCommand('lux_sampling:off')
+  }
+}

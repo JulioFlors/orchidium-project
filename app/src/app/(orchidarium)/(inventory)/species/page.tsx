@@ -1,13 +1,23 @@
 import type { Metadata } from 'next'
 
+import { SpeciesView } from './ui/SpeciesView'
+
+import { getSpecies, getGenera } from '@/actions'
+
 export const metadata: Metadata = {
-  title: 'Catálogo de Especies',
+  title: 'Especies',
 }
 
-export default function SpeciesPage() {
+export default async function SpeciesPage() {
+  // Fetch paralelo para velocidad
+  const [speciesRes, generaRes] = await Promise.all([getSpecies(), getGenera()])
+
+  const species = speciesRes.species || []
+  const genera = generaRes.genera || []
+
   return (
-    <div>
-      <h1>(inventory)/species Page</h1>
-    </div>
+    <main className="p-4 sm:p-8">
+      <SpeciesView genera={genera} initialSpecies={species} />
+    </main>
   )
 }

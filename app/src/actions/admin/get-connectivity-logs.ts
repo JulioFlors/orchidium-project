@@ -20,7 +20,6 @@ export async function getConnectivityLogs(limit: number = 50) {
       logs,
     }
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.error('Error fetching connectivity logs:', error)
 
     return {

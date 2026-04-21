@@ -26,7 +26,6 @@ export const getSpeciesBySlug = async (slug: string) => {
       images: species.images.map((image) => image.url),
     }
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.log(error)
     throw new Error('Error al obtener el articulo por slug')
   }

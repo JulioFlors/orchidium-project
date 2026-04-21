@@ -4,11 +4,27 @@ export * from './auth/admin-users'
 
 export * from './auth/verify-email'
 
+export * from './insights/insight-actions'
+
+export * from './inventory/genus-actions'
+
+export * from './inventory/species-actions'
+
+export * from './inventory/store-actions'
+
 export * from './lab/agrochemicals'
 
 export * from './lab/programs'
 
 export * from './navigation/get-plants-navigation'
+
+export * from './operations/biological-actions'
+
+export * from './operations/control-actions'
+
+export * from './operations/history-actions'
+
+export * from './operations/queue-actions'
 
 export * from './product/get-all-species'
 
@@ -24,8 +40,4 @@ export * from './product/get-species-by-type'
 
 export * from './product/get-stock-by-slug'
 
-export * from './operations/control-actions'
-
-export * from './operations/history-actions'
-
-export * from './operations/queue-actions'
+export * from './storage/upload-actions'
