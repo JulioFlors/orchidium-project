@@ -29,27 +29,3 @@ export const influxClient = new InfluxDBClient({
   token: INFLUX_TOKEN!,
   database: INFLUX_BUCKET,
 })
-
-/**
- * Espera a que InfluxDB esté listo respondiendo a una query simple.
- */
-export async function waitForInflux(retries = 10): Promise<boolean> {
-  for (let i = 0; i < retries; i++) {
-    try {
-      // Intentamos una query mínima para verificar salud y TLS
-      const stream = influxClient.query('SELECT 1')
-
-      // Consumimos el primer resultado para validar la conexión sin asignar variables no usadas
-      const reader = stream[Symbol.asyncIterator]()
-
-      await reader.next()
-
-      return true
-    } catch {
-      if (i === 0) Logger.warn(`Esperando a InfluxDB (${INFLUX_URL})...`)
-      await new Promise((resolve) => setTimeout(resolve, 3000))
-    }
-  }
-
-  return false
-}

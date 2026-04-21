@@ -1,5 +1,5 @@
-import { InfluxDBClient, Point } from '@influxdata/influxdb3-client'
 import mqtt from 'mqtt'
+import { InfluxDBClient, Point } from '@influxdata/influxdb3-client'
 import { prisma, ZoneType, Prisma } from '@package/database'
 
 // ---- Cargar variables de entorno ----
@@ -23,9 +23,6 @@ const MQTT_PASSWORD = process.env.MQTT_PASSWORD || process.env.MQTT_PASS_BACKEND
 
 const MQTT_CLIENT_ID = process.env.MQTT_CLIENT_ID || process.env.MQTT_CLIENT_ID_INGEST || 'Ingest'
 const BASE_TOPIC_PREFIX = 'PristinoPlant'
-
-// Service Status Topic for LWT and Heartbeat
-const SERVICE_STATUS_TOPIC = `PristinoPlant/Services/${MQTT_CLIENT_ID}/status`
 
 // ---- Configuración InfluxDB ----
 const INFLUX_URL =
@@ -316,24 +313,10 @@ async function start() {
     protocol: MQTT_BROKER_URL.startsWith('mqtts') ? 'mqtts' : 'mqtt',
     rejectUnauthorized: true,
     servername: new URL(MQTT_BROKER_URL).hostname,
-    will: {
-      topic: SERVICE_STATUS_TOPIC,
-      payload: Buffer.from('offline'),
-      qos: 1,
-      retain: true,
-    },
   })
-
-  let heartbeatInterval: NodeJS.Timeout | null = null
 
   client.on('connect', () => {
     Logger.success('Conectado a Broker MQTT')
-    client.publish(SERVICE_STATUS_TOPIC, 'online', { qos: 1, retain: true })
-
-    if (heartbeatInterval) clearInterval(heartbeatInterval)
-    heartbeatInterval = setInterval(() => {
-      client.publish(SERVICE_STATUS_TOPIC, 'online', { qos: 1, retain: true })
-    }, 300000)
 
     const topicToSubscribe = `${BASE_TOPIC_PREFIX}/#`
 
@@ -369,22 +352,6 @@ async function start() {
       if (!hasSensorData) return
     }
 
-    if (topicParts[1] === 'Services') {
-      if (topic.endsWith('/status')) {
-        const serviceName = topicParts[2] || 'Unknown'
-        const point = Point.measurement('system_events')
-          .setTag('source', 'Services')
-          .setTag('context', 'status')
-          .setTag('event_type', 'Service_Status')
-          .setTag('service_name', serviceName)
-          .setStringField('value', messageValue)
-
-        await writeToInflux(point)
-      }
-
-      return
-    }
-
     if (firmwareSource === 'Environmental_Monitoring' || firmwareSource === 'Weather_Station') {
       const zoneSlug = topicParts[2]
       const zone = mapZoneSlugToZoneType(zoneSlug)
@@ -414,10 +381,6 @@ async function start() {
 
   client.on('close', () => {
     Logger.warn('Conexión MQTT perdida')
-    if (heartbeatInterval) {
-      clearInterval(heartbeatInterval)
-      heartbeatInterval = null
-    }
   })
 }
 

@@ -1,6 +1,6 @@
 import { Cron } from 'croner'
 
-import { syncOpenMeteo, syncOpenWeatherMap, syncAgroMonitoring, syncAgroHistory } from './oracle'
+import { syncOpenMeteo, syncOpenWeatherMap, syncAgroMonitoring } from './oracle'
 import { Logger } from './logger'
 
 Logger.info('Iniciando servicio Weather Oracle')
@@ -11,12 +11,7 @@ Logger.info('Iniciando servicio Weather Oracle')
 async function bootstrap() {
   try {
     Logger.info('Iniciando sincronización (Bootstrap)')
-    await Promise.allSettled([
-      syncOpenMeteo(),
-      syncOpenWeatherMap(),
-      syncAgroMonitoring(),
-      syncAgroHistory(),
-    ])
+    await Promise.allSettled([syncOpenMeteo(), syncOpenWeatherMap(), syncAgroMonitoring()])
     Logger.success('Bootstrap completado.')
   } catch (error) {
     Logger.error('Error crítico durante el bootstrap:', error)
@@ -29,12 +24,7 @@ bootstrap()
 // Programar sincronización periódica cada 3 horas.
 const job = new Cron('0 */3 * * *', async () => {
   Logger.cron(`Iniciando sincronización meteorológica periódica`)
-  await Promise.allSettled([
-    syncOpenMeteo(),
-    syncOpenWeatherMap(),
-    syncAgroMonitoring(),
-    syncAgroHistory(),
-  ])
+  await Promise.allSettled([syncOpenMeteo(), syncOpenWeatherMap(), syncAgroMonitoring()])
 })
 
 const nextRun = job.nextRun()

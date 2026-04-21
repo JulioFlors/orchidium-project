@@ -3,14 +3,7 @@ import { Cron } from 'croner'
 
 import { Logger } from './lib/logger'
 import { InferenceEngine } from './lib/inference-engine'
-import { waitForInflux } from './lib/influx'
-import {
-  mqttClient,
-  retryManager,
-  syncEcoMode,
-  MQTT_BROKER_URL,
-  SERVICE_STATUS_TOPIC,
-} from './lib/mqtt-handler'
+import { mqttClient, retryManager, syncEcoMode, MQTT_BROKER_URL } from './lib/mqtt-handler'
 import { recordTaskEvent, processTaskLog, resumeInterruptedTasks } from './lib/task-manager'
 
 // ---- Configuración de Reglas ----
@@ -30,13 +23,6 @@ async function init() {
 
   if (!mqttReady) {
     Logger.error('FALLO CRÍTICO: No se pudo conectar al Broker MQTT.')
-    process.exit(1)
-  }
-
-  const influxReady = await waitForInflux()
-
-  if (!influxReady) {
-    Logger.error('FALLO CRÍTICO: No se pudo conectar a InfluxDB.')
     process.exit(1)
   }
 
@@ -82,12 +68,9 @@ async function waitForMosquitto(retries = 15) {
 
 // ---- Gestión de Estado Local ----
 let lastRainState: string | null = null
-let heartbeatInterval: NodeJS.Timeout | null = null
 
 mqttClient.on('connect', () => {
   Logger.success('Conectado a Broker MQTT')
-
-  mqttClient.publish(SERVICE_STATUS_TOPIC, 'online', { qos: 1, retain: true })
 
   mqttClient.subscribe(
     [
@@ -100,11 +83,6 @@ mqttClient.on('connect', () => {
     ],
     { qos: 1 },
   )
-
-  if (heartbeatInterval) clearInterval(heartbeatInterval)
-  heartbeatInterval = setInterval(() => {
-    mqttClient.publish(SERVICE_STATUS_TOPIC, 'online', { qos: 1, retain: true })
-  }, 300000)
 })
 
 mqttClient.on('message', async (topic, payload) => {

@@ -83,6 +83,7 @@ export const nextConfig = [
     rules: {
       ...vercelStyleGuideNext.rules,
       '@next/next/no-img-element': 'off',
+      'no-console': 'warn',
     },
   },
 ]

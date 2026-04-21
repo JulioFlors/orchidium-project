@@ -18,8 +18,6 @@ export const ACTUATOR_TOPIC = 'PristinoPlant/Actuator_Controller/irrigation/cmd'
 
 export const SYSTEM_CMD_TOPIC = 'PristinoPlant/Actuator_Controller/cmd'
 
-export const SERVICE_STATUS_TOPIC = `PristinoPlant/Services/${MQTT_CLIENT_ID}/status`
-
 const colors = {
   reset: '\x1b[0m',
   magenta: '\x1b[95m',
@@ -34,12 +32,6 @@ export const mqttClient = mqtt.connect(MQTT_BROKER_URL, {
   protocol: MQTT_BROKER_URL.startsWith('mqtts') ? 'mqtts' : 'mqtt',
   rejectUnauthorized: true,
   servername: new URL(MQTT_BROKER_URL).hostname,
-  will: {
-    topic: SERVICE_STATUS_TOPIC,
-    payload: Buffer.from('offline'),
-    qos: 1,
-    retain: true,
-  },
 })
 
 // ---- Gestión de Reintentos de Comandos (ACK) ----

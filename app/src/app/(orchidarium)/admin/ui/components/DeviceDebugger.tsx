@@ -46,25 +46,6 @@ const DEVICES: DeviceConfig[] = [
   },
 ]
 
-const SERVICES: DeviceConfig[] = [
-  {
-    id: 'ingest',
-    name: 'Service: Ingest',
-    description: 'Ingesta de telemetría a InfluxDB.',
-    baseTopic: 'PristinoPlant/Services/Ingest',
-    isService: true,
-    heartbeatTimeoutMs: 360000,
-  },
-  {
-    id: 'scheduler',
-    name: 'Service: Scheduler',
-    description: 'Planificador de tareas y automatizaciones.',
-    baseTopic: 'PristinoPlant/Services/Scheduler',
-    isService: true,
-    heartbeatTimeoutMs: 360000,
-  },
-]
-
 type ConnectionState = 'online' | 'offline' | 'unknown' | 'zombie'
 
 const formatVETime = (timestamp: number | string | Date) => {
@@ -83,11 +64,6 @@ export function DeviceDebugger() {
   const [connectivityLogs, setConnectivityLogs] = useState<DeviceLog[]>([])
   const [now, setNow] = useState(() => Date.now())
 
-  const [showServices, setShowServices] = useState(() => {
-    if (typeof window === 'undefined') return false
-
-    return localStorage.getItem('diag_show_services') === 'true'
-  })
   const [showTimeline, setShowTimeline] = useState(() => {
     if (typeof window === 'undefined') return false
 
@@ -102,14 +78,12 @@ export function DeviceDebugger() {
     return cached ? JSON.parse(cached) : []
   })
 
-  // Sincronización con localStorage
   useEffect(() => {
     if (typeof window === 'undefined') return
-    localStorage.setItem('diag_show_services', String(showServices))
     localStorage.setItem('diag_show_timeline', String(showTimeline))
     localStorage.setItem('diag_selected_device', selectedDeviceId)
     localStorage.setItem(`diag_widget_order_${selectedDeviceId}`, JSON.stringify(widgetOrder))
-  }, [showServices, showTimeline, widgetOrder, selectedDeviceId])
+  }, [showTimeline, widgetOrder, selectedDeviceId])
 
   const selectedDevice = DEVICES.find((d) => d.id === selectedDeviceId) || DEVICES[0]
   const statusTopic = `${selectedDevice.baseTopic}/status`
@@ -186,7 +160,6 @@ export function DeviceDebugger() {
     if (status === 'connected') {
       subscribe(statusTopic)
       subscribe(topicReceived)
-      SERVICES.forEach((s) => subscribe(`${s.baseTopic}/status`))
       subscribe(unifiedAuditTopic)
       subscribe(auditStateTopic)
     }
@@ -308,87 +281,15 @@ export function DeviceDebugger() {
         activeAudits={activeDisplayWidgets}
         hardwarePresence={hardwarePresence}
         isOnline={connectionState === 'online'}
-        showServices={showServices}
         showTimeline={showTimeline}
         onCommand={handleCommand}
-        onToggleServices={() => setShowServices((prev) => !prev)}
         onToggleTimeline={() => setShowTimeline((prev) => !prev)}
       />
 
       {/* Widgets Area: Cola FIFO vertical */}
       <div className="animate-in slide-in-from-top-4 flex flex-col gap-6 duration-500">
-        {(showServices || showTimeline || orderedWidgets.length > 0) && (
+        {(showTimeline || orderedWidgets.length > 0) && (
           <>
-            {showServices && (
-              <Card className="flex w-full flex-col p-5">
-                <h3 className="text-primary mb-6 flex items-center gap-2 text-sm font-bold tracking-widest uppercase opacity-60">
-                  <IoServerOutline className="text-indigo-500" />
-                  Estado de Servicios
-                </h3>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {SERVICES.map((srv) => {
-                    const srvStatus = getStatus(`${srv.baseTopic}/status`, srv.heartbeatTimeoutMs)
-
-                    return (
-                      <div
-                        key={srv.id}
-                        className="group relative flex items-center justify-between overflow-hidden rounded-xl border border-zinc-200 bg-white p-5 transition-all hover:border-zinc-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900/40 dark:hover:border-zinc-700"
-                      >
-                        {/* Glow de fondo sutil según estado */}
-                        <div
-                          className={clsx(
-                            'absolute -top-4 -right-4 h-16 w-16 rounded-full opacity-0 blur-2xl transition-opacity group-hover:opacity-20',
-                            srvStatus === 'online'
-                              ? 'bg-emerald-500'
-                              : srvStatus === 'zombie'
-                                ? 'bg-amber-500'
-                                : 'bg-red-500',
-                          )}
-                        />
-
-                        <div className="relative z-10 flex flex-col">
-                          <span className="mb-1 text-[10px] font-black tracking-widest text-zinc-400 uppercase">
-                            Service Node
-                          </span>
-                          <span className="text-sm font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
-                            {srv.name.replace('Service: ', '')}
-                          </span>
-                        </div>
-
-                        <div className="relative z-10 flex flex-col items-end gap-1.5">
-                          <div
-                            className={clsx(
-                              'flex items-center gap-2 rounded-full px-2.5 py-0.5 text-[9px] font-black tracking-widest uppercase',
-                              srvStatus === 'online'
-                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                                : srvStatus === 'zombie'
-                                  ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                                  : 'bg-red-500/10 text-red-600 dark:text-red-400',
-                            )}
-                          >
-                            <div
-                              className={clsx(
-                                'h-1.5 w-1.5 animate-pulse rounded-full',
-                                srvStatus === 'online'
-                                  ? 'bg-emerald-500'
-                                  : srvStatus === 'zombie'
-                                    ? 'bg-amber-500'
-                                    : 'bg-red-500',
-                              )}
-                            />
-                            {srvStatus}
-                          </div>
-                          <span className="font-mono text-[9px] font-bold tracking-widest text-zinc-500 uppercase opacity-40">
-                            Heartbeat OK
-                          </span>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </Card>
-            )}
-
             {showTimeline && (
               <Card className="flex w-full flex-col overflow-hidden border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-900/40">
                 <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50/50 px-5 py-3 dark:border-zinc-800 dark:bg-black/40">

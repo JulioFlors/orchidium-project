@@ -193,9 +193,7 @@ interface ToolboxGridProps {
   activeAudits: string[]
   onCommand: (cmd: string, auditKey: string | null) => void
   hardwarePresence: Record<string, boolean>
-  showServices: boolean
   showTimeline: boolean
-  onToggleServices: () => void
   onToggleTimeline: () => void
 }
 
@@ -204,21 +202,12 @@ export function ToolboxGrid({
   activeAudits,
   onCommand,
   hardwarePresence,
-  showServices,
-  onToggleServices,
   showTimeline,
   onToggleTimeline,
 }: ToolboxGridProps) {
   return (
     <div className="@container w-full">
       <div className="grid grid-cols-1 gap-4 @min-[340px]:grid-cols-2 @min-[540px]:grid-cols-3 @min-[740px]:grid-cols-4 @min-[940px]:grid-cols-5 @min-[1140px]:grid-cols-6">
-        <ToolCard
-          active={showServices}
-          colorKey="services"
-          icon={<IoServerOutline className={clsx(!showServices && TOOL_COLORS.services.icon)} />}
-          label="Servicios"
-          onClick={onToggleServices}
-        />
         <ToolCard
           active={showTimeline}
           colorKey="timeline"
