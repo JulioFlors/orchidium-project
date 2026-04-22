@@ -3,26 +3,20 @@ import { Cron } from 'croner'
 import { syncOpenMeteo, syncOpenWeatherMap, syncAgroMonitoring } from './oracle'
 import { Logger } from './logger'
 
-Logger.info('Iniciando servicio Weather Oracle')
-
-/**
- * Inicialización inmediata al arrancar el contenedor/servicio.
- */
-async function bootstrap() {
+// Inmediatamente al arrancar el contenedor/servicio, realizamos una sincronización
+async function initialSync() {
   try {
-    Logger.info('Iniciando sincronización (Bootstrap)')
     await Promise.allSettled([syncOpenMeteo(), syncOpenWeatherMap(), syncAgroMonitoring()])
-    Logger.success('Bootstrap completado.')
   } catch (error) {
-    Logger.error('Error crítico durante el bootstrap:', error)
+    Logger.error('Error crítico durante la sincronización inicial:', error)
   }
 }
 
 // Iniciar procesos
-bootstrap()
+initialSync()
 
-// Programar sincronización periódica cada 3 horas.
-const job = new Cron('0 */3 * * *', async () => {
+// Programar sincronización periódica cada hora.
+const job = new Cron('0 * * * *', async () => {
   Logger.cron(`Iniciando sincronización meteorológica periódica`)
   await Promise.allSettled([syncOpenMeteo(), syncOpenWeatherMap(), syncAgroMonitoring()])
 })
@@ -39,7 +33,7 @@ if (nextRun) {
     timeZoneName: 'short',
   }).format(nextRun)
 
-  Logger.info(`Servicio inactivo en espera. Próxima ejecución: ${formattedDate}`)
+  Logger.oracle(`Servicio a la espera. Próxima ejecución: ${formattedDate}`)
 } else {
   Logger.warn('No se pudo programar la próxima ejecución del cron.')
 }

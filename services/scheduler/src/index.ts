@@ -164,8 +164,13 @@ mqttClient.on('message', async (topic, payload) => {
         }
 
         if (interruptedTasks.length > 0) {
+          const isSingle = interruptedTasks.length === 1
+          const taskText = isSingle ? 'tarea' : 'tareas'
+          const actionText = isSingle ? 'pausó' : 'pausaron'
+          const nameInfo = isSingle ? ` (${interruptedTasks[0].purpose})` : ''
+
           Logger.warn(
-            `Se pausaron ${interruptedTasks.length} tareas para su recuperación automática.`,
+            `Se ${actionText} ${interruptedTasks.length} ${taskText}${nameInfo} para su recuperación automática.`,
           )
         }
 

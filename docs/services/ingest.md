@@ -25,4 +25,4 @@ Dado que los controladores ESP32 usan la época de MicroPython (iniciando el 1 d
 
 ## Configuración de Seguridad
 
-El servicio detecta si está operando en un entorno local o de producción. Para conexiones a hosts internos de Docker (`influxdb`), desactiva la verificación TLS (`NODE_TLS_REJECT_UNAUTHORIZED='0'`) para facilitar la comunicación gRPC/HTTP interna.
+El servicio detecta si está operando en un entorno local o de producción. Para conexiones a hosts internos de Docker (`influxdb`), se utiliza una configuración de seguridad granular (`rejectUnauthorized`) dentro del cliente InfluxDB para facilitar la comunicación gRPC/HTTP interna sin comprometer la seguridad global del proceso.

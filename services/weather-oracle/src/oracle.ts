@@ -53,7 +53,6 @@ export async function syncOpenMeteo() {
     }
 
     const source = 'Open-Meteo'
-    let upsertCount = 0
 
     for (let i = 0; i < hourly.time.length; i++) {
       const timestamp = new Date(hourly.time[i])
@@ -87,10 +86,12 @@ export async function syncOpenMeteo() {
           source,
         },
       })
-      upsertCount++
     }
 
-    Logger.success(`${source} resincronizado. ${upsertCount} registros horarios guardados.`)
+    const nextTemp = hourly.temperature_2m[0]
+    const nextPrecip = hourly.precipitation_probability[0]
+
+    Logger.success(`${source} sincronizado. Próximas horas: ${nextTemp}°C | Lluvia: ${nextPrecip}%`)
 
     return true
   } catch (error) {
@@ -128,7 +129,6 @@ export async function syncOpenWeatherMap() {
     }
 
     const source = 'OpenWeatherMap'
-    let upsertCount = 0
 
     for (const item of list) {
       const timestamp = new Date(item.dt * 1000) // OWM usa segundos
@@ -164,10 +164,13 @@ export async function syncOpenWeatherMap() {
           source,
         },
       })
-      upsertCount++
     }
 
-    Logger.success(`${source} resincronizado. ${upsertCount} registros guardados.`)
+    const first = list[0]
+    const nextTemp = first.main.temp
+    const nextPrecip = Math.round((first.pop || 0) * 100)
+
+    Logger.success(`${source} sincronizado. Próximas horas: ${nextTemp}°C | Lluvia: ${nextPrecip}%`)
 
     return true
   } catch (error) {

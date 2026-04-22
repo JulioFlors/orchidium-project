@@ -55,15 +55,6 @@ async function checkDbConnection() {
   }
 }
 
-// Configuración de Seguridad para InfluxDB (Interno vs Cloud)
-const url = new URL(INFLUX_URL)
-const isPublicCloud = url.hostname.endsWith('influxdata.com')
-const isInternalHost = url.hostname === 'influxdb' || url.hostname === 'localhost'
-
-if (isInternalHost && !isPublicCloud) {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
-}
-
 // ---- Definición de tipo estándar  ----
 type PacketProcessor = (
   source: string,
@@ -230,10 +221,17 @@ async function start() {
   await checkDbConnection()
 
   // 2. Cliente InfluxDB v3
+  const url = new URL(INFLUX_URL)
+  const isPublicCloud = url.hostname.endsWith('influxdata.com')
+  const isInternalHost = url.hostname === 'influxdb' || url.hostname === 'localhost'
+
   influxClient = new InfluxDBClient({
     host: INFLUX_URL,
     token: INFLUX_TOKEN,
     database: INFLUX_BUCKET,
+    transportOptions: {
+      rejectUnauthorized: isPublicCloud ? true : !isInternalHost,
+    },
   })
 
   // 3. Cliente MQTT

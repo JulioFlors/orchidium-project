@@ -1,4 +1,3 @@
-// ---- Colores para Logs ----
 const colors = {
   reset: '\x1b[0m',
   bold: '\x1b[1m',
@@ -11,10 +10,6 @@ const colors = {
   white: '\x1b[97m',
 }
 
-// ---- Debugging ----
-const DEBUG = process.env.NODE_ENV !== 'production'
-
-// ---- Sistema de Logs ----
 const getLogTime = () => {
   return new Intl.DateTimeFormat('es-VE', {
     timeZone: 'America/Caracas',
@@ -27,39 +22,37 @@ const getLogTime = () => {
   }).format(new Date())
 }
 
+const formatLog = (icon: string, tag: string, color: string, msg: string) => {
+  const time = getLogTime()
+  const paddedTag = tag.padEnd(4).substring(0, 4).toUpperCase()
+
+  return `${colors.white}[ ${time} ]${colors.reset} ${color}${icon} [ ${paddedTag} ]${colors.reset} ${colors.white}${msg}${colors.reset}`
+}
+
 export const Logger = {
-  info: (msg: string) =>
-    console.log(
-      `${colors.cyan}⛅ [ ORACLE ]${colors.reset}${colors.magenta} [${getLogTime()}]${colors.reset}${colors.white} ${msg}${colors.reset}`,
-    ),
-  cron: (msg: string) =>
-    console.log(
-      `${colors.magenta}🕒 [ CRON ]${colors.reset}${colors.magenta} [${getLogTime()}]${colors.reset}${colors.white} ${msg}${colors.reset}`,
-    ),
-  success: (msg: string) =>
-    console.log(
-      `${colors.green}✅ [ DONE ]${colors.reset}${colors.magenta} [${getLogTime()}]${colors.reset}${colors.white} ${msg}${colors.reset}`,
-    ),
-  warn: (msg: string) =>
-    console.warn(
-      `${colors.yellow}⚠️ [ WARN ]${colors.reset}${colors.magenta} [${getLogTime()}]${colors.reset}${colors.white} ${msg}${colors.reset}`,
-    ),
-  error: (msg: string, err?: unknown) =>
-    console.error(
-      `${colors.red}❌ [ ERROR ]${colors.reset}${colors.magenta} [${getLogTime()}]${colors.reset}${colors.white} ${msg}${colors.reset}`,
-      err || '',
-    ),
-  debug: (msg: string) =>
-    DEBUG &&
-    console.log(
-      `${colors.green}🔎 [ DEBUG ]${colors.reset}${colors.magenta} [${getLogTime()}]${colors.reset}${colors.white} ${msg}${colors.reset}`,
-    ),
-  db: (msg: string) =>
-    DEBUG &&
-    console.log(
-      `${colors.blue}🐘 [ PRISMA ]${colors.reset}${colors.magenta} [${getLogTime()}]${colors.reset}${colors.white} ${msg}${colors.reset}`,
-    ),
-  raw: (msg: string) => {
-    console.log(msg)
+  info: (msg: string) => console.log(formatLog('📡', 'INFO', colors.blue, msg)),
+  success: (msg: string) => console.log(formatLog('✅', 'DONE', colors.green, msg)),
+  warn: (msg: string, err?: unknown) => {
+    console.warn(formatLog('⚠️', 'WARN', colors.yellow, msg))
+    if (err) {
+      console.error(
+        `${colors.yellow}      ╰─> ${err instanceof Error ? err.message : String(err)}${colors.reset}`,
+      )
+    }
   },
+  error: (msg: string, err?: unknown) => {
+    console.error(formatLog('❌', 'ERRO', colors.red, msg))
+    if (err) {
+      console.error(
+        `${colors.red}      ╰─> ${err instanceof Error ? err.message : String(err)}${colors.reset}`,
+      )
+    }
+  },
+  debug: (msg: string) => {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(formatLog('🔎', 'DBUG', colors.cyan, msg))
+    }
+  },
+  cron: (msg: string) => console.log(formatLog('⏰', 'CRON', colors.cyan, msg)),
+  oracle: (msg: string) => console.log(formatLog('⛅', 'ORCL', colors.blue, msg)),
 }
