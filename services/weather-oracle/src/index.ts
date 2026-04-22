@@ -13,7 +13,9 @@ async function initialSync() {
 }
 
 // Iniciar procesos
-initialSync()
+initialSync().then(() => {
+  console.log() // Espacio en blanco tras la conexión y sync inicial
+})
 
 // Programar sincronización periódica cada hora.
 const job = new Cron('0 * * * *', async () => {
@@ -30,7 +32,7 @@ if (nextRun) {
     hour: '2-digit',
     minute: '2-digit',
     hour12: true,
-    timeZoneName: 'short',
+    timeZone: 'America/Caracas',
   }).format(nextRun)
 
   Logger.oracle(`Servicio a la espera. Próxima ejecución: ${formattedDate}`)

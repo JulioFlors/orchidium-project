@@ -843,8 +843,8 @@ export function AuditConsoleCard({
   const content = renderContent()
 
   return (
-    <Card className="flex min-h-80 w-full max-w-full flex-col overflow-hidden border-zinc-200 bg-white shadow-xl transition-all dark:border-zinc-800 dark:bg-[#18181b]">
-      <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50/50 px-5 py-3 dark:border-zinc-800 dark:bg-black/40">
+    <Card className="bg-surface border-input-outline flex min-h-80 w-full max-w-full flex-col overflow-hidden rounded-xl border shadow-sm transition-all">
+      <div className="border-black-and-white/5 bg-black-and-white/5 flex items-center justify-between border-b px-5 py-3">
         <div className="flex items-center gap-3">
           <div
             className={clsx(
@@ -930,7 +930,7 @@ export function HeartbeatCard({ lastSeen }: HeartbeatCardProps) {
   const hasSeen = Boolean(lastSeen)
 
   return (
-    <Card className="bg-surface border-black-and-white/5 group relative flex w-full flex-row items-center gap-4 rounded-xl border p-4 shadow-sm transition-all hover:bg-zinc-50 dark:hover:bg-white/2">
+    <Card className="bg-surface border-input-outline group hover:bg-hover-overlay tds-sm:flex-row tds-sm:items-center relative flex flex-col gap-4 rounded-xl border p-4 shadow-sm transition-all">
       <div className="flex flex-1 flex-row items-center gap-4">
         <StatusCircleIcon
           colorClassName={hasSeen ? 'text-red-500' : 'text-secondary/30'}

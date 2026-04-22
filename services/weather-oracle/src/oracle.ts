@@ -89,9 +89,12 @@ export async function syncOpenMeteo() {
     }
 
     const nextTemp = hourly.temperature_2m[0]
+    const nextHum = hourly.relative_humidity_2m[0]
     const nextPrecip = hourly.precipitation_probability[0]
 
-    Logger.success(`${source} sincronizado. Próximas horas: ${nextTemp}°C | Lluvia: ${nextPrecip}%`)
+    Logger.success(
+      `${source} sincronizado. Próximas horas: ${nextTemp}°C | Hum: ${nextHum}% | Lluvia: ${nextPrecip}%`,
+    )
 
     return true
   } catch (error) {
@@ -168,9 +171,12 @@ export async function syncOpenWeatherMap() {
 
     const first = list[0]
     const nextTemp = first.main.temp
+    const nextHum = first.main.humidity
     const nextPrecip = Math.round((first.pop || 0) * 100)
 
-    Logger.success(`${source} sincronizado. Próximas horas: ${nextTemp}°C | Lluvia: ${nextPrecip}%`)
+    Logger.success(
+      `${source} sincronizado. Próximas horas: ${nextTemp}°C | Hum: ${nextHum}% | Lluvia: ${nextPrecip}%`,
+    )
 
     return true
   } catch (error) {

@@ -235,6 +235,7 @@ async function start() {
   })
 
   // 3. Cliente MQTT
+  console.log() // Espacio en blanco tras conexiones base
   Logger.mqtt(`Conectando a ${colors.blue}${MQTT_BROKER_URL}${colors.reset}`)
 
   const client = mqtt.connect(MQTT_BROKER_URL, {

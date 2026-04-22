@@ -12,7 +12,7 @@ import { getConnectivityLogs } from '@/actions'
 import { Card, Heading, DeviceStatus } from '@/components'
 import { authClient } from '@/lib/auth-client'
 import { useMqttStore } from '@/store/mqtt/mqtt.store'
-import { formatTime12h } from '@/utils'
+import { formatTime12h, formatRelativeHeartbeat } from '@/utils'
 import { ZoneType, ZoneTypeLabels } from '@/config/mappings'
 
 interface DeviceConfig {
@@ -308,8 +308,8 @@ export function DeviceDebugger() {
         {(showTimeline || orderedWidgets.length > 0) && (
           <>
             {showTimeline && (
-              <Card className="flex w-full flex-col overflow-hidden border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-900/40">
-                <div className="flex items-center justify-between border-b border-zinc-200 bg-zinc-50/50 px-5 py-3 dark:border-zinc-800 dark:bg-black/40">
+              <Card className="bg-surface border-input-outline flex w-full flex-col overflow-hidden rounded-xl border shadow-sm transition-all">
+                <div className="border-black-and-white/5 bg-black-and-white/5 flex items-center justify-between border-b px-5 py-3">
                   <h4 className="font-mono text-[10px] font-bold tracking-[0.2em] text-zinc-500 uppercase opacity-80 dark:text-zinc-400">
                     Connectivity/Log Timeline
                   </h4>
@@ -325,7 +325,7 @@ export function DeviceDebugger() {
                     connectivityLogs.map((log) => (
                       <div
                         key={log.id}
-                        className="group flex items-center justify-between px-5 py-4 transition-all hover:bg-zinc-50 dark:hover:bg-black/20"
+                        className="group hover:bg-hover-overlay flex items-center justify-between px-5 py-4 transition-all"
                       >
                         <div className="flex items-center gap-4">
                           <div
@@ -374,8 +374,8 @@ export function DeviceDebugger() {
                           <span className="font-mono text-[10px] font-bold text-zinc-500 dark:text-zinc-400">
                             {formatVETime(log.timestamp)}
                           </span>
-                          <span className="text-[9px] font-medium text-zinc-400 opacity-40">
-                            Protocol: MQTT (VET-4)
+                          <span className="text-[10px] font-bold tracking-tight text-zinc-400 opacity-60">
+                            {formatRelativeHeartbeat(log.timestamp)}
                           </span>
                         </div>
                       </div>
