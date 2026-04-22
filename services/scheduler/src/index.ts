@@ -16,6 +16,7 @@ import {
 // ---- Configuración de Reglas ----
 
 async function init() {
+  console.log() // Espacio en blanco
   Logger.info('🚀 Iniciando Servicio Scheduler (PristinoPlant)')
 
   const pgReady = await waitForPostgres()
@@ -31,9 +32,6 @@ async function init() {
     Logger.error('FALLO CRÍTICO: No se pudo conectar al Broker MQTT.')
     process.exit(1)
   }
-
-  Logger.success('Conexiones base establecidas.')
-  console.log() // Espacio en blanco tras las conexiones base
 
   // 1. Cargar y programar rutinas primero (Prioridad estética)
   await initScheduler()
