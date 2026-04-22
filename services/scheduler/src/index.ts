@@ -33,8 +33,12 @@ async function init() {
   }
 
   Logger.success('Conexiones base establecidas.')
+  console.log() // Espacio en blanco tras las conexiones base
+
+  // 1. Cargar y programar rutinas primero (Prioridad estética)
   await initScheduler()
-  console.log() // Espacio en blanco tras la inicialización
+
+  // 2. Iniciar escucha de eventos MQTT
   setupMqttHandlers()
 }
 
@@ -78,9 +82,7 @@ async function waitForMosquitto(retries = 15) {
 let lastRainState: string | null = null
 
 function setupMqttHandlers() {
-  mqttClient.on('connect', () => {
-    Logger.success('Conectado a Broker MQTT')
-
+  const subscribe = () => {
     mqttClient.subscribe(
       [
         'PristinoPlant/Actuator_Controller/cmd/received',
@@ -92,7 +94,18 @@ function setupMqttHandlers() {
       ],
       { qos: 1 },
     )
+  }
+
+  mqttClient.on('connect', () => {
+    Logger.success('Conectado a Broker MQTT')
+    subscribe()
   })
+
+  // Si ya estamos conectados (por el waitForMosquitto), suscribir de inmediato
+  if (mqttClient.connected) {
+    Logger.success('Conectado a Broker MQTT')
+    subscribe()
+  }
 
   mqttClient.on('message', async (topic, payload) => {
     try {

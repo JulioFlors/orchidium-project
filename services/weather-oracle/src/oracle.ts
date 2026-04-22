@@ -93,7 +93,7 @@ export async function syncOpenMeteo() {
     const nextPrecip = hourly.precipitation_probability[0]
 
     Logger.success(
-      `${source} sincronizado. Próximas horas: ${nextTemp}°C | Hum: ${nextHum}% | Lluvia: ${nextPrecip}%`,
+      `${source} sincronizado. ${nextTemp}°C | Hum: ${nextHum}% | Lluvia: ${nextPrecip}%`,
     )
 
     return true
@@ -175,7 +175,7 @@ export async function syncOpenWeatherMap() {
     const nextPrecip = Math.round((first.pop || 0) * 100)
 
     Logger.success(
-      `${source} sincronizado. Próximas horas: ${nextTemp}°C | Hum: ${nextHum}% | Lluvia: ${nextPrecip}%`,
+      `${source} sincronizado. ${nextTemp}°C | Hum: ${nextHum}% | Lluvia: ${nextPrecip}%`,
     )
 
     return true
@@ -253,9 +253,7 @@ export async function syncAgroMonitoring() {
 
     const captureDate = timestamp.toLocaleString('es-VE', { timeZone: 'America/Caracas' })
 
-    Logger.success(
-      `${source}: Captura satelital del [${captureDate}] procesada -> Humedad del suelo: ${(moisture * 100).toFixed(1)}%`,
-    )
+    Logger.success(`${source}: [${captureDate}] Humedad del suelo: ${(moisture * 100).toFixed(1)}%`)
 
     return true
   } catch (error) {

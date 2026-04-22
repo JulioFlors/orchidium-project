@@ -13,9 +13,8 @@ async function initialSync() {
 }
 
 // Iniciar procesos
-initialSync().then(() => {
-  console.log() // Espacio en blanco tras la conexión y sync inicial
-})
+console.log() // Espacio en blanco tras la conexión base
+initialSync()
 
 // Programar sincronización periódica cada hora.
 const job = new Cron('0 * * * *', async () => {
