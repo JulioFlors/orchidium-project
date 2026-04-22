@@ -4,7 +4,8 @@ import { revalidatePath } from 'next/cache'
 import prisma from '@package/database'
 import { headers } from 'next/headers'
 
-import { auth } from '@/lib/auth'
+import { Logger } from '@/lib'
+import { auth } from '@/lib/server'
 
 export const getPaginatedUsers = async (limit: number = 50, skip: number = 0) => {
   const session = await auth.api.getSession({
@@ -27,7 +28,7 @@ export const getPaginatedUsers = async (limit: number = 50, skip: number = 0) =>
       users,
     }
   } catch (err) {
-    console.error('Error al obtener usuarios:', err)
+    Logger.error('Error al obtener usuarios:', err)
 
     return { ok: false, message: 'Error al obtener usuarios' }
   }
@@ -57,7 +58,7 @@ export const changeUserRole = async (userId: string, newRole: string) => {
 
     return { ok: true }
   } catch (err) {
-    console.error('Error al cambiar rol de usuario:', err)
+    Logger.error('Error al cambiar rol de usuario:', err)
 
     return { ok: false, message: 'No se pudo actualizar el rol' }
   }
@@ -83,7 +84,7 @@ export const deleteUser = async (userId: string) => {
 
     return { ok: true }
   } catch (err) {
-    console.error('Error al eliminar usuario:', err)
+    Logger.error('Error al eliminar usuario:', err)
 
     return { ok: false, message: 'Error al eliminar usuario' }
   }

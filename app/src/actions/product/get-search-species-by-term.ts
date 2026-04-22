@@ -2,6 +2,8 @@
 
 import prisma from '@package/database'
 
+import { Logger } from '@/lib'
+
 export const getSearchSpeciesByTerm = async (
   searchTerm: string,
   limit: number = 20,
@@ -65,7 +67,7 @@ export const getSearchSpeciesByTerm = async (
       }
     })
   } catch (error) {
-    console.error('Error searching species:', error)
+    Logger.error('Error searching species:', error)
 
     return []
   }

@@ -40,26 +40,24 @@ interface PendingCommand {
   payload: string
   attempts: number
   lastSent: number
+  scheduledAt: number
   timer: NodeJS.Timeout | null
 }
 
 class CommandRetryManager {
   private pending = new Map<string, PendingCommand>()
-  private MAX_ATTEMPTS = 20
-  private RETRY_INTERVAL_MS = 60000
+  private onFailure?: (taskId: string, notes?: string) => Promise<void>
   public lastActuatorState = 'unknown'
+  setOnFailure(callback: (taskId: string, notes?: string) => Promise<void>) {
+    this.onFailure = callback
+  }
 
-  track(topic: string, payload: string) {
+  track(topic: string, payload: string, scheduledAt: Date = new Date()) {
     const key = `${topic}:${payload}`
     const existing = this.pending.get(key)
 
     if (existing) {
       if (existing.timer) clearInterval(existing.timer)
-      Logger.debug(
-        `Sincronización del comando reiniciada: ${colors.magenta}${payload}${colors.reset}`,
-      )
-    } else {
-      Logger.debug(`Iniciando seguimiento de comando: ${colors.magenta}${payload}${colors.reset}`)
     }
 
     const command: PendingCommand = {
@@ -67,7 +65,8 @@ class CommandRetryManager {
       payload,
       attempts: 1,
       lastSent: Date.now(),
-      timer: setInterval(() => this.retry(key), Math.max(1, this.RETRY_INTERVAL_MS)),
+      scheduledAt: scheduledAt.getTime(),
+      timer: setInterval(() => this.retry(key), 60000),
     }
 
     this.pending.set(key, command)
@@ -108,10 +107,13 @@ class CommandRetryManager {
 
     if (this.lastActuatorState === 'offline') return
 
-    if (command.attempts >= this.MAX_ATTEMPTS) {
-      Logger.error(
-        `Se agotaron los ${this.MAX_ATTEMPTS} intentos de entrega para: ${command.payload}`,
-      )
+    const now = Date.now()
+    const ageMs = now - command.scheduledAt
+
+    // 1. Expiración de Ventana (20 min)
+    if (ageMs > 20 * 60 * 1000) {
+      Logger.error(`Ventana de oportunidad cerrada para: ${command.payload}`)
+      this.handleTimeout(command.payload, 'Ventana de oportunidad cerrada (20 min expirados).')
       if (command.timer) clearInterval(command.timer)
       this.pending.delete(key)
 
@@ -119,11 +121,41 @@ class CommandRetryManager {
     }
 
     command.attempts++
-    command.lastSent = Date.now()
-    Logger.warn(
-      `Reintentando entrega al nodo (${command.attempts}/${this.MAX_ATTEMPTS}): ${colors.magenta}${command.payload}${colors.reset}`,
-    )
+    command.lastSent = now
+    // Log de reintento SILENCIADO por petición (solo visible en depuración extrema)
+    // Logger.warn(`Reintentando entrega al nodo...`)
+
+    // 2. Fallo Visual (al minuto 2 de insistencia si el nodo está online)
+    if (command.attempts === 3) {
+      Logger.warn(`Fallo visual (min 2). Reportando al historial mientras se sigue insistiendo.`)
+      this.handleTimeout(
+        command.payload,
+        'Sin respuesta del Nodo Actuador (Sordo). Reintentando cada 60s...',
+      )
+    }
+
     mqttClient.publish(command.topic, command.payload, { qos: 1 })
+  }
+
+  private handleTimeout(payload: string, notes?: string) {
+    if (!this.onFailure) return
+    const taskId = this.extractTaskId(payload)
+
+    if (taskId) this.onFailure(taskId, notes)
+  }
+
+  private extractTaskId(payload: string): string | null {
+    try {
+      if (payload.startsWith('{')) {
+        const parsed = JSON.parse(payload)
+
+        return parsed.task_id || null
+      }
+
+      return null
+    } catch {
+      return null
+    }
   }
 }
 
@@ -133,7 +165,12 @@ let lastLuxState: 'on' | 'off' | null = null
 /**
  * Envía un comando de circuito al Nodo Actuador.
  */
-export function executeSequence(purpose: TaskPurpose, durationMinutes: number, taskId: string) {
+export function executeSequence(
+  purpose: TaskPurpose,
+  durationMinutes: number,
+  taskId: string,
+  scheduledAt: Date = new Date(),
+) {
   const durationSec = durationMinutes * 60
 
   const payload = {
@@ -153,7 +190,7 @@ export function executeSequence(purpose: TaskPurpose, durationMinutes: number, t
     },
   })
 
-  retryManager.track(ACTUATOR_TOPIC, message)
+  retryManager.track(ACTUATOR_TOPIC, message, scheduledAt)
 
   Logger.info(
     `Despachando Circuito: ${purpose} (${durationMinutes} min) [Task: ${taskId.slice(0, 8)}]`,
@@ -173,9 +210,9 @@ export function executeSystemCommand(command: string) {
 }
 
 /**
- * Sincroniza el estado del monitoreo de lux basado en la hora actual.
+ * Sincroniza el estado del monitoreo del nodo basado en la hora actual.
  */
-export function syncEcoMode() {
+export function syncNodeSampling() {
   const now = new Date()
   const options: Intl.DateTimeFormatOptions = {
     timeZone: 'America/Caracas',
@@ -186,6 +223,11 @@ export function syncEcoMode() {
   const hour = parseInt(hourString)
 
   const targetState = hour >= 5 && hour < 19 ? 'on' : 'off'
+
+  if (retryManager.lastActuatorState !== 'online') {
+    // Evitar comandos a ciegas si el nodo no ha reportado su estado inicial.
+    return
+  }
 
   if (lastLuxState === targetState) {
     // Ya estamos en el estado correcto, no spamear al broker.

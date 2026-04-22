@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { prisma, TaskStatus } from '@package/database'
 
+import { Logger } from '@/lib'
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const limit = Math.min(parseInt(searchParams.get('limit') || '20'), 100)
@@ -34,7 +36,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(tasks)
   } catch (error) {
-    console.error('Error fetching history tasks:', error)
+    Logger.error('Error fetching history tasks:', error)
 
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }

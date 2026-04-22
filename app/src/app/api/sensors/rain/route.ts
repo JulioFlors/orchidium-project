@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 
-import { influxClient } from '@/lib/influxdb'
+import { Logger } from '@/lib'
+import { influxClient } from '@/lib/server'
 
 export async function GET(_request: Request) {
   const { searchParams } = new URL(_request.url)
@@ -91,7 +92,7 @@ export async function GET(_request: Request) {
       })
     }
 
-    console.error('Error querying Rain Events:', error)
+    Logger.error('Error querying Rain Events:', error)
 
     return NextResponse.json(
       { error: 'Error al obtener datos de telemetría del pluviómetro' },

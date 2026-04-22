@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { prisma, ZoneType } from '@package/database'
 
-import { influxClient } from '@/lib/influxdb'
+import { Logger } from '@/lib'
+import { influxClient } from '@/lib/server'
 
 /**
  * Definición de campos disponibles por zona para evitar errores de esquema en InfluxDB.
@@ -141,7 +142,7 @@ export async function GET(request: Request) {
 
       return NextResponse.json(data)
     } catch (error) {
-      console.error('Error querying InfluxDB (short range):', error)
+      Logger.error('Error querying InfluxDB (short range):', error)
 
       return NextResponse.json({ error: 'Error al obtener datos de los sensores' }, { status: 500 })
     }
@@ -217,46 +218,73 @@ export async function GET(request: Request) {
     }
 
     // 2. Obtener datos de "Hoy" (aún no procesado por el cron) desde InfluxDB
-    const todayStart = new Date(now)
-
-    todayStart.setHours(0, 0, 0, 0)
-
-    const hasTodayInPg = pgData.some((d) => d.date.getTime() === todayStart.getTime())
+    const todayStr = now.toISOString().split('T')[0]
+    const hasTodayInPg = pgData.some((d) => d.date.toISOString().startsWith(todayStr))
 
     if (!hasTodayInPg) {
-      const isIlluminanceQuery = fieldsToQuery.includes('illuminance')
-      // Para iluminancia, solo consideramos el horario diurno (8 AM - 4 PM)
-      const hourFilter = isIlluminanceQuery ? 'AND EXTRACT(HOUR FROM time) BETWEEN 8 AND 15' : ''
-      const timeFilter = `AND time >= '${todayStart.toISOString()}' ${hourFilter}`
-
-      const fieldsSql = fieldsToQuery
-        .map((f) => `AVG(${f}) as ${f}, MIN(${f}) as min_${f}, MAX(${f}) as max_${f}`)
-        .join(', ')
-
-      const query = `SELECT '${todayStart.toISOString()}' as time, ${fieldsSql} FROM "environment_metrics" WHERE "zone" = '${zone}' ${timeFilter}`
+      // Medianoche en Caracas (UTC-4) = 04:00:00 UTC
+      const todayStartUTC = `${todayStr}T04:00:00Z`
+      const rawQuery = `SELECT * FROM "environment_metrics" WHERE "zone" = '${zone}' AND time >= '${todayStartUTC}' ORDER BY time ASC`
 
       try {
-        const todayData = await executeInfluxQuery(
-          query,
-          fieldsToQuery,
-          true,
-          zone,
-          timeFilter,
-          null,
-        )
+        const reader = influxClient.query(rawQuery)
+        const stats: Record<string, { sum: number; count: number; min: number; max: number }> = {}
 
-        if (todayData && todayData.length > 0) {
-          todayData[0].dateLabel = 'Hoy'
-          allData.push(todayData[0])
+        fieldsToQuery.forEach((f) => {
+          stats[f] = { sum: 0, count: 0, min: Infinity, max: -Infinity }
+        })
+
+        for await (const row of reader) {
+          const tDate = new Date(safeTimeToISO(row.time))
+          const hour = (tDate.getUTCHours() - 4 + 24) % 24
+          const isDaytime = hour >= 8 && hour < 16
+
+          fieldsToQuery.forEach((f) => {
+            if (row[f] != null) {
+              const v = Number(row[f])
+
+              if (!isNaN(v)) {
+                // Filtro botánico para iluminancia
+                if (f === 'illuminance' && !isDaytime) return
+
+                stats[f].sum += v
+                stats[f].count++
+                if (v < stats[f].min) stats[f].min = v
+                if (v > stats[f].max) stats[f].max = v
+              }
+            }
+          })
         }
-      } catch {
-        // InfluxDB puede fallar para "Hoy" — no es crítico, ya tenemos el historial
+
+        const entry: Record<string, unknown> = {
+          time: new Date(todayStr + 'T00:00:00.000Z').toISOString(),
+          dateLabel: 'Hoy',
+        }
+
+        let hasData = false
+
+        fieldsToQuery.forEach((f) => {
+          const s = stats[f]
+
+          if (s.count > 0) {
+            hasData = true
+            entry[f] = Number((s.sum / s.count).toFixed(2))
+            entry[`min_${f}`] = s.min
+            entry[`max_${f}`] = s.max
+          }
+        })
+
+        if (hasData) {
+          allData.push(entry)
+        }
+      } catch (err) {
+        Logger.error('Error procesando telemetría de "Hoy" en API:', err)
       }
     }
 
     return NextResponse.json(allData)
   } catch (error) {
-    console.error('Error in PostgreSQL + InfluxDB Hybrid Query:', error)
+    Logger.error('Error in PostgreSQL + InfluxDB Hybrid Query:', error)
 
     return NextResponse.json({ error: 'Error al obtener historial' }, { status: 500 })
   }

@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@package/database'
 
+import { Logger } from '@/lib'
 import { deleteR2Object } from '@/actions/storage/upload-actions'
 
 // ─────────────────────────────────────────────────────────────
@@ -37,7 +38,7 @@ export async function getSpecies() {
 
     return { ok: true, species }
   } catch (err) {
-    console.error('[Species] Error al obtener especies:', err)
+    Logger.error('[Species] Error al obtener especies:', err)
 
     return { ok: false, message: 'No se pudieron cargar las especies.' }
   }
@@ -63,7 +64,7 @@ export async function createSpecies(data: { name: string; genusId: string; descr
 
     return { ok: true, species }
   } catch (err) {
-    console.error('[Species] Error al crear especie:', err)
+    Logger.error('[Species] Error al crear especie:', err)
 
     return { ok: false, message: 'Error al crear. ¿El nombre ya existe?' }
   }
@@ -93,7 +94,7 @@ export async function updateSpecies(
 
     return { ok: true, species }
   } catch (err) {
-    console.error('[Species] Error al actualizar especie:', err)
+    Logger.error('[Species] Error al actualizar especie:', err)
 
     return { ok: false, message: 'Error al actualizar la especie.' }
   }
@@ -128,7 +129,7 @@ export async function deleteSpecies(id: string) {
 
     return { ok: true }
   } catch (err) {
-    console.error('[Species] Error al eliminar especie:', err)
+    Logger.error('[Species] Error al eliminar especie:', err)
 
     return { ok: false, message: 'Error al eliminar la especie.' }
   }
@@ -147,7 +148,7 @@ export async function addSpeciesImage(speciesId: string, url: string) {
 
     return { ok: true, image }
   } catch (err) {
-    console.error('[Species] Error al guardar imagen:', err)
+    Logger.error('[Species] Error al guardar imagen:', err)
 
     return { ok: false, message: 'Error al registrar la imagen.' }
   }
@@ -174,7 +175,7 @@ export async function deleteSpeciesImage(imageId: string) {
 
     return { ok: true }
   } catch (err) {
-    console.error('[Species] Error al eliminar imagen:', err)
+    Logger.error('[Species] Error al eliminar imagen:', err)
 
     return { ok: false, message: 'Error al eliminar la imagen.' }
   }

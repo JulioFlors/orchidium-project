@@ -2,6 +2,8 @@
 
 import { prisma, TaskStatus } from '@package/database'
 
+import { Logger } from '@/lib'
+
 export async function getHistoryTasks(limit = 20, offset = 0) {
   try {
     const tasks = await prisma.taskLog.findMany({
@@ -47,7 +49,7 @@ export async function getHistoryTasks(limit = 20, offset = 0) {
       data,
     }
   } catch (error) {
-    console.error('Error fetching history tasks (server action):', error)
+    Logger.error('Error fetching history tasks (server action):', error)
 
     return {
       success: false,

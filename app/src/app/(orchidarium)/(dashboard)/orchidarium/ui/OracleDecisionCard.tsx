@@ -18,20 +18,23 @@ export function OracleDecisionCard({ forecast }: { forecast: OracleForecast | un
   }
 
   // Lógica básica de decisión simulada para entendimiento humano
-  const willRain = forecast.precipProb > 0.6
-  const drySoil = forecast.soilMoisture !== null && forecast.soilMoisture < 0.2
+  // WillRain is higher now to match inference engine (80%+)
+  const willRain = forecast.precipProb >= 0.8
+  // Suelo seco si es menor al 35% (ajuste para clima venezolano/suelo duro)
+  const drySoil = forecast.soilMoisture !== null && forecast.soilMoisture < 0.35
 
   let decisionTitle = 'Riego Permitido'
-  let decisionDesc = 'No se preven lluvias fuertes inminentes y la humedad satelital está en rango.'
+  let decisionDesc =
+    'No se prevén lluvias fuertes inminentes y la humedad satelital está en rango seco/normal.'
   let decisionColor = 'text-green-400'
 
   if (willRain) {
-    decisionTitle = 'Riego Bloqueado (Lluvia Inminente)'
-    decisionDesc = `El oráculo predice lluvia con una probabilidad del ${(forecast.precipProb * 100).toFixed(0)}%.`
+    decisionTitle = 'Riego Probablemente Bloqueado (Lluvia Inminente)'
+    decisionDesc = `El oráculo predice lluvia (${(forecast.precipProb * 100).toFixed(0)}%). Será refutado si hay sol intenso localmente.`
     decisionColor = 'text-blue-400'
   } else if (!drySoil && forecast.soilMoisture !== null) {
     decisionTitle = 'Riego Innecesario (Suelo Húmedo)'
-    decisionDesc = `Las imágenes satelitales reportan un suelo con suficiente humedad (${(forecast.soilMoisture * 100).toFixed(0)}%).`
+    decisionDesc = `Las imágenes satelitales reportan un suelo con suficiente humedad (>35%). Actual: ${(forecast.soilMoisture * 100).toFixed(0)}%.`
     decisionColor = 'text-yellow-400'
   }
 

@@ -23,6 +23,13 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 ### 🚀 0.2 Despliegue de Servicios (Backend)
 
 * [x] **Dockerización Producción:** Configurar los servicios de `ingest` y `scheduler` en un VPS.
+* [x] **Calidad de Código & Linting:**
+  * [x] Corregir crash de ESLint en archivos Markdown mediante restricción de reglas de `import/react/next` a archivos de script.
+  * [x] Unificar configuración de linting en `@package/eslint-config`.
+
+### 📄 0.3 Documentación & Trazabilidad
+
+* [x] **Refuerzo de Protocolos:** Implementar regla MANDATORIA en `SKILL.md` para actualización proactiva de `todos.md` y `ROADMAP.md` por parte de agentes.
 
 ---
 

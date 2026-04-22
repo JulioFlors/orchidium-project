@@ -168,9 +168,7 @@ export function getDominantVibrantColor(imgElement: HTMLImageElement): RGB | nul
     const boostedL = Math.min(Math.max(avgL, 0.45), 0.55)
 
     return hslToRgb(avgH, boostedS, boostedL)
-  } catch (e) {
-    console.error('Error extrayendo color dominante de la imagen:', e)
-
+  } catch {
     return null
   }
 }

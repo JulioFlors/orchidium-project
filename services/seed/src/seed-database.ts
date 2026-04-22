@@ -1,5 +1,4 @@
-/* eslint-disable no-console */
-
+import { Logger } from './lib/logger'
 import { initialData, SeedFertilizationCycle, SeedPhytosanitaryCycle } from './seed-data'
 import { prisma, ZoneType, TableType, PotSize, PlantStatus, PlantType } from '@package/database'
 import { betterAuth } from 'better-auth'
@@ -40,7 +39,7 @@ const createValidatedProductsCycle = async (
     })
 
     if (!agrochemicalExists) {
-      console.warn(`
+      Logger.warn(`
         ❌  Error: Agroquímico NO Encontrado
 
           • Agroquímico: ${pc.agrochemical.name}
@@ -88,16 +87,16 @@ async function main() {
     dbName = 'neondb'
   }
 
-  console.log('\n')
-  console.log('\x1b[33m┌──────────────────────────────────────────────────┐')
-  console.log('\x1b[33m│               🌱  Script de Seeding              │')
-  console.log('\x1b[33m├──────────────────────────────────────────────────┤')
-  console.log(`\x1b[33m│ \x1b[0mBase de Datos: \x1b[36m${dbName.padEnd(32)}  \x1b[33m│`)
-  console.log(`\x1b[33m│ \x1b[0mServidor:      \x1b[36m${host.padEnd(32)}  \x1b[33m│`)
-  console.log('\x1b[33m└──────────────────────────────────────────────────┘\x1b[0m\n')
+  Logger.raw('\n')
+  Logger.raw('\x1b[33m┌──────────────────────────────────────────────────┐')
+  Logger.raw('\x1b[33m│               🌱  Script de Seeding              │')
+  Logger.raw('\x1b[33m├──────────────────────────────────────────────────┤')
+  Logger.raw(`\x1b[33m│ \x1b[0mBase de Datos: \x1b[36m${dbName.padEnd(32)}  \x1b[33m│`)
+  Logger.raw(`\x1b[33m│ \x1b[0mServidor:      \x1b[36m${host.padEnd(32)}  \x1b[33m│`)
+  Logger.raw('\x1b[33m└──────────────────────────────────────────────────┘\x1b[0m\n')
 
   // ---- Borrar registros previos ----
-  console.log('🗑️  Borrando datos antiguos')
+  Logger.info('🗑️  Borrando datos antiguos')
 
   // Tablas de Automatización
   await prisma.taskLog.deleteMany({})
@@ -122,7 +121,7 @@ async function main() {
   await prisma.fertilizationProgram.deleteMany({})
   await prisma.agrochemical.deleteMany({})
 
-  console.log('✅  Datos antiguos borrados')
+  Logger.success('✅  Datos antiguos borrados')
 
   // ---- obtener el arreglo de objetos del seed-data.ts ----
   const {
@@ -136,7 +135,7 @@ async function main() {
     automationSchedules
   } = initialData
 
-  console.log('🌱  Insertando nuevos datos')
+  Logger.info('🌱  Insertando nuevos datos')
 
   // ---- Insertar Users ----
 
@@ -159,7 +158,7 @@ async function main() {
          const existingUser = await prisma.user.findUnique({ where: { email: user.email } })
          if (existingUser) targetUserId = existingUser.id
       } else {
-        console.error(`Error creando usuario ${user.email}:`, error)
+        Logger.error(`Error creando usuario ${user.email}:`, error)
       }
     }
 
@@ -174,7 +173,7 @@ async function main() {
           },
         })
       } catch (err) {
-        console.error(`Error forzando rol al usuario ${user.email}:`, err)
+        Logger.error(`Error forzando rol al usuario ${user.email}:`, err)
       }
     }
   }
@@ -200,7 +199,7 @@ async function main() {
     const genusData = genusMap[genus.name]
 
     if (!genusData) {
-      console.warn(`
+      Logger.warn(`
         ❌  Error: El Genero NO es válido
 
           • Genero: ${genus.name}
@@ -284,7 +283,7 @@ async function main() {
     const speciesId = speciesMap[species.name]
 
     if (!speciesId) {
-      console.error(`No se encontró la especie: ${species.name}`)
+      Logger.error(`No se encontró la especie: ${species.name}`)
       continue
     }
 
@@ -363,14 +362,14 @@ async function main() {
     if (schedule.fertilizationProgramName) {
       const progId = fertProgramMap[schedule.fertilizationProgramName];
       if (progId) fertConnection = { connect: { id: progId } };
-      else console.warn(`⚠️  Programa Fertilización '${schedule.fertilizationProgramName}' no encontrado para rutina '${schedule.name}'`);
+      else Logger.warn(`⚠️  Programa Fertilización '${schedule.fertilizationProgramName}' no encontrado para rutina '${schedule.name}'`);
     }
 
     let phytoConnection = undefined;
     if (schedule.phytosanitaryProgramName) {
       const progId = phytoProgramMap[schedule.phytosanitaryProgramName];
       if (progId) phytoConnection = { connect: { id: progId } };
-      else console.warn(`⚠️  Programa Fitosanitario '${schedule.phytosanitaryProgramName}' no encontrado para rutina '${schedule.name}'`);
+      else Logger.warn(`⚠️  Programa Fitosanitario '${schedule.phytosanitaryProgramName}' no encontrado para rutina '${schedule.name}'`);
     }
 
     await prisma.automationSchedule.create({
@@ -389,12 +388,12 @@ async function main() {
     })
   }
 
-  console.log('\n✨  Seed cargado exitosamente!\n\n')
+  Logger.raw('\n✨  Seed cargado exitosamente!\n\n')
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Ha ocurrio un Error al ejecutar el Seed:', e)
+    Logger.error('❌ Ha ocurrio un Error al ejecutar el Seed:', e)
     process.exit(1)
   })
   .finally(async () => {

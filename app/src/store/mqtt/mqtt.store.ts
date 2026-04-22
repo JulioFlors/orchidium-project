@@ -3,6 +3,7 @@ import { devtools } from 'zustand/middleware'
 import mqtt, { MqttClient, IClientOptions } from 'mqtt'
 
 import { MqttStatus } from '@/interfaces'
+import { Logger } from '@/lib'
 
 interface PendingAck {
   topic: string
@@ -82,7 +83,7 @@ export const useMqttStore = create<MqttState>()(
 
           Object.entries(pendingAcks).forEach(([payload, ack]) => {
             if (ack.retries >= MAX_RETRIES) {
-              console.warn(`❌ [MQTT] Comando fallido tras ${MAX_RETRIES} intentos:`, payload)
+              Logger.warn(`❌ [MQTT] Comando fallido tras ${MAX_RETRIES} intentos:`, payload)
               acksToClear.push(payload)
 
               return
@@ -91,7 +92,7 @@ export const useMqttStore = create<MqttState>()(
             // Solo re-intentar si el tiempo ha pasado Y el cliente está realmente conectado
             if (now - ack.timestamp >= RETRY_INTERVAL_MS) {
               if (client?.connected) {
-                console.log(
+                Logger.mqtt(
                   `🔄 [MQTT] Re-intentando envío (${ack.retries + 1}/${MAX_RETRIES}):`,
                   payload,
                 )
@@ -145,19 +146,19 @@ export const useMqttStore = create<MqttState>()(
         if (client || status === 'connected' || status === 'connecting') return
 
         if (!IS_CONFIG_VALID) {
-          console.warn('⚠️ [MQTT] Configuración incompleta.')
+          Logger.warn('⚠️ [MQTT] Configuración incompleta.')
           set({ status: 'disconnected' })
 
           return
         }
 
-        console.log(`🔌 [MQTT] Conectando a ${BROKER_URL}`)
+        Logger.info(`🔌 [MQTT] Conectando a ${BROKER_URL}`)
         set({ status: 'connecting' })
 
         const mqttClient = mqtt.connect(BROKER_URL, OPTIONS)
 
         mqttClient.on('connect', () => {
-          console.log('✅ [MQTT] Conectado')
+          Logger.success('✅ [MQTT] Conectado')
           set({ status: 'connected' })
           startRetryLoop()
 
@@ -172,7 +173,7 @@ export const useMqttStore = create<MqttState>()(
         })
 
         mqttClient.on('error', (err: Error) => {
-          console.error('❌ [MQTT] Error:', err)
+          Logger.error('❌ [MQTT] Error:', err)
           set({ status: 'error' })
         })
 
@@ -212,7 +213,7 @@ export const useMqttStore = create<MqttState>()(
                     : payloadStr
 
               if (state.pendingAcks[ackKey]) {
-                console.log(`🎯 [MQTT] ACK Recibido:`, ackKey)
+                Logger.success(`🎯 [MQTT] ACK Recibido:`, ackKey)
                 const rest = { ...state.pendingAcks }
 
                 delete rest[ackKey]

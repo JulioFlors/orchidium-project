@@ -10,7 +10,6 @@ import {
   IoPlayCircleOutline,
   IoPulseOutline,
   IoSearchOutline,
-  IoServerOutline,
   IoStatsChartOutline,
   IoStopCircleOutline,
   IoTimeOutline,
@@ -27,10 +26,10 @@ import {
 } from 'recharts'
 import clsx from 'clsx'
 
-import { Card } from '@/components'
+import { Card, StatusCircleIcon } from '@/components'
 import { authClient } from '@/lib/auth-client'
 import { AUDIT_STORAGE_PREFIX, clearAuditData } from '@/lib/audit-storage'
-import { formatTime12h } from '@/utils'
+import { formatTime12h, formatRelativeHeartbeat } from '@/utils'
 
 // ---- Interfaces de Auditoría ----
 interface AuditPayload {
@@ -927,63 +926,26 @@ interface HeartbeatCardProps {
   lastSeen?: number
 }
 
-const formatVEDateTime = (timestamp: number | string | Date) => {
-  const date = new Date(timestamp)
-  const dateStr = date.toLocaleDateString([], { month: 'short', day: 'numeric' })
-
-  return `${dateStr}, ${formatTime12h(timestamp)}`
-}
-
 export function HeartbeatCard({ lastSeen }: HeartbeatCardProps) {
   const hasSeen = Boolean(lastSeen)
 
   return (
-    <Card className="group flex items-center justify-between border-zinc-200 bg-white p-5 shadow-lg transition-all hover:shadow-xl dark:border-zinc-800/40 dark:bg-zinc-900/40 dark:backdrop-blur-sm">
-      <div className="flex items-center gap-4">
-        <div className="relative flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-50 ring-1 ring-zinc-200 dark:bg-black/20 dark:ring-zinc-800">
-          <IoHeartOutline
-            className={clsx(
-              'text-lg transition-all duration-700',
-              hasSeen ? 'animate-pulse text-red-500' : 'text-zinc-400 opacity-30',
-            )}
-          />
-          {hasSeen && (
-            <div className="absolute inset-0 animate-ping rounded-lg bg-red-500/5 duration-3000" />
-          )}
+    <Card className="bg-surface border-black-and-white/5 group relative flex w-full flex-row items-center gap-4 rounded-xl border p-4 shadow-sm transition-all hover:bg-zinc-50 dark:hover:bg-white/2">
+      <div className="flex flex-1 flex-row items-center gap-4">
+        <StatusCircleIcon
+          colorClassName={hasSeen ? 'text-red-500' : 'text-secondary/30'}
+          icon={<IoHeartOutline className={clsx(hasSeen && 'animate-pulse')} size={18} />}
+          variant="vibrant"
+        />
+
+        <div className="flex flex-col gap-y-0.5 overflow-hidden text-left">
+          <h3 className="text-primary text-[15px] leading-tight font-bold">Señal de vida</h3>
+          <div className="text-secondary flex items-center gap-2 text-[11px] font-medium opacity-60">
+            <span className="font-mono tracking-tight">
+              {hasSeen ? formatRelativeHeartbeat(lastSeen!) : 'Esperando señal del nodo...'}
+            </span>
+          </div>
         </div>
-        <div className="flex flex-col gap-0.5">
-          <span className="font-mono text-[9px] font-black tracking-[0.2em] text-zinc-400 uppercase opacity-60">
-            Vital Device Pulse
-          </span>
-          <span
-            className={clsx(
-              'font-mono text-xs font-bold tracking-tight uppercase',
-              hasSeen ? 'text-indigo-600 dark:text-indigo-400' : 'text-zinc-400',
-            )}
-          >
-            {hasSeen ? formatVEDateTime(lastSeen!) : 'Listening for signal...'}
-          </span>
-        </div>
-      </div>
-      <div className="flex flex-col items-end text-right">
-        <div className="flex items-center gap-2">
-          <div
-            className={clsx(
-              'h-1.5 w-1.5 rounded-full',
-              hasSeen
-                ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
-                : 'bg-zinc-300 dark:bg-zinc-700',
-            )}
-          />
-          <span className="font-mono text-[9px] font-black tracking-widest text-zinc-400 uppercase opacity-40">
-            Frontend Pulse Sync
-          </span>
-        </div>
-        {hasSeen && (
-          <span className="mt-1 font-mono text-[8px] tracking-tighter opacity-30">
-            Suscrito al broker
-          </span>
-        )}
       </div>
     </Card>
   )

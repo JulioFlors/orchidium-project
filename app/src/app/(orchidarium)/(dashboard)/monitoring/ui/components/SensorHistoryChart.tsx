@@ -266,8 +266,9 @@ export function SensorHistoryChart({
   if (count > 0) {
     let statsData = data
 
-    if (dataKey === 'illuminance') {
-      // Filtrar por horario diurno (8 AM - 4 PM) para estadísticas de luz
+    if (dataKey === 'illuminance' && !isMacro) {
+      // Filtrar por horario diurno (8 AM - 4 PM) solo para estadísticas de tiempo real (micro-visión)
+      // Los datos Macro (Postgres) ya vienen pre-filtrados botánicamente.
       statsData = data.filter((d) => {
         const date = new Date(String(d.time))
         const hour = date.getHours()

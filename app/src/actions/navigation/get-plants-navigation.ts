@@ -3,6 +3,7 @@
 import prisma from '@package/database'
 
 import { PlantType } from '@/interfaces'
+import { Logger } from '@/lib'
 
 // Definimos la interfaz de los datos que necesita el menú de Plantas.
 export interface PlantsNavData {
@@ -37,7 +38,7 @@ export const getPlantsNavigation = async (): Promise<PlantsNavData[]> => {
 
     return navigationItems
   } catch (error) {
-    console.error('Error fetching genus navigation data:', error)
+    Logger.error('Error fetching genus navigation data:', error)
 
     return []
   }

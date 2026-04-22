@@ -4,6 +4,8 @@ import type { PlantType } from '@/interfaces'
 
 import prisma from '@package/database'
 
+import { Logger } from '@/lib'
+
 export const getSpeciesByType = async (plantType: PlantType) => {
   try {
     const species = await prisma.species.findMany({
@@ -42,7 +44,7 @@ export const getSpeciesByType = async (plantType: PlantType) => {
       }
     })
   } catch (error) {
-    console.error('Error fetching species by type:', error)
+    Logger.error('Error fetching species by type:', error)
 
     // En lugar de lanzar un error que crashee la página,
     // Se devuelve un array vacío.

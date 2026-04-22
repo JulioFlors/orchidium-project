@@ -5,6 +5,8 @@ import type { PotSize } from '@package/database/enums'
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@package/database'
 
+import { Logger } from '@/lib'
+
 // ─────────────────────────────────────────────────────────────
 // READ
 // ─────────────────────────────────────────────────────────────
@@ -26,7 +28,7 @@ export async function getStoreData() {
 
     return { ok: true, species }
   } catch (err) {
-    console.error('[Store] Error al obtener datos de tienda:', err)
+    Logger.error('[Store] Error al obtener datos de tienda:', err)
 
     return { ok: false, message: 'No se pudieron cargar los datos de la tienda.' }
   }
@@ -63,7 +65,7 @@ export async function upsertVariant(data: UpsertVariantData) {
 
     return { ok: true, variant }
   } catch (err) {
-    console.error('[Store] Error al upsert variant:', err)
+    Logger.error('[Store] Error al upsert variant:', err)
 
     return {
       ok: false,
@@ -83,7 +85,7 @@ export async function deleteVariant(id: string) {
 
     return { ok: true }
   } catch (err) {
-    console.error('[Store] Error al eliminar variante:', err)
+    Logger.error('[Store] Error al eliminar variante:', err)
 
     return { ok: false, message: 'Error al eliminar la variante comercial.' }
   }
@@ -103,7 +105,7 @@ export async function updateVariantStock(id: string, newQuantity: number) {
 
     return { ok: true }
   } catch (err) {
-    console.error('[Store] Error al actualizar stock:', err)
+    Logger.error('[Store] Error al actualizar stock:', err)
 
     return { ok: false, message: 'No se pudo actualizar el inventario.' }
   }

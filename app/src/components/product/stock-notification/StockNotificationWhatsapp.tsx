@@ -5,6 +5,7 @@ import { clsx } from 'clsx'
 import Link from 'next/link'
 
 import { Button } from '@/components'
+import { Logger } from '@/lib'
 // todo: Importar tu Server Action cuando esté lista
 // import { requestStockNotificationWhatsapp } from '@/actions/notify-stock';
 
@@ -57,13 +58,14 @@ export function StockNotificationWhatsapp({ productName }: Props) {
 
     setIsSubmitting(true)
 
-    // --- SIMULACIÓN DE LLAMADA AL BACKEND ---
-
-    console.log('Enviando datos para notificación por WhatsApp:', {
+    // ---- SIMULACIÓN DE LLAMADA AL BACKEND ----
+    // TODO: realizar la notificacion por whatsApp
+    Logger.info('Enviando datos para notificación por WhatsApp:', {
       userName,
       phoneNumber,
       productName,
     })
+
     await new Promise((resolve) => setTimeout(resolve, 1500))
     const wasSuccessful = Math.random() > 0.3 // Simular éxito
 

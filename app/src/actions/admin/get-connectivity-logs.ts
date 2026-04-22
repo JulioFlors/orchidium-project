@@ -2,6 +2,8 @@
 
 import { prisma } from '@package/database'
 
+import { Logger } from '@/lib'
+
 /**
  * Obtiene los últimos registros de conectividad de los dispositivos IoT.
  * @param limit Número máximo de registros a recuperar.
@@ -20,7 +22,7 @@ export async function getConnectivityLogs(limit: number = 50) {
       logs,
     }
   } catch (error) {
-    console.error('Error fetching connectivity logs:', error)
+    Logger.error('Error fetching connectivity logs:', error)
 
     return {
       ok: false,

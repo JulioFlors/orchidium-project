@@ -3,7 +3,8 @@
 import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
-import { r2, R2_BUCKET, R2_PUBLIC_URL } from '@/lib/r2'
+import { Logger } from '@/lib'
+import { r2, R2_BUCKET, R2_PUBLIC_URL } from '@/lib/server'
 
 /**
  * Genera una URL prefirmada (PUT) para subir directamente un WebP a R2
@@ -30,7 +31,7 @@ export async function generateUploadPresignedUrl(key: string, contentType: strin
 
     return { ok: true, presignedUrl, publicUrl }
   } catch (err) {
-    console.error('[R2] Error generando presigned URL:', err)
+    Logger.error('[R2] Error generando presigned URL:', err)
 
     return { ok: false, message: 'Error generando URL de subida.' }
   }
@@ -46,7 +47,7 @@ export async function deleteR2Object(key: string) {
 
     return { ok: true }
   } catch (err) {
-    console.error('[R2] Error eliminando objeto:', err)
+    Logger.error('[R2] Error eliminando objeto:', err)
 
     return { ok: false, message: 'Error eliminando imagen del storage.' }
   }

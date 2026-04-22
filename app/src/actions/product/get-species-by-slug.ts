@@ -2,6 +2,8 @@
 
 import prisma from '@package/database'
 
+import { Logger } from '@/lib'
+
 export const getSpeciesBySlug = async (slug: string) => {
   try {
     const species = await prisma.species.findFirst({
@@ -26,7 +28,7 @@ export const getSpeciesBySlug = async (slug: string) => {
       images: species.images.map((image) => image.url),
     }
   } catch (error) {
-    console.log(error)
+    Logger.error('Error al obtener el articulo por slug:', error)
     throw new Error('Error al obtener el articulo por slug')
   }
 }

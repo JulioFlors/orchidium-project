@@ -6,6 +6,8 @@ import type { PlantType } from '@/interfaces'
 
 import prisma from '@package/database'
 
+import { Logger } from '@/lib'
+
 // 1. Interfaz de Opciones Adaptada
 // Cambiamos 'gender' por 'plantType' para que coincida con tu lógica de negocio.
 export interface PaginationOptions {
@@ -90,7 +92,7 @@ export const getPaginatedSpeciesWithImages = async ({
       }),
     }
   } catch (error) {
-    console.error('Error fetching paginated species:', error)
+    Logger.error('Error fetching paginated species:', error)
     throw new Error('No se pudieron cargar las especies.')
   }
 }

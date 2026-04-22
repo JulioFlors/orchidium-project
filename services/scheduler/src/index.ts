@@ -3,14 +3,20 @@ import { Cron } from 'croner'
 
 import { Logger } from './lib/logger'
 import { InferenceEngine } from './lib/inference-engine'
-import { mqttClient, retryManager, syncEcoMode, MQTT_BROKER_URL } from './lib/mqtt-handler'
-import { recordTaskEvent, processTaskLog, resumeInterruptedTasks } from './lib/task-manager'
+import { mqttClient, retryManager, syncNodeSampling, MQTT_BROKER_URL } from './lib/mqtt-handler'
+import {
+  recordTaskEvent,
+  processTaskLog,
+  resumeInterruptedTasks,
+  processPostponedTasks,
+  cleanupExpiredTasks,
+  handleAckTimeout,
+} from './lib/task-manager'
 
 // ---- Configuración de Reglas ----
 
 async function init() {
-  console.clear()
-  console.log('\n🚀 Iniciando Servicio Scheduler (PristinoPlant)\n')
+  Logger.info('🚀 Iniciando Servicio Scheduler (PristinoPlant)')
 
   const pgReady = await waitForPostgres()
 
@@ -94,7 +100,7 @@ mqttClient.on('message', async (topic, payload) => {
       if (message === 'online' && retryManager.lastActuatorState !== 'online') {
         retryManager.lastActuatorState = 'online'
         Logger.node('ONLINE')
-        syncEcoMode()
+        syncNodeSampling()
 
         await prisma.deviceLog
           .create({
@@ -106,6 +112,12 @@ mqttClient.on('message', async (topic, payload) => {
           })
           .catch((err) => Logger.error('Fallo persistiendo deviceLog (ONLINE)', err))
 
+        await recordTaskEvent(
+          `ACTUATOR`,
+          TaskStatus.AUTHORIZED,
+          'Nodo Actuador Online. Sincronizando tareas y comandos pendientes.',
+        )
+        await processPostponedTasks()
         await resumeInterruptedTasks()
       } else if (message === 'offline' && retryManager.lastActuatorState !== 'offline') {
         const previousState = retryManager.lastActuatorState
@@ -251,6 +263,15 @@ mqttClient.on('message', async (topic, payload) => {
 // ---- Lógica de Rutinas (Crons) ----
 async function initScheduler() {
   await waitForPostgres()
+
+  // Registrar callback para fallos de ACK y expiración rápida
+  retryManager.setOnFailure(handleAckTimeout)
+
+  // Cron de limpieza de tareas expiradas (Ventana de 20 min)
+  new Cron('*/5 * * * *', { timezone: 'America/Caracas' }, async () => {
+    await cleanupExpiredTasks()
+  })
+
   Logger.info('Cargando Rutinas desde la base de datos')
 
   const schedules = await prisma.automationSchedule.findMany({
@@ -264,7 +285,7 @@ async function initScheduler() {
     })
   })
 
-  syncEcoMode()
+  syncNodeSampling()
 }
 
 async function runTask(scheduleId: string) {
@@ -276,6 +297,25 @@ async function runTask(scheduleId: string) {
     })
 
     if (!schedule || !schedule.isEnabled) return
+
+    if (retryManager.lastActuatorState !== 'online') {
+      Logger.warn(`⏭️ Rutina POSTERGADA: ${schedule.name}. Motivo: Nodo Actuador OFFLINE.`)
+
+      await prisma.taskLog.create({
+        data: {
+          scheduleId: schedule.id,
+          purpose: schedule.purpose,
+          zones: schedule.zones,
+          status: TaskStatus.PENDING,
+          source: 'ROUTINE',
+          scheduledAt: new Date(),
+          duration: schedule.durationMinutes,
+          notes: 'Nodo Actuador no está conectado. Esperando reconexión...',
+        },
+      })
+
+      return
+    }
 
     // 1. Evaluar si la rutina debe proceder mediante el Motor de Inferencia
     // Esto detecta cancelaciones manuales en la cola y condiciones ambientales adversas.

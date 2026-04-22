@@ -1,14 +1,13 @@
 import mqtt from 'mqtt'
 import { InfluxDBClient, Point } from '@influxdata/influxdb3-client'
-import { prisma, ZoneType, Prisma } from '@package/database'
+import { prisma, ZoneType } from '@package/database'
+
+import { Logger } from './lib/logger'
 
 // ---- Cargar variables de entorno ----
 // La carga de variables de entorno se gestiona externamente.
 // docker-compose.yml (dentro del contenedor)
 // dotenv-cli en el package.json (desarrollo local)
-
-// ---- Debugging ----
-const DEBUG = process.env.NODE_ENV !== 'production'
 
 // ---- Configuración MQTT ----
 const MQTT_BROKER_URL =
@@ -34,76 +33,11 @@ const INFLUX_URL =
 const INFLUX_TOKEN = process.env.INFLUX_TOKEN || process.env.INFLUX_TOKEN_SERVERLESS || ''
 const INFLUX_BUCKET = process.env.INFLUX_BUCKET || 'telemetry'
 
-// ---- Colores para Logs ----
 const colors = {
   reset: '\x1b[0m',
-  bold: '\x1b[1m',
-  red: '\x1b[91m',
-  green: '\x1b[92m',
-  yellow: '\x1b[93m',
   blue: '\x1b[34m',
-  magenta: '\x1b[95m',
-  cyan: '\x1b[96m',
-  white: '\x1b[97m',
 }
 
-// ---- Sistema de Logs ----
-const getLogTime = () => {
-  return new Intl.DateTimeFormat('es-VE', {
-    timeZone: 'America/Caracas',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: true,
-  }).format(new Date())
-}
-
-const Logger = {
-  mqtt: (msg: string) =>
-    console.log(
-      `${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.blue} 📡 [ MQTT ]${colors.reset}${colors.white} ${msg}${colors.reset}`,
-    ),
-  info: (msg: string) =>
-    console.log(
-      `${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.blue} 📡 [ INFO ]${colors.reset}${colors.white} ${msg}${colors.reset}`,
-    ),
-  success: (msg: string) =>
-    console.log(
-      `${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.green} ✅ [ DONE ]${colors.reset}${colors.white} ${msg}${colors.reset}`,
-    ),
-  warn: (msg: string) =>
-    console.warn(
-      `${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.yellow} ⚠️ [ WARN ]${colors.reset}${colors.white} ${msg}${colors.reset}`,
-    ),
-  error: (msg: string, err?: unknown) => {
-    console.error(
-      `${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.red} ❌ [ ERROR ]${colors.reset}${colors.white} ${msg}${colors.reset}`,
-    )
-    if (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError) {
-        console.error(`       ╰─> [PRISMA ${err.code}] ${err.message}`)
-      } else if (err instanceof Error) {
-        console.error(`       ╰─> ${err.message}`)
-      } else {
-        console.error(`       ╰─> ${String(err)}`)
-      }
-    }
-  },
-  debug: (msg: string) =>
-    DEBUG &&
-    console.log(
-      `${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.cyan} 🔎 [ DEBUG ]${colors.reset}${colors.white} ${msg}${colors.reset}`,
-    ),
-  influx: (msg: string) =>
-    DEBUG &&
-    console.log(
-      `${colors.white}[ ${getLogTime()} ]${colors.reset}${colors.green} 💾 [ INFLUX ]${colors.reset}${colors.white} ${msg}${colors.reset}`,
-    ),
-}
-
-// ---- Inicialización Atómica (Fail-Fast) ----
 if (!INFLUX_TOKEN) {
   Logger.error('INFLUX_TOKEN no está definido. Verifique el archivo .env')
   process.exit(1)

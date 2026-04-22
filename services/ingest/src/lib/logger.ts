@@ -32,22 +32,25 @@ const formatLog = (icon: string, tag: string, color: string, msg: string) => {
 }
 
 export const Logger = {
-  info: (msg: string) => console.log(formatLog('📡', 'INFO', colors.blue, msg)),
-  success: (msg: string) => console.log(formatLog('✅', 'DONE', colors.green, msg)),
-  warn: (msg: string, err?: unknown) => {
+  info: (msg: string) => {
+    console.log(formatLog('📡', 'INFO', colors.blue, msg))
+  },
+  success: (msg: string) => {
+    console.log(formatLog('✅', 'DONE', colors.green, msg))
+  },
+  warn: (msg: string) => {
     console.warn(formatLog('⚠️', 'WARN', colors.yellow, msg))
-    if (err) {
-      console.error(
-        `${colors.yellow}      ╰─> ${err instanceof Error ? err.message : String(err)}${colors.reset}`,
-      )
-    }
   },
   error: (msg: string, err?: unknown) => {
     console.error(formatLog('❌', 'ERRO', colors.red, msg))
     if (err) {
-      console.error(
-        `${colors.red}      ╰─> [PRISMA ${err instanceof Prisma.PrismaClientKnownRequestError ? err.code : 'ERROR'}] ${err instanceof Error ? err.message : String(err)}${colors.reset}`,
-      )
+      if (err instanceof Prisma.PrismaClientKnownRequestError) {
+        console.error(`${colors.red}      ╰─> [PRISMA ${err.code}] ${err.message}${colors.reset}`)
+      } else if (err instanceof Error) {
+        console.error(`${colors.red}      ╰─> ${err.message}${colors.reset}`)
+      } else {
+        console.error(`${colors.red}      ╰─> ${String(err)}${colors.reset}`)
+      }
     }
   },
   debug: (msg: string) => {
@@ -55,14 +58,12 @@ export const Logger = {
       console.log(formatLog('🔎', 'DBUG', colors.cyan, msg))
     }
   },
-  mqtt: (msg: string) => console.log(formatLog('📡', 'MQTT', colors.magenta, msg)),
-  cron: (msg: string) => console.log(formatLog('⏰', 'CRON', colors.cyan, msg)),
-  node: (status: 'ONLINE' | 'OFFLINE') => {
-    const isOnline = status === 'ONLINE'
-    const color = isOnline ? colors.green : colors.red
-    const icon = isOnline ? '✅' : '❌'
-
-    console.log(formatLog(icon, 'NODE', color, status))
+  mqtt: (msg: string) => {
+    console.log(formatLog('📡', 'MQTT', colors.blue, msg))
   },
-  oracle: (msg: string) => console.log(formatLog('🔮', 'ORCL', colors.blue, msg)),
+  influx: (msg: string) => {
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(formatLog('💾', 'INFL', colors.green, msg))
+    }
+  },
 }

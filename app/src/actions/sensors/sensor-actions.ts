@@ -2,7 +2,8 @@
 
 import { prisma, ZoneType } from '@package/database'
 
-import { influxClient } from '@/lib/influxdb'
+import { Logger } from '@/lib'
+import { influxClient } from '@/lib/server'
 
 interface RainEvent {
   time: string
@@ -310,7 +311,7 @@ export async function getRainHistory(range = '24h', zone = 'EXTERIOR') {
       }
     }
 
-    console.error('Error querying InfluxDB (Rain Events):', error)
+    Logger.error('Error querying InfluxDB (Rain Events):', error)
 
     return { success: false, error: `Error de telemetría (Lluvia): ${msg}` }
   }

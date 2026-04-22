@@ -6,6 +6,14 @@ Este documento define la estrategia de alto nivel dividida en 4 fases de ingenie
 
 ---
 
+## 🏗️ FASE 0: Infraestructura & DevOps (Cimientos)
+
+*Objetivo:* Asegurar estabilidad, despliegue continuo y calidad de código.
+
+* [x] **Dockerización:** Despliegue de microservicios en VPS.
+* [x] **Calidad de Código:** Unificación de ESLint y corrección de crashes en configuraciones modulares.
+* [x] **Protocolos de Agente:** Implementación de trazabilidad mandatoria y autónoma en bitácoras.
+
 ## 🏗️ FASE 1: Fundamentos de Gestión (La Estructura de Datos)
 
 *Objetivo:* Construir la "verdad" del sistema. Antes de controlar el hardware, el software debe entender qué está gestionando.

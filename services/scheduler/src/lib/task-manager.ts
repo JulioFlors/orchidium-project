@@ -114,7 +114,7 @@ export async function recordTaskEvent(
  */
 export async function processTaskLog(taskLog: TaskLog) {
   try {
-    executeSequence(taskLog.purpose, taskLog.duration, taskLog.id)
+    executeSequence(taskLog.purpose, taskLog.duration, taskLog.id, taskLog.scheduledAt)
 
     await recordTaskEvent(
       taskLog.id,
@@ -157,10 +157,69 @@ export async function resumeInterruptedTasks() {
 
   if (interrupted.length > 0) {
     Logger.warn(
-      `Detectadas ${interrupted.length} tareas interrumpidas. Marcándolas como fallidas para reintento.`,
+      `Detectadas ${interrupted.length} tareas interrumpidas por reinicio. Marcándolas como fallidas.`,
     )
     for (const task of interrupted) {
       await recordTaskEvent(task.id, TaskStatus.FAILED, 'Scheduler restart during execution')
     }
+  }
+}
+
+/**
+ * Procesa tareas que fueron postergadas porque el nodo estaba offline.
+ * Ventana de oportunidad: 20 minutos.
+ */
+export async function processPostponedTasks() {
+  const twentyMinsAgo = new Date(Date.now() - 20 * 60000)
+
+  const postponed = await prisma.taskLog.findMany({
+    where: {
+      status: TaskStatus.PENDING,
+      notes: { contains: 'Nodo Actuador no está conectado' },
+      scheduledAt: { gte: twentyMinsAgo },
+    },
+    orderBy: { scheduledAt: 'asc' },
+  })
+
+  if (postponed.length > 0) {
+    Logger.info(`Reactivando ${postponed.length} tareas postergadas tras reconexión del nodo.`)
+
+    for (const task of postponed) {
+      await processTaskLog(task)
+    }
+  }
+}
+
+/**
+ * Callback para el RetryManager cuando agota los intentos de ACK o detecta fallo visual.
+ */
+export async function handleAckTimeout(taskId: string, notes?: string) {
+  await recordTaskEvent(
+    taskId,
+    TaskStatus.FAILED,
+    notes || 'Sin respuesta del Nodo Actuador (ACK timeout tras agotarse los reintentos).',
+  )
+}
+
+/**
+ * Limpia tareas que excedieron la ventana de oportunidad de 20 minutos.
+ */
+export async function cleanupExpiredTasks() {
+  const twentyMinsAgo = new Date(Date.now() - 20 * 60000)
+
+  const expired = await prisma.taskLog.updateMany({
+    where: {
+      status: TaskStatus.PENDING,
+      notes: { contains: 'Nodo Actuador no está conectado' },
+      scheduledAt: { lt: twentyMinsAgo },
+    },
+    data: {
+      status: TaskStatus.FAILED,
+      notes: 'Ventana de oportunidad cerrada (20 min expirados sin reconexión del nodo).',
+    },
+  })
+
+  if (expired.count > 0) {
+    Logger.warn(`Limpieza: ${expired.count} tareas expiraron y se marcaron como fallidas.`)
   }
 }

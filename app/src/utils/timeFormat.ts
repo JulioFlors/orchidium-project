@@ -52,3 +52,33 @@ export function formatDateLong(dateValue: string | Date | number): string {
 
   return `${weekdayCap}, ${day} de ${month}`
 }
+
+export function formatRelativeHeartbeat(dateValue: string | Date | number): string {
+  if (!dateValue) return 'Sin datos'
+
+  const date = new Date(dateValue)
+
+  if (isNaN(date.getTime())) return 'Sin datos'
+
+  const now = new Date()
+  const diffMs = Math.max(0, now.getTime() - date.getTime())
+  const diffSec = Math.floor(diffMs / 1000)
+  const diffMin = Math.floor(diffSec / 60)
+  const diffHours = Math.floor(diffMin / 60)
+
+  if (diffSec < 60) return 'Hace unos segundos'
+  if (diffMin < 5) return 'Hace unos minutos'
+  if (diffHours < 1) return `Hace ${diffMin}min`
+  if (diffHours < 12) return `Hace ${diffHours}h`
+
+  const timeStr = formatTime12h(date)
+
+  if (diffHours < 24 && date.getDate() === now.getDate()) {
+    return timeStr
+  }
+
+  const day = date.getDate().toString().padStart(2, '0')
+  const month = date.toLocaleDateString('es-VE', { month: 'short' }).replace('.', '')
+
+  return `${day} ${month}, ${timeStr}`
+}

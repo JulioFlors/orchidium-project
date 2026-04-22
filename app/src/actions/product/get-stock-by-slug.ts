@@ -2,6 +2,8 @@
 
 import prisma from '@package/database'
 
+import { Logger } from '@/lib'
+
 export const getStockBySlug = async (slug: string): Promise<number> => {
   try {
     const species = await prisma.species.findFirst({
@@ -19,7 +21,7 @@ export const getStockBySlug = async (slug: string): Promise<number> => {
 
     return species.variants.reduce((total, variant) => total + variant.quantity, 0)
   } catch (error) {
-    console.error(`Error al obtener el stock de ${slug}: ${error}`)
+    Logger.error(`Error al obtener el stock de ${slug}:`, error)
 
     return 0
   }

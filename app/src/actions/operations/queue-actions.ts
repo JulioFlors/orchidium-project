@@ -3,6 +3,8 @@
 import { prisma, TaskStatus, TaskPurpose, ZoneType } from '@package/database'
 import { Cron } from 'croner'
 
+import { Logger } from '@/lib'
+
 interface CombinedTask {
   id: string
   originalId: string
@@ -74,7 +76,7 @@ export async function getQueueTasks() {
             routineName: schedule.name,
           }
         } catch (err) {
-          console.error(`Cron inválido para rutina ${schedule.name}:`, err)
+          Logger.error(`Cron inválido para rutina ${schedule.name}:`, err)
 
           return null
         }
@@ -98,7 +100,7 @@ export async function getQueueTasks() {
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error)
 
-    console.error('Error fetching planner queue (server action):', error)
+    Logger.error('Error fetching planner queue (server action):', error)
 
     return {
       success: false,

@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 
 import { Footer, Header, PageNotFound, Sidebar } from '@/components'
 import { getPlantsNavigation, getSearchSuggestions } from '@/actions'
+import { Logger } from '@/lib'
 import { adminRoutes } from '@/config'
 
 // Metadata se elimina porque no se puede exportar desde un Client Component
@@ -50,7 +51,7 @@ export default function NotFoundPage() {
           setSuggestions(suggestionsData)
           setPlantsNavData(navData)
         } catch (err) {
-          console.error('🚨 Error recovering navigation data:', err)
+          Logger.error('🚨 Error recovering navigation data:', err)
         }
       }
 

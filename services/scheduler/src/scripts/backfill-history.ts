@@ -304,7 +304,7 @@ async function processDay(zone: ZoneType, dayStart: Date): Promise<void> {
     maxHighHumStreakMinutes > 0 ? Number((maxHighHumStreakMinutes / 60).toFixed(1)) : null
 
   if (DRY_RUN) {
-    console.log(
+    Logger.info(
       `  [DRY-RUN] [${dayLabel}] [${zone}] rows=${rowCount} DLI=${dli} VPD=${vpdAvg} DIF=${dif}`,
     )
 
@@ -386,6 +386,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('Error fatal en backfill:', err)
+  Logger.error('Error fatal en backfill:', err)
   process.exit(1)
 })

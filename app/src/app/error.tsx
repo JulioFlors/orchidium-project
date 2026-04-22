@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 
 import { Footer, Header, PageNotFound, Sidebar } from '@/components'
 import { getPlantsNavigation, getSearchSuggestions } from '@/actions'
+import { Logger } from '@/lib'
 import { adminRoutes } from '@/config'
 
 // La Metadata no se puede exportar desde un Componente Cliente (error.tsx debe ser cliente).
@@ -26,7 +27,7 @@ export default function ErrorPage({ error }: ErrorProps) {
 
     // Loguear el error en la consola del navegador para que tú (el dev) sepas qué pasó
 
-    console.error('🚨 Application Error:', error)
+    Logger.error('🚨 Application Error:', error)
 
     const pathname = window.location.pathname
 
@@ -57,7 +58,7 @@ export default function ErrorPage({ error }: ErrorProps) {
           setSuggestions(suggestionsData)
           setPlantsNavData(navData)
         } catch (err) {
-          console.error('🚨 Error recovering navigation data:', err)
+          Logger.error('🚨 Error recovering navigation data:', err)
         }
       }
 

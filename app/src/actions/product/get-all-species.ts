@@ -2,6 +2,8 @@
 
 import prisma from '@package/database'
 
+import { Logger } from '@/lib'
+
 export const getAllSpeciesWithImages = async () => {
   try {
     const species = await prisma.species.findMany({
@@ -33,7 +35,7 @@ export const getAllSpeciesWithImages = async () => {
       }
     })
   } catch (error) {
-    console.error('Error fetching all species:', error)
+    Logger.error('Error fetching all species:', error)
 
     return []
   }

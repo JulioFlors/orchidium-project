@@ -4,6 +4,7 @@ import { headers } from 'next/headers'
 
 import { auth } from '@/lib/auth'
 import { Footer, Sidebar, Header } from '@/components'
+import { Logger } from '@/lib'
 import {
   getPlantsNavigation,
   getSearchSuggestions,
@@ -28,7 +29,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
       headers: await headers(),
     }),
   ]).catch((err) => {
-    console.warn(
+    Logger.warn(
       '⚠️ Error al obtener los datos (shop)/layout (la base de datos podría estar caída):',
       err,
     )

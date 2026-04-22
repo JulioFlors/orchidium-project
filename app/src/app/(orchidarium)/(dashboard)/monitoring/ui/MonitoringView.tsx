@@ -197,8 +197,8 @@ export function MonitoringView() {
         } else {
           Object.assign(result, payload)
         }
-      } catch (err) {
-        console.error('Error parseando lectura MQTT:', err)
+      } catch {
+        // Error de parseo silencioso
       }
     }
 

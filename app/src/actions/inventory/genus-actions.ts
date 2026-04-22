@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { prisma, type PlantType } from '@package/database'
 
+import { Logger } from '@/lib'
+
 // ─────────────────────────────────────────────────────────────
 // READ
 // ─────────────────────────────────────────────────────────────
@@ -21,7 +23,7 @@ export async function getGenera() {
 
     return { ok: true, genera }
   } catch (err) {
-    console.error('[Genus] Error al obtener géneros:', err)
+    Logger.error('[Genus] Error al obtener géneros:', err)
 
     return { ok: false, message: 'No se pudieron cargar los géneros.' }
   }
@@ -42,7 +44,7 @@ export async function createGenus(data: { name: string; type: PlantType }) {
 
     return { ok: true, genus }
   } catch (err) {
-    console.error('[Genus] Error al crear género:', err)
+    Logger.error('[Genus] Error al crear género:', err)
 
     return { ok: false, message: 'Error al crear. ¿El nombre ya existe?' }
   }
@@ -63,7 +65,7 @@ export async function updateGenus(id: string, data: { name: string; type: PlantT
 
     return { ok: true, genus }
   } catch (err) {
-    console.error('[Genus] Error al actualizar género:', err)
+    Logger.error('[Genus] Error al actualizar género:', err)
 
     return { ok: false, message: 'Error al actualizar el género.' }
   }
@@ -93,7 +95,7 @@ export async function deleteGenus(id: string) {
 
     return { ok: true }
   } catch (err) {
-    console.error('[Genus] Error al eliminar género:', err)
+    Logger.error('[Genus] Error al eliminar género:', err)
 
     return { ok: false, message: 'Error al eliminar el género.' }
   }

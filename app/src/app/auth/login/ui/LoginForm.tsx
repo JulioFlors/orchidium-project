@@ -87,8 +87,7 @@ export function LoginForm() {
       } else {
         setError('email', { type: 'manual', message: message })
       }
-    } catch (error) {
-      console.error(error)
+    } catch {
       setError('email', { type: 'manual', message: 'Error verificando correo' })
     } finally {
       setIsCheckingEmail(false)

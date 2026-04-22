@@ -25,6 +25,7 @@ export const baseConfig = [
   },
   // General configuration
   {
+    files: ['**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}'],
     rules: {
       'padding-line-between-statements': [
         'warn',
@@ -62,8 +63,12 @@ export const baseConfig = [
   ],
   // Prettier configuration
   ...[
-    eslintPluginPrettier,
     {
+      ...eslintPluginPrettier,
+      files: ['**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}'],
+    },
+    {
+      files: ['**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}'],
       rules: {
         'prettier/prettier': ['warn', prettierOptions],
       },

@@ -12,6 +12,7 @@ import {
   StockLabel,
   Button,
 } from '@/components'
+import { Logger } from '@/lib'
 
 interface Props {
   product: Species
@@ -54,7 +55,7 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
 
     // TODO: Conectar con Zustand (Cart Store) aquí
 
-    console.log('Agregando al carrito:', {
+    Logger.info('Agregando al carrito:', {
       variant: selectedVariant,
       quantity: quantity,
     })

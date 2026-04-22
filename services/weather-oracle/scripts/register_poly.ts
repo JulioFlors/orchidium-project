@@ -3,13 +3,15 @@ import path from 'path'
 import axios from 'axios'
 import dotenv from 'dotenv'
 
+import { Logger } from '../src/logger'
+
 // Cargar variables desde el root .env
 dotenv.config({ path: path.resolve(process.cwd(), '../../.env') })
 
 const apiKey = process.env.AGROMONITORING_API_KEY
 
 if (!apiKey) {
-  console.error('❌ Error: AGROMONITORING_API_KEY no encontrada en .env')
+  Logger.error('❌ Error: AGROMONITORING_API_KEY no encontrada en .env')
   process.exit(1)
 }
 
@@ -34,7 +36,7 @@ const polygonData = {
 }
 
 async function register() {
-  console.log('🛰️ Iniciando registro de polígono en Agromonitoring...')
+  Logger.info('🛰️ Iniciando registro de polígono en Agromonitoring...')
 
   try {
     const response = await axios.post(
@@ -44,24 +46,24 @@ async function register() {
 
     const { id, name, area } = response.data
 
-    console.log('\n✅ POLÍGONO REGISTRADO CON ÉXITO:')
-    console.log(`-----------------------------------`)
-    console.log(`🆔 ID:   ${id}`)
-    console.log(`📁 Name: ${name}`)
-    console.log(`📐 Area: ${area.toFixed(2)}m² (${(area / 10000).toFixed(4)} ha)`)
-    console.log(`-----------------------------------`)
-    console.log('\n🚀 PRÓXIMO PASO:')
-    console.log(`Copia el ID anterior y pégalo en tu archivo .env como:`)
-    console.log(`AGROMONITORING_POLY_ID=${id}`)
+    Logger.raw('\n✅ POLÍGONO REGISTRADO CON ÉXITO:')
+    Logger.raw(`-----------------------------------`)
+    Logger.raw(`🆔 ID:   ${id}`)
+    Logger.raw(`📁 Name: ${name}`)
+    Logger.raw(`📐 Area: ${area.toFixed(2)}m² (${(area / 10000).toFixed(4)} ha)`)
+    Logger.raw(`-----------------------------------`)
+    Logger.raw('\n🚀 PRÓXIMO PASO:')
+    Logger.raw(`Copia el ID anterior y pégalo en tu archivo .env como:`)
+    Logger.raw(`AGROMONITORING_POLY_ID=${id}`)
   } catch (error: unknown) {
-    console.error('❌ Error al registrar el polígono:')
+    Logger.error('❌ Error al registrar el polígono:')
     if (axios.isAxiosError(error) && error.response) {
-      console.error(`Status: ${error.response.status}`)
-      console.error('Data:', JSON.stringify(error.response.data, null, 2))
+      Logger.raw(`Status: ${error.response.status}`)
+      Logger.raw(`Data: ${JSON.stringify(error.response.data, null, 2)}`)
     } else if (error instanceof Error) {
-      console.error(error.message)
+      Logger.error(error.message)
     } else {
-      console.error(String(error))
+      Logger.error(String(error))
     }
   }
 }

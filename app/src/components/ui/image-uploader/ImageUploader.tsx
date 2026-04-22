@@ -5,6 +5,7 @@ import imageCompression from 'browser-image-compression'
 
 import { generateUploadPresignedUrl } from '@/actions'
 import { useToastStore } from '@/store/toast/toast.store'
+import { Logger } from '@/lib'
 
 interface UploadedImage {
   url: string
@@ -92,7 +93,7 @@ export function ImageUploader({ folder, onUploaded, disabled }: ImageUploaderPro
           addToast('Imagen subida correctamente.', 'success')
           setProgress(null)
         } catch (e) {
-          console.error('[ImageUploader]', e)
+          Logger.error('[ImageUploader]', e)
           const msg = 'Ocurrió un error inesperado al procesar la imagen.'
 
           setError(msg)

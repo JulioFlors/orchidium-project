@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { prisma, TaskStatus } from '@package/database'
 import { Cron } from 'croner'
 
+import { Logger } from '@/lib'
+
 export async function GET() {
   try {
     // 1. Fetch manual pending tasks
@@ -77,7 +79,7 @@ export async function GET() {
 
     return NextResponse.json(combinedTasks)
   } catch (error) {
-    console.error('Error fetching planner queue:', error)
+    Logger.error('Error fetching planner queue:', error)
 
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }

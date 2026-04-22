@@ -2,6 +2,8 @@
 
 import prisma from '@package/database'
 
+import { Logger } from '@/lib'
+
 export interface SearchSuggestion {
   name: string
   slug: string
@@ -21,7 +23,7 @@ export const getSearchSuggestions = async (): Promise<SearchSuggestion[]> => {
 
     return species
   } catch (error) {
-    console.error('Error fetching search suggestions:', error)
+    Logger.error('Error fetching search suggestions:', error)
 
     return []
   }

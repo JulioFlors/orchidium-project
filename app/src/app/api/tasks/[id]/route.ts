@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { prisma, TaskStatus } from '@package/database'
 
+import { Logger } from '@/lib'
+
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
@@ -113,7 +115,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
     return NextResponse.json(updatedTask)
   } catch (error) {
-    console.error('Error cancelando tarea diferida:', error)
+    Logger.error('Error cancelando tarea diferida:', error)
 
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }

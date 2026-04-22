@@ -2,6 +2,8 @@
 
 import { prisma } from '@package/database'
 
+import { Logger } from '@/lib'
+
 export const verifyEmailInDb = async (email: string) => {
   try {
     const user = await prisma.user.findUnique({
@@ -23,7 +25,7 @@ export const verifyEmailInDb = async (email: string) => {
       message: 'Usuario encontrado',
     }
   } catch (error) {
-    console.log(error)
+    Logger.error('Error al verificar el correo:', error)
 
     return {
       ok: false,

@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@package/database'
 
+import { Logger } from '@/lib'
+
 /**
  * Obtiene todos los programas de cultivo (Fertilización y Fitosanitarios).
  */
@@ -35,7 +37,7 @@ export async function getPrograms() {
       phytosanitaryPrograms,
     }
   } catch (err) {
-    console.error('Error al obtener programas:', err)
+    Logger.error('Error al obtener programas:', err)
 
     return { ok: false, message: 'No se pudieron cargar los programas' }
   }
@@ -84,7 +86,7 @@ export async function upsertFertilizationProgram(data: {
 
     return { ok: true, program }
   } catch (err) {
-    console.error('Error al guardar programa de fertilización:', err)
+    Logger.error('Error al guardar programa de fertilización:', err)
 
     return { ok: false, message: 'Error al guardar el programa de fertilización' }
   }
@@ -130,7 +132,7 @@ export async function upsertPhytosanitaryProgram(data: {
 
     return { ok: true, program }
   } catch (err) {
-    console.error('Error al guardar programa fitosanitario:', err)
+    Logger.error('Error al guardar programa fitosanitario:', err)
 
     return { ok: false, message: 'Error al guardar el programa fitosanitario' }
   }
@@ -146,7 +148,7 @@ export async function deleteFertilizationProgram(id: string) {
 
     return { ok: true }
   } catch (err) {
-    console.error('Error al eliminar programa de fertilización:', err)
+    Logger.error('Error al eliminar programa de fertilización:', err)
 
     return { ok: false, message: 'No se pudo eliminar el programa' }
   }
@@ -162,7 +164,7 @@ export async function deletePhytosanitaryProgram(id: string) {
 
     return { ok: true }
   } catch (err) {
-    console.error('Error al eliminar programa fitosanitario:', err)
+    Logger.error('Error al eliminar programa fitosanitario:', err)
 
     return { ok: false, message: 'No se pudo eliminar el programa' }
   }

@@ -3,7 +3,7 @@
 import type { DeviceLog } from '@package/database'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { IoHardwareChipOutline, IoPulseOutline, IoServerOutline } from 'react-icons/io5'
+import { IoHardwareChipOutline, IoPulseOutline } from 'react-icons/io5'
 import clsx from 'clsx'
 
 import { ToolboxGrid, AuditConsoleCard, HeartbeatCard } from './DiagnosticPanel'
@@ -256,6 +256,23 @@ export function DeviceDebugger() {
     return widgetOrder.filter((w) => activeDisplayWidgets.includes(w) || widgetOrder.includes(w))
   }, [widgetOrder, activeDisplayWidgets])
 
+  // Determinar la última señal de vida (Heartbeat)
+  // Prioridad: Logs de Connectivity (BD) para persistencia, luego Mensajes MQTT para tiempo real.
+  const effectiveLastSeen = useMemo(() => {
+    const lastOnlineLog = connectivityLogs.find(
+      (l) => l.device === selectedDeviceId && l.status === 'ONLINE',
+    )
+    const logTime = lastOnlineLog ? new Date(lastOnlineLog.timestamp).getTime() : 0
+
+    const statusMsg = messages[statusTopic]
+    const statusTime = statusMsg?.payload === 'online' ? statusMsg.receivedAt : 0
+
+    const ackMsg = messages[topicReceived]
+    const ackTime = ackMsg?.receivedAt || 0
+
+    return Math.max(logTime, statusTime, ackTime) || undefined
+  }, [connectivityLogs, selectedDeviceId, messages, statusTopic, topicReceived])
+
   return (
     <div className="animate-in fade-in space-y-10 duration-500">
       <Heading
@@ -383,7 +400,7 @@ export function DeviceDebugger() {
                   className="w-full"
                 >
                   {auditId === 'heartbeat' ? (
-                    <HeartbeatCard lastSeen={messages[statusTopic]?.receivedAt} />
+                    <HeartbeatCard lastSeen={effectiveLastSeen} />
                   ) : (
                     <AuditConsoleCard
                       activeAudit={auditId}

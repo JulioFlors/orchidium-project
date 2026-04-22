@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { prisma, type AgrochemicalType, type AgrochemicalPurpose } from '@package/database'
 
+import { Logger } from '@/lib'
+
 /**
  * Obtiene todos los agroquímicos de la base de datos.
  */
@@ -14,7 +16,7 @@ export async function getAgrochemicals() {
 
     return { ok: true, agrochemicals }
   } catch (err) {
-    console.error('Error al obtener agroquímicos:', err)
+    Logger.error('Error al obtener agroquímicos:', err)
 
     return { ok: false, message: 'No se pudieron cargar los insumos' }
   }
@@ -45,7 +47,7 @@ export async function createAgrochemical(data: {
 
     return { ok: true, agrochemical }
   } catch (err) {
-    console.error('Error al crear agroquímico:', err)
+    Logger.error('Error al crear agroquímico:', err)
 
     return { ok: false, message: 'Error al crear el insumo. ¿Ya existe ese nombre?' }
   }
@@ -80,7 +82,7 @@ export async function updateAgrochemical(
 
     return { ok: true, agrochemical }
   } catch (err) {
-    console.error('Error al actualizar agroquímico:', err)
+    Logger.error('Error al actualizar agroquímico:', err)
 
     return { ok: false, message: 'Error al actualizar el insumo.' }
   }
@@ -99,7 +101,7 @@ export async function deleteAgrochemical(id: string) {
 
     return { ok: true }
   } catch (err) {
-    console.error('Error al eliminar agroquímico:', err)
+    Logger.error('Error al eliminar agroquímico:', err)
 
     return {
       ok: false,

@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import prisma, { type ZoneType, type Severity } from '@package/database'
 
+import { Logger } from '@/lib'
+
 /**
  * Obtiene el catálogo de plagas disponibles.
  */
@@ -14,7 +16,7 @@ export async function getPestCatalog() {
 
     return { success: true, data: pests }
   } catch (error) {
-    console.error('Error al obtener catálogo de plagas:', error)
+    Logger.error('Error al obtener catálogo de plagas:', error)
 
     return {
       success: false,
@@ -54,7 +56,7 @@ export async function registerPestSighting(data: {
 
     return { success: true, data: sighting }
   } catch (error) {
-    console.error('Error al registrar avistamiento:', error)
+    Logger.error('Error al registrar avistamiento:', error)
 
     return {
       success: false,
@@ -87,7 +89,7 @@ export async function registerFlowering(data: {
 
     return { success: true, data: event }
   } catch (error) {
-    console.error('Error al registrar floración:', error)
+    Logger.error('Error al registrar floración:', error)
 
     return {
       success: false,
@@ -115,7 +117,7 @@ export async function getPlantsByZone(zone: ZoneType) {
 
     return { success: true, data: plants }
   } catch (error) {
-    console.error('Error al obtener plantas por zona:', error)
+    Logger.error('Error al obtener plantas por zona:', error)
 
     return {
       success: false,

@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from 'react'
 
 import { ProductGrid } from '@/components'
 import { getSearchSpeciesByTerm } from '@/actions'
+import { Logger } from '@/lib'
 
 // charts mínimo para filtrar la búsqueda
 const MIN_SEARCH_TERM_LENGTH = 3
@@ -41,7 +42,7 @@ export default function SearchPageClient({ results: initialResults, searchTerm }
               setOffset((prev) => prev + nextResults.length)
             }
           } catch (error) {
-            console.error('Error cargando más resultados:', error)
+            Logger.error('Error cargando más resultados:', error)
           } finally {
             setIsLoading(false)
           }

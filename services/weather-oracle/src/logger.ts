@@ -59,4 +59,7 @@ export const Logger = {
     console.log(
       `${colors.blue}🐘 [ PRISMA ]${colors.reset}${colors.magenta} [${getLogTime()}]${colors.reset}${colors.white} ${msg}${colors.reset}`,
     ),
+  raw: (msg: string) => {
+    console.log(msg)
+  },
 }
