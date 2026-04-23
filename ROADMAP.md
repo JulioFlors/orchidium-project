@@ -117,7 +117,7 @@ Interfaz para crear/editar/eliminar rutinas de automatización (`AutomationSched
 
 ### 4.5 Observabilidad del Sistema
 
-* Registro de eventos `online`/`offline` de todos los nodos (Sensors, Actuador) y servicios backend (Scheduler, Ingest) en InfluxDB.
+* [x] **Observabilidad Eficiente:** Registro de eventos `online`/`offline` en InfluxDB con deduplicación por cambio de estado para optimizar almacenamiento.
 * Correlación automática de desconexiones con tareas fallidas para generar notas de diagnóstico.
 * Dashboard de salud en `/orchidarium`: estado de nodos, uptime, última lectura.
 * Notificaciones de desconexión/reconexión de nodos vía Telegram/WhatsApp.

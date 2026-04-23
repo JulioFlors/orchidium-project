@@ -186,7 +186,27 @@ async function processRainEventPacket(
   }
 }
 
-let lastRainState: string | null = null
+// ---- Gestión de Estado (Deduplicación) ----
+const stateCache = new Map<string, string>()
+
+/**
+ * Determina si un evento de estado debe persistirse (solo si cambió).
+ */
+function hasStateChanged(
+  source: string,
+  zone: string | undefined,
+  eventType: string,
+  value: string,
+): boolean {
+  const key = `${source}:${zone || 'global'}:${eventType}`
+  const lastValue = stateCache.get(key)
+
+  if (lastValue === value) return false
+
+  stateCache.set(key, value)
+
+  return true
+}
 
 async function processZoneStateEvent(
   source: string,
@@ -195,6 +215,9 @@ async function processZoneStateEvent(
   payload: string,
   eventType: string,
 ) {
+  // Solo persistir si el estado cambió (evitar spam de heartbeats)
+  if (!hasStateChanged(source, zone, eventType, payload)) return
+
   const point = Point.measurement('system_events')
     .setTag('source', source)
     .setTag('zone', zone)
@@ -206,12 +229,11 @@ async function processZoneStateEvent(
 
   // Visibilidad operativa: Anunciar cambios reales de estado de lluvia
   if (eventType === 'Rain_State') {
-    if (payload === 'Raining' && lastRainState !== 'Raining') {
+    if (payload === 'Raining') {
       Logger.warn('🌧️ [Raining] Lluvia detectada por sensores')
-    } else if (payload === 'Dry' && lastRainState === 'Raining') {
+    } else if (payload === 'Dry') {
       Logger.info('☀️ [Dry] Lluvia finalizada (Cambio de estado detectado)')
     }
-    lastRainState = payload
   }
 }
 
@@ -271,13 +293,16 @@ async function start() {
 
     if (firmwareSource === 'Actuator_Controller') {
       if (topic.endsWith('/status')) {
-        const point = Point.measurement('system_events')
-          .setTag('source', firmwareSource)
-          .setTag('context', 'status')
-          .setTag('event_type', 'Device_Status')
-          .setStringField('value', messageValue)
+        // Solo persistir si el estado cambió
+        if (hasStateChanged(firmwareSource, undefined, 'Device_Status', messageValue)) {
+          const point = Point.measurement('system_events')
+            .setTag('source', firmwareSource)
+            .setTag('context', 'status')
+            .setTag('event_type', 'Device_Status')
+            .setStringField('value', messageValue)
 
-        await writeToInflux(point)
+          await writeToInflux(point)
+        }
       }
 
       const hasSensorData = Object.keys(TOPIC_ROUTES).some((suffix) => topic.endsWith(suffix))

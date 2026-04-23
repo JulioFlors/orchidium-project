@@ -23,6 +23,7 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 ### 🚀 0.2 Despliegue de Servicios (Backend)
 
 * [x] **Dockerización Producción:** Configurar los servicios de `ingest` y `scheduler` en un VPS.
+* [x] **Optimización de Ingesta (Deduplicación):** Implementar caché de estados para evitar spam redundante de heartbeats en InfluxDB.
 * [x] **Calidad de Código & Linting:**
   * [x] Corregir crash de ESLint en archivos Markdown mediante restricción de reglas de `import/react/next` a archivos de script.
   * [x] Unificar configuración de linting en `@package/eslint-config`.
