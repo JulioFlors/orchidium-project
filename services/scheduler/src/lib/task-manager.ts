@@ -156,9 +156,13 @@ export async function resumeInterruptedTasks() {
   })
 
   if (interrupted.length > 0) {
-    Logger.warn(
-      `Detectadas ${interrupted.length} tareas interrumpidas por reinicio. Marcándolas como fallidas.`,
-    )
+    const isSingle = interrupted.length === 1
+    const introText = isSingle
+      ? 'Detectada 1 tarea interrumpida'
+      : `Detectadas ${interrupted.length} tareas interrumpidas`
+    const markText = isSingle ? 'Marcándola como fallida' : 'Marcándolas como fallidas'
+
+    Logger.warn(`${introText} por reinicio. ${markText}.`)
     for (const task of interrupted) {
       await recordTaskEvent(task.id, TaskStatus.FAILED, 'Scheduler restart during execution')
     }
@@ -174,15 +178,24 @@ export async function processPostponedTasks() {
 
   const postponed = await prisma.taskLog.findMany({
     where: {
-      status: TaskStatus.PENDING,
-      notes: { contains: 'Nodo Actuador no está conectado' },
+      status: { in: [TaskStatus.PENDING, TaskStatus.FAILED] },
+      OR: [
+        { notes: { contains: 'Nodo Actuador no está conectado' } },
+        { notes: { contains: 'Reintentando al reconectar' } },
+        { notes: { contains: 'Interrumpida' } },
+      ],
       scheduledAt: { gte: twentyMinsAgo },
     },
     orderBy: { scheduledAt: 'asc' },
   })
 
   if (postponed.length > 0) {
-    Logger.info(`Reactivando ${postponed.length} tareas postergadas tras reconexión del nodo.`)
+    const isSingle = postponed.length === 1
+    const introText = isSingle
+      ? 'Reactivando 1 tarea postergada'
+      : `Reactivando ${postponed.length} tareas postergadas`
+
+    Logger.info(`${introText} tras reconexión del nodo.`)
 
     for (const task of postponed) {
       await processTaskLog(task)
@@ -209,17 +222,25 @@ export async function cleanupExpiredTasks() {
 
   const expired = await prisma.taskLog.updateMany({
     where: {
-      status: TaskStatus.PENDING,
-      notes: { contains: 'Nodo Actuador no está conectado' },
+      status: { in: [TaskStatus.PENDING, TaskStatus.FAILED] },
+      OR: [
+        { notes: { contains: 'Nodo Actuador no está conectado' } },
+        { notes: { contains: 'Reintentando al reconectar' } },
+        { notes: { contains: 'Interrumpida' } },
+      ],
       scheduledAt: { lt: twentyMinsAgo },
     },
     data: {
-      status: TaskStatus.FAILED,
+      status: TaskStatus.EXPIRED,
       notes: 'Ventana de oportunidad cerrada (20 min expirados sin reconexión del nodo).',
     },
   })
 
   if (expired.count > 0) {
-    Logger.warn(`Limpieza: ${expired.count} tareas expiraron y se marcaron como fallidas.`)
+    const isSingle = expired.count === 1
+    const taskText = isSingle ? 'tarea expiró' : 'tareas expiraron'
+    const resultText = isSingle ? 'marcó como expirada' : 'marcaron como expiradas'
+
+    Logger.warn(`Limpieza: ${expired.count} ${taskText} y se ${resultText}.`)
   }
 }

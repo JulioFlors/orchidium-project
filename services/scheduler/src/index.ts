@@ -50,7 +50,7 @@ async function waitForPostgres(retries = 10) {
 
       return true
     } catch {
-      if (i === 0) Logger.warn('Esperando a PostgreSQL...')
+      if (i === 0) Logger.warn('Esperando a PostgreSQL')
       await new Promise((resolve) => setTimeout(resolve, 3000))
     }
   }
@@ -69,7 +69,7 @@ async function waitForMosquitto(retries = 15) {
   for (let i = 0; i < retries; i++) {
     if (mqttClient.connected) return true
 
-    if (i === 0) Logger.warn(`Esperando a Mosquitto en ${host}:${port}...`)
+    if (i === 0) Logger.warn(`Esperando a Mosquitto en ${host}:${port}`)
     await new Promise((resolve) => setTimeout(resolve, 3000))
   }
 
@@ -126,11 +126,6 @@ function setupMqttHandlers() {
             })
             .catch((err) => Logger.error('Fallo persistiendo deviceLog (ONLINE)', err))
 
-          await recordTaskEvent(
-            `ACTUATOR`,
-            TaskStatus.AUTHORIZED,
-            'Nodo Actuador Online. Sincronizando tareas y comandos pendientes.',
-          )
           await processPostponedTasks()
           await resumeInterruptedTasks()
         } else if (message === 'offline' && retryManager.lastActuatorState !== 'offline') {
@@ -161,9 +156,14 @@ function setupMqttHandlers() {
           })
 
           for (const task of interruptedTasks) {
+            retryManager.confirmByTaskId(task.id)
+
+            // Todas las tareas interrumpidas (DISPATCHED, ACKNOWLEDGED, IN_PROGRESS)
+            // vuelven a FAILED para ser reanudadas automáticamente tras la reconexión.
             let extraNotes = 'Interrumpida: El Nodo Actuador perdió conexión inesperadamente.'
             let addedMinutes = 0
 
+            // Si ya estaba en progreso, calculamos cuánto tiempo se ejecutó para registro
             if (task.actualStartAt && task.status === TaskStatus.IN_PROGRESS) {
               const elapsedMs = Date.now() - new Date(task.actualStartAt).getTime()
 
@@ -171,7 +171,6 @@ function setupMqttHandlers() {
               extraNotes = `Interrumpida tras ${addedMinutes} min de riego efectivo.`
             }
 
-            retryManager.confirmByTaskId(task.id)
             await recordTaskEvent(task.id, TaskStatus.FAILED, extraNotes, {
               completedMinutes: { increment: addedMinutes },
             })
@@ -292,6 +291,11 @@ async function initScheduler() {
     await cleanupExpiredTasks()
   })
 
+  // Cron para sincronizar muestreo de iluminancia (Amanecer 5am / Anochecer 7pm)
+  new Cron('0 5,19 * * *', { timezone: 'America/Caracas' }, () => {
+    syncNodeSampling()
+  })
+
   Logger.info('Cargando Rutinas desde la base de datos')
 
   const schedules = await prisma.automationSchedule.findMany({
@@ -304,8 +308,6 @@ async function initScheduler() {
       runTask(schedule.id)
     })
   })
-
-  syncNodeSampling()
 }
 
 async function runTask(scheduleId: string) {
@@ -330,7 +332,7 @@ async function runTask(scheduleId: string) {
           source: 'ROUTINE',
           scheduledAt: new Date(),
           duration: schedule.durationMinutes,
-          notes: 'Nodo Actuador no está conectado. Esperando reconexión...',
+          notes: 'Nodo Actuador no está conectado. Esperando reconexión',
         },
       })
 

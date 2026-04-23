@@ -360,7 +360,9 @@ async function main() {
   const zones = BACKFILL_ZONE ? [BACKFILL_ZONE] : allZones
 
   Logger.info('════════════════════════════════════════════════════════')
-  Logger.info(`  BACKFILL: ${BACKFILL_DAYS} días × ${zones.join(', ')}`)
+  const dayText = BACKFILL_DAYS === 1 ? 'día' : 'días'
+
+  Logger.info(`  BACKFILL: ${BACKFILL_DAYS} ${dayText} × ${zones.join(', ')}`)
   if (DRY_RUN) Logger.warn('  ⚠️  MODO DRY-RUN — No se escribirá en Postgres')
   Logger.info('════════════════════════════════════════════════════════')
 

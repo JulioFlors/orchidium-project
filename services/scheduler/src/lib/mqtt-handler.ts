@@ -95,8 +95,11 @@ class CommandRetryManager {
 
   clear() {
     if (this.pending.size === 0) return
+    const isSingle = this.pending.size === 1
+    const retryText = isSingle ? 'reintento' : 'reintentos'
+
     Logger.debug(
-      `El nodo está offline, pero mantenemos ${this.pending.size} reintentos en cola para cuando regrese.`,
+      `El nodo está offline, pero mantenemos ${this.pending.size} ${retryText} en cola para cuando regrese.`,
     )
   }
 
