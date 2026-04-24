@@ -70,7 +70,7 @@ El usuario no sabe qué es un relé o un tópico MQTT. El sistema traduce intenc
 
 Interfaz para crear/editar/eliminar rutinas de automatización (`AutomationSchedule`). Riegos, Fertilización, etc., con bloqueos simples en tiempo real (ej. Sensor de lluvia).
 
-* [x] **Confirmación Previa de Agroquímicos:** Las tareas de Fertirriego/Fumigación requieren confirmación del usuario 1h antes. Sin confirmación, la tarea se cancela automáticamente. Depende del Sistema de Notificaciones.
+* [x] **Confirmación Previa de Agroquímicos:** Implementado protocolo v4 (Doble Seguro). Pre-agendamiento 12h, autorización manual obligatoria y ventana de 24h.
 
 ### 3.2 WeatherGuard (El Escudo Preventivo)
 
@@ -78,9 +78,9 @@ Interfaz para crear/editar/eliminar rutinas de automatización (`AutomationSched
 
 ### 3.3 Motor de Inferencias (El Cerebro)
 
-* [x] **Inference Engine (v2):** Sistema de decisión por consenso multicapa. Cruza pronósticos de múltiples APIs (OWM, Open-Meteo) y los valida contra la "verdad" de los sensores locales (Luz Solar y Humedad Exterior) para refutar falsas alarmas de lluvia.
+* [x] **Inference Engine (v4):** Sistema de decisión por consenso multicapa. Incluye **Protocolo de Veto Estricto** para agroquímicos basado en telemetría local (Lluvia/Lux/HR) y pronóstico satelital (>95%).
 * [ ] **Segmentación Circadiana:** Comprensión de las 4 fases del día (Valle Nocturno, Rampa Matutina, Pico Diurno, Transición Vespertina).
-* [ ] **Métricas Complejas:** Cálculo diario del DLI (Daily Light Integral) discriminando luz solar de artificial, y VPD (Déficit de Presión de Vapor).
+* [x] **Métricas Complejas:** Cálculo diario del DLI (Daily Light Integral) y VPD (Déficit de Presión de Vapor) integrado en el cierre diario.
 * [ ] **Predicción Epidemiológica:** Cruce del historial ambiental con el "Diario Biológico" para alertar sobre condiciones propensas a hongos o plagas específicas.
 
 ---

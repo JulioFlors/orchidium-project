@@ -73,15 +73,24 @@ export function MonitoringView() {
   const [selectedMetric, setSelectedMetric] = useState<MetricType | null>(null)
   const [now, setNow] = useState(0)
 
-  // Capturar tiempo de montaje de forma asíncrona para evitar renders en cascada síncronos
-  // y cumplir con la pureza requerida en React 19 (idempotencia).
+  // Capturar tiempo de montaje y mantenerlo actualizado para clasificaciones dinámicas
+  // (Atardecer, Noche, etc.) sin depender de recargas manuales.
   useEffect(() => {
+    let interval: NodeJS.Timeout
+
     const timer = setTimeout(() => {
       setNow(Date.now())
+      // Sincronizar cada 60s con el ciclo de refresco de SWR
+      interval = setInterval(() => {
+        setNow(Date.now())
+      }, 60000)
     }, 0)
 
-    return () => clearTimeout(timer)
-  }, [])
+    return () => {
+      clearTimeout(timer)
+      if (interval) clearInterval(interval)
+    }
+  }, [setNow])
 
   const { error: notifyError } = useToast()
 

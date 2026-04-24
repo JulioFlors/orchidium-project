@@ -51,6 +51,21 @@ export function QueueTaskCard({ task, onCancel, icon, colorClassName }: QueueTas
   const actionLabel = TaskPurposeLabels[task.purpose] || task.purpose
 
   const menuItems: ActionMenuItem[] = [
+    ...(task.purpose === 'FERTIGATION' || task.purpose === 'FUMIGATION'
+      ? [
+          {
+            label: 'Posponer 48h',
+            icon: <IoCalendarOutline className="text-blue-400" />,
+            onClick: async () => {
+              const newDate = new Date(new Date(task.scheduledAt).getTime() + 48 * 60 * 60000)
+              const { rescheduleAgrochemicalTask } =
+                await import('@/actions/tasks/task-confirmation-actions')
+
+              await rescheduleAgrochemicalTask(task.id, newDate)
+            },
+          },
+        ]
+      : []),
     {
       label: 'Cancelar tarea',
       icon: <IoCloseOutline className="text-red-500" />,

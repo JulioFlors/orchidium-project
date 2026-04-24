@@ -136,3 +136,60 @@ export async function skipAgrochemicalTask(
     return { success: false, error: msg }
   }
 }
+
+/**
+ * Reprograma una tarea de agroquímicos para una nueva fecha/hora.
+ * No afecta a la programación maestra (AutomationSchedule).
+ */
+export async function rescheduleAgrochemicalTask(
+  taskId: string,
+  newDate: Date,
+): Promise<TaskConfirmationResult> {
+  try {
+    const task = await prisma.taskLog.findUnique({ where: { id: taskId } })
+
+    if (!task) return { success: false, error: 'Tarea no encontrada.' }
+
+    // Solo permitir reprogramar tareas que no han finalizado
+    const allowedStatuses: TaskStatus[] = [
+      TaskStatus.WAITING_CONFIRMATION,
+      TaskStatus.PENDING,
+      TaskStatus.FAILED,
+      TaskStatus.AUTHORIZED,
+    ]
+
+    if (!allowedStatuses.includes(task.status)) {
+      return {
+        success: false,
+        error: `No se puede reprogramar una tarea en estado ${task.status}.`,
+      }
+    }
+
+    await prisma.taskLog.update({
+      where: { id: taskId },
+      data: {
+        scheduledAt: newDate,
+        status: TaskStatus.WAITING_CONFIRMATION, // Vuelve a esperar confirmación para la nueva fecha
+        notes: `Reprogramada para el ${newDate.toLocaleString('es-VE')}.`,
+      },
+    })
+
+    await prisma.taskEventLog.create({
+      data: {
+        taskId,
+        status: TaskStatus.WAITING_CONFIRMATION,
+        notes: `Reprogramada por el usuario para: ${newDate.toISOString()}`,
+      },
+    })
+
+    revalidatePath('/orchidarium')
+    revalidatePath('/history')
+    revalidatePath('/queue')
+
+    return { success: true }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error)
+
+    return { success: false, error: msg }
+  }
+}

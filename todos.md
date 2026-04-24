@@ -124,7 +124,7 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 * [x] **Scheduler Diferido:** Motor de ejecución backend (Polling DB) e UI para agendar Tareas Diferidas Manuales.
 * [x] **Mejora de Trazabilidad Offline/Expiración:** Registro de eventos en timeline para tareas postergadas por nodo offline y mapeo visual de estado `EXPIRED` como "Fallida" en la UI.
 * [ ] **Scheduler UI (Crons Recurrentes):** Interfaz para gestionar `AutomationSchedule` (rutinas continuas).
-* [ ] **Confirmación de Agroquímicos (Diferido/Automatizado):** Las tareas de Fertirriego y Fumigación programadas (diferidas o cron) deben solicitar confirmación al usuario **1 hora antes** de la ejecución. El usuario confirma que el tanque ha sido preparado. Si no hay confirmación antes de la hora programada, la tarea se cancela automáticamente con nota auditable (`WAITING_CONFIRMATION` → `CANCELLED`). Depende del **Sistema de Notificaciones** (ver sección transversal).
+* [x] **Confirmación de Agroquímicos (Diferido/Automatizado):** Implementado protocolo de seguridad v4. Las tareas de agroquímicos se pre-agendan 12h antes en `WAITING_CONFIRMATION`. Requieren autorización manual para ejecutarse (estado `AUTHORIZED`). Ventana de confirmación extendida a 24h tras la hora programada antes de expirar.
 * [x] **WeatherGuard Básico:** "Si llovió > X mm, cancelar riego" o si hay precipitaciones pronosticadas.
 * [x] **Integración Ingest/Scheduler:** Suscripción reactiva a eventos de lluvia (`rain/event`, `rain/state`) para toma de decisiones instantánea.
 
@@ -136,12 +136,13 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
   * [x] Modificar la API/WebSocket de telemetría para que retorne Medias Móviles Simples (SMA de 10-15 min) en vez de lecturas crudas puras (elimina parpadeos UI por nubes/reflejos).
 * [x] **Fase 3.2.2 - Agregación de VPD:**
   * [x] Backend: Añadir cálculo de Déficit de Presión de Vapor (VPD) combinando Temp/Humedad para inferir transpiración de fluidos en las orquídeas.
-* [x] **Fase 3.2.3 - Worker de Agregación Diaria (CRON 23:55):**
-  * [x] Crear script/servicio independiente para Downsampling de InfluxDB.
+* [x] **Fase 3.2.3 - Worker de Agregación Diaria (CRON 00:01 - Cierre de Ayer):**
+  * [x] Crear script/servicio independiente para Downsampling de InfluxDB (Refactorizado en `telemetry-processor.ts`).
   * [x] Calcular métricas botánicas: DLI (Daily Light Integral) convirtiendo Lux a PPFD, y DIF (Salto Térmico Día-Noche).
   * [x] Calcular Riesgo Epidemiológico: "Horas de Humedad Foliar" consecutivas (>85% HR sin salto térmico).
-  * [x] Persistir resumen procesado diario en base de datos central.
-* [x] **Motor de Inferencias (v2):** Implementado lazo cerrado de decisión con **Consenso de APIs** (OWM + OpenMeteo) y **Refutación por Sensores** (Lux/HR). Cruce con InfluxDB + Postgres (VWC) + Pronóstico.
+  * [x] Persistir resumen procesado diario en base de datos central (PostgreSQL).
+  * [x] **Corrección:** Ejecución a las 00:01 AM para procesar el día anterior completo (Yesterday).
+* [x] **Motor de Inferencias (v4):** Implementado lazo cerrado de decisión con **Consenso de APIs** (OWM + OpenMeteo) y **Refutación por Sensores** (Lux/HR). Incluye protocolo de **Veto Ambiental Estricto** para agroquímicos (Lluvia 4h + Nubosidad + HR > 95% + API > 95%).
 * [ ] **Machine Learning Ligero:** Función para cruzar avistamientos de plagas (Fase 1.1) con los históricos de InfluxDB.
 
 ### 🌤️ 3.3 WeatherGuard (Inteligencia Predictiva Híbrida)

@@ -50,9 +50,23 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
   const now = new Date()
   const currentHour = now.getHours()
 
-  // Fuera de horario evaluable → UNKNOWN
-  // No se puede clasificar el cielo por lux antes de las 8am ni después de las 4pm
-  if (currentHour < 8 || currentHour >= 16) {
+  // Determinar la ventana de evaluación
+  const startEval = new Date(now)
+
+  startEval.setHours(8, 0, 0, 0)
+
+  const endEval = new Date(now)
+
+  if (currentHour < 16) {
+    // Si es antes de las 4pm, evaluamos hasta "ahora"
+    endEval.setTime(now.getTime())
+  } else {
+    // Si es después de las 4pm, evaluamos el bloque completo del día (8am - 4pm)
+    endEval.setHours(16, 0, 0, 0)
+  }
+
+  // Si aún no son las 8am, no hay datos representativos
+  if (currentHour < 8) {
     return {
       type: 'UNKNOWN',
       avgLuxSince8am: 0,
@@ -63,16 +77,14 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
   }
 
   try {
-    // 1. Promedio de Lux desde las 8am hasta ahora (zona EXTERIOR)
-    const today8am = new Date(now)
+    const startISO = startEval.toISOString()
+    const endISO = endEval.toISOString()
 
-    today8am.setHours(8, 0, 0, 0)
-    const since8amISO = today8am.toISOString()
-
+    // 1. Promedio de Lux en la ventana (8am hasta ahora o hasta las 4pm)
     const avgQuery = `
       SELECT AVG(illuminance) as avg_lux
       FROM "environment_metrics"
-      WHERE time >= '${since8amISO}'
+      WHERE time >= '${startISO}' AND time <= '${endISO}'
       AND source = 'Weather_Station'
     `
     const avgStream = influxClient.query(avgQuery)
@@ -82,11 +94,12 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
       if (row.avg_lux != null) avgLux = Number(row.avg_lux)
     }
 
-    // 2. Lux actual instantáneo (último 5 min)
+    // 2. Lux instantáneo (el último dato de la ventana evaluada)
     const currentQuery = `
       SELECT illuminance
       FROM "environment_metrics"
-      WHERE time >= now() - interval '5 minutes'
+      WHERE time <= '${endISO}'
+      AND time >= '${startISO}'
       AND source = 'Weather_Station'
       ORDER BY time DESC
       LIMIT 1

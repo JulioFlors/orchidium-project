@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState, useTransition } from 'react'
-import { IoFlask, IoCheckmarkCircle, IoCloseCircle } from 'react-icons/io5'
+import { IoFlask, IoCheckmarkCircle, IoCloseCircle, IoCalendarOutline } from 'react-icons/io5'
 
 import {
   confirmAgrochemicalTask,
@@ -132,6 +132,27 @@ export function PendingTasksBanner() {
               >
                 <IoCloseCircle className="h-4 w-4" />
                 Omitir
+              </button>
+              <button
+                className="flex items-center gap-1.5 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-xs font-bold text-blue-300 transition-colors hover:bg-blue-500/20 disabled:opacity-50"
+                disabled={isPending}
+                type="button"
+                onClick={async () => {
+                  const newDate = new Date(new Date(task.scheduledAt).getTime() + 48 * 60 * 60000)
+                  const { rescheduleAgrochemicalTask } =
+                    await import('@/actions/tasks/task-confirmation-actions')
+
+                  startTransition(async () => {
+                    const result = await rescheduleAgrochemicalTask(task.id, newDate)
+
+                    if (result.success) {
+                      setTasks((prev) => prev.filter((t) => t.id !== task.id))
+                    }
+                  })
+                }}
+              >
+                <IoCalendarOutline className="h-4 w-4" />
+                +48h
               </button>
             </div>
           </div>

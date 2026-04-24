@@ -1,69 +1,78 @@
-# Reglas del Motor de Inferencia (WeatherGuard v2)
+# Reglas del Motor de Inferencia (WeatherGuard v4)
 
-El `InferenceEngine` actúa como la capa de protección (guardrail) antes de ejecutar cualquier tarea logística (riego o fertirriego). Evalúa múltiples fuentes de datos para tomar una decisión informada, compensando las inexactitudes de los pronósticos satelitales con telemetría local cruda.
+El `InferenceEngine` actúa como la capa de protección (guardrail) antes de ejecutar cualquier tarea logística (riego o agroquímicos). Evalúa múltiples fuentes de datos para tomar una decisión informada, priorizando la telemetría local cruda sobre los pronósticos satelitales.
 
-## Fuentes de Datos Cruzadas
+## 🛡️ Filosofía de Seguridad por Circuito
 
-1. **Estación Meteorológica Exterior (Local)**:
-   - `Temp`, `Hum`, `Lux`, y Detección de Lluvia (Física).
-   - *Peso: Crítico (Fuente de Verdad en Tiempo Real).*
-2. **Imágenes Satelitales (AgroMonitoring)**:
-   - Humedad del suelo a 10cm (`soilMoisture`).
-   - Temperatura del suelo (`t10`).
-   - *Peso: Referencial a corto-mediano plazo.*
-3. **Pronóstico Meteorológico (Open-Meteo / OpenWeatherMap)**:
-   - Probabilidad de precipitación (`precipProb`).
-   - *Peso: Especulativo.*
+El sistema distingue entre tareas vitales (supervivencia) y tareas químicas (riesgo/coste):
+
+1. **Circuito de Irrigación (Vital):**
+    * **Fail-safe:** Ante fallos de telemetría o API, el riego **SIEMPRE** se ejecuta (mejor exceso de agua que deshidratación por un bug).
+    * **Veto:** Solo se cancela si hay evidencia física e inapelable de lluvia real acumulada.
+2. **Circuito de Agroquímicos (Riesgo):**
+    * **Fail-safe:** Ante fallos de telemetría o API, la tarea **SE DETIENE** y solicita confirmación manual.
+    * **Veto:** Requiere consenso total (Sensores + Pronóstico) para cancelar una tarea ya autorizada por el usuario.
 
 ---
 
-## Reglas de Evaluación y Pesos (Score System)
+## 🏗️ Protocolo de Agroquímicos (Doble Seguro)
 
-Para evitar rechazos falsos (ej. 100% prob. lluvia pero día soleado), el sistema usará un modelo de devaluación de riesgo. Si el riesgo global supera un umbral, se omite el riego (`SKIP`).
+Las tareas de `FUMIGATION` y `FERTIGATION` siguen un flujo de ejecución de dos pasos:
 
-### 1. Hard Blocks (Cancelación Inmediata - Bloqueo Absoluto)
+### Paso 1: Autorización del Usuario (12h antes)
 
-- **Lluvia Física Detectada**: Si el sensor de la estación exterior reporta lluvia en los últimos 30-60 minutos.
-- **Humedad Relativa del Suelo Crítica**: Si `soilMoisture` saturado > `40%` (El histórico demuestra que 20-25% es suelo de seco a normal bajo sol intenso, y >35% es el valor tras lluvia prolongada).
-- **Cancelación Manual Reciente**: Si el usuario canceló una tarea desde la interfaz hace menos de 5 minutos.
+* La tarea se pre-agenda 12 horas antes en estado `WAITING_CONFIRMATION`.
 
-### 2. Evaluaciones Cruzadas (Cross-Check Logic)
+* **Sin autorización explícita, la tarea nunca se despacha.**
+* Si no se confirma en un plazo de 24h desde la hora programada, la tarea pasa a `EXPIRED`.
 
-Cuando hay factores de alerta moderada, se requiere validación cruzada:
+### Paso 2: Veto Ambiental Automático (Momento de ejecución)
 
-#### Riesgo de Lluvia Inminente
+Incluso si el usuario autorizó la tarea, el motor puede vetarla justo antes de abrir las válvulas si detecta tormenta inminente.
 
-Si el Pronóstico indica `precipProb >= 70%`:
+**Lógica de Veto para Agroquímicos:**
+Se cancela (`SKIP`) si se cumple:
+`((Condición A OR Condición B) AND Condición C)`
 
-- **Condición Refutadora (Falso Positivo)**: Si el sensor exterior reporta insolación alta (`Lux > 50000`) o temperatura alta (`Temp > 30°C`) y la humedad local es baja (`Hum < 50%`) cerca de la hora programada.
-  *Acción*: **Ejecutar Riego** (El pronóstico satelital está equivocado o la nube falló en precipitar localmente).
-- **Condición Confirmadora**: Si el pronóstico indica lluvia Y los sensores locales reportan `Lux < 10000` (muy nublado) y `Hum > 85%` (saturación en el aire).
-  *Acción*: **Cancelar Riego** (Convergencia de pronóstico y clima local).
-
-#### Evaluación de Horario y VPD (Vapor Pressure Deficit)
-
-Si es mediodía (11:00 AM - 03:00 PM):
-
-- Riego foliar / nebulización puede causar efecto lupa o estrés térmico si `Temp > 32°C` y `Lux > 80000`.
-- *Acción*: **Diferir o Cancelar** por protección biológica.
-
-#### Exceso de Humedad Residual (Suelo + Ambiente)
-
-- Si `soilMoisture` está entre `28% - 35%` (Humedad media-alta) **Y** la humedad ambiente de las estaciones (Interior/Exterior) es **mayor a 85%** constantes.
-- *Acción*: **Cancelar Riego** para evitar proliferación fúngica, ya que el sustrato no se evaporará rápido.
+* **Condición A (Lluvia Real):** Está lloviendo ahora o llovió en las últimas 4 horas (según sensor de gotas).
+* **Condición B (Microclima Crítico):** El día pasó muy nublado (promedio < 20,000 lux) **Y** la Humedad Relativa es > 95%.
+* **Condición C (Pronóstico Agresivo):** El consenso de APIs (OWM + OpenMeteo) indica una probabilidad de lluvia > 95%.
 
 ---
 
-## Problemas Identificados en la Lógica Actual
+## 📡 Reglas de Evaluación y Pesos
 
-1. **Umbral de Suelo Irreal**: Considerar `soilMoisture >= 20%` como húmedo era un fallo de calibración satelital. El suelo venezolano árido arroja ~20% incluso cuarteado. Se debe ajustar a `> 35%`.
-2. **Ceguera Local**: El oráculo y el motor confiaban ciegamente en el pronóstico (`precipProb`). La estación meteorológica local no tenía voz en la decisión final.
-3. **Carencia de Validación Cruzada**: Una API afirmaba que llovía y el riego se cancelaba, ignorando que los fotodiodos locales estaban saturados de sol a mediodía.
+### 1. Hard Blocks (Bloqueo Absoluto - Solo Irrigación/Hídricos)
 
-## Próximos Pasos de Implementación (Plan)
+* **Lluvia Física Detectada:** Si el sensor exterior reporta lluvia en curso o acumulada (>20 min en 12h).
 
-1. **Ajustar UI del Oráculo (`OracleDecisionCard.tsx`)**: Elevar la barrera de "Suelo Húmedo" al 35% o más, y agregar el aviso si el sensor local refuta al satélite.
-2. **Refactorizar `InferenceEngine.evaluate`**:
-   - Programar la query para extraer último reporte de la **Estación Exterior** e **Interior** en InfluxDB.
-   - Construir los bloques de decisión (Hard Blocks y Validación Cruzada).
-   - Generar registros detallados de la refutación: *"Pronóstico 100% de lluvia ignorado debido a Sol intenso (45k Lux) detectado por sensores locales."*
+* **Humedad Relativa Crítica (Interior):** Si `Hum > 90%` constante y el día es nublado/lluvioso.
+* **Cancelación Manual:** Si existe un registro de cancelación manual del usuario para esa misma ventana horaria.
+
+### 2. Validaciones Cruzadas (Refutación de APIs)
+
+Para evitar "cielos de papel" (pronósticos que no ocurren):
+
+* **Refutación por Insolación:** Si el pronóstico indica lluvia pero los sensores locales detectan sol intenso (`Lux > 50,000`) y temperatura alta, el riego **procede**.
+* **Confirmación por Nubosidad:** Si el pronóstico indica lluvia y los sensores locales detectan oscuridad inusual (`Lux < 10,000`) y humedad saturada, el riego **se cancela**.
+
+### 3. Ventanas Biológicas (Protección de Plantas)
+
+* **Nebulización/Humidificación:** Máximo 3 minutos para evitar goteo excesivo de la línea. Se cancela si la temperatura es fresca (< 28°C) o el día es muy nublado, ya que la humedad ambiental es suficiente.
+
+* **Salto Térmico (DIF):** Se monitorea el diferencial día/noche (5-8°C). Si no hay salto térmico y la humedad es alta (>85%), se genera alerta de riesgo epidemiológico.
+
+---
+
+## ⚙️ Configuración de Umbrales (Calibración 2026)
+
+| Factor | Umbral | Aplicación |
+| :--- | :--- | :--- |
+| **Lluvia Acumulada** | > 1200s (20m) / 12h | Veto Riego |
+| **Humedad Crítica** | > 90% HR | Veto Hídricos |
+| **Día Nublado** | < 26,000 lux (promedio) | Veto Humidificación |
+| **Tormenta Inminente** | > 95% Prob. API | Veto Agroquímicos |
+| **HR Crítica (Agro)** | > 95% HR | Veto Agroquímicos (TODO: Calibrar) |
+
+> [!NOTE]
+> Toda cancelación realizada por el motor de inferencia queda registrada en el historial con el motivo detallado, permitiendo auditar por qué el "Oráculo" tomó dicha decisión.

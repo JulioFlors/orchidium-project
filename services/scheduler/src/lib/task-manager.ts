@@ -1,7 +1,9 @@
 import { prisma, TaskStatus, TaskLog } from '@package/database'
+import { Cron } from 'croner'
 
 import { Logger } from './logger'
 import { executeSequence } from './mqtt-handler'
+import { InferenceEngine } from './inference-engine'
 
 const recentEvents = new Map<string, number>()
 
@@ -215,14 +217,20 @@ export async function handleAckTimeout(taskId: string, notes?: string) {
 }
 
 /**
- * Limpia tareas que excedieron la ventana de oportunidad de 20 minutos.
+ * Limpia tareas que excedieron su ventana de oportunidad.
+ * - Tareas normales (IRRIGATION, etc.): 20 minutos.
+ * - Agroquímicos (FERTIGATION, FUMIGATION): 24 horas después de la hora programada.
  */
 export async function cleanupExpiredTasks() {
-  const twentyMinsAgo = new Date(Date.now() - 20 * 60000)
+  const now = new Date()
+  const twentyMinsAgo = new Date(now.getTime() - 20 * 60000)
+  const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60000)
 
-  const tasksToExpire = await prisma.taskLog.findMany({
+  // 1. Limpieza de tareas estándar (20 min)
+  const standardTasksToExpire = await prisma.taskLog.findMany({
     where: {
       status: { in: [TaskStatus.PENDING, TaskStatus.FAILED] },
+      purpose: { notIn: ['FERTIGATION', 'FUMIGATION'] },
       OR: [
         { notes: { contains: 'Nodo Actuador no está conectado' } },
         { notes: { contains: 'Reintentando al reconectar' } },
@@ -232,19 +240,118 @@ export async function cleanupExpiredTasks() {
     },
   })
 
-  for (const task of tasksToExpire) {
-    await recordTaskEvent(
-      task.id,
-      TaskStatus.EXPIRED,
-      'Ventana de oportunidad cerrada (20 min expirados sin reconexión del nodo).',
-    )
+  // 2. Limpieza de agroquímicos (24h)
+  const agroTasksToExpire = await prisma.taskLog.findMany({
+    where: {
+      status: { in: [TaskStatus.WAITING_CONFIRMATION, TaskStatus.PENDING, TaskStatus.FAILED] },
+      purpose: { in: ['FERTIGATION', 'FUMIGATION'] },
+      scheduledAt: { lt: twentyFourHoursAgo },
+    },
+  })
+
+  const allTasksToExpire = [...standardTasksToExpire, ...agroTasksToExpire]
+
+  for (const task of allTasksToExpire) {
+    const isAgro = ['FERTIGATION', 'FUMIGATION'].includes(task.purpose)
+    const reason = isAgro
+      ? 'Ventana de confirmación cerrada (24h expiradas sin autorización).'
+      : 'Ventana de oportunidad cerrada (20 min expirados sin reconexión del nodo).'
+
+    await recordTaskEvent(task.id, TaskStatus.EXPIRED, reason)
   }
 
-  if (tasksToExpire.length > 0) {
-    const isSingle = tasksToExpire.length === 1
-    const taskText = isSingle ? 'tarea expiró' : 'tareas expiraron'
-    const resultText = isSingle ? 'marcó como expirada' : 'marcaron como expiradas'
+  if (allTasksToExpire.length > 0) {
+    Logger.warn(`Limpieza: ${allTasksToExpire.length} tareas marcaron como expiradas.`)
+  }
+}
 
-    Logger.warn(`Limpieza: ${tasksToExpire.length} ${taskText} y se ${resultText}.`)
+/**
+ * Pre-agenda tareas de agroquímicos 12h antes de su ejecución para que el usuario pueda confirmarlas.
+ */
+export async function preScheduleAgrochemicals() {
+  try {
+    const agroSchedules = await prisma.automationSchedule.findMany({
+      where: {
+        isEnabled: true,
+        purpose: { in: ['FERTIGATION', 'FUMIGATION'] },
+      },
+    })
+
+    const now = new Date()
+    const twelveHoursAhead = new Date(now.getTime() + 12 * 60 * 60000)
+
+    for (const schedule of agroSchedules) {
+      const cron = new Cron(schedule.cronTrigger, { timezone: 'America/Caracas' })
+      const nextOccurrence = cron.nextRun()
+
+      if (nextOccurrence && nextOccurrence <= twelveHoursAhead) {
+        // Verificar si ya existe una tarea para esta fecha exacta (con margen de 1 min)
+        const startWindow = new Date(nextOccurrence.getTime() - 60000)
+        const endWindow = new Date(nextOccurrence.getTime() + 60000)
+
+        const existing = await prisma.taskLog.findFirst({
+          where: {
+            scheduleId: schedule.id,
+            scheduledAt: { gte: startWindow, lte: endWindow },
+          },
+        })
+
+        if (!existing) {
+          await prisma.taskLog.create({
+            data: {
+              scheduleId: schedule.id,
+              purpose: schedule.purpose,
+              zones: schedule.zones,
+              status: TaskStatus.WAITING_CONFIRMATION,
+              source: 'ROUTINE',
+              scheduledAt: nextOccurrence,
+              duration: schedule.durationMinutes,
+              notes: 'Tarea pre-agendada para confirmación (12h de antelación).',
+            },
+          })
+          Logger.info(
+            `[ AGRO ] Pre-agendada rutina "${schedule.name}" para el ${nextOccurrence.toLocaleString('es-VE')}`,
+          )
+        }
+      }
+    }
+  } catch (error) {
+    Logger.error('Error en preScheduleAgrochemicals:', error)
+  }
+}
+
+/**
+ * Poller que ejecuta tareas que han sido marcadas como AUTHORIZED por el usuario.
+ */
+export async function processAuthorizedTasks() {
+  try {
+    const authorizedTasks = await prisma.taskLog.findMany({
+      where: {
+        status: TaskStatus.AUTHORIZED,
+        scheduledAt: { lte: new Date() }, // Ya llegó su hora o ya pasó
+      },
+      include: { schedule: true },
+    })
+
+    for (const task of authorizedTasks) {
+      Logger.info(
+        `[ POLLER ] Procesando tarea autorizada: ${task.id.slice(0, 8)} (${task.purpose})`,
+      )
+
+      // Antes de ejecutar, pasar por el Motor de Inferencia para el Veto de último minuto
+      if (task.schedule) {
+        const inference = await InferenceEngine.evaluate(task.schedule)
+
+        if (inference.shouldCancel) {
+          Logger.warn(`[ AGRO ] VETO AMBIENTAL aplicado a tarea autorizada: ${inference.reason}`)
+          await recordTaskEvent(task.id, TaskStatus.SKIPPED, inference.reason)
+          continue
+        }
+      }
+
+      await processTaskLog(task)
+    }
+  } catch (error) {
+    Logger.error('Error en processAuthorizedTasks:', error)
   }
 }

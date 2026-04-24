@@ -39,7 +39,7 @@ const THRESHOLDS = {
 export interface InferenceResult {
   shouldCancel: boolean
   reason?: string
-  action?: 'SKIP' | 'EXECUTE' | 'DEFER'
+  action?: 'SKIP' | 'EXECUTE' | 'DEFER' | 'REQUIRE_CONFIRMATION'
   metadata?: Record<string, unknown>
 }
 
@@ -197,27 +197,26 @@ export class InferenceEngine {
         }
       }
 
-      // ── 8. Protección de Fertilización/Fumigación contra Lluvia Inminente ──
-      // Solo FERTIGATION y FUMIGATION. Hora ideal de aplicación: 5PM.
-      // A las 5PM no se puede clasificar cielo por lux → usamos clasificación del día (8am-4pm).
-      // Requiere consenso FUERTE de todas las fuentes + contexto ambiental.
+      // ── 8. Protección de Fertilización/Fumigación contra Tormentas (Veto Estricto) ──
       if (purpose === 'FERTIGATION' || purpose === 'FUMIGATION') {
         const forecast = await this.getForecastConsensus()
+        const recentRain4h = await this.getRecentRainAccumulation(4)
 
-        // TODO: Comparar temp/hum interior vs promedio 7 días a la misma hora
-        // (filtrando días con lluvia 1pm-5pm) para detectar anomalías.
-        // Actualmente no hay datos históricos suficientes del DHT22 interior.
+        const conditionA =
+          localConditions.exterior.rain_intensity > 0 || recentRain4h.durationSeconds > 0
 
-        if (
-          forecast.bothApisAgree &&
-          forecast.consensusPrecipProb >= 0.95 &&
-          (dayClass.type === 'OVERCAST' || dayClass.type === 'RAINY')
-        ) {
+        // TODO: Calibrar HR cuando DHT22 esté activo. 95% es el umbral solicitado.
+        const conditionB =
+          dayClass.avgLuxSince8am < 20000 && dayClass.type !== 'UNKNOWN' && interiorHum > 95
+
+        const conditionC = forecast.consensusPrecipProb > 0.95
+
+        if ((conditionA || conditionB) && conditionC) {
           return {
             shouldCancel: true,
-            reason: `Lluvia inminente: APIs(${(forecast.consensusPrecipProb * 100).toFixed(0)}%) + Día ${dayClass.type} (Lux prom: ${dayClass.avgLuxSince8am.toFixed(0)}). Protegiendo ${purpose}.`,
+            reason: `VETO AMBIENTAL: ${conditionA ? 'Lluvia actual/reciente' : 'Día muy nublado + HR crítica'} con Pronóstico > 95%. Protegiendo ${purpose}.`,
             action: 'SKIP',
-            metadata: { forecast, dayClass },
+            metadata: { forecast, dayClass, recentRain4h },
           }
         }
       }
@@ -227,7 +226,16 @@ export class InferenceEngine {
     } catch (error) {
       Logger.error('Error en InferenceEngine.evaluate:', error)
 
-      // Ante error → ejecutar. Las orquídeas no deben quedarse sin agua por un bug.
+      // Fail-safe diferenciado: Agroquímicos requieren confirmación si el motor falla.
+      if (schedule.purpose === 'FERTIGATION' || schedule.purpose === 'FUMIGATION') {
+        return {
+          shouldCancel: false,
+          action: 'REQUIRE_CONFIRMATION',
+          reason: 'Error en motor de inferencia. Requiere validación manual.',
+        }
+      }
+
+      // Las orquídeas no deben quedarse sin agua por un bug.
       return { shouldCancel: false, action: 'EXECUTE' }
     }
   }
@@ -352,11 +360,17 @@ export class InferenceEngine {
           result.interior.rain_intensity = Number(row.rain_intensity || 0)
           foundInterior = true
         }
+      }
 
-        if (foundExterior && foundInterior) break
+      if (!foundExterior || !foundInterior) {
+        const missing = [!foundExterior && 'EXTERIOR', !foundInterior && 'INTERIOR']
+          .filter(Boolean)
+          .join(', ')
+
+        Logger.warn(`[ INFERENCE ] Datos incompletos en InfluxDB (Falta: ${missing})`)
       }
     } catch (error) {
-      Logger.warn(
+      Logger.error(
         'No se pudo extraer telemetría reciente de InfluxDB para el motor de inferencia.',
         error,
       )

@@ -5,14 +5,16 @@ import { Logger } from './lib/logger'
 import { InferenceEngine } from './lib/inference-engine'
 import { mqttClient, retryManager, syncNodeSampling, MQTT_BROKER_URL } from './lib/mqtt-handler'
 import {
-  recordTaskEvent,
-  processTaskLog,
-  resumeInterruptedTasks,
-  processPostponedTasks,
   cleanupExpiredTasks,
   handleAckTimeout,
+  preScheduleAgrochemicals,
+  processAuthorizedTasks,
+  processPostponedTasks,
+  processTaskLog,
+  recordTaskEvent,
+  resumeInterruptedTasks,
 } from './lib/task-manager'
-import { processDay } from './scripts/backfill-history'
+import { processDay } from './lib/telemetry-processor'
 
 // ---- Configuración de Reglas ----
 
@@ -287,9 +289,19 @@ async function initScheduler() {
   // Registrar callback para fallos de ACK y expiración rápida
   retryManager.setOnFailure(handleAckTimeout)
 
-  // Cron de limpieza de tareas expiradas (Ventana de 20 min)
+  // Cron de limpieza de tareas expiradas (Ventana de 20 min / 24h agroquímicos)
   new Cron('*/5 * * * *', { timezone: 'America/Caracas' }, async () => {
     await cleanupExpiredTasks()
+  })
+
+  // Cron de Pre-Agendamiento de Agroquímicos (12h antes)
+  new Cron('0 * * * *', { timezone: 'America/Caracas' }, async () => {
+    await preScheduleAgrochemicals()
+  })
+
+  // Poller de Tareas Autorizadas (cada 1 min)
+  new Cron('* * * * *', { timezone: 'America/Caracas' }, async () => {
+    await processAuthorizedTasks()
   })
 
   // Cron para sincronizar muestreo de iluminancia (Amanecer 5am / Anochecer 7:01pm)
@@ -300,16 +312,18 @@ async function initScheduler() {
     syncNodeSampling()
   })
 
-  // Cron de cierre oficial diario (16:01 PM)
-  new Cron('1 16 * * *', { timezone: 'America/Caracas' }, async () => {
+  // Cron de cierre oficial diario (Media noche 00:01 AM)
+  new Cron('1 0 * * *', { timezone: 'America/Caracas' }, async () => {
     try {
-      Logger.info('Iniciando cierre diario oficial de telemetría a las 16:01...')
-      const today = new Date()
+      Logger.info('Iniciando cierre diario oficial de telemetría de ayer...')
+      const yesterday = new Date()
 
-      today.setHours(0, 0, 0, 0)
-      await processDay(ZoneType.EXTERIOR, today)
-      await processDay(ZoneType.ZONA_A, today)
-      Logger.success('Cierre diario completado.')
+      yesterday.setDate(yesterday.getDate() - 1)
+      yesterday.setHours(0, 0, 0, 0)
+
+      await processDay(ZoneType.EXTERIOR, yesterday)
+      await processDay(ZoneType.ZONA_A, yesterday)
+      Logger.success('Cierre diario de ayer completado.')
     } catch (error) {
       Logger.error('Error en cierre diario:', error)
     }
@@ -365,14 +379,66 @@ async function runTask(scheduleId: string) {
     }
 
     // 1. Evaluar si la rutina debe proceder mediante el Motor de Inferencia
-    // Esto detecta cancelaciones manuales en la cola y condiciones ambientales adversas.
     const inference = await InferenceEngine.evaluate(schedule)
 
+    // Lógica especial para Agroquímicos
+    if (schedule.purpose === 'FERTIGATION' || schedule.purpose === 'FUMIGATION') {
+      // Buscar si ya existe una tarea pre-agendada
+      let taskLog = await prisma.taskLog.findFirst({
+        where: {
+          scheduleId: schedule.id,
+          scheduledAt: {
+            gte: new Date(Date.now() - 60000), // Ventana de 1min para el trigger exacto
+            lte: new Date(Date.now() + 60000),
+          },
+        },
+      })
+
+      // Si no existe (por algún motivo falló el pre-scheduler), crearla ahora
+      if (!taskLog) {
+        taskLog = await prisma.taskLog.create({
+          data: {
+            scheduleId: schedule.id,
+            purpose: schedule.purpose,
+            zones: schedule.zones,
+            status: TaskStatus.WAITING_CONFIRMATION,
+            source: 'ROUTINE',
+            scheduledAt: new Date(),
+            duration: schedule.durationMinutes,
+            notes: 'Tarea de agroquímicos creada en tiempo de ejecución (Pre-scheduler omitido).',
+          },
+        })
+      }
+
+      // Si está en WAITING_CONFIRMATION, NO se ejecuta. Se queda esperando 24h.
+      if (taskLog.status === TaskStatus.WAITING_CONFIRMATION) {
+        Logger.info(
+          `[ AGRO ] Tarea ${taskLog.id.slice(0, 8)} (${schedule.name}) en espera de confirmación.`,
+        )
+
+        return
+      }
+
+      // Si ya está AUTHORIZED (por confirmación manual anticipada), procesar con Veto ambiental
+      if (taskLog.status === TaskStatus.AUTHORIZED) {
+        if (inference.shouldCancel) {
+          Logger.warn(`[ AGRO ] VETO AMBIENTAL aplicado a tarea autorizada: ${inference.reason}`)
+          await recordTaskEvent(taskLog.id, TaskStatus.SKIPPED, inference.reason)
+
+          return
+        }
+        await processTaskLog(taskLog)
+
+        return
+      }
+
+      return
+    }
+
+    // Lógica estándar para otras tareas (IRRIGATION, etc.)
     if (inference.shouldCancel) {
       Logger.warn(`⏭️ Rutina SALTADA: ${schedule.name}. Motivo: ${inference.reason}`)
 
-      // Solo creamos el log si no era una cancelación manual (para no duplicar registros en el historial)
-      // Si inference.reason menciona "Cancelación manual", significa que ya hay un log CANCELLED previo.
       if (inference.reason && !inference.reason.includes('Cancelación manual')) {
         await prisma.taskLog.create({
           data: {
