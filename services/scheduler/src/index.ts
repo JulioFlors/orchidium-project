@@ -1,4 +1,4 @@
-import { prisma, TaskStatus, CollisionGuard } from '@package/database'
+import { prisma, TaskStatus, CollisionGuard, ZoneType } from '@package/database'
 import { Cron } from 'croner'
 
 import { Logger } from './lib/logger'
@@ -12,6 +12,7 @@ import {
   cleanupExpiredTasks,
   handleAckTimeout,
 } from './lib/task-manager'
+import { processDay } from './scripts/backfill-history'
 
 // ---- Configuración de Reglas ----
 
@@ -291,9 +292,27 @@ async function initScheduler() {
     await cleanupExpiredTasks()
   })
 
-  // Cron para sincronizar muestreo de iluminancia (Amanecer 5am / Anochecer 7pm)
-  new Cron('0 5,19 * * *', { timezone: 'America/Caracas' }, () => {
+  // Cron para sincronizar muestreo de iluminancia (Amanecer 5am / Anochecer 7:01pm)
+  new Cron('0 5 * * *', { timezone: 'America/Caracas' }, () => {
     syncNodeSampling()
+  })
+  new Cron('1 19 * * *', { timezone: 'America/Caracas' }, () => {
+    syncNodeSampling()
+  })
+
+  // Cron de cierre oficial diario (16:01 PM)
+  new Cron('1 16 * * *', { timezone: 'America/Caracas' }, async () => {
+    try {
+      Logger.info('Iniciando cierre diario oficial de telemetría a las 16:01...')
+      const today = new Date()
+
+      today.setHours(0, 0, 0, 0)
+      await processDay(ZoneType.EXTERIOR, today)
+      await processDay(ZoneType.ZONA_A, today)
+      Logger.success('Cierre diario completado.')
+    } catch (error) {
+      Logger.error('Error en cierre diario:', error)
+    }
   })
 
   Logger.info('Cargando Rutinas desde la base de datos')
@@ -333,6 +352,12 @@ async function runTask(scheduleId: string) {
           scheduledAt: new Date(),
           duration: schedule.durationMinutes,
           notes: 'Nodo Actuador no está conectado. Esperando reconexión',
+          events: {
+            create: {
+              status: TaskStatus.PENDING,
+              notes: 'Nodo Actuador OFFLINE: Esperando reconexión para ejecutar.',
+            },
+          },
         },
       })
 

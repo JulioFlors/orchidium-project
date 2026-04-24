@@ -13,7 +13,7 @@ import {
   IoRibbonOutline,
 } from 'react-icons/io5'
 
-import { authClient } from '@/lib/auth-client'
+import { authClient } from '@/lib'
 import { Button } from '@/components'
 
 // --- Types & Data ---

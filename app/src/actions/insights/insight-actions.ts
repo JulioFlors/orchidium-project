@@ -22,6 +22,11 @@ export interface OracleForecast {
   condition: string
   soilMoisture: number | null
   windSpeed: number | null
+  pressure: number | null
+  sources: {
+    owm?: { precipProb: number; temp: number }
+    om?: { precipProb: number; temp: number }
+  }
 }
 
 /**
@@ -106,13 +111,24 @@ export async function getLatestOracleForecast(): Promise<{
   error?: string
 }> {
   try {
-    // 1. Obtener el pronóstico más reciente (Open-Meteo u OpenWeatherMap)
-    const latestGeneral = await prisma.weatherForecast.findFirst({
+    const now = new Date()
+    const hourAgo = new Date(now.getTime() - 60 * 60000)
+    const hourAhead = new Date(now.getTime() + 60 * 60000)
+
+    // 1. Obtener todos los pronósticos cercanos a la hora actual para el consenso
+    const forecasts = await prisma.weatherForecast.findMany({
       where: {
+        timestamp: { gte: hourAgo, lte: hourAhead },
         source: { in: ['Open-Meteo', 'OpenWeatherMap'] },
       },
       orderBy: { timestamp: 'desc' },
     })
+
+    const owm = forecasts.find((f) => f.source === 'OpenWeatherMap')
+    const om = forecasts.find((f) => f.source === 'Open-Meteo')
+
+    // Usamos el más reciente como base general, o priorizamos OM si existe por ser más estable
+    const primary = om || owm
 
     // 2. Obtener la última lectura de suelo (AgroMonitoring)
     const latestSoil = await prisma.weatherForecast.findFirst({
@@ -123,23 +139,28 @@ export async function getLatestOracleForecast(): Promise<{
       orderBy: { timestamp: 'desc' },
     })
 
-    if (!latestGeneral) {
+    if (!primary) {
       return {
         success: false,
-        error: 'No hay datos del oráculo meteorológico en la base de datos.',
+        error: 'No hay datos del oráculo meteorológico para la hora actual.',
       }
     }
 
     return {
       success: true,
       data: {
-        timestamp: latestGeneral.timestamp,
-        temperature: latestGeneral.temperature,
-        humidity: latestGeneral.humidity,
-        precipProb: latestGeneral.precipProb,
-        condition: latestGeneral.condition,
+        timestamp: primary.timestamp,
+        temperature: primary.temperature,
+        humidity: primary.humidity,
+        precipProb: primary.precipProb,
+        condition: primary.condition,
         soilMoisture: latestSoil?.soilMoisture ?? null,
-        windSpeed: latestGeneral.windSpeed,
+        windSpeed: primary.windSpeed,
+        pressure: primary.pressure,
+        sources: {
+          owm: owm ? { precipProb: owm.precipProb, temp: owm.temperature } : undefined,
+          om: om ? { precipProb: om.precipProb, temp: om.temperature } : undefined,
+        },
       },
     }
   } catch (error) {

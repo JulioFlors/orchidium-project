@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
 
-import { auth } from '@/lib/auth'
+import { auth } from '@/lib/server'
 import { Footer, Header, Sidebar } from '@/components'
 
 export const metadata: Metadata = {

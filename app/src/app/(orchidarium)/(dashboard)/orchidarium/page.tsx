@@ -9,7 +9,7 @@ import { BotanicalInsightsGrid } from './ui/BotanicalInsightsGrid'
 import { OracleDecisionCard } from './ui/OracleDecisionCard'
 import { QuickActionsGrid } from './ui/QuickActionsGrid'
 
-import { auth } from '@/lib/auth'
+import { auth } from '@/lib/server'
 import { ZoneType, ZoneTypeLabels } from '@/config/mappings'
 import { getLatestBotanicalInsights, getLatestOracleForecast, BotanicalInsights } from '@/actions'
 import { Heading } from '@/components'

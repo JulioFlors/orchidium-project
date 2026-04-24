@@ -1,3 +1,3 @@
 export * from './EnvironmentCard'
 
-export * from './SensorHistoryChart'
+export * from './EnvironmentHistoryChart'

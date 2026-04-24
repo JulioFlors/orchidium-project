@@ -5,7 +5,7 @@ import { headers } from 'next/headers'
 
 import { LogoutButton } from './ui/LogoutButton'
 
-import { auth } from '@/lib/auth'
+import { auth } from '@/lib/server'
 import { Title } from '@/components'
 
 export default async function AccountPage() {

@@ -220,7 +220,7 @@ export async function handleAckTimeout(taskId: string, notes?: string) {
 export async function cleanupExpiredTasks() {
   const twentyMinsAgo = new Date(Date.now() - 20 * 60000)
 
-  const expired = await prisma.taskLog.updateMany({
+  const tasksToExpire = await prisma.taskLog.findMany({
     where: {
       status: { in: [TaskStatus.PENDING, TaskStatus.FAILED] },
       OR: [
@@ -230,17 +230,21 @@ export async function cleanupExpiredTasks() {
       ],
       scheduledAt: { lt: twentyMinsAgo },
     },
-    data: {
-      status: TaskStatus.EXPIRED,
-      notes: 'Ventana de oportunidad cerrada (20 min expirados sin reconexión del nodo).',
-    },
   })
 
-  if (expired.count > 0) {
-    const isSingle = expired.count === 1
+  for (const task of tasksToExpire) {
+    await recordTaskEvent(
+      task.id,
+      TaskStatus.EXPIRED,
+      'Ventana de oportunidad cerrada (20 min expirados sin reconexión del nodo).',
+    )
+  }
+
+  if (tasksToExpire.length > 0) {
+    const isSingle = tasksToExpire.length === 1
     const taskText = isSingle ? 'tarea expiró' : 'tareas expiraron'
     const resultText = isSingle ? 'marcó como expirada' : 'marcaron como expiradas'
 
-    Logger.warn(`Limpieza: ${expired.count} ${taskText} y se ${resultText}.`)
+    Logger.warn(`Limpieza: ${tasksToExpire.length} ${taskText} y se ${resultText}.`)
   }
 }

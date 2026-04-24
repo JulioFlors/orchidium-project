@@ -13,7 +13,9 @@ import {
 } from 'recharts'
 import { clsx } from 'clsx'
 
-interface SensorHistoryChartProps {
+import { getHourInCaracas } from '@/utils/timeFormat'
+
+interface EnvironmentHistoryChartProps {
   data: Record<string, number | string | boolean | undefined>[]
   className?: string
   dataKey: string
@@ -206,7 +208,7 @@ function CustomTooltip({
   return null
 }
 
-export function SensorHistoryChart({
+export function EnvironmentHistoryChart({
   data,
   className,
   dataKey,
@@ -217,7 +219,7 @@ export function SensorHistoryChart({
   range,
   onRangeChange,
   chartType = 'area',
-}: SensorHistoryChartProps) {
+}: EnvironmentHistoryChartProps) {
   const getTimeFormatter = (r: string) => {
     const opts: Intl.DateTimeFormatOptions = { timeZone: 'America/Caracas' }
 
@@ -270,10 +272,9 @@ export function SensorHistoryChart({
       // Filtrar por horario diurno (8 AM - 4 PM) solo para estadísticas de tiempo real (micro-visión)
       // Los datos Macro (Postgres) ya vienen pre-filtrados botánicamente.
       statsData = data.filter((d) => {
-        const date = new Date(String(d.time))
-        const hour = date.getHours()
+        const hour = getHourInCaracas(String(d.time))
 
-        return hour >= 8 && hour < 16
+        return hour >= 8 && hour <= 16
       })
     }
 
@@ -327,7 +328,7 @@ export function SensorHistoryChart({
         </div>
 
         <div className="bg-hover-overlay tds-sm:self-auto inline-flex self-start rounded-md p-1">
-          {['24h', '7d', '30d', 'all'].map((r) => (
+          {['12h', '24h', '7d', '30d', 'all'].map((r) => (
             <button
               key={r}
               className={clsx(

@@ -53,8 +53,9 @@ function toCaracasTimeStr(isoStr: string | null): string | null {
   })
 }
 
-const safeAvg = (sum: number, count: number) => (count > 0 ? Number((sum / count).toFixed(2)) : 0)
-const safeInf = (v: number) => (v === Infinity || v === -Infinity ? 0 : Number(v.toFixed(2)))
+const safeAvg = (sum: number, count: number) =>
+  count > 0 ? Number((sum / count).toFixed(2)) : null
+const safeInf = (v: number) => (v === Infinity || v === -Infinity ? null : Number(v.toFixed(2)))
 
 function calculateVPD(tempC: number, humidityPercent: number): number {
   const svp = 0.6108 * Math.exp((17.27 * tempC) / (tempC + 237.3))
@@ -64,7 +65,7 @@ function calculateVPD(tempC: number, humidityPercent: number): number {
 
 // ── Procesamiento de un solo día ──────────────────────────────────────────────
 
-async function processDay(zone: ZoneType, dayStart: Date): Promise<void> {
+export async function processDay(zone: ZoneType, dayStart: Date): Promise<void> {
   const dayEnd = new Date(dayStart)
 
   dayEnd.setDate(dayEnd.getDate() + 1)
@@ -137,7 +138,7 @@ async function processDay(zone: ZoneType, dayStart: Date): Promise<void> {
       const tDate = rowTimeToDate(row.time)
       const tIso = tDate.toISOString()
       const localHour = localHourCaracas(tDate)
-      const isDaytime = localHour >= 8 && localHour < 16
+      const isDaytime = localHour >= 8 && localHour <= 16
       const isNighttime = localHour >= 20 || localHour < 6
 
       // Temperatura (24h)
@@ -342,6 +343,21 @@ async function processDay(zone: ZoneType, dayStart: Date): Promise<void> {
     totalWaterEvents,
   }
 
+  if (
+    coreData.avgTemperature === null &&
+    coreData.avgHumidity === null &&
+    coreData.avgIlluminance === null &&
+    coreData.totalRainDuration === 0 &&
+    coreData.irrigationMinutes === 0 &&
+    coreData.nebulizationMinutes === 0
+  ) {
+    Logger.warn(
+      `[${dayLabel}] [${zone}] Sin métricas válidas tras procesar ${rowCount} filas. Skipping upsert.`,
+    )
+
+    return
+  }
+
   await prisma.dailyEnvironmentStat.upsert({
     where: { date_zone: { date: dayStart, zone } },
     create: { date: dayStart, zone, ...coreData },
@@ -387,7 +403,13 @@ async function main() {
   await influxClient.close()
 }
 
-main().catch((err) => {
-  Logger.error('Error fatal en backfill:', err)
-  process.exit(1)
-})
+const isMain = import.meta.url
+  ? import.meta.url === `file://${process.argv[1]}`
+  : require.main === module
+
+if (isMain || process.argv[1]?.endsWith('backfill-history.ts')) {
+  main().catch((err) => {
+    Logger.error('Error fatal en backfill:', err)
+    process.exit(1)
+  })
+}

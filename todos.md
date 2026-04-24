@@ -31,6 +31,7 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 ### 📄 0.3 Documentación & Trazabilidad
 
 * [x] **Refuerzo de Protocolos:** Implementar regla MANDATORIA en `SKILL.md` para actualización proactiva de `todos.md` y `ROADMAP.md` por parte de agentes.
+* [x] **Guía de Scripts de Utilidad:** Documentación técnica para estandarizar la creación de herramientas locales (Postgres/InfluxDB) con soporte para batching.
 
 ---
 
@@ -121,6 +122,7 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 
 * [ ] **CRUD Programas de Cultivo:** Creación de secuencias de fertilización completas.
 * [x] **Scheduler Diferido:** Motor de ejecución backend (Polling DB) e UI para agendar Tareas Diferidas Manuales.
+* [x] **Mejora de Trazabilidad Offline/Expiración:** Registro de eventos en timeline para tareas postergadas por nodo offline y mapeo visual de estado `EXPIRED` como "Fallida" en la UI.
 * [ ] **Scheduler UI (Crons Recurrentes):** Interfaz para gestionar `AutomationSchedule` (rutinas continuas).
 * [ ] **Confirmación de Agroquímicos (Diferido/Automatizado):** Las tareas de Fertirriego y Fumigación programadas (diferidas o cron) deben solicitar confirmación al usuario **1 hora antes** de la ejecución. El usuario confirma que el tanque ha sido preparado. Si no hay confirmación antes de la hora programada, la tarea se cancela automáticamente con nota auditable (`WAITING_CONFIRMATION` → `CANCELLED`). Depende del **Sistema de Notificaciones** (ver sección transversal).
 * [x] **WeatherGuard Básico:** "Si llovió > X mm, cancelar riego" o si hay precipitaciones pronosticadas.
@@ -139,7 +141,7 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
   * [x] Calcular métricas botánicas: DLI (Daily Light Integral) convirtiendo Lux a PPFD, y DIF (Salto Térmico Día-Noche).
   * [x] Calcular Riesgo Epidemiológico: "Horas de Humedad Foliar" consecutivas (>85% HR sin salto térmico).
   * [x] Persistir resumen procesado diario en base de datos central.
-* [x] **Motor de Inferencias (v1):** Implementado lazo cerrado de decisión cruzando InfluxDB + Postgres (VWC) + Pronóstico.
+* [x] **Motor de Inferencias (v2):** Implementado lazo cerrado de decisión con **Consenso de APIs** (OWM + OpenMeteo) y **Refutación por Sensores** (Lux/HR). Cruce con InfluxDB + Postgres (VWC) + Pronóstico.
 * [ ] **Machine Learning Ligero:** Función para cruzar avistamientos de plagas (Fase 1.1) con los históricos de InfluxDB.
 
 ### 🌤️ 3.3 WeatherGuard (Inteligencia Predictiva Híbrida)

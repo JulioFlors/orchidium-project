@@ -4,7 +4,7 @@ import { headers } from 'next/headers'
 import { AdminDashboard, type AdminView } from './ui/AdminDashboard'
 
 import { getPaginatedUsers } from '@/actions'
-import { auth } from '@/lib/auth'
+import { auth } from '@/lib/server'
 
 interface Props {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>

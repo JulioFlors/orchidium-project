@@ -13,7 +13,6 @@ const LIMITS = {
 
   // Guardianes (Throttles)
   MAX_VWC_FOR_WETTING: 0.35, // 35% de Humedad de suelo satelital (AgroMonitoring). Si hay más, el suelo está lodoso, no regar el piso.
-  MAX_RAIN_PROBABILITY: 0.6, // Si la probabilidad de lluvia > 60%, la naturaleza lo enfriará/hidratará, no intervenir.
 
   // Tiempos (Minutes)
   SOIL_WETTING_DURATION: 5, // Minutos de aspersión al suelo
@@ -30,22 +29,25 @@ export async function runInferenceEngine() {
   Logger.info('[ ORACLE ENGINE ] Iniciando evaluación botánica autónoma...')
 
   try {
-    // 1. Obtener última lectura de VWC y lluvia (Oracle)
+    // 1. Obtener lluvia real acumulada (sensor de gotas, no pronóstico)
     const now = new Date()
-    const forecast = await prisma.weatherForecast.findFirst({
-      where: {
-        timestamp: { gte: now }, // Pronóstico actual o inmediato
-      },
-      orderBy: { timestamp: 'asc' },
-    })
+    const rainQuery = `
+      SELECT SUM("duration_seconds") as total_rain
+      FROM "rain_events"
+      WHERE time >= now() - interval '2 hours'
+      AND zone = 'EXTERIOR'
+    `
+    const rainStream = influxClient.query(rainQuery)
+    let recentRainSeconds = 0
 
-    const rainProb = forecast?.precipProb || 0
-    const vwc = forecast?.soilMoisture || 0.0
+    for await (const row of rainStream) {
+      if (row.total_rain) recentRainSeconds = Number(row.total_rain)
+    }
 
-    // Si viene una tormenta fuerte, cedemos el control a la naturaleza.
-    if (rainProb > LIMITS.MAX_RAIN_PROBABILITY) {
+    // Si llovió más de 3 minutos en las últimas 2h, modo pasivo
+    if (recentRainSeconds >= 180) {
       Logger.warn(
-        `[ ORACLE ENGINE ] Probabilidad de lluvia alta (${(rainProb * 100).toFixed(0)}%). Motor en modo pasivo.`,
+        `[ ORACLE ENGINE ] Lluvia real reciente: ${Math.round(recentRainSeconds / 60)} min. Motor en modo pasivo.`,
       )
 
       return
@@ -81,6 +83,13 @@ export async function runInferenceEngine() {
       return
     }
 
+    // 2b. Obtener VWC del suelo (AgroMonitoring en Postgres)
+    const soilData = await prisma.weatherForecast.findFirst({
+      where: { source: 'AgroMonitoring', soilMoisture: { not: null } },
+      orderBy: { timestamp: 'desc' },
+    })
+    const vwc = soilData?.soilMoisture || 0.0
+
     Logger.info(
       `[ ORACLE ENGINE ] Telemetría actual -> Temp: ${avgTemp.toFixed(1)}°C | Hum: ${avgHum.toFixed(1)}% | VWC Suelo: ${(vwc * 100).toFixed(1)}%`,
     )
@@ -101,92 +110,27 @@ export async function runInferenceEngine() {
       return
     }
 
-    // 4. LÓGICA DE RECUPERACIÓN (PROACTIVA - 17:00h)
-    // Si se saltó el riego de la mañana por pronóstico y al final NO llovió, recuperamos.
-    const isRecoveryWindow = now.getHours() === 17 && now.getMinutes() >= 0 && now.getMinutes() < 30
+    // 4. ADAPTACIÓN DE CRONOGRAMA (RainSeasonAdapter)
+    // Evalúa si el próximo riego debe diferirse por lluvia acumulada.
+    // Se ejecuta siempre, no solo a las 17h.
+    const { evaluateRainSeason } = await import('../lib/rain-season-adapter')
+    const { classifyCurrentDay } = await import('../lib/day-classifier')
 
-    if (isRecoveryWindow) {
-      Logger.info(
-        '[ RECOVERY ENGINE ] Ventana de las 17:00h detectada. Buscando deudas de riego...',
+    const dayClass = await classifyCurrentDay()
+
+    const rainDecision = await evaluateRainSeason({
+      interiorHumidity: avgHum,
+      dayType: dayClass.type,
+    })
+
+    if (rainDecision.shouldDeferIrrigation) {
+      Logger.warn(
+        `[ RAIN ADAPTER ] ${rainDecision.reason} → Riego diferido a ${rainDecision.deferToDate?.toLocaleString() ?? 'N/A'}`,
       )
-
-      const startOfDay = new Date(now.setHours(0, 0, 0, 0))
-      const endOfDay = new Date(now.setHours(23, 59, 59, 999))
-
-      // Buscar si hubo riegos de zona A cancelados por clima/pronóstico hoy
-      const skippedTasks = await prisma.taskLog.findMany({
-        where: {
-          purpose: TaskPurpose.IRRIGATION,
-          zones: { has: ZoneType.ZONA_A },
-          status: 'CANCELLED',
-          scheduledAt: { gte: startOfDay, lte: endOfDay },
-          notes: { contains: 'WeatherGuard' },
-        },
-      })
-
-      if (skippedTasks.length > 0) {
-        Logger.info(
-          `[ RECOVERY ENGINE ] Se encontraron ${skippedTasks.length} tareas de riego canceladas hoy. Validando lluvia real...`,
-        )
-
-        // Consultar InfluxDB: ¿Llovió realmente hoy? (> 180 segundos de lluvia acumulada es el umbral para no regar)
-        const rainQuery = `
-          SELECT SUM("duration_seconds") as total_rain
-          FROM "rain_events"
-          WHERE time >= now() - interval '12 hours'
-          AND zone = 'EXTERIOR'
-        `
-        const rainStream = influxClient.query(rainQuery)
-        let actualRainDuration = 0
-
-        for await (const row of rainStream) {
-          if (row.total_rain) actualRainDuration = Number(row.total_rain)
-        }
-
-        Logger.info(
-          `[ RECOVERY ENGINE ] Lluvia real detectada hoy: ${actualRainDuration} segundos.`,
-        )
-
-        if (actualRainDuration < 180) {
-          // Si llovió menos de 3 minutos
-          // VALIDACIÓN FINAL: ¿Lloverá en la noche?
-          const tonightForecast = await prisma.weatherForecast.findFirst({
-            where: {
-              timestamp: { gte: new Date(Date.now() + 2 * 3600000) },
-              precipProb: { gte: 0.7 },
-            },
-            orderBy: { timestamp: 'asc' },
-          })
-
-          if (!tonightForecast) {
-            Logger.success(
-              '[ RECOVERY ENGINE ] Pronóstico fallido: No llovió y no viene lluvia nocturna. Reprogramando riego.',
-            )
-
-            await prisma.taskLog.create({
-              data: {
-                scheduledAt: new Date(),
-                status: 'PENDING',
-                source: TaskSource.INFERENCE,
-                purpose: TaskPurpose.IRRIGATION,
-                zones: [ZoneType.ZONA_A],
-                duration: skippedTasks[0].duration, // Recuperamos la misma duración
-                notes: `Tarea de recuperación: El pronóstico matutino falló (Lluvia real: ${actualRainDuration}s).`,
-              },
-            })
-
-            return // Salimos tras crear la tarea de recuperación
-          } else {
-            Logger.warn(
-              `[ RECOVERY ENGINE ] Se detectó probabilidad de lluvia nocturna intensa (${(tonightForecast.precipProb * 100).toFixed(0)}%). Cancelando recuperación.`,
-            )
-          }
-        } else {
-          Logger.success(
-            '[ RECOVERY ENGINE ] La naturaleza hizo su trabajo. Lluvia real suficiente detectada.',
-          )
-        }
-      }
+    } else {
+      Logger.info(
+        `[ RAIN ADAPTER ] ${rainDecision.reason} (Último riego: hace ${rainDecision.daysSinceLastIrrigation} día${rainDecision.daysSinceLastIrrigation !== 1 ? 's' : ''})`,
+      )
     }
 
     // 5. LÓGICA DE DECISIÓN REACTIVA (Existente)

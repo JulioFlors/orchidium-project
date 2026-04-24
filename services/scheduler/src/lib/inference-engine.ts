@@ -2,6 +2,39 @@ import { prisma, TaskStatus, AutomationSchedule } from '@package/database'
 
 import { Logger } from './logger'
 import { influxClient } from './influx'
+import { classifyCurrentDay } from './day-classifier'
+
+/**
+ * Umbrales Botánicos (Orquídeas Epífitas Tropicales - Cattleya).
+ *
+ * NOTA: Los umbrales de HR (90%, 80%) son tentativos. No se dispone
+ * de datos calibrados del sensor DHT22 interior (aún no activado).
+ * Se dejaron TODO: en cada regla que depende de esta calibración.
+ */
+const THRESHOLDS = {
+  // Lluvia acumulada (segundos)
+  MIN_RAIN_FOR_IRRIGATION: 1200, // 20 min de lluvia acumulada → omitir riego por aspersión
+  MIN_RAIN_FOR_SOIL_WETTING: 1200, // 20 min de lluvia acumulada → omitir humectación suelo
+
+  // Ventanas de análisis (horas)
+  RAIN_LOOKBACK_IRRIGATION: 12, // Lluvia acumulada en 12h → aplica a IRRIGATION
+  RAIN_LOOKBACK_SOIL_WETTING: 4, // Lluvia acumulada en 4h → aplica a SOIL_WETTING
+
+  // Microclima Interior (bajo mallasombra)
+  // TODO: Calibrar con datos reales del DHT22 cuando esté activo
+  MAX_HUMIDITY_CRITICAL: 90, // HR > 90% → skip todo lo hídrico (tentativo)
+  MAX_HUMIDITY_FOR_MISTING: 80, // HR > 80% + día nublado → skip HUMIDIFICATION
+  MIN_HUMIDITY_TRIGGER: 50, // HR < 50% → raíces aéreas deshidratándose
+
+  // Iluminancia (calibrado con observaciones de campo marzo-abril 2026)
+  OVERCAST_LUX_THRESHOLD: 26000, // Promedio diario < 26k = nublado confirmado
+
+  // Duración máxima de nebulización (minutos)
+  MAX_NEBULIZATION_MINUTES: 3, // > 3min la línea gotea y riega plantas debajo
+
+  // Aspersión
+  IRRIGATION_DURATION_MINUTES: 15, // Duración de la rutina de aspersión 6AM
+}
 
 export interface InferenceResult {
   shouldCancel: boolean
@@ -10,14 +43,29 @@ export interface InferenceResult {
   metadata?: Record<string, unknown>
 }
 
+/**
+ * Motor de Inferencia v4 — Gestión Ambiental Inteligente.
+ *
+ * PRINCIPIOS CARDINALES:
+ * 1. Jamás cancelar IRRIGACIÓN por pronóstico de APIs.
+ *    Solo lluvia REAL acumulada (sensor de gotas) cancela riego.
+ * 2. APIs son un FACTOR más para FERTIGATION/FUMIGATION (no decisivo).
+ *    Requiere consenso >95% de AMBAS APIs + cielo nublado + más contexto.
+ * 3. Los sensores físicos tienen poder de veto absoluto.
+ * 4. El clasificador de día (8am-4pm) aporta contexto para pulverización.
+ * 5. El motor también CANCELA tareas programadas cuando detecta la necesidad.
+ *
+ * HERRAMIENTAS DE REGULACIÓN:
+ * - Humectación del suelo: sin peligro de mojar plantas, puede repetirse.
+ * - Pulverización/Nebulización: máx 3 min, la línea gotea y moja plantas debajo.
+ * - Aspersión: solo a las 6AM, 15 min, interdiaria.
+ */
 export class InferenceEngine {
-  /**
-   * Evalúa si una rutina debe ejecutarse basándose en condiciones ambientales e intervención manual.
-   */
   static async evaluate(schedule: AutomationSchedule): Promise<InferenceResult> {
     try {
-      // 1. Verificar si existe una cancelación manual previa (±5 min de la hora actual)
       const now = new Date()
+
+      // ── 1. Cancelación Manual ──
       const fiveMinAgo = new Date(now.getTime() - 5 * 60000)
       const fiveMinFromNow = new Date(now.getTime() + 5 * 60000)
 
@@ -25,10 +73,7 @@ export class InferenceEngine {
         where: {
           scheduleId: schedule.id,
           status: { in: [TaskStatus.CANCELLED, TaskStatus.SKIPPED] },
-          scheduledAt: {
-            gte: fiveMinAgo,
-            lte: fiveMinFromNow,
-          },
+          scheduledAt: { gte: fiveMinAgo, lte: fiveMinFromNow },
         },
         orderBy: { scheduledAt: 'desc' },
       })
@@ -36,103 +81,237 @@ export class InferenceEngine {
       if (previousCancellation) {
         return {
           shouldCancel: true,
-          reason: `Cancelación manual detectada: ${previousCancellation.notes || 'Sin motivo'}`,
+          reason: `Cancelación manual: ${previousCancellation.notes || 'Sin motivo'}`,
           action: 'SKIP',
         }
       }
 
-      // 2. Lógica de Clima (WeatherGuard v2)
-      if (schedule.purpose === 'IRRIGATION' || schedule.purpose === 'FERTIGATION') {
-        const localConditions = await this.getLatestLocalConditions()
-        const forecast = await prisma.weatherForecast.findFirst({
-          orderBy: { timestamp: 'desc' },
-        })
+      // ── 2. Obtener Telemetría Real + Clasificación del Día ──
+      const localConditions = await this.getLatestLocalConditions()
+      const dayClass = await classifyCurrentDay()
 
-        // -- Hard Blocks --
+      const purpose = schedule.purpose
+      const interiorHum = localConditions.interior.hum
+      const interiorTemp = localConditions.interior.temp
 
-        // Lluvia Física Detectada (Sensor Exterior) en los últimos 30-60 min
-        // Nota: asumiendo rain_intensity > 0 o detectado localmente
-        if (
-          localConditions.exterior.rain_intensity &&
-          localConditions.exterior.rain_intensity > 1
-        ) {
+      Logger.info(
+        `[ INFERENCE ] Evaluando "${schedule.name}" (${purpose}) → HR: ${interiorHum.toFixed(0)}% | Temp: ${interiorTemp.toFixed(1)}°C | Día: ${dayClass.type}`,
+      )
+
+      // ── 3. HARD BLOCK: Lluvia Real en Curso ──
+      // Si está lloviendo AHORA → no ejecutar ninguna tarea hídrica
+      if (localConditions.exterior.rain_intensity && localConditions.exterior.rain_intensity > 0) {
+        return {
+          shouldCancel: true,
+          reason: `Está lloviendo ahora (sensor de lluvia activo). Intensidad: ${localConditions.exterior.rain_intensity}.`,
+          action: 'SKIP',
+          metadata: { localConditions },
+        }
+      }
+
+      // ── 4. Lluvia Acumulada → IRRIGATION (>20min en 12h) ──
+      if (purpose === 'IRRIGATION') {
+        const recentRain = await this.getRecentRainAccumulation(THRESHOLDS.RAIN_LOOKBACK_IRRIGATION)
+
+        if (recentRain.durationSeconds >= THRESHOLDS.MIN_RAIN_FOR_IRRIGATION) {
           return {
             shouldCancel: true,
-            reason: `Lluvia reciente detectada por estación local (${localConditions.exterior.rain_intensity} mm/h).`,
+            reason: `Lluvia acumulada: ${Math.round(recentRain.durationSeconds / 60)} min en las últimas ${THRESHOLDS.RAIN_LOOKBACK_IRRIGATION}h.`,
             action: 'SKIP',
-            metadata: { localConditions },
-          }
-        }
-
-        // Humedad del Suelo Crítica (>40%) según AgroMonitoring
-        if (forecast?.soilMoisture && forecast.soilMoisture > 0.4) {
-          return {
-            shouldCancel: true,
-            reason: `Suelo saturado reportado por imágenes satelitales (${(forecast.soilMoisture * 100).toFixed(0)}%).`,
-            action: 'SKIP',
-            metadata: { forecast },
-          }
-        }
-
-        // -- Cross-Check Logic --
-
-        const isMidday = now.getHours() >= 11 && now.getHours() <= 15
-        const precipProb = forecast?.precipProb || 0
-
-        // Riesgo de Lluvia Inminente
-        if (precipProb >= 0.8) {
-          const isHotAndSunny =
-            localConditions.exterior.lux > 50000 || localConditions.exterior.temp > 30
-
-          if (isHotAndSunny) {
-            Logger.info(
-              'Refutación: Pronóstico de lluvia alto (>=80%), pero hay sol intenso localmente. Se ejecuta riego.',
-            )
-            // No cancelamos
-          } else {
-            return {
-              shouldCancel: true,
-              reason: `Pronóstico de lluvia inminente (${(precipProb * 100).toFixed(0)}% prob).`,
-              action: 'SKIP',
-              metadata: { forecast, localConditions },
-            }
-          }
-        }
-
-        // Evaluación de Horario y VPD (Vapor Pressure Deficit)
-        if (
-          isMidday &&
-          localConditions.exterior.temp > 32 &&
-          localConditions.exterior.lux > 80000
-        ) {
-          return {
-            shouldCancel: true,
-            reason: `Condiciones extremas a mediodía (Temp: ${localConditions.exterior.temp.toFixed(1)}°C, Lux: ${localConditions.exterior.lux}). Riesgo de efecto lupa.`,
-            action: 'DEFER',
-            metadata: { localConditions },
-          }
-        }
-
-        // Exceso de Humedad Residual (Suelo + Ambiente)
-        if (forecast?.soilMoisture && forecast.soilMoisture >= 0.28) {
-          if (localConditions.interior.hum > 85 || localConditions.exterior.hum > 85) {
-            return {
-              shouldCancel: true,
-              reason: `Humedad residual alta. Suelo al ${(forecast.soilMoisture * 100).toFixed(0)}% y atmósfera saturada (>85%). Prevención de hongos.`,
-              action: 'SKIP',
-              metadata: { forecast, localConditions },
-            }
+            metadata: { recentRain },
           }
         }
       }
 
+      // ── 4.1 Lluvia Acumulada → SOIL_WETTING (>20min en 4h) ──
+      if (purpose === 'SOIL_WETTING') {
+        const recentRain = await this.getRecentRainAccumulation(
+          THRESHOLDS.RAIN_LOOKBACK_SOIL_WETTING,
+        )
+
+        if (recentRain.durationSeconds >= THRESHOLDS.MIN_RAIN_FOR_SOIL_WETTING) {
+          return {
+            shouldCancel: true,
+            reason: `Lluvia acumulada: ${Math.round(recentRain.durationSeconds / 60)} min en las últimas ${THRESHOLDS.RAIN_LOOKBACK_SOIL_WETTING}h.`,
+            action: 'SKIP',
+            metadata: { recentRain },
+          }
+        }
+      }
+
+      // ── 5. Humedad Interior Crítica ──
+      // TODO: Calibrar umbral cuando DHT22 esté activo. 90% es tentativo.
+      // No cancelar basándose en un único parámetro → requiere más contexto.
+      // Solo aplica si HR > 90% Y adicionalmente el día es nublado o llovió recientemente.
+      if (interiorHum > 0) {
+        // Solo evaluar si tenemos datos reales del sensor
+        const recentRainCheck = await this.getRecentRainAccumulation(4)
+        const rainedRecently = recentRainCheck.durationSeconds > 0
+        const cloudyDay = dayClass.type === 'OVERCAST' || dayClass.type === 'RAINY'
+
+        if (
+          interiorHum > THRESHOLDS.MAX_HUMIDITY_CRITICAL &&
+          (rainedRecently || cloudyDay) &&
+          (purpose === 'IRRIGATION' || purpose === 'HUMIDIFICATION' || purpose === 'SOIL_WETTING')
+        ) {
+          return {
+            shouldCancel: true,
+            reason: `HR interior ${interiorHum.toFixed(0)}% (crítica) + ${cloudyDay ? `día ${dayClass.type}` : `lluvia reciente (${Math.round(recentRainCheck.durationSeconds / 60)}min)`}. Omitiendo ${purpose}.`,
+            action: 'SKIP',
+            metadata: { localConditions, dayClass },
+          }
+        }
+      }
+
+      // ── 6. Pulverización innecesaria (día nublado + HR alta) ──
+      // HR > 80% + día promedio < 26k lux → no pulverizar
+      // TODO: Calibrar HR cuando sensor activo
+      if (
+        purpose === 'HUMIDIFICATION' &&
+        interiorHum > THRESHOLDS.MAX_HUMIDITY_FOR_MISTING &&
+        interiorTemp < 28 &&
+        dayClass.avgLuxSince8am < THRESHOLDS.OVERCAST_LUX_THRESHOLD &&
+        dayClass.type !== 'UNKNOWN'
+      ) {
+        return {
+          shouldCancel: true,
+          reason: `Ambiente fresco (HR: ${interiorHum.toFixed(0)}%, Temp: ${interiorTemp.toFixed(1)}°C, Lux prom: ${dayClass.avgLuxSince8am.toFixed(0)}). Pulverización innecesaria.`,
+          action: 'SKIP',
+          metadata: { localConditions, dayClass },
+        }
+      }
+
+      // ── 7. Evaluación de pulverización diaria (4PM) ──
+      // La pulverización se ejecuta si el promedio del día (8am-4pm) > 26k lux
+      // TODO: Este umbral está calibrado para temporada seca
+      if (
+        purpose === 'HUMIDIFICATION' &&
+        dayClass.type !== 'UNKNOWN' &&
+        dayClass.avgLuxSince8am <= THRESHOLDS.OVERCAST_LUX_THRESHOLD
+      ) {
+        return {
+          shouldCancel: true,
+          reason: `Día ${dayClass.type} (Lux prom 8am-ahora: ${dayClass.avgLuxSince8am.toFixed(0)}). Promedio ≤ ${THRESHOLDS.OVERCAST_LUX_THRESHOLD} lux → pulverización innecesaria.`,
+          action: 'SKIP',
+          metadata: { dayClass },
+        }
+      }
+
+      // ── 8. Protección de Fertilización/Fumigación contra Lluvia Inminente ──
+      // Solo FERTIGATION y FUMIGATION. Hora ideal de aplicación: 5PM.
+      // A las 5PM no se puede clasificar cielo por lux → usamos clasificación del día (8am-4pm).
+      // Requiere consenso FUERTE de todas las fuentes + contexto ambiental.
+      if (purpose === 'FERTIGATION' || purpose === 'FUMIGATION') {
+        const forecast = await this.getForecastConsensus()
+
+        // TODO: Comparar temp/hum interior vs promedio 7 días a la misma hora
+        // (filtrando días con lluvia 1pm-5pm) para detectar anomalías.
+        // Actualmente no hay datos históricos suficientes del DHT22 interior.
+
+        if (
+          forecast.bothApisAgree &&
+          forecast.consensusPrecipProb >= 0.95 &&
+          (dayClass.type === 'OVERCAST' || dayClass.type === 'RAINY')
+        ) {
+          return {
+            shouldCancel: true,
+            reason: `Lluvia inminente: APIs(${(forecast.consensusPrecipProb * 100).toFixed(0)}%) + Día ${dayClass.type} (Lux prom: ${dayClass.avgLuxSince8am.toFixed(0)}). Protegiendo ${purpose}.`,
+            action: 'SKIP',
+            metadata: { forecast, dayClass },
+          }
+        }
+      }
+
+      // ── DECISIÓN FINAL: EJECUTAR ──
       return { shouldCancel: false, action: 'EXECUTE' }
     } catch (error) {
       Logger.error('Error en InferenceEngine.evaluate:', error)
 
-      // En caso de error, preferimos ejecutar para no dejar a las orquídeas sin agua ante fallos de lógica crítica
+      // Ante error → ejecutar. Las orquídeas no deben quedarse sin agua por un bug.
       return { shouldCancel: false, action: 'EXECUTE' }
     }
+  }
+
+  /**
+   * Consulta el consenso de pronóstico entre OWM y Open-Meteo.
+   * Usado exclusivamente para protección de fertilización (NUNCA para irrigación).
+   */
+  private static async getForecastConsensus(): Promise<{
+    bothApisAgree: boolean
+    consensusPrecipProb: number
+    owmProb: number
+    omProb: number
+    vwc: number
+  }> {
+    try {
+      const now = new Date()
+      const hourAgo = new Date(now.getTime() - 60 * 60000)
+      const hourAhead = new Date(now.getTime() + 60 * 60000)
+
+      const forecasts = await prisma.weatherForecast.findMany({
+        where: {
+          timestamp: { gte: hourAgo, lte: hourAhead },
+          source: { in: ['Open-Meteo', 'OpenWeatherMap'] },
+        },
+        orderBy: { timestamp: 'desc' },
+      })
+
+      const owm = forecasts.find((f) => f.source === 'OpenWeatherMap')
+      const om = forecasts.find((f) => f.source === 'Open-Meteo')
+
+      const owmProb = owm?.precipProb || 0
+      const omProb = om?.precipProb || 0
+      const bothApisAgree = owmProb >= 0.9 && omProb >= 0.9
+      const consensusPrecipProb = (owmProb + omProb) / 2
+
+      // VWC del suelo (AgroMonitoring) — se renueva cada 12h (8am/8pm)
+      // Indicativo de historial reciente, no estado actual exacto
+      const soil = await prisma.weatherForecast.findFirst({
+        where: { source: 'AgroMonitoring', soilMoisture: { not: null } },
+        orderBy: { timestamp: 'desc' },
+      })
+
+      return {
+        bothApisAgree,
+        consensusPrecipProb,
+        owmProb,
+        omProb,
+        vwc: soil?.soilMoisture || 0,
+      }
+    } catch {
+      return { bothApisAgree: false, consensusPrecipProb: 0, owmProb: 0, omProb: 0, vwc: 0 }
+    }
+  }
+
+  /**
+   * Obtiene la lluvia acumulada de las últimas N horas desde InfluxDB (rain_events).
+   */
+  private static async getRecentRainAccumulation(lookbackHours: number): Promise<{
+    durationSeconds: number
+    eventCount: number
+  }> {
+    const result = { durationSeconds: 0, eventCount: 0 }
+
+    try {
+      const query = `
+        SELECT 
+          SUM("duration_seconds") as total_rain,
+          COUNT(*) as event_count
+        FROM "rain_events"
+        WHERE time >= now() - interval '${lookbackHours} hours'
+        AND zone = 'EXTERIOR'
+      `
+      const stream = influxClient.query(query)
+
+      for await (const row of stream) {
+        if (row.total_rain) result.durationSeconds = Number(row.total_rain)
+        if (row.event_count) result.eventCount = Number(row.event_count)
+      }
+    } catch (error) {
+      Logger.warn('No se pudo consultar lluvia acumulada de InfluxDB.', error)
+    }
+
+    return result
   }
 
   /**
@@ -159,7 +338,6 @@ export class InferenceEngine {
       let foundExterior = false
       let foundInterior = false
 
-      // Iteramos un poco sobre los resultados para conseguir el dato más fresco de c/u
       for await (const row of stream) {
         if (!foundExterior && row.source === 'Weather_Station') {
           result.exterior.temp = Number(row.temperature || 0)

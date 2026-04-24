@@ -4,6 +4,8 @@ export * from './auth/admin-users'
 
 export * from './auth/verify-email'
 
+export * from './environment/environment-actions'
+
 export * from './insights/insight-actions'
 
 export * from './inventory/genus-actions'

@@ -163,7 +163,6 @@ class CommandRetryManager {
 }
 
 export const retryManager = new CommandRetryManager()
-let lastLuxState: 'on' | 'off' | null = null
 
 /**
  * Envía un comando de circuito al Nodo Actuador.
@@ -214,6 +213,7 @@ export function executeSystemCommand(command: string) {
 
 /**
  * Sincroniza el estado del monitoreo del nodo basado en la hora actual.
+ * Asegura que el nodo tenga el estado de muestreo correcto (Amanecer/Anochecer).
  */
 export function syncNodeSampling() {
   const now = new Date()
@@ -228,16 +228,9 @@ export function syncNodeSampling() {
   const targetState = hour >= 5 && hour < 19 ? 'on' : 'off'
 
   if (retryManager.lastActuatorState !== 'online') {
-    // Evitar comandos a ciegas si el nodo no ha reportado su estado inicial.
+    // Evitar comandos si el nodo está offline.
     return
   }
-
-  if (lastLuxState === targetState) {
-    // Ya estamos en el estado correcto, no spamear al broker.
-    return
-  }
-
-  lastLuxState = targetState
 
   if (targetState === 'on') {
     Logger.info('☀  Iniciando muestreo de iluminancia (Amanecer)')

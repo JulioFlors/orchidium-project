@@ -12,7 +12,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 
 import { verifyEmailInDb } from '@/actions'
 import { Backdrop, Button } from '@/components'
-import { authClient } from '@/lib/auth-client'
+import { authClient } from '@/lib'
 
 const loginSchema = z.object({
   email: z.string().email('No es un correo electrónico válido').min(1, 'Rellene este campo'),

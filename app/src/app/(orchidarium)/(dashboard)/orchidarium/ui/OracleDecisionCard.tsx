@@ -1,6 +1,6 @@
 'use client'
 
-import { FaCloudSunRain, FaSatelliteDish, FaTintSlash } from 'react-icons/fa'
+import { FaCloudSunRain, FaSatelliteDish, FaTintSlash, FaBalanceScale } from 'react-icons/fa'
 
 import { OracleForecast } from '@/actions/insights/insight-actions'
 
@@ -17,30 +17,32 @@ export function OracleDecisionCard({ forecast }: { forecast: OracleForecast | un
     )
   }
 
-  // Lógica básica de decisión simulada para entendimiento humano
-  // WillRain is higher now to match inference engine (80%+)
-  const willRain = forecast.precipProb >= 0.8
-  // Suelo seco si es menor al 35% (ajuste para clima venezolano/suelo duro)
+  const owmProb = forecast.sources.owm?.precipProb ?? 0
+  const omProb = forecast.sources.om?.precipProb ?? 0
+
+  // Lógica de visualización de consenso
+  const hasConflict = Math.abs(owmProb - omProb) > 0.4
+  const willRain = forecast.precipProb >= 0.7
   const drySoil = forecast.soilMoisture !== null && forecast.soilMoisture < 0.35
 
   let decisionTitle = 'Riego Permitido'
   let decisionDesc =
-    'No se prevén lluvias fuertes inminentes y la humedad satelital está en rango seco/normal.'
+    'No se prevén lluvias fuertes inminentes y la humedad satelital está en rango normal.'
   let decisionColor = 'text-green-400'
 
   if (willRain) {
-    decisionTitle = 'Riego Probablemente Bloqueado (Lluvia Inminente)'
-    decisionDesc = `El oráculo predice lluvia (${(forecast.precipProb * 100).toFixed(0)}%). Será refutado si hay sol intenso localmente.`
+    decisionTitle = 'Riego Probablemente Bloqueado'
+    decisionDesc = `Pronóstico de lluvia (${(forecast.precipProb * 100).toFixed(0)}%). Será refutado si hay sol intenso localmente.`
     decisionColor = 'text-blue-400'
   } else if (!drySoil && forecast.soilMoisture !== null) {
-    decisionTitle = 'Riego Innecesario (Suelo Húmedo)'
-    decisionDesc = `Las imágenes satelitales reportan un suelo con suficiente humedad (>35%). Actual: ${(forecast.soilMoisture * 100).toFixed(0)}%.`
+    decisionTitle = 'Riego Innecesario'
+    decisionDesc = `Imágenes satelitales reportan suelo húmedo (${(forecast.soilMoisture * 100).toFixed(0)}%).`
     decisionColor = 'text-yellow-400'
   }
 
   return (
     <div className="from-surface to-surface/80 relative flex h-full flex-col gap-5 overflow-hidden rounded-xl border border-white/10 bg-linear-to-br p-6">
-      <div className="absolute top-0 right-0 p-4 opacity-10">
+      <div className="absolute top-0 right-0 p-4 opacity-5">
         <FaCloudSunRain className="h-32 w-32" />
       </div>
 
@@ -50,13 +52,13 @@ export function OracleDecisionCard({ forecast }: { forecast: OracleForecast | un
         </div>
         <div className="flex flex-1 flex-col">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold tracking-tight">Weather Oracle</h2>
+            <h2 className="text-lg font-bold tracking-tight">Weather Oracle v2</h2>
             <div className="bg-secondary/10 text-secondary rounded-full border border-white/5 px-2 py-0.5 text-[9px] font-bold tracking-widest uppercase">
-              Actualizado: cada 3h
+              Consenso de Fuentes
             </div>
           </div>
           <p className="text-secondary text-xs font-medium tracking-wide">
-            ASISTENTE DE DECISIONES AGRONÓMICAS
+            IA AGRONÓMICA + SENSORES LOCALES
           </p>
         </div>
       </div>
@@ -71,32 +73,77 @@ export function OracleDecisionCard({ forecast }: { forecast: OracleForecast | un
           <span className={`font-bold ${decisionColor}`}>{decisionTitle}</span>
         </div>
         <p className="text-secondary/90 text-sm leading-relaxed">{decisionDesc}</p>
+
+        {hasConflict && (
+          <div className="mt-2 flex items-center gap-2 rounded-md border border-amber-500/20 bg-amber-500/10 p-2">
+            <FaBalanceScale className="h-3 w-3 text-amber-400" />
+            <span className="text-[10px] font-bold tracking-wider text-amber-400 uppercase">
+              Discrepancia Detectada: Validando con Lux local
+            </span>
+          </div>
+        )}
       </div>
 
-      <div className="relative z-10 mt-auto grid grid-cols-2 gap-4 md:grid-cols-4">
-        <div className="flex flex-col gap-1">
-          <span className="text-secondary text-xs font-semibold tracking-wider uppercase">
-            Temp. Satelital
+      <div className="relative z-10 grid grid-cols-2 gap-4">
+        {/* Desglose de Consenso */}
+        <div className="flex flex-col gap-2 rounded-lg bg-white/5 p-3">
+          <span className="text-secondary text-[10px] font-bold tracking-widest uppercase">
+            Fuentes (Lluvia)
           </span>
-          <span className="font-medium">{forecast.temperature.toFixed(1)} °C</span>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-secondary/80 text-[11px]">OpenWeather</span>
+              <span
+                className={`text-[11px] font-bold ${owmProb > 0.6 ? 'text-blue-400' : 'text-white'}`}
+              >
+                {(owmProb * 100).toFixed(0)}%
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-secondary/80 text-[11px]">Open-Meteo</span>
+              <span
+                className={`text-[11px] font-bold ${omProb > 0.6 ? 'text-blue-400' : 'text-white'}`}
+              >
+                {(omProb * 100).toFixed(0)}%
+              </span>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-secondary text-xs font-semibold tracking-wider uppercase">
-            Humedad Ext.
+
+        {/* Datos Atmosféricos */}
+        <div className="flex flex-col gap-2 rounded-lg bg-white/5 p-3">
+          <span className="text-secondary text-[10px] font-bold tracking-widest uppercase">
+            Atmósfera
           </span>
-          <span className="font-medium">{forecast.humidity.toFixed(0)}%</span>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-secondary/80 text-[11px]">Presión</span>
+              <span className="text-[11px] font-bold">
+                {forecast.pressure?.toFixed(0) ?? '--'} hPa
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-secondary/80 text-[11px]">Viento</span>
+              <span className="text-[11px] font-bold">
+                {forecast.windSpeed?.toFixed(1) ?? '--'} km/h
+              </span>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-secondary text-xs font-semibold tracking-wider uppercase">
-            Prob. Precipit.
-          </span>
-          <span className="font-medium">{(forecast.precipProb * 100).toFixed(0)}%</span>
+      </div>
+
+      <div className="relative z-10 mt-auto grid grid-cols-3 gap-4 border-t border-white/5 pt-4">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-secondary/60 text-[10px] font-bold uppercase">Temp. Sat</span>
+          <span className="text-sm font-medium">{forecast.temperature.toFixed(1)} °C</span>
         </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-secondary text-xs font-semibold tracking-wider uppercase">
-            Humedad Suelo
-          </span>
-          <span className="font-medium">
+        <div className="flex flex-col gap-0.5">
+          <span className="text-secondary/60 text-[10px] font-bold uppercase">Hum. Sat</span>
+          <span className="text-sm font-medium">{forecast.humidity.toFixed(0)}%</span>
+        </div>
+        <div className="flex flex-col gap-0.5 text-right">
+          <span className="text-secondary/60 text-[10px] font-bold uppercase">Suelo VWC</span>
+          <span className="text-sm font-medium">
             {forecast.soilMoisture ? `${(forecast.soilMoisture * 100).toFixed(0)}%` : '--'}
           </span>
         </div>

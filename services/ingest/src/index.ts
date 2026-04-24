@@ -207,7 +207,6 @@ function hasStateChanged(
 
   return true
 }
-
 async function processZoneStateEvent(
   source: string,
   zone: ZoneType,
@@ -215,25 +214,40 @@ async function processZoneStateEvent(
   payload: string,
   eventType: string,
 ) {
-  // Solo persistir si el estado cambió (evitar spam de heartbeats)
-  if (!hasStateChanged(source, zone, eventType, payload)) return
-
-  const point = Point.measurement('system_events')
-    .setTag('source', source)
-    .setTag('zone', zone)
-    .setTag('context', context)
-    .setTag('event_type', eventType)
-    .setStringField('value', payload)
-
-  await writeToInflux(point)
-
   // Visibilidad operativa: Anunciar cambios reales de estado de lluvia
   if (eventType === 'Rain_State') {
+    const key = `${source}:${zone || 'global'}:${eventType}`
+    const previousValue = stateCache.get(key)
+
+    // Solo persistir si el estado cambió (evitar spam de heartbeats)
+    if (!hasStateChanged(source, zone, eventType, payload)) return
+
+    const point = Point.measurement('system_events')
+      .setTag('source', source)
+      .setTag('zone', zone)
+      .setTag('context', context)
+      .setTag('event_type', eventType)
+      .setStringField('value', payload)
+
+    await writeToInflux(point)
+
     if (payload === 'Raining') {
       Logger.warn('🌧️ [Raining] Lluvia detectada por sensores')
-    } else if (payload === 'Dry') {
+    } else if (payload === 'Dry' && previousValue === 'Raining') {
       Logger.info('☀️ [Dry] Lluvia finalizada (Cambio de estado detectado)')
     }
+  } else {
+    // Para otros eventos (Device_Status, etc.)
+    if (!hasStateChanged(source, zone, eventType, payload)) return
+
+    const point = Point.measurement('system_events')
+      .setTag('source', source)
+      .setTag('zone', zone)
+      .setTag('context', context)
+      .setTag('event_type', eventType)
+      .setStringField('value', payload)
+
+    await writeToInflux(point)
   }
 }
 

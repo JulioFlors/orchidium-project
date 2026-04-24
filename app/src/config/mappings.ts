@@ -104,7 +104,7 @@ export const TaskStatusLabels: Record<TaskStatus, string> = {
   [TaskStatus.COMPLETED]: 'Completada',
   [TaskStatus.CANCELLED]: 'Cancelada',
   [TaskStatus.FAILED]: 'Fallida',
-  [TaskStatus.EXPIRED]: 'Expirada',
+  [TaskStatus.EXPIRED]: 'Fallida',
   [TaskStatus.SKIPPED]: 'Omitida',
   [TaskStatus.CONFIRMED]: 'Confirmada',
   [TaskStatus.IN_PROGRESS]: 'Ejecutando',
@@ -183,4 +183,13 @@ export const AgrochemicalPurposeStyles: Record<AgrochemicalPurpose, string> = {
   [AgrochemicalPurpose.BACTERICIDA]: 'text-red-500',
   [AgrochemicalPurpose.FUNGICIDA]: 'text-amber-500',
   [AgrochemicalPurpose.INSECTICIDA]: 'text-rose-600',
+}
+
+/**
+ * Mapa de Sensores (Sensor Map)
+ * Define qué métricas de telemetría están disponibles para cada zona.
+ */
+export const ZoneMetrics: Partial<Record<ZoneType, string[]>> = {
+  [ZoneType.EXTERIOR]: ['illuminance', 'rain_intensity'],
+  [ZoneType.ZONA_A]: ['temperature', 'humidity', 'illuminance'],
 }

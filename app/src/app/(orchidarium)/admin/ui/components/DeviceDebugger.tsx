@@ -10,7 +10,7 @@ import { ToolboxGrid, AuditConsoleCard, HeartbeatCard } from './DiagnosticPanel'
 
 import { getConnectivityLogs } from '@/actions'
 import { Card, Heading, DeviceStatus } from '@/components'
-import { authClient } from '@/lib/auth-client'
+import { authClient } from '@/lib'
 import { useMqttStore } from '@/store/mqtt/mqtt.store'
 import { formatTime12h, formatRelativeHeartbeat } from '@/utils'
 import { ZoneType, ZoneTypeLabels } from '@/config/mappings'

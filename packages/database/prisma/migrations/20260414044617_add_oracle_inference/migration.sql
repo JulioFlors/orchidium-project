@@ -1,2 +1,0 @@
--- AlterEnum
-ALTER TYPE "TaskSource" ADD VALUE 'ORACLE_INFERENCE';

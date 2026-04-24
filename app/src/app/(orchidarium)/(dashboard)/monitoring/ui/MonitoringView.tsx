@@ -5,17 +5,18 @@ import { CloudRain, Droplets, Thermometer, Sun, Cloud, Moon } from 'lucide-react
 import { FaChartLine } from 'react-icons/fa6'
 import useSWR from 'swr'
 
-import { EnvironmentCard, SensorHistoryChart } from './components'
+import { EnvironmentCard, EnvironmentHistoryChart } from './components'
 
-import { ZoneType } from '@/config/mappings'
+import { ZoneType, ZoneMetrics } from '@/config/mappings'
 import { Heading, DeviceStatus } from '@/components'
 import { useDeviceHeartbeat, useToast } from '@/hooks'
 import { useMqttStore } from '@/store/mqtt/mqtt.store'
 import { formatTime12h, formatDateLong } from '@/utils/timeFormat'
 
+type MetricType = 'temperature' | 'humidity' | 'illuminance' | 'rain_intensity' | 'rain_events'
+
 interface SensorData {
   [key: string]: string | number | boolean | undefined
-  external_illuminance?: number
   humidity: number
   illuminance: number
   rain_intensity: number
@@ -34,8 +35,6 @@ interface RainData {
   events?: { time: string; duration: number; intensity: number }[]
 }
 
-type MetricType = 'temperature' | 'humidity' | 'illuminance' | 'rain_intensity' | 'rain_events'
-
 const fetcher = async (url: string) => {
   const res = await fetch(url)
 
@@ -50,14 +49,27 @@ const fetcher = async (url: string) => {
 
 export function MonitoringView() {
   // ----- Estados -----
-  const [metricRanges, setMetricRanges] = useState<Record<MetricType, string>>({
-    temperature: '24h',
-    humidity: '24h',
-    illuminance: '24h',
-    rain_intensity: '24h',
-    rain_events: '24h',
-  })
   const [zone, setZone] = useState<string>(ZoneType.EXTERIOR)
+
+  const [metricRanges, setMetricRanges] = useState<Record<string, Record<string, string>>>(() => {
+    const initial: Record<string, Record<string, string>> = {}
+
+    Object.values(ZoneType).forEach((z) => {
+      initial[z] = {}
+      const metrics = ZoneMetrics[z] || []
+
+      metrics.forEach((m) => {
+        initial[z][m] = '12h'
+      })
+      // Agregar métricas especiales que no están en ZoneMetrics pero se muestran en la UI
+      if (z === ZoneType.EXTERIOR) {
+        initial[z]['rain_events'] = '12h'
+      }
+    })
+
+    return initial
+  })
+
   const [selectedMetric, setSelectedMetric] = useState<MetricType | null>(null)
   const [now, setNow] = useState(0)
 
@@ -73,11 +85,18 @@ export function MonitoringView() {
 
   const { error: notifyError } = useToast()
 
-  const currentRange = selectedMetric ? metricRanges[selectedMetric] : '24h'
+  const currentRange =
+    selectedMetric && metricRanges[zone] ? metricRanges[zone][selectedMetric] : '12h'
 
   const handleRangeChange = (newRange: string) => {
-    if (selectedMetric) {
-      setMetricRanges((prev) => ({ ...prev, [selectedMetric]: newRange }))
+    if (selectedMetric && zone) {
+      setMetricRanges((prev) => ({
+        ...prev,
+        [zone]: {
+          ...(prev[zone] || {}),
+          [selectedMetric]: newRange,
+        },
+      }))
     }
   }
 
@@ -86,7 +105,7 @@ export function MonitoringView() {
     data: cardStatusData = [],
     error: cardStatusError,
     isLoading: isCardStatusLoading,
-  } = useSWR<SensorData[]>(`/api/sensors/history?range=24h&zone=${zone}`, fetcher, {
+  } = useSWR<SensorData[]>(`/api/environment/history?range=12h&zone=${zone}`, fetcher, {
     refreshInterval: 30000,
     revalidateOnFocus: false,
     errorRetryCount: 3,
@@ -100,7 +119,7 @@ export function MonitoringView() {
     isLoading: isChartLoading,
   } = useSWR<SensorData[]>(
     selectedMetric && selectedMetric !== 'rain_events'
-      ? `/api/sensors/history?range=${currentRange}&zone=${zone}&metric=${selectedMetric}`
+      ? `/api/environment/history?range=${currentRange}&zone=${zone}&metric=${selectedMetric}`
       : null,
     fetcher,
     {
@@ -117,8 +136,8 @@ export function MonitoringView() {
     error: rainError,
     isLoading: isRainLoading,
   } = useSWR<RainData>(
-    zone === ZoneType.EXTERIOR
-      ? `/api/sensors/rain?range=${metricRanges['rain_events']}&zone=${zone}`
+    zone === ZoneType.EXTERIOR && metricRanges[zone]?.['rain_events']
+      ? `/api/environment/rain?range=${metricRanges[zone]['rain_events']}&zone=${zone}`
       : null,
     fetcher,
     {
@@ -310,7 +329,7 @@ export function MonitoringView() {
           dataKey: 'illuminance',
           color: '#eab308',
           unit: 'lx',
-          title: 'Iluminancia',
+          title: zone === ZoneType.EXTERIOR ? 'Iluminancia Exterior' : 'Iluminancia Orquideario',
           icon: <Sun className="h-4 w-4" />,
         }
       case 'rain_intensity':
@@ -494,20 +513,20 @@ export function MonitoringView() {
 
       if (lux < 75000) {
         return {
-          label: 'Extremo',
+          label: 'Crítico',
           icon: <Sun className="h-6 w-6 text-orange-500" />,
           color: 'orange' as const,
           description: 'Radiación crítica',
-          status: 'warning' as const,
+          status: 'critical' as const,
         }
       }
 
       return {
-        label: 'Peligro',
+        label: 'Advertencia',
         icon: <Sun className="h-6 w-6 text-red-400" />,
         color: 'red' as const,
         description: 'Riesgo de Deshidratación',
-        status: 'critical' as const,
+        status: 'warning' as const,
       }
     } else {
       if (lux < 10000)
@@ -606,7 +625,7 @@ export function MonitoringView() {
               isLoading={isMqttLoading}
               isOffline={connectionState === 'offline'}
               status="optimal"
-              title="Iluminancia"
+              title="Iluminancia Orquideario"
               trend={calculateTrend('illuminance')}
               unit="lux"
               value={Math.round(current.illuminance).toLocaleString()}
@@ -624,7 +643,7 @@ export function MonitoringView() {
               isLoading={isMqttLoading}
               isOffline={connectionState === 'offline'}
               status="optimal"
-              title="Iluminancia"
+              title="Iluminancia Exterior"
               unit="lux"
               value={Math.round(current.illuminance).toLocaleString()}
               onClick={() => setSelectedMetric('illuminance')}
@@ -650,11 +669,11 @@ export function MonitoringView() {
               isOffline={false}
               status="optimal"
               title="Eventos de Lluvia"
-              unit={metricRanges['rain_events'] === '24h' ? '' : 'Eventos'}
+              unit={metricRanges[zone]?.['rain_events'] === '12h' ? '' : 'Eventos'}
               value={
                 !rainData
                   ? '--'
-                  : metricRanges['rain_events'] === '24h'
+                  : metricRanges[zone]?.['rain_events'] === '12h'
                     ? formatDuration(rainData.totalDurationSeconds)
                     : rainData.eventCount
               }
@@ -694,13 +713,11 @@ export function MonitoringView() {
               <div className="bg-hover-overlay flex h-12 w-12 items-center justify-center rounded-full">
                 <FaChartLine className="text-primary h-6 w-6" />
               </div>
-              <p className="text-sm font-medium">
-                Seleccione un parámetro ambiental para ver su historial
-              </p>
+              <p className="text-sm font-medium">Seleccione una card</p>
             </div>
           </div>
         ) : chartProps ? (
-          <SensorHistoryChart
+          <EnvironmentHistoryChart
             chartType={chartProps.chartType as 'area' | 'bar'}
             color={chartProps.color}
             data={chartProps.customData || chartData}

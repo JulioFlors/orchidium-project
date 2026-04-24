@@ -5,7 +5,7 @@ import { influxClient } from '@/lib/server'
 
 export async function GET(_request: Request) {
   const { searchParams } = new URL(_request.url)
-  const range = searchParams.get('range') || '24h'
+  const range = searchParams.get('range') || '12h'
   const zone = searchParams.get('zone') || 'EXTERIOR'
 
   let rangeString = '24h'

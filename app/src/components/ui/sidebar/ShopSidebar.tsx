@@ -11,7 +11,7 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import { AnimatePresence, motion } from 'motion/react'
 import useSWR from 'swr'
 
-import { authClient } from '@/lib/auth-client'
+import { authClient } from '@/lib'
 import { PersonIcon, SearchBox, ThemeToggle, buttonVariants } from '@/components'
 import { shopRoutes } from '@/config'
 import { useUIStore } from '@/store'

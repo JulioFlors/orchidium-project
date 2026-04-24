@@ -40,7 +40,7 @@ export async function syncOpenMeteo() {
   const lat = process.env.LATITUDE || '8.31'
   const lon = process.env.LONGITUDE || '-62.71'
 
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,weather_code&timezone=auto&forecast_days=3`
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,weather_code,surface_pressure&timezone=auto&forecast_days=3`
 
   Logger.info(`Sincronizando Open-Meteo para las coordenadas Lat:${lat} Lon:${lon}...`)
 
@@ -60,6 +60,7 @@ export async function syncOpenMeteo() {
       const humidity = hourly.relative_humidity_2m[i]
       const precipProb = (hourly.precipitation_probability[i] || 0) / 100
       const weatherCode = hourly.weather_code[i]
+      const pressure = hourly.surface_pressure[i]
 
       const condition = mapWeatherCode(weatherCode)
 
@@ -74,6 +75,7 @@ export async function syncOpenMeteo() {
           temperature,
           humidity,
           precipProb,
+          pressure,
           condition,
           updatedAt: new Date(),
         },
@@ -82,6 +84,7 @@ export async function syncOpenMeteo() {
           temperature,
           humidity,
           precipProb,
+          pressure,
           condition,
           source,
         },
@@ -140,6 +143,7 @@ export async function syncOpenWeatherMap() {
 
       // OWM 'pop' (Probability of precipitation) es 0-1
       const precipProb = item.pop || 0
+      const pressure = item.main.pressure
 
       const weatherCode = item.weather[0]?.id || 0
       const condition = mapOWMWeatherCode(weatherCode)
@@ -155,6 +159,7 @@ export async function syncOpenWeatherMap() {
           temperature,
           humidity,
           precipProb,
+          pressure,
           condition,
           updatedAt: new Date(),
         },
@@ -163,6 +168,7 @@ export async function syncOpenWeatherMap() {
           temperature,
           humidity,
           precipProb,
+          pressure,
           condition,
           source,
         },

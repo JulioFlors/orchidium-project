@@ -259,17 +259,17 @@ model DailyEnvironmentStat {
   id                  String   @id @default(uuid())
   date                DateTime @db.Date
   zone                ZoneType
-  avgTemperature      Float
-  minTemperature      Float
-  maxTemperature      Float
-  avgHumidity         Float
-  minHumidity         Float
-  maxHumidity         Float
+  avgTemperature      Float?
+  minTemperature      Float?
+  maxTemperature      Float?
+  avgHumidity         Float?
+  minHumidity         Float?
+  maxHumidity         Float?
   lightDurationHours  Float
   totalRainDuration   Int
   createdAt           DateTime @default(now())
-  avgIlluminance      Float
-  maxIlluminance      Float
+  avgIlluminance      Float?
+  maxIlluminance      Float?
   /// Temperatura promedio diurna (08:00–16:00 hora local)
   avgTempDay          Float?
   /// Temperatura promedio nocturna (20:00–06:00 hora local)
@@ -288,7 +288,7 @@ model DailyEnvironmentStat {
   maxTempTime         String?
   minHumTime          String?
   minIllumTime        String?
-  minIlluminance      Float
+  minIlluminance      Float?
   minTempTime         String?
   /// Balance hídrico: minutos totales de nebulización ejecutada en el día
   nebulizationMinutes Int?
@@ -298,6 +298,8 @@ model DailyEnvironmentStat {
   vpdAvg              Float?
   vpdMax              Float?
   vpdMin              Float?
+  /// Clasificación del tipo de día: EXTREMELY_SUNNY, SUNNY, TEMPERATE, OVERCAST, RAINY
+  dayType             String?
 
   @@unique([date, zone])
   @@index([date])
@@ -345,6 +347,35 @@ model WeatherAlert {
   createdAt   DateTime  @default(now())
 
   @@index([startsAt])
+}
+
+model Pest {
+  id          String         @id @default(uuid())
+  name        String         @unique
+  description String?
+  category    PestCategory
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  sightings   PestSighting[]
+}
+
+model PestSighting {
+  id         String   @id @default(uuid())
+  pestId     String?
+  pestName   String?
+  zone       ZoneType
+  severity   Severity @default(LOW)
+  notes      String?
+  capturedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  plantId    String?
+  pest       Pest?    @relation(fields: [pestId], references: [id])
+  plant      Plant?   @relation(fields: [plantId], references: [id])
+
+  @@index([zone])
+  @@index([pestId])
+  @@index([plantId])
 }
 
 enum DeviceStatus {
@@ -447,35 +478,6 @@ enum WeatherCondition {
   FOG
   SNOW
   UNKNOWN
-}
-
-model Pest {
-  id          String         @id @default(uuid())
-  name        String         @unique
-  description String?
-  category    PestCategory
-  sightings   PestSighting[]
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-}
-
-model PestSighting {
-  id         String       @id @default(uuid())
-  pestId     String?
-  pestName   String? // Para registros rápidos o plagas no catalogadas
-  zone       ZoneType
-  severity   Severity     @default(LOW)
-  notes      String?
-  capturedAt DateTime     @default(now())
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
-  plantId    String?
-  pest       Pest?        @relation(fields: [pestId], references: [id])
-  plant      Plant?       @relation(fields: [plantId], references: [id])
-
-  @@index([zone])
-  @@index([pestId])
-  @@index([plantId])
 }
 
 enum PestCategory {

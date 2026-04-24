@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 
 import { headers } from 'next/headers'
 
-import { auth } from '@/lib/auth'
+import { auth } from '@/lib/server'
 import { Footer, Sidebar, Header } from '@/components'
 import { Logger } from '@/lib'
 import {

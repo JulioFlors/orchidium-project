@@ -82,3 +82,23 @@ export function formatRelativeHeartbeat(dateValue: string | Date | number): stri
 
   return `${day} ${month}, ${timeStr}`
 }
+
+/**
+ * Obtiene la hora (0-23) de una fecha específicamente en la zona horaria de Caracas.
+ */
+export function getHourInCaracas(dateValue: string | Date | number): number {
+  const date = new Date(dateValue)
+
+  if (isNaN(date.getTime())) return 0
+
+  const hourStr = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    hour12: false,
+    timeZone: 'America/Caracas',
+  }).format(date)
+
+  // Nota: Intl.DateTimeFormat con hour12: false a veces devuelve "24" para medianoche.
+  const hour = Number(hourStr)
+
+  return hour === 24 ? 0 : hour
+}
