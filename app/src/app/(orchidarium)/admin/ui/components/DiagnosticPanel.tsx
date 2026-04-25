@@ -27,8 +27,7 @@ import {
 import clsx from 'clsx'
 
 import { Card, StatusCircleIcon } from '@/components'
-import { authClient } from '@/lib'
-import { AUDIT_STORAGE_PREFIX, clearAuditData } from '@/lib/server'
+import { authClient, AUDIT_STORAGE_PREFIX, clearAuditData } from '@/lib'
 import { formatTime12h, formatRelativeHeartbeat } from '@/utils'
 
 // ---- Interfaces de Auditoría ----

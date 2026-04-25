@@ -89,10 +89,91 @@ function mapZoneSlugToZoneType(zoneSlug: string): ZoneType | undefined {
 }
 
 // ---- Escritura en InfluxDB ----
+
+/**
+ * Formatea un punto de InfluxDB para una salida de log ultra-compacta.
+ */
+function formatPointSummary(point: Point): string {
+  const line = point.toLineProtocol()
+
+  if (!line) return ''
+
+  const parts = line.split(' ')
+
+  if (parts.length < 2) return line
+
+  const header = parts[0] // measurement,tag1=v1...
+  const fieldsRaw = parts[1] // f1=v1,f2=v2...
+
+  const headerParts = header.split(',')
+  const measurement = headerParts[0]
+  const tags: Record<string, string> = {}
+
+  headerParts.slice(1).forEach((t) => {
+    const [k, v] = t.split('=')
+
+    if (k && v) tags[k] = v
+  })
+
+  const fields: Record<string, string> = {}
+
+  fieldsRaw.split(',').forEach((f) => {
+    const [k, v] = f.split('=')
+
+    if (k && v) fields[k] = v
+  })
+
+  // Formato: [ Evento ] Origen -> Valor
+  if (measurement === 'system_events') {
+    const val = fields.value?.replace(/"/g, '') || '?'
+    const event = tags.event_type || 'Event'
+    const source = tags.source || 'Unknown'
+
+    return `[ ${event} ] ${source} -> ${val}`
+  }
+
+  // Formato: [ Metrics ] Origen/Zona -> temp:25, hum:60...
+  if (measurement === 'environment_metrics') {
+    const metrics = Object.entries(fields)
+      .map(([k, v]) => {
+        const short =
+          k === 'temperature'
+            ? 'temp'
+            : k === 'humidity'
+              ? 'hum'
+              : k === 'illuminance'
+                ? 'lux'
+                : k === 'rain_intensity'
+                  ? 'rain'
+                  : k
+
+        return `${short}:${v}`
+      })
+      .join(', ')
+
+    const source = tags.source || 'Unknown'
+    const zone = tags.zone ? `/${tags.zone}` : ''
+
+    return `[ Metrics ] ${source}${zone} -> ${metrics}`
+  }
+
+  // Formato: [ Rain_Event ] Origen -> 300s | 85%
+  if (measurement === 'rain_events') {
+    const source = tags.source || 'Unknown'
+    const dur = fields.duration_seconds || '?'
+    const int = fields.intensity_percent || fields.average_intensity_percent || '?'
+
+    return `[ Rain_Event ] ${source} -> ${dur}s | ${int}%`
+  }
+
+  // Fallback compacto (sin timestamp)
+  return `[ ${measurement} ] ${fieldsRaw}`
+}
+
 async function writeToInflux(point: Point) {
   try {
     await influxClient.write(point)
-    Logger.influx(`Guardado: ${point.toLineProtocol()}`)
+    Logger.influx(formatPointSummary(point))
   } catch (e) {
     Logger.error('Error al guardar en InfluxDB', e)
   }
@@ -154,9 +235,6 @@ async function processEnvironmentPacket(
     if (data.phase !== undefined) point.setStringField('phase', String(data.phase))
 
     await writeToInflux(point)
-    Logger.debug(
-      `💾 [ INFLUX ] Guardado Environment (${source}/${zone}): ${Object.keys(data).join(', ')}`,
-    )
   } catch (e) {
     Logger.error('Error procesando paquete de datos Ambientales (Batch/Single)', e)
   }

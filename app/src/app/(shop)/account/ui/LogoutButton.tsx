@@ -6,8 +6,7 @@ import { IoLogOutOutline } from 'react-icons/io5'
 import clsx from 'clsx'
 
 import { Backdrop } from '@/components'
-import { clearAuditData } from '@/lib/server'
-import { authClient } from '@/lib'
+import { authClient, clearAuditData } from '@/lib'
 
 export function LogoutButton() {
   const [isLoggingOut, setIsLoggingOut] = useState(false)
