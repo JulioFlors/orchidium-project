@@ -7,7 +7,7 @@ from utime import sleep #type: ignore
 
 # ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
-DEBUG = False
+DEBUG = True
 
 # ---- Configuración OTA (Optimizado sin diccionario) ----
 OTA_URL = const("https://raw.githubusercontent.com/JulioFlors/orchidium-project/main/firmware/build/relay_modules/")
@@ -81,40 +81,61 @@ def connect_wifi_sync():
     if DEBUG: print(f"\n❌  No se pudo establecer la conexión WiFi {Colors.RED}(Timeout){Colors.RESET}.")
     return False
 
-# ---- Comprobar/Actualizar firmware via OTA ----
-if connect_wifi_sync():
-    try:
-        from ota import OTAUpdater #type: ignore
-        collect()
-        
-        # Ejecutar OTA (Usando la constante directa OTA_URL)
-        ota = OTAUpdater(OTA_URL, debug=DEBUG)
-        
-        # Si falla la verificación (DNS/Red), reiniciamos para reintentar limpio.
-        if not ota.check_for_updates():
-            if DEBUG:
-                print(f"\n💀  {Colors.RED}DEATH: Fallo Crítico de Red en Boot.{Colors.RESET}")
-                print(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo{Colors.RESET}\n\n")
-            sleep(1)
-            reset()
+# ---- Bucle de Persistencia de Red con Límite de Seguridad ----
+# El dispositivo intentará conectar pacientemente. Si tras 10 intentos (aprox 10 min) 
+# no hay éxito, reiniciará físicamente para limpiar la tabla de memoria (heap).
+fail_count = 0
+MAX_BOOT_FAILURES = const(10)
 
-    except Exception as e:
-        if DEBUG: print(f"🔥 Error en proceso OTA: {Colors.RED}{e}{Colors.RESET}")
+while True:
+    if connect_wifi_sync():
+        try:
+            from ota import OTAUpdater #type: ignore
+            collect()
+            
+            # ---- Comprobar/Actualizar Firmrware via OTA ----
+            # Ejecutar OTA (Usando la constante directa OTA_URL)
+            ota = OTAUpdater(OTA_URL, debug=DEBUG)
+            
+            # Si falla la verificación por (DNS/Red), Aumentamos el contador de errores.
+            if ota.check_for_updates():
+                break  # OTA OK → salir del bucle y continuar a main.py
+            else:
+                fail_count += 1
+                if DEBUG: print(f"\n⚠️  {Colors.YELLOW}Fallo de Red en proceso OTA.{Colors.RESET} ({fail_count}/{MAX_BOOT_FAILURES})")
+                sleep(10)
 
-    finally:
-        # (Liberar RAM Realmente)
-        import sys
-        modules_to_free = ['machine', 'ntptime', 'ota']
-        for mod in modules_to_free:
-            if mod in sys.modules:
-                del sys.modules[mod]
-                
-        # Destruir Variables Globales Innecesarias
-        for var in ['ota', 'WIFI_SSID', 'WIFI_PASS', 'OTA_URL', 'connect_wifi_sync', 'update_creds']:
-            if var in globals():
-                del globals()[var]
+        except Exception as e:
+            fail_count += 1
+            if DEBUG: print(f"\n🔥  Error en proceso OTA: {Colors.RED}{e}{Colors.RESET} ({fail_count}/{MAX_BOOT_FAILURES})")
+            sleep(10)
+    else:
+        # Falló el WiFi
+        fail_count += 1
+        if DEBUG: print(f"    └─ Reintento en 10 segundos. ({fail_count}/{MAX_BOOT_FAILURES})")
+        sleep(10)
+    
+    # [ÚLTIMO RECURSO]: Si la RAM está muy fragmentada o el driver de red colapsó
+    if fail_count >= MAX_BOOT_FAILURES:
+        if DEBUG:
+            print(f"\n💀  {Colors.RED}Límite de fallos alcanzado.{Colors.RESET}")
+            print(f"🔄  {Colors.BLUE}Reiniciando Hardware para limpiar RAM...{Colors.RESET}\n")
+        sleep(2)
+        reset()
 
-        collect()
+# (Limpieza Final de RAM antes de main.py)
+import sys
+modules_to_free = ['machine', 'ntptime', 'ota']
+for mod in modules_to_free:
+    if mod in sys.modules:
+        del sys.modules[mod]
+
+# Destruir Variables Globales Innecesarias
+for var in ['ota', 'WIFI_SSID', 'WIFI_PASS', 'OTA_URL', 'connect_wifi_sync', 'update_creds']:
+    if var in globals():
+        del globals()[var]
+
+collect()
 
 # Al terminar boot.py, MicroPython ejecuta automáticamente main.py
 # El WiFi queda conectado.

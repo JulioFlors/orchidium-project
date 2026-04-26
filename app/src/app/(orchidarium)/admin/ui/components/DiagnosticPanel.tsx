@@ -13,6 +13,7 @@ import {
   IoStatsChartOutline,
   IoStopCircleOutline,
   IoTimeOutline,
+  IoTrashOutline,
   IoWifiOutline,
 } from 'react-icons/io5'
 import {
@@ -26,7 +27,7 @@ import {
 } from 'recharts'
 import clsx from 'clsx'
 
-import { Card, StatusCircleIcon } from '@/components'
+import { ActionMenu, Card, StatusCircleIcon } from '@/components'
 import { authClient, AUDIT_STORAGE_PREFIX, clearAuditData } from '@/lib'
 import { formatTime12h, formatRelativeHeartbeat } from '@/utils'
 
@@ -38,62 +39,73 @@ interface AuditPayload {
 }
 
 // ---- Mapa de Colores por Herramienta ----
-const TOOL_COLORS: Record<string, { bg: string; ring: string; border: string; icon: string }> = {
+const TOOL_COLORS: Record<
+  string,
+  { bg: string; ring: string; border: string; icon: string; pulse: string }
+> = {
   services: {
     bg: 'from-slate-500/20 to-slate-500/5',
     ring: 'ring-slate-500/10',
     border: 'border-slate-500/20',
     icon: 'text-slate-400',
+    pulse: 'bg-slate-400',
   },
   timeline: {
     bg: 'from-indigo-500/20 to-indigo-500/5',
     ring: 'ring-indigo-500/10',
     border: 'border-indigo-500/20',
     icon: 'text-indigo-400',
+    pulse: 'bg-indigo-400',
   },
   lux: {
-    bg: 'from-cyan-500/20 to-cyan-500/5',
-    ring: 'ring-cyan-500/10',
-    border: 'border-cyan-500/20',
-    icon: 'text-cyan-400',
+    bg: 'from-amber-500/20 to-amber-500/5',
+    ring: 'ring-amber-500/10',
+    border: 'border-amber-500/20',
+    icon: 'text-amber-400',
+    pulse: 'bg-amber-400',
   },
   rain: {
     bg: 'from-blue-500/20 to-blue-500/5',
     ring: 'ring-blue-500/10',
     border: 'border-blue-500/20',
     icon: 'text-blue-400',
+    pulse: 'bg-blue-400',
   },
   heartbeat: {
     bg: 'from-red-500/20 to-red-500/5',
     ring: 'ring-red-500/10',
     border: 'border-red-500/20',
     icon: 'text-red-400',
+    pulse: 'bg-red-400',
   },
   nvs: {
     bg: 'from-amber-500/20 to-amber-500/5',
     ring: 'ring-amber-500/10',
     border: 'border-amber-500/20',
     icon: 'text-amber-400',
+    pulse: 'bg-amber-400',
   },
   ram: {
-    bg: 'from-zinc-500/20 to-zinc-500/5',
-    ring: 'ring-zinc-500/10',
-    border: 'border-zinc-500/20',
-    icon: 'text-zinc-400',
+    bg: 'from-indigo-500/20 to-indigo-500/5',
+    ring: 'ring-indigo-500/10',
+    border: 'border-indigo-500/20',
+    icon: 'text-indigo-400',
+    pulse: 'bg-indigo-400',
   },
   health: {
-    bg: 'from-emerald-500/20 to-emerald-500/5',
-    ring: 'ring-emerald-500/10',
-    border: 'border-emerald-500/20',
-    icon: 'text-emerald-400',
+    bg: 'from-purple-500/20 to-purple-500/5',
+    ring: 'ring-purple-500/10',
+    border: 'border-purple-500/20',
+    icon: 'text-purple-400',
+    pulse: 'bg-purple-400',
   },
 }
 
 const AUDIT_CHART_COLORS: Record<string, string> = {
-  lux: '#22d3ee',
+  lux: '#fbbf24', // amber-400
   rain: '#3b82f6',
   ram: '#818cf8',
-  health: '#10b981',
+  health: '#a855f7', // purple-500
 }
 
 const fallbackColor = {
@@ -114,10 +126,10 @@ const getWiFiSignalLabel = (rssi: number) => {
 }
 
 const getWiFiSignalIcon = (rssi: number) => {
-  if (rssi >= -60) return <IoWifiOutline className="text-emerald-500" />
-  if (rssi >= -80) return <IoWifiOutline className="text-amber-500" />
+  if (rssi >= -60) return <IoWifiOutline className="text-emerald-500" size={24} />
+  if (rssi >= -80) return <IoWifiOutline className="text-amber-500" size={24} />
 
-  return <IoWifiOutline className="text-red-500" />
+  return <IoWifiOutline className="text-red-500" size={24} />
 }
 
 // --- Micro-Componente: Herramienta Individual (Card) ---
@@ -220,6 +232,7 @@ export function ToolboxGrid({
           icon={
             <IoSearchOutline
               className={clsx(!activeAudits.includes('lux') && TOOL_COLORS.lux.icon)}
+              size={24}
             />
           }
           label={hardwarePresence.lux === false ? 'Lux (Off)' : 'Lux Meter'}
@@ -232,6 +245,7 @@ export function ToolboxGrid({
           icon={
             <IoPulseOutline
               className={clsx(!activeAudits.includes('rain') && TOOL_COLORS.rain.icon)}
+              size={24}
             />
           }
           label={hardwarePresence.rain === false ? 'Rain (Off)' : 'Rain Audit'}
@@ -245,6 +259,7 @@ export function ToolboxGrid({
               className={clsx(
                 activeAudits.includes('heartbeat') ? 'text-red-500' : TOOL_COLORS.heartbeat.icon,
               )}
+              size={24}
             />
           }
           label="Heartbeat"
@@ -257,6 +272,7 @@ export function ToolboxGrid({
           icon={
             <IoCodeSlashOutline
               className={clsx(!activeAudits.includes('nvs') && TOOL_COLORS.nvs.icon)}
+              size={24}
             />
           }
           label="NVS Stack"
@@ -269,6 +285,7 @@ export function ToolboxGrid({
           icon={
             <IoHardwareChipOutline
               className={clsx(!activeAudits.includes('ram') && TOOL_COLORS.ram.icon)}
+              size={24}
             />
           }
           label="RAM Audit"
@@ -281,15 +298,16 @@ export function ToolboxGrid({
           icon={
             <IoWifiOutline
               className={clsx(!activeAudits.includes('health') && TOOL_COLORS.health.icon)}
+              size={24}
             />
           }
-          label="WiFi Audit"
+          label="Wi-Fi Audit"
           onClick={() => onCommand('audit_health_on', 'health')}
         />
         <ToolCard
           colorKey="services"
           disabled={!isOnline}
-          icon={<IoPulseOutline className="rotate-90 text-red-500" />}
+          icon={<IoPulseOutline className="rotate-90 text-red-500" size={24} />}
           label="Node Reset"
           onClick={() => {
             if (confirm('¿Reiniciar dispositivo?')) onCommand('reset', null)
@@ -331,33 +349,32 @@ export function AuditConsoleCard({
   const accumulatorRef = useRef<Record<string, unknown>>({})
   const { data: session } = authClient.useSession()
 
-  const [displayPayload, setDisplayPayload] = useState<AuditPayload | null>(() => {
-    if (typeof window === 'undefined' || !activeAudit) return null
-    if (activeAudit && ['lux', 'rain', 'ram', 'health'].includes(activeAudit)) {
-      const cached = window.localStorage.getItem(
-        `${AUDIT_STORAGE_PREFIX}history_${deviceId}_${activeAudit}`,
-      )
+  const [displayPayload, setDisplayPayload] = useState<AuditPayload | null>(null)
+  const [localReceivedAt, setLocalReceivedAt] = useState<number | null>(null)
+  const [hasMounted, setHasMounted] = useState(false)
 
-      if (cached) {
-        try {
-          return JSON.parse(cached) as AuditPayload
-        } catch {
-          return null
+  // ---- Hidratación Segura y Carga de Cache ----
+  useEffect(() => {
+    queueMicrotask(() => {
+      setHasMounted(true)
+      if (activeAudit && ['lux', 'rain', 'ram', 'health'].includes(activeAudit)) {
+        const cached = window.localStorage.getItem(
+          `${AUDIT_STORAGE_PREFIX}history_${deviceId}_${activeAudit}`,
+        )
+
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached) as AuditPayload
+
+            setDisplayPayload(parsed)
+            if (parsed.receivedAt) setLocalReceivedAt(parsed.receivedAt)
+          } catch {
+            // No hacer nada si el cache está corrupto
+          }
         }
       }
-    }
-
-    return null
-  })
-
-  // Tiempo de llegada individual por widget
-  const [localReceivedAt, setLocalReceivedAt] = useState<number | null>(() => {
-    if (displayPayload && typeof displayPayload === 'object' && 'receivedAt' in displayPayload) {
-      return displayPayload.receivedAt as number
-    }
-
-    return null
-  })
+    })
+  }, [activeAudit, deviceId])
 
   // Auto-limpieza si la sesión caduca
   useEffect(() => {
@@ -365,6 +382,24 @@ export function AuditConsoleCard({
       clearAuditData()
     }
   }, [session])
+  // ---- Limpieza Automática al Cerrar ----
+  const unmountRef = useRef({ isActive, onStop })
+
+  useEffect(() => {
+    unmountRef.current = { isActive, onStop }
+  }, [isActive, onStop])
+
+  useEffect(() => {
+    return () => {
+      // Si el componente se desmonta y la auditoría seguía activa en el dispositivo,
+      // enviamos el comando de parada.
+      // NOTA: MqttStore.publishWithAck ahora evita duplicados, por lo que si ya
+      // había un comando de parada en cola, esta llamada será ignorada.
+      if (unmountRef.current.isActive && unmountRef.current.onStop) {
+        unmountRef.current.onStop()
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!currentPayload) return
@@ -410,19 +445,30 @@ export function AuditConsoleCard({
           const prevHistory = prevPayload.history || []
           let incomingHistory = (incomingPayload.history as unknown[]) || []
 
-          if (
-            incomingHistory.length === 0 &&
-            activeAudit &&
-            (incomingPayload[activeAudit] !== undefined || incomingPayload.val !== undefined)
-          ) {
-            const val = incomingPayload[activeAudit] ?? incomingPayload.val
-            const timestamp = incomingPayload.time
-              ? Number(incomingPayload.time) < 1000000000
-                ? Number(incomingPayload.time) + 946684800
-                : Number(incomingPayload.time)
-              : Date.now() / 1000
+          if (incomingHistory.length === 0 && activeAudit) {
+            // Caso A: El payload es un objeto y tiene la clave de la auditoría (o 'val')
+            // Caso B: El payload ya es el valor primitivo (número/string)
+            // Caso C: El payload es un objeto pero NO tiene la clave (ya fue pre-indexado en el padre, ej: RAM)
+            const hasKey =
+              typeof incomingPayload === 'object' &&
+              incomingPayload !== null &&
+              (incomingPayload[activeAudit] !== undefined || incomingPayload.val !== undefined)
 
-            incomingHistory = [[timestamp, val]]
+            const val = hasKey
+              ? ((incomingPayload as Record<string, unknown>)[activeAudit] ??
+                (incomingPayload as Record<string, unknown>).val)
+              : incomingPayload
+
+            // Solo agregamos si el valor es válido (no nulo/undefined)
+            if (val !== undefined && val !== null) {
+              const timestamp = (incomingPayload as Record<string, unknown>)?.time
+                ? Number((incomingPayload as Record<string, unknown>).time) < 1000000000
+                  ? Number((incomingPayload as Record<string, unknown>).time) + 946684800
+                  : Number((incomingPayload as Record<string, unknown>).time)
+                : Date.now() / 1000
+
+              incomingHistory = [[timestamp, val]]
+            }
           }
 
           const mergedMap = new Map<string, unknown>()
@@ -480,10 +526,6 @@ export function AuditConsoleCard({
     }
   }, [currentPayload, activeAudit, deviceId])
 
-  const timeAgeStr = localReceivedAt
-    ? `Recibido a las ${formatTime12h(localReceivedAt, true)}`
-    : 'Esperando datos...'
-
   const activeColor = activeAudit
     ? TOOL_COLORS[activeAudit]
       ? activeAudit
@@ -526,6 +568,8 @@ export function AuditConsoleCard({
 
       return { name: timeStr, value }
     })
+
+    if (!hasMounted) return <div className="mt-2 h-40 w-full" />
 
     return (
       <div
@@ -610,24 +654,24 @@ export function AuditConsoleCard({
           />
           <span
             className={clsx(
-              'animate-pulse text-sm font-medium tracking-wide uppercase',
+              'animate-pulse text-sm font-medium tracking-wide',
               TOOL_COLORS[activeColor].icon,
             )}
           >
-            Comunicando con Firmware
+            Estableciendo Conexión
           </span>
         </div>
       )
     }
 
-    if (!isActive && !displayPayload && activeAudit !== 'nvs') {
+    if (!isActive && !displayPayload) {
       return (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 px-10 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-zinc-800/40 text-zinc-500">
             <IoPlayCircleOutline size={32} />
           </div>
           <div className="flex flex-col gap-1">
-            <span className="text-xs font-black tracking-widest text-zinc-400 uppercase">
+            <span className="text-sm font-black tracking-widest text-zinc-400 uppercase">
               Diagnóstico en Pausa
             </span>
             <p className="text-[10px] leading-relaxed text-zinc-500 italic opacity-60">
@@ -655,7 +699,7 @@ export function AuditConsoleCard({
       }
     }
 
-    if (activeAudit === 'nvs') {
+    if (activeAudit === 'nvs' && displayPayload) {
       return (
         <pre className="whitespace-pre-wrap text-blue-300">
           {JSON.stringify(displayPayload, null, 2)}
@@ -696,7 +740,8 @@ export function AuditConsoleCard({
                       ? 'stroke-red-500'
                       : percent > 60
                         ? 'stroke-amber-500'
-                        : 'stroke-indigo-500',
+                        : TOOL_COLORS[activeColor]?.icon.replace('text-', 'stroke-') ||
+                          'stroke-indigo-500',
                   )}
                   cx="80"
                   cy="80"
@@ -710,28 +755,38 @@ export function AuditConsoleCard({
                 <span className="text-3xl font-black text-zinc-900 dark:text-white">
                   {percent}%
                 </span>
-                <span className="text-[10px] font-bold tracking-widest text-zinc-400 uppercase">
+                <span className="text-sm font-bold tracking-widest text-zinc-400 uppercase">
                   Consumo RAM
                 </span>
               </div>
             </div>
 
             <div className="grid w-full grid-cols-2 gap-3 border-t border-zinc-200/50 pt-6 dark:border-white/5">
-              <div className="flex flex-col items-start gap-1 rounded-lg bg-zinc-50 p-3 dark:bg-white/5">
+              <div className="bg-black-and-white/5 flex flex-col items-start gap-1 rounded-lg p-3">
                 <div className="flex items-center gap-1.5">
                   <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                   <span className="text-[9px] font-bold text-zinc-400 uppercase">Libre</span>
                 </div>
-                <span className="font-mono text-xs font-bold text-emerald-500">
+                <span className="font-mono text-sm font-bold text-emerald-500">
                   {(free / 1024).toFixed(1)} KB
                 </span>
               </div>
-              <div className="flex flex-col items-start gap-1 rounded-lg bg-zinc-50 p-3 dark:bg-white/5">
+              <div className="bg-black-and-white/5 flex flex-col items-start gap-1 rounded-lg p-3">
                 <div className="flex items-center gap-1.5">
-                  <div className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                  <div
+                    className={clsx(
+                      'h-1.5 w-1.5 rounded-full',
+                      TOOL_COLORS[activeColor]?.icon.replace('text-', 'bg-') || 'bg-indigo-500',
+                    )}
+                  />
                   <span className="text-[9px] font-bold text-zinc-400 uppercase">Usada</span>
                 </div>
-                <span className="font-mono text-xs font-bold text-indigo-400">
+                <span
+                  className={clsx(
+                    'font-mono text-sm font-bold',
+                    TOOL_COLORS[activeColor]?.icon || 'text-indigo-400',
+                  )}
+                >
                   {(used / 1024).toFixed(1)} KB
                 </span>
               </div>
@@ -740,9 +795,9 @@ export function AuditConsoleCard({
             <div className="mt-4 flex w-full items-center justify-between px-2">
               <div className="flex items-center gap-2">
                 <IoInformationCircleOutline className="text-zinc-400" />
-                <span className="text-[10px] text-zinc-500">Capacidad Total</span>
+                <span className="text-sm text-zinc-500">Capacidad Total</span>
               </div>
-              <span className="font-mono text-[10px] font-black text-zinc-400 opacity-60">
+              <span className="font-mono text-sm font-black text-zinc-400 opacity-60">
                 {(total / 1024).toFixed(1)} KB
               </span>
             </div>
@@ -777,32 +832,46 @@ export function AuditConsoleCard({
                 {getWiFiSignalIcon(rssi)}
               </div>
               <div className="flex flex-col gap-0.5">
-                <span className="text-[10px] font-black tracking-widest text-zinc-400 uppercase">
-                  Señal Inalámbrica
+                <span className="text-sm font-black tracking-widest text-zinc-400 uppercase">
+                  Fuerza de la Señal Inalámbrica
                 </span>
                 <div className="flex items-center gap-2">
                   <span className={clsx('text-sm font-bold', signal.color)}>{signal.label}</span>
-                  <span className="text-xs text-zinc-500 opacity-60">({rssi} dBm)</span>
+                  <span className="text-sm text-zinc-500 opacity-60">({rssi} dBm)</span>
                 </div>
               </div>
             </div>
           </div>
 
           <div className="mt-4 grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1 rounded-lg bg-zinc-100/50 p-3 dark:bg-white/5">
-              <span className="text-[9px] font-bold text-zinc-400 uppercase">Dirección IP</span>
-              <span className="font-mono text-xs font-medium text-indigo-400">{ip}</span>
+            <div className="bg-black-and-white/5 flex flex-col gap-1 rounded-lg p-3">
+              <span className="text-sm font-bold text-zinc-400 uppercase">Dirección IP</span>
+              <span
+                className={clsx(
+                  'font-mono text-sm font-medium',
+                  TOOL_COLORS[activeColor]?.icon || 'text-indigo-400',
+                )}
+              >
+                {ip}
+              </span>
             </div>
-            <div className="flex flex-col gap-1 rounded-lg bg-zinc-100/50 p-3 dark:bg-white/5">
-              <span className="text-[9px] font-bold text-zinc-400 uppercase">Protocolo</span>
-              <span className="font-mono text-xs font-medium text-emerald-400">DHCP/TCP</span>
+            <div className="bg-black-and-white/5 flex flex-col gap-1 rounded-lg p-3">
+              <span className="text-sm font-bold text-zinc-400 uppercase">Protocolo</span>
+              <span
+                className={clsx(
+                  'font-mono text-sm font-medium',
+                  TOOL_COLORS[activeColor]?.icon || 'text-emerald-400',
+                )}
+              >
+                DHCP/TCP
+              </span>
             </div>
           </div>
 
           <div className="mt-6 flex flex-col gap-2">
             <div className="flex items-center gap-2 text-zinc-400">
               <IoStatsChartOutline className="text-sm" />
-              <span className="text-[10px] font-bold uppercase">Estabilidad de Señal</span>
+              <span className="text-sm font-bold uppercase">Estabilidad de Señal</span>
             </div>
             {renderTrendChart()}
           </div>
@@ -828,11 +897,11 @@ export function AuditConsoleCard({
         />
         <span
           className={clsx(
-            'font-mono text-sm font-medium tracking-wide uppercase',
+            'font-mono text-sm font-bold tracking-wide',
             TOOL_COLORS[activeColor].icon,
           )}
         >
-          Enlace Establecido
+          Esperando Datos
         </span>
       </div>
     )
@@ -847,12 +916,22 @@ export function AuditConsoleCard({
         <div className="flex items-center gap-3">
           <div
             className={clsx(
-              'h-1.5 w-1.5 animate-pulse rounded-full',
-              isStale ? 'bg-zinc-400' : 'bg-indigo-500',
+              'h-1.5 w-1.5 rounded-full',
+              isActive && 'animate-pulse',
+              isStale ? 'bg-zinc-400' : TOOL_COLORS[activeColor]?.pulse || 'bg-indigo-500',
             )}
           />
-          <h3 className="font-mono text-[10px] font-bold tracking-[0.2em] text-zinc-500 uppercase opacity-80 dark:text-zinc-400">
-            {activeAudit ? `Audit/${activeAudit}` : 'Diagnostic/Console'}
+          <h3 className="flex items-center gap-2 font-mono text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase opacity-80 dark:text-zinc-400">
+            {activeAudit === 'health'
+              ? 'Audit/WiFi'
+              : activeAudit
+                ? `Audit/${activeAudit}`
+                : 'Diagnostic/Console'}
+            {!isOnline && isActive && (
+              <span className="animate-pulse text-[9px] font-black tracking-normal text-red-500">
+                (OFFLINE)
+              </span>
+            )}
           </h3>
           {isStale && (
             <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[8px] font-bold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
@@ -860,60 +939,74 @@ export function AuditConsoleCard({
             </span>
           )}
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
           {localReceivedAt && (
-            <span className="hidden font-mono text-sm font-medium tracking-tight text-zinc-400 opacity-60 md:block">
-              {timeAgeStr}
+            <span className="font-mono text-[10px] font-medium tracking-tight text-zinc-400 opacity-60">
+              {formatTime12h(new Date(localReceivedAt))}
             </span>
           )}
-          <div className="flex items-center gap-1 border-l border-zinc-200 pl-4 dark:border-white/5">
+          <div className="flex items-center gap-0.5 border-l border-zinc-200 pl-2 dark:border-white/5">
             {isActive ? (
               <button
-                className="rounded-md bg-zinc-200/50 p-1.5 text-red-500 transition-all hover:bg-red-500 hover:text-white disabled:pointer-events-none dark:bg-zinc-800/40 dark:text-red-400 dark:hover:bg-red-500/20"
+                className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-red-500 transition-all hover:bg-red-500/10 disabled:pointer-events-none dark:text-red-400 dark:hover:bg-red-500/20"
                 disabled={isPending}
+                title="Detener Auditoría"
                 type="button"
                 onClick={onStop}
               >
-                <IoStopCircleOutline size={18} />
+                <IoStopCircleOutline size={20} />
               </button>
             ) : (
               <button
-                className="rounded-md bg-zinc-200/50 p-1.5 text-emerald-600 transition-all hover:bg-emerald-600 hover:text-white disabled:pointer-events-none dark:bg-zinc-800/40 dark:text-emerald-400 dark:hover:bg-emerald-500/20"
-                disabled={isPending}
+                className={clsx(
+                  'flex h-8 w-8 items-center justify-center rounded-full transition-all',
+                  !isOnline
+                    ? 'cursor-default opacity-30 grayscale'
+                    : 'cursor-pointer text-emerald-600 hover:bg-emerald-600/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20',
+                )}
+                disabled={isPending || !isOnline}
+                title={isOnline ? 'Iniciar Auditoría' : 'Nodo Fuera de Línea'}
                 type="button"
-                onClick={() => {
-                  if (activeAudit && typeof window !== 'undefined') {
-                    window.localStorage.removeItem(
-                      `${AUDIT_STORAGE_PREFIX}history_${deviceId}_${activeAudit}`,
-                    )
-                  }
-                  setDisplayPayload(null)
-                  onClear?.()
-                  onStart?.()
-                }}
+                onClick={onStart}
               >
-                <IoPlayCircleOutline size={18} />
+                <IoPlayCircleOutline size={20} />
               </button>
             )}
-            <button
-              className="cursor-pointer rounded-md p-1.5 text-zinc-400 transition-all hover:bg-zinc-200 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-white"
-              type="button"
-              onClick={() => {
-                onStop?.()
-                if (activeAudit && typeof window !== 'undefined') {
-                  window.sessionStorage.removeItem(`audit_history_${deviceId}_${activeAudit}`)
-                }
-                setDisplayPayload(null)
-                onClear?.()
-                onClose?.()
-              }}
-            >
-              <IoCloseOutline size={18} />
-            </button>
+
+            <ActionMenu
+              hoverOnly={false}
+              items={[
+                {
+                  label: 'Limpiar Datos',
+                  icon: <IoTrashOutline />,
+                  onClick: () => {
+                    if (activeAudit && typeof window !== 'undefined') {
+                      window.localStorage.removeItem(
+                        `${AUDIT_STORAGE_PREFIX}history_${deviceId}_${activeAudit}`,
+                      )
+                    }
+                    setDisplayPayload(null)
+                    onClear?.()
+                  },
+                },
+                {
+                  label: 'Cerrar',
+                  icon: <IoCloseOutline />,
+                  onClick: () => {
+                    onStop?.()
+                    if (activeAudit && typeof window !== 'undefined') {
+                      window.sessionStorage.removeItem(`audit_history_${deviceId}_${activeAudit}`)
+                    }
+                    onClose?.()
+                  },
+                },
+              ]}
+              triggerClassName="h-8 w-8"
+            />
           </div>
         </div>
       </div>
-      <div className="flex flex-1 overflow-y-auto bg-zinc-50 font-mono text-[11px] leading-relaxed text-zinc-600 dark:bg-[#09090b] dark:text-zinc-300">
+      <div className="bg-surface flex flex-1 overflow-y-auto font-mono text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-300">
         <div className="animate-in fade-in flex w-full flex-col duration-300">{content}</div>
       </div>
     </Card>

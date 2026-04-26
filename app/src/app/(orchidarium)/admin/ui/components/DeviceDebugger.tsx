@@ -56,27 +56,28 @@ export function DeviceDebugger() {
   const { subscribe, publishWithAck, messages, status, pendingAcks } = useMqttStore()
   const { data: session } = authClient.useSession()
 
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string>(() => {
-    if (typeof window === 'undefined') return DEVICES[0].id
-
-    return localStorage.getItem('diag_selected_device') || DEVICES[0].id
-  })
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>(DEVICES[0].id)
   const [connectivityLogs, setConnectivityLogs] = useState<DeviceLog[]>([])
   const [now, setNow] = useState(() => Date.now())
 
-  const [showTimeline, setShowTimeline] = useState(() => {
-    if (typeof window === 'undefined') return false
-
-    return localStorage.getItem('diag_show_timeline') === 'true'
-  })
+  const [showTimeline, setShowTimeline] = useState(false)
 
   // Cola FIFO: orden estricto de activación de widgets por el usuario
-  const [widgetOrder, setWidgetOrder] = useState<string[]>(() => {
-    if (typeof window === 'undefined') return []
-    const cached = localStorage.getItem(`diag_widget_order_${selectedDeviceId}`)
+  const [widgetOrder, setWidgetOrder] = useState<string[]>([])
 
-    return cached ? JSON.parse(cached) : []
-  })
+  // ---- Hidratación Segura (Solo Cliente) ----
+  useEffect(() => {
+    // Usamos queueMicrotask para evitar cascading renders sincrónicos durante el montaje
+    queueMicrotask(() => {
+      const storedDevice = localStorage.getItem('diag_selected_device')
+      const storedTimeline = localStorage.getItem('diag_show_timeline') === 'true'
+      const cachedOrder = localStorage.getItem(`diag_widget_order_${storedDevice || DEVICES[0].id}`)
+
+      if (storedDevice) setSelectedDeviceId(storedDevice)
+      if (storedTimeline) setShowTimeline(storedTimeline)
+      if (cachedOrder) setWidgetOrder(JSON.parse(cachedOrder))
+    })
+  }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -386,12 +387,9 @@ export function DeviceDebugger() {
             )}
 
             {orderedWidgets.map((auditId) => {
-              const unifiedPacket = messages[unifiedAuditTopic]?.payload as Record<
-                string,
-                { history: unknown[] }
-              >
+              const unifiedPacket = messages[unifiedAuditTopic]?.payload as Record<string, unknown>
 
-              // Los datos provienen directamente del stream MQTT
+              // Los datos provienen directamente del stream MQTT (Audit Unified Ticker)
               const payload = unifiedPacket ? unifiedPacket[auditId] : null
 
               return (

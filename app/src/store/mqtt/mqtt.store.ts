@@ -56,7 +56,8 @@ const OPTIONS: IClientOptions = {
 }
 
 const RETRY_INTERVAL_MS = 60000 // 60 segundos entre reintentos
-const MAX_RETRIES = 20 // 20 minutos de perseverancia
+const MAX_RETRIES = 5 // 5 minutos de perseverancia (ajustado de 20 a 5)
+const COMMAND_TTL_MS = 5 * 60 * 1000 // 5 minutos de vida absoluta
 
 export const useMqttStore = create<MqttState>()(
   devtools(
@@ -82,15 +83,20 @@ export const useMqttStore = create<MqttState>()(
           const acksToClear: string[] = []
 
           Object.entries(pendingAcks).forEach(([payload, ack]) => {
-            if (ack.retries >= MAX_RETRIES) {
-              Logger.warn(`❌ [MQTT] Comando fallido tras ${MAX_RETRIES} intentos:`, payload)
+            const ageMs = now - ack.timestamp
+
+            // 1. Expiración por intentos o por tiempo absoluto (TTL)
+            if (ack.retries >= MAX_RETRIES || ageMs >= COMMAND_TTL_MS) {
+              const reason = ack.retries >= MAX_RETRIES ? 'intentos agotados' : 'TTL expirado'
+
+              Logger.warn(`❌ [MQTT] Comando descartado (${reason}):`, payload)
               acksToClear.push(payload)
 
               return
             }
 
-            // Solo re-intentar si el tiempo ha pasado Y el cliente está realmente conectado
-            if (now - ack.timestamp >= RETRY_INTERVAL_MS) {
+            // 2. Solo re-intentar si el tiempo ha pasado Y el cliente está realmente conectado
+            if (ageMs >= RETRY_INTERVAL_MS) {
               if (client?.connected) {
                 Logger.mqtt(
                   `🔄 [MQTT] Re-intentando envío (${ack.retries + 1}/${MAX_RETRIES}):`,
@@ -109,9 +115,6 @@ export const useMqttStore = create<MqttState>()(
                     },
                   },
                 }))
-              } else {
-                // Si no hay conexión, simplemente posponemos el chequeo para la siguiente vuelta del interval
-                // para no inflar el contador de retries en el vacío
               }
             }
           })
@@ -277,8 +280,12 @@ export const useMqttStore = create<MqttState>()(
       },
 
       publishWithAck: (topic, message) => {
-        const { client, publish } = get()
+        const { client, publish, pendingAcks } = get()
         const payload = typeof message === 'object' ? JSON.stringify(message) : message
+
+        // Si ya está en cola, no reiniciamos el timer ni volvemos a encolar.
+        // Esto evita ráfagas de comandos idénticos durante reconexiones inestables.
+        if (pendingAcks[payload]) return
 
         set((state) => ({
           pendingAcks: {

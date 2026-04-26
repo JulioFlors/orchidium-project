@@ -50,12 +50,13 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 * [ ] **Sistema de Plantas (`Plant`):** CRUD Activos (Gemelo Digital) en `/plants`.
 * [ ] **Diario Biológico (Eventos):** CRUD completo para registrar "Avistamientos de Plagas" y "Floraciones". Incluye búsqueda in-situ y persistencia atómica.
 * [ ] **Cierre de Ciclos:** Implementar lógica para marcar el fin de una floración (endDate) y resolución de plagas.
+
 * [ ] **Visibilidad Histórica:** Dashboard para visualizar la línea de tiempo biológica cruzada con telemetría.
 
 ### 🌸 1.2 Tienda & Lógica de Negocio
 
 * [ ] **CRUD Variantes (`ProductVariant`):** Gestión de precios y stock.
-* [x] **Mejoras UI Tienda:**
+* [x] **Mejora UI Tienda:**
   * [x] Filtro/sección para agrupar plantas con **Floración Activa** (Sincronizado con el Diario Biológico).
   * [x] Aplicar label "Floración" (FloweringLabel) a los productos correspondientes.
   * [x] Distintivo visual en la card de producto.
@@ -127,6 +128,7 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 * [x] **Confirmación de Agroquímicos (Diferido/Automatizado):** Implementado protocolo de seguridad v4. Las tareas de agroquímicos se pre-agendan 12h antes en `WAITING_CONFIRMATION`. Requieren autorización manual para ejecutarse (estado `AUTHORIZED`). Ventana de confirmación extendida a 24h tras la hora programada antes de expirar.
 * [x] **WeatherGuard Básico:** "Si llovió > X mm, cancelar riego" o si hay precipitaciones pronosticadas.
 * [x] **Integración Ingest/Scheduler:** Suscripción reactiva a eventos de lluvia (`rain/event`, `rain/state`) para toma de decisiones instantánea.
+* [x] **Precisión Temporal en Lluvia:** Implementado envío de `timestamp` (Unix/MicroPython) desde el firmware para el inicio y fin de la lluvia, con normalización de época en la ingesta para garantizar historia fidedigna post-reconexión.
 
 ### 💡 3.2 Motor de Inferencias (El Cerebro Analítico)
 

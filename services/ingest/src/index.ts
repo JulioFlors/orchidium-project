@@ -255,6 +255,18 @@ async function processRainEventPacket(
       .setFloatField('duration_seconds', Number(data.duration_seconds))
       .setFloatField('intensity_percent', Number(data.average_intensity_percent))
 
+    // Si el nodo envía un timestamp sincronizado (NTP), lo usamos.
+    if (data.timestamp) {
+      const rawTimestamp = Number(data.timestamp)
+      // Corrección de Época: MicroPython (2000) vs Unix (1970)
+      const unixTimestamp = rawTimestamp < 1000000000 ? rawTimestamp + 946684800 : rawTimestamp
+
+      // 1735689600 = 1 de enero de 2025
+      if (unixTimestamp > 1735689600) {
+        point.setTimestamp(new Date(unixTimestamp * 1000))
+      }
+    }
+
     await writeToInflux(point)
     Logger.success(
       `🌧️ [RAIN] Evento Finalizado: ${data.duration_seconds}s | Int: ${data.average_intensity_percent}%`,
@@ -292,44 +304,60 @@ async function processZoneStateEvent(
   payload: string,
   eventType: string,
 ) {
+  let value = payload
+  let timestamp: number | undefined
+
+  // Intento de parseo si es JSON
+  if (payload.trim().startsWith('{')) {
+    try {
+      const data = JSON.parse(payload)
+
+      value = data.state || data.value || payload
+      timestamp = data.timestamp
+    } catch {
+      // Si falla, tratar como string plano
+    }
+  }
+
   // Visibilidad operativa: Anunciar cambios reales de estado de lluvia
   if (eventType === 'Rain_State') {
-    const key = `${source}:${zone || 'global'}:${eventType}`
-    const previousValue = stateCache.get(key)
-
     // Solo persistir si el estado cambió (evitar spam de heartbeats)
-    if (!hasStateChanged(source, zone, eventType, payload)) return
+    if (!hasStateChanged(source, zone, eventType, value)) return
 
     const point = Point.measurement('system_events')
       .setTag('source', source)
       .setTag('zone', zone)
       .setTag('context', context)
       .setTag('event_type', eventType)
-      .setStringField('value', payload)
+      .setStringField('value', value)
 
-    await writeToInflux(point)
+    // Aplicar timestamp si viene en el JSON (con normalización de época)
+    if (timestamp) {
+      const rawTimestamp = Number(timestamp)
+      const unixTimestamp = rawTimestamp < 1000000000 ? rawTimestamp + 946684800 : rawTimestamp
 
-    if (payload === 'Raining') {
-      Logger.warn('🌧️ [Raining] Lluvia detectada por sensores')
-    } else if (payload === 'Dry' && previousValue === 'Raining') {
-      Logger.info('☀️ [Dry] Lluvia finalizada (Cambio de estado detectado)')
+      if (unixTimestamp > 1735689600) {
+        point.setTimestamp(new Date(unixTimestamp * 1000))
+      }
     }
+
+    await writeToInflux(point)
+    Logger.success(`[ ${eventType} ] ${source}/${zone} -> ${value}`)
   } else {
-    // Para otros eventos (Device_Status, etc.)
-    if (!hasStateChanged(source, zone, eventType, payload)) return
+    // Otros eventos de estado (Device_Status, etc.)
+    if (!hasStateChanged(source, zone, eventType, value)) return
 
     const point = Point.measurement('system_events')
       .setTag('source', source)
       .setTag('zone', zone)
       .setTag('context', context)
       .setTag('event_type', eventType)
-      .setStringField('value', payload)
+      .setStringField('value', value)
 
     await writeToInflux(point)
+    Logger.info(`[ ${eventType} ] ${source}/${zone} -> ${value}`)
   }
 }
-
-// ---- Punto de Entrada ----
 async function start() {
   // 1. Validar conexión con Base de Datos
   await checkDbConnection()

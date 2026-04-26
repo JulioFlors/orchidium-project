@@ -42,6 +42,7 @@ interface PendingCommand {
   lastSent: number
   scheduledAt: number
   timer: NodeJS.Timeout | null
+  isPersistent?: boolean
 }
 
 class CommandRetryManager {
@@ -52,12 +53,19 @@ class CommandRetryManager {
     this.onFailure = callback
   }
 
-  track(topic: string, payload: string, scheduledAt: Date = new Date()) {
+  track(
+    topic: string,
+    payload: string,
+    scheduledAt: Date = new Date(),
+    isPersistent: boolean = false,
+  ) {
     const key = `${topic}:${payload}`
     const existing = this.pending.get(key)
 
     if (existing) {
-      if (existing.timer) clearInterval(existing.timer)
+      // Si ya existe, no reiniciamos el contador de intentos ni el timer,
+      // simplemente dejamos que siga su curso. Esto evita spam al reconectar.
+      return
     }
 
     const command: PendingCommand = {
@@ -67,6 +75,7 @@ class CommandRetryManager {
       lastSent: Date.now(),
       scheduledAt: scheduledAt.getTime(),
       timer: setInterval(() => this.retry(key), 60000),
+      isPersistent,
     }
 
     this.pending.set(key, command)
@@ -113,8 +122,8 @@ class CommandRetryManager {
     const now = Date.now()
     const ageMs = now - command.scheduledAt
 
-    // 1. Expiración de Ventana (20 min)
-    if (ageMs > 20 * 60 * 1000) {
+    // 1. Expiración de Ventana (20 min) - Ignorada si es persistente
+    if (!command.isPersistent && ageMs > 20 * 60 * 1000) {
       Logger.error(`Ventana de oportunidad cerrada para: ${command.payload}`)
       this.handleTimeout(command.payload, 'Ventana de oportunidad cerrada (20 min expirados).')
       if (command.timer) clearInterval(command.timer)
@@ -202,41 +211,56 @@ export function executeSequence(
 /**
  * Envía un comando de sistema (eco, reset, etc) al Nodo Actuador.
  */
-export function executeSystemCommand(command: string) {
+export function executeSystemCommand(command: string, isPersistent: boolean = false) {
   mqttClient.publish(SYSTEM_CMD_TOPIC, command, {
     qos: 1,
     retain: false,
   })
   Logger.info(`Comando: ${colors.magenta}${command}${colors.reset}`)
-  retryManager.track(SYSTEM_CMD_TOPIC, command)
+  retryManager.track(SYSTEM_CMD_TOPIC, command, new Date(), isPersistent)
+}
+
+let lastSamplingState: 'on' | 'off' | null = null
+
+export function resetSamplingState() {
+  lastSamplingState = null
 }
 
 /**
  * Sincroniza el estado del monitoreo del nodo basado en la hora actual.
  * Asegura que el nodo tenga el estado de muestreo correcto (Amanecer/Anochecer).
  */
-export function syncNodeSampling() {
-  const now = new Date()
-  const options: Intl.DateTimeFormatOptions = {
-    timeZone: 'America/Caracas',
-    hour: 'numeric',
-    hour12: false,
-  }
-  const hourString = new Intl.DateTimeFormat('en-US', options).format(now)
-  const hour = parseInt(hourString)
+export function syncNodeSampling(forcedState?: 'on' | 'off') {
+  let targetState: 'on' | 'off'
 
-  const targetState = hour >= 5 && hour < 19 ? 'on' : 'off'
+  if (forcedState) {
+    targetState = forcedState
+  } else if (lastSamplingState) {
+    // Si no se fuerza y ya tenemos un estado estipulado, usarlo.
+    targetState = lastSamplingState
+  } else {
+    // Inicialización por hora solo si no hay estado previo (primer arranque)
+    const now = new Date()
+    const options: Intl.DateTimeFormatOptions = {
+      timeZone: 'America/Caracas',
+      hour: 'numeric',
+      hour12: false,
+    }
+    const hour = parseInt(new Intl.DateTimeFormat('en-US', options).format(now))
 
-  if (retryManager.lastActuatorState !== 'online') {
-    // Evitar comandos si el nodo está offline.
-    return
+    targetState = hour >= 5 && hour < 19 ? 'on' : 'off'
   }
+
+  // Evitar duplicados si el estado no ha cambiado
+  if (lastSamplingState === targetState && !forcedState) return
+
+  lastSamplingState = targetState
 
   if (targetState === 'on') {
     Logger.info('☀  Iniciando muestreo de iluminancia (Amanecer)')
-    executeSystemCommand('lux_sampling:on')
+    executeSystemCommand('lux_sampling:on', true)
   } else {
     Logger.info('🌙  Suspendiendo muestreo de iluminancia (Anochecer)')
-    executeSystemCommand('lux_sampling:off')
+    executeSystemCommand('lux_sampling:off', true)
   }
 }

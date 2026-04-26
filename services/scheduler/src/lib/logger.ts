@@ -45,9 +45,25 @@ export const Logger = {
   error: (msg: string, err?: unknown) => {
     console.error(formatLog('❌', 'ERRO', colors.red, msg))
     if (err) {
-      console.error(
-        `${colors.red}      ╰─> [PRISMA ${err instanceof Prisma.PrismaClientKnownRequestError ? err.code : 'ERROR'}] ${err instanceof Error ? err.message : String(err)}${colors.reset}`,
-      )
+      let tag = 'ERRO'
+      let message = String(err)
+
+      if (err instanceof Prisma.PrismaClientKnownRequestError) {
+        tag = 'DBAS'
+        message = `[${err.code}] ${err.message}`
+      } else if (err instanceof Prisma.PrismaClientValidationError) {
+        tag = 'DBAS'
+        message = '[VAL] ' + err.message
+      } else if (err instanceof Error) {
+        message = err.message
+        if (message.includes('InfluxDB') || message.includes('influxdb')) {
+          tag = 'INFX'
+        } else if (message.includes('MQTT') || message.includes('broker')) {
+          tag = 'MQTT'
+        }
+      }
+
+      console.error(`${colors.red}      ╰─> [ ${tag} ] ${message}${colors.reset}`)
     }
   },
   debug: (msg: string) => {

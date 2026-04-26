@@ -3,7 +3,13 @@ import { Cron } from 'croner'
 
 import { Logger } from './lib/logger'
 import { InferenceEngine } from './lib/inference-engine'
-import { mqttClient, retryManager, syncNodeSampling, MQTT_BROKER_URL } from './lib/mqtt-handler'
+import {
+  mqttClient,
+  retryManager,
+  syncNodeSampling,
+  resetSamplingState,
+  MQTT_BROKER_URL,
+} from './lib/mqtt-handler'
 import {
   cleanupExpiredTasks,
   handleAckTimeout,
@@ -114,21 +120,32 @@ function setupMqttHandlers() {
 
       // 1. Monitoreo de Conexión del Nodo Actuador
       if (topic === 'PristinoPlant/Actuator_Controller/status') {
-        if (message === 'online' && retryManager.lastActuatorState !== 'online') {
+        if (message === 'online') {
+          const wasOnline = retryManager.lastActuatorState === 'online'
+
           retryManager.lastActuatorState = 'online'
-          Logger.node('ONLINE')
+
+          // Nodo arrancó -> Limpiar caché para forzar re-envío
+          resetSamplingState()
+
+          if (!wasOnline) {
+            Logger.node('ONLINE')
+            await prisma.deviceLog
+              .create({
+                data: {
+                  device: 'Actuator_Controller',
+                  status: 'ONLINE',
+                  notes: 'Dispositivo conectado / Heartbeat recuperado.',
+                },
+              })
+              .catch((err) => Logger.error('Fallo persistiendo deviceLog (ONLINE)', err))
+          } else {
+            Logger.warn(
+              '[ MQTT ] Reconexión rápida del nodo detectada (sin LWT). Re-sincronizando.',
+            )
+          }
+
           syncNodeSampling()
-
-          await prisma.deviceLog
-            .create({
-              data: {
-                device: 'Actuator_Controller',
-                status: 'ONLINE',
-                notes: 'Dispositivo conectado / Heartbeat recuperado.',
-              },
-            })
-            .catch((err) => Logger.error('Fallo persistiendo deviceLog (ONLINE)', err))
-
           await processPostponedTasks()
           await resumeInterruptedTasks()
         } else if (message === 'offline' && retryManager.lastActuatorState !== 'offline') {
@@ -136,6 +153,7 @@ function setupMqttHandlers() {
 
           retryManager.lastActuatorState = 'offline'
           Logger.node('OFFLINE')
+          resetSamplingState()
 
           await prisma.deviceLog
             .create({
@@ -269,10 +287,20 @@ function setupMqttHandlers() {
 
       // 4. Detección de Lluvia
       if (topic === 'PristinoPlant/Weather_Station/Exterior/rain/state') {
-        if (message === 'Raining' && lastRainState !== 'Raining') {
+        let state = message
+
+        if (message.startsWith('{')) {
+          try {
+            state = JSON.parse(message).state || message
+          } catch {
+            /* ignore */
+          }
+        }
+
+        if (state === 'Raining' && lastRainState !== 'Raining') {
           Logger.warn('🌧️ [WeatherGuard] Lluvia detectada por sensores en tiempo real.')
         }
-        lastRainState = message
+        lastRainState = state
 
         return
       }
@@ -304,18 +332,18 @@ async function initScheduler() {
     await processAuthorizedTasks()
   })
 
-  // Cron para sincronizar muestreo de iluminancia (Amanecer 5am / Anochecer 7:01pm)
-  new Cron('0 5 * * *', { timezone: 'America/Caracas' }, () => {
-    syncNodeSampling()
+  // Cron para sincronizar muestreo de iluminancia (Amanecer 4:59am / Anochecer 7:01pm)
+  new Cron('59 4 * * *', { timezone: 'America/Caracas' }, () => {
+    syncNodeSampling('on')
   })
   new Cron('1 19 * * *', { timezone: 'America/Caracas' }, () => {
-    syncNodeSampling()
+    syncNodeSampling('off')
   })
 
   // Cron de cierre oficial diario (Media noche 00:01 AM)
   new Cron('1 0 * * *', { timezone: 'America/Caracas' }, async () => {
     try {
-      Logger.info('Iniciando cierre diario oficial de telemetría de ayer...')
+      Logger.info('Procesando Telemetría de las Estaciones Meteorológicas.')
       const yesterday = new Date()
 
       yesterday.setDate(yesterday.getDate() - 1)

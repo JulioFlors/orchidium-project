@@ -985,7 +985,7 @@ Edita el archivo `manifest.json` del dispositivo que deseas migrar (ej. `firmwar
     }
     ```
 
-1. Haz `git push` de los cambios.
+3. Haz `git push` de los cambios.
 
 #### 4\. Ejecución Automática en el Dispositivo
 
@@ -1005,5 +1005,5 @@ Una vez confirmada la migración:
 1. **Elimina** `update_creds.py` de tu repositorio GitHub.
 2. Actualiza el `manifest.json` para eliminar la referencia al archivo y sube una nueva versión menor para "limpiar" el estado del manifiesto.
 
-- [x] RingBuffer para Lluvia.
-- [x] RingBuffer para Iluminancia.
+* [x] RingBuffer para Lluvia.
+* [x] RingBuffer para Iluminancia.
