@@ -80,8 +80,7 @@ export async function getSensorHistoryInternal(
       timeFilter = `AND time >= '${start.toISOString()}' AND time <= '${end.toISOString()}'`
     }
 
-    const fieldsSql = fieldsToQuery.join(', ')
-    const query = `SELECT time, ${fieldsSql} FROM "environment_metrics" WHERE "zone" = '${zone}' ${timeFilter} ORDER BY time ASC`
+    const query = `SELECT * FROM "environment_metrics" WHERE "zone" = '${zone}' ${timeFilter} ORDER BY time ASC`
 
     try {
       const reader = influxClient.query(query)
@@ -166,7 +165,7 @@ export async function getSensorHistoryInternal(
     const todayISO = now.toISOString().split('T')[0]
 
     if (!pgData.some((d) => d.date.toISOString().startsWith(todayISO))) {
-      const todayQuery = `SELECT time, ${fieldsToQuery.join(', ')} FROM "environment_metrics" WHERE "zone" = '${zone}' AND time >= '${todayStart.toISOString()}' ORDER BY time ASC`
+      const todayQuery = `SELECT * FROM "environment_metrics" WHERE "zone" = '${zone}' AND time >= '${todayStart.toISOString()}' ORDER BY time ASC`
 
       try {
         const reader = influxClient.query(todayQuery)

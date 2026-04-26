@@ -326,10 +326,9 @@ export class InferenceEngine {
    * Extrae la última condición física registrada en InfluxDB en los últimos 30 min.
    */
   private static async getLatestLocalConditions() {
-    const defaultData = { temp: 0, hum: 0, lux: 0, rain_intensity: 0 }
     const result = {
-      exterior: { ...defaultData },
-      interior: { ...defaultData },
+      exterior: { lux: 0, rain_intensity: 0 },
+      interior: { temp: 0, hum: 0, lux: 0 },
     }
 
     try {
@@ -348,8 +347,6 @@ export class InferenceEngine {
 
       for await (const row of stream) {
         if (!foundExterior && row.source === 'Weather_Station') {
-          result.exterior.temp = Number(row.temperature || 0)
-          result.exterior.hum = Number(row.humidity || 0)
           result.exterior.lux = Number(row.illuminance || 0)
           result.exterior.rain_intensity = Number(row.rain_intensity || 0)
           foundExterior = true
@@ -357,7 +354,6 @@ export class InferenceEngine {
           result.interior.temp = Number(row.temperature || 0)
           result.interior.hum = Number(row.humidity || 0)
           result.interior.lux = Number(row.illuminance || 0)
-          result.interior.rain_intensity = Number(row.rain_intensity || 0)
           foundInterior = true
         }
       }

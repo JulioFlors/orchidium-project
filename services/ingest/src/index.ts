@@ -404,7 +404,11 @@ async function start() {
     })
   })
 
-  client.on('message', async (topic, payload) => {
+  client.on('message', async (topic, payload, packet) => {
+    // Ignorar mensajes retenidos (retained).
+    // Ingest solo procesa telemetría en tiempo real para evitar duplicados o estados falsos al arrancar.
+    if (packet.retain) return
+
     const messageValue = payload.toString()
     const topicParts = topic.split('/')
 
@@ -422,6 +426,30 @@ async function start() {
             .setStringField('value', messageValue)
 
           await writeToInflux(point)
+
+          // ---- Lógica de Limpieza por LWT ----
+          // Si el nodo de la estación meteorológica se cae, invalidamos el estado de lluvia
+          if (messageValue === 'offline') {
+            Logger.warn(`[ LWT ] Limpiando estados para ${firmwareSource} (Offline)`)
+
+            // 1. Forzar estado 'Dry' en system_events
+            await processZoneStateEvent(
+              firmwareSource,
+              ZoneType.EXTERIOR,
+              'rain/state',
+              'Dry',
+              'Rain_State',
+            )
+
+            // 2. Inyectar intensidad 0 en environment_metrics para liberar el motor de inferencia
+            const pointRain = Point.measurement('environment_metrics')
+              .setTag('source', firmwareSource)
+              .setTag('zone', ZoneType.EXTERIOR)
+              .setTag('context', 'readings')
+              .setFloatField('rain_intensity', 0)
+
+            await writeToInflux(pointRain)
+          }
         }
       }
 

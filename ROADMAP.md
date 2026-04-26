@@ -13,6 +13,7 @@ Este documento define la estrategia de alto nivel dividida en 4 fases de ingenie
 * [x] **Dockerización:** Despliegue de microservicios en VPS.
 * [x] **Calidad de Código:** Unificación de ESLint y corrección de crashes en configuraciones modulares.
 * [x] **Protocolos de Agente:** Implementación de trazabilidad mandatoria y autónoma en bitácoras.
+* [ ] **Estandarización MQTT:** Refactorización de tópicos a `weather_station` y uso de capitalización Prisma (`ZONA_A`).
 
 ## 🏗️ FASE 1: Fundamentos de Gestión (La Estructura de Datos)
 

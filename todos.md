@@ -31,7 +31,11 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 ### 📄 0.3 Documentación & Trazabilidad
 
 * [x] **Refuerzo de Protocolos:** Implementar regla MANDATORIA en `SKILL.md` para actualización proactiva de `todos.md` y `ROADMAP.md` por parte de agentes.
-* [x] **Guía de Scripts de Utilidad:** Documentación técnica para estandarizar la creación de herramientas locales (Postgres/InfluxDB) con soporte para batching.
+* [x] **Guía de Scripts de Utilidad:** Documentación técnica para estandarización de la creación de herramientas locales (Postgres/InfluxDB) con soporte para batching.
+* [ ] **Estandarización de Tópicos MQTT:**
+  * [ ] Cambiar tópico base de sensores: `Environmental_Monitoring` -> `weather_station`.
+  * [ ] Normalizar Zonas: Usar capitalización de base de datos (`ZONA_A`) en lugar de formateo manual.
+  * [ ] Sincronizar firmware (`sensors`), `ingest`, `scheduler` y `frontend`.
 
 ---
 
@@ -165,13 +169,11 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 
 *Objetivo:* Visualización de datos para toma de decisiones.
 
-### 📊 4.1 UI/UX & Visualización
-
 ### 📊 4.1 UI/UX & Visualización Avanzada
 
 * [x] **Gráficos en Tiempo Real:** Implementar Recharts para Temperatura/Humedad.
 * [x] **Layouts y Accesibilidad:** Refinar Grids, transiciones, eliminación de marcos de enfoque.
-* [x] **Lógica de Clima Inteligente:** Detección de "Falla de Sensor", "Obsoleto" y validación robusta de paleta de colores TDS.
+* [x] **Lógica de Clima Inteligente:** Detección de "Falla de Sensor", "Obsoleto" and validación robusta de paleta de colores TDS.
 * [ ] **Micro-Visión (Vista 24h):**
   * [ ] Implementar **Escala Logarítmica** en el eje Y de Iluminancia (para ver sutiles variaciones de 100lx y picos de 60,000lx simultáneamente).
   * [ ] Implementar **Sombreado Contextual** (Fondo gris/azulado) durante las horas del Valle Nocturno y Transición Vespertina.

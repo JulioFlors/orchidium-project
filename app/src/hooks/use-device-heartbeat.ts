@@ -9,23 +9,18 @@ const OFFLINE_THRESHOLD_MS = 100000 // (30s x 3 latidos) + 10s de gracia
 const INITIAL_SEARCH_THRESHOLD_MS = 30000 // Tiempo máximo para esperar el primer latido antes de marcar offline
 
 export const useDeviceHeartbeat = (topic: string = 'PristinoPlant/Actuator_Controller/status') => {
-  const { subscribe, messages } = useMqttStore()
+  const { subscribe, messages, subscriptionTimestamps } = useMqttStore()
 
   // Estado para forzar re-render periódicamente (cada 5s)
   // Inicializamos en 0 para evitar Hydration Mismatch y errores de pureza
   const [now, setNow] = useState<number>(0)
 
-  // Track de cuándo se inició la escucha de este tópico (Estado estable para el render)
-  const [startedAt, setStartedAt] = useState<number>(0)
+  // Track de cuándo se inició la escucha de este tópico (Estado estable y global)
+  const startedAt = subscriptionTimestamps[topic] || 0
 
-  // 1. Suscripción y Reset de Timer de Búsqueda
+  // 1. Suscripción
   useEffect(() => {
     subscribe(topic)
-
-    // Desacoplamos el setState del efecto síncrono inicial
-    // para evitar el error de "cascading renders". Al usar un microtask,
-    // permitimos que React complete el render primario antes de registrar el tiempo de inicio.
-    Promise.resolve().then(() => setStartedAt(Date.now()))
   }, [subscribe, topic])
 
   useEffect(() => {
@@ -43,43 +38,52 @@ export const useDeviceHeartbeat = (topic: string = 'PristinoPlant/Actuator_Contr
   }, [])
 
   // 3. Derivar estado del Store + Tiempo
-  const statusData = messages[topic] as { payload: unknown; receivedAt: number } | undefined
+  const statusData = messages[topic] as
+    | { payload: unknown; receivedAt: number; isRetained: boolean }
+    | undefined
 
   const lastHeartbeat = statusData?.receivedAt || null
   const rawStatus = String(statusData?.payload || 'unknown').trim()
+  const isRetained = statusData?.isRetained || false
+
+  // Lógica de Estado Efectivo:
+  // Si el mensaje es 'online' pero es retenido (viejo), lo ignoramos para el cálculo de latidos frescos.
+  // Pero si el mensaje es 'offline', confiamos en él inmediatamente (LWT).
+  const effectiveStatus = isRetained && rawStatus === 'online' ? 'unknown' : rawStatus
 
   // Cálculo de Zombie y Dead en tiempo de render (Reactivo puro)
+  // Nota: Solo calculamos esto si el estado efectivo es 'online' (es decir, recibimos uno fresco)
   const isZombie =
     lastHeartbeat !== null &&
-    rawStatus === 'online' &&
+    effectiveStatus === 'online' &&
     now > 0 &&
     now - lastHeartbeat > ZOMBIE_THRESHOLD_MS
 
   const isDead =
     lastHeartbeat !== null &&
-    rawStatus === 'online' &&
+    effectiveStatus === 'online' &&
     now > 0 &&
     now - lastHeartbeat > OFFLINE_THRESHOLD_MS
 
   // 4. Calcular Estado Final
-  // Si no hay mensaje retenido o es explícitamente offline, el dispositivo se marca offline (a menos que aún no se sepa el estado)
   let connectionState: DeviceConnectionState = 'offline'
 
-  if (rawStatus === 'unknown') {
+  if (effectiveStatus === 'unknown') {
     // Si no sabemos nada (unknown), permitimos un tiempo de búsqueda inicial (30s)
-    // Solo realizamos este cálculo si 'now' y 'startedAt' ya se han sincronizado
     if (now > 0 && startedAt > 0) {
       const searchDuration = now - startedAt
 
-      if (searchDuration > INITIAL_SEARCH_THRESHOLD_MS) {
+      if (searchDuration > OFFLINE_THRESHOLD_MS) {
         connectionState = 'offline'
+      } else if (searchDuration > INITIAL_SEARCH_THRESHOLD_MS) {
+        connectionState = 'zombie'
       } else {
         connectionState = 'unknown'
       }
     } else {
       connectionState = 'unknown'
     }
-  } else if (rawStatus === 'online') {
+  } else if (effectiveStatus === 'online') {
     if (isDead) connectionState = 'offline'
     else if (isZombie) connectionState = 'zombie'
     else connectionState = 'online'

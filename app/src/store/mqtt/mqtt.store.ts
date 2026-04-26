@@ -15,8 +15,9 @@ interface PendingAck {
 interface MqttState {
   client: MqttClient | null
   status: MqttStatus
-  messages: Record<string, { payload: unknown; receivedAt: number }>
+  messages: Record<string, { payload: unknown; receivedAt: number; isRetained: boolean }>
   subscriptions: Set<string>
+  subscriptionTimestamps: Record<string, number>
   pendingAcks: Record<string, PendingAck>
   retryTimer: ReturnType<typeof setInterval> | null
 
@@ -66,6 +67,7 @@ export const useMqttStore = create<MqttState>()(
       status: 'disconnected',
       messages: {},
       subscriptions: new Set(),
+      subscriptionTimestamps: {},
       pendingAcks: {},
       retryTimer: null,
 
@@ -184,7 +186,7 @@ export const useMqttStore = create<MqttState>()(
           set({ status: 'disconnected' })
         })
 
-        mqttClient.on('message', (topic, payload) => {
+        mqttClient.on('message', (topic, payload, packet) => {
           const payloadStr = payload.toString()
           let parsedPayload: unknown = payloadStr
 
@@ -200,7 +202,11 @@ export const useMqttStore = create<MqttState>()(
           set((state) => {
             const newMessages = {
               ...state.messages,
-              [topic]: { payload: parsedPayload, receivedAt: Date.now() },
+              [topic]: {
+                payload: parsedPayload,
+                receivedAt: Date.now(),
+                isRetained: packet.retain,
+              },
             }
 
             let newPendingAcks = state.pendingAcks
@@ -242,14 +248,17 @@ export const useMqttStore = create<MqttState>()(
       },
 
       subscribe: (topic) => {
-        const { client, subscriptions } = get()
+        const { client, subscriptions, subscriptionTimestamps } = get()
 
         if (subscriptions.has(topic)) return
 
         const newSubscriptions = new Set(subscriptions)
 
         newSubscriptions.add(topic)
-        set({ subscriptions: newSubscriptions })
+        set({
+          subscriptions: newSubscriptions,
+          subscriptionTimestamps: { ...subscriptionTimestamps, [topic]: Date.now() },
+        })
 
         if (client && client.connected) {
           client.subscribe(topic)

@@ -406,8 +406,30 @@ export function MonitoringView() {
 
     const luxTrend = calculateTrend('illuminance')
 
-    // ─── PRIORIDAD 1: Lluvia activa (siempre, sin importar si el dato es viejo) ───────────
-    // La lluvia es detectada por el pluviómetro que funciona 24h independiente del sensor de lux
+    // ─── PRIORIDAD 1: Verificación de Conexión (Real-time) ──────────────────────────
+    if (connectionState === 'offline') {
+      return {
+        label: 'Desconectado',
+        icon: <Cloud className="h-6 w-6 text-slate-500" />,
+        color: 'orange' as const,
+        description: 'Estación meteorológica fuera de línea',
+        status: 'critical' as const,
+      }
+    }
+
+    // ─── PRIORIDAD 2: Dato viejo (isStale) ──────────────────────────────────────────
+    // Si el dato tiene más de 30 min (o 15 min para lluvia), no es confiable.
+    if (isStale) {
+      return {
+        label: 'Sin Datos',
+        icon: <Cloud className="h-6 w-6 text-slate-500" />,
+        color: 'orange' as const,
+        description: `Sin señal desde las ${formatTime12h(lastUpdateDate)}`,
+        status: 'critical' as const,
+      }
+    }
+
+    // ─── PRIORIDAD 3: Lluvia activa (Solo si el dato es reciente) ───────────────────
     if (rain > 20) {
       return {
         label: 'Lloviendo',
@@ -418,7 +440,7 @@ export function MonitoringView() {
       }
     }
 
-    // ─── PRIORIDAD 2: Ciclo nocturno basado en el RELOJ DEL SISTEMA ─────────────────────
+    // ─── PRIORIDAD 4: Ciclo nocturno basado en el RELOJ DEL SISTEMA ─────────────────────
     // El scheduler apaga el sensor a 19:00 → cualquier hora ≥19 o <5:30 es noche esperada.
 
     // Madrugada (0:00 – 5:30)
@@ -467,18 +489,7 @@ export function MonitoringView() {
       }
     }
 
-    // ─── PRIORIDAD 3: Horario diurno (6:30 – 17:00) con sensor activo ───────────────────
-
-    // Dato viejo durante horario activo del sensor → advertencia real
-    if (isStale) {
-      return {
-        label: 'Sin Datos',
-        icon: <Cloud className="h-6 w-6 text-slate-500" />,
-        color: 'orange' as const,
-        description: `Sin señal desde las ${formatTime12h(lastUpdateDate)}`,
-        status: 'critical' as const,
-      }
-    }
+    // ─── PRIORIDAD 5: Horario diurno (6:30 – 17:00) con sensor activo ───────────────────
 
     // Falla real: sensor activo, dato reciente, pero lux=0 en horario de alta irradiación
     if (lux < 5 && sysHour >= 8 && sysHour < 17) {

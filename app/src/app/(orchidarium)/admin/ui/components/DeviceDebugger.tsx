@@ -11,6 +11,7 @@ import { ToolboxGrid, AuditConsoleCard, HeartbeatCard } from './DiagnosticPanel'
 import { getConnectivityLogs } from '@/actions'
 import { Card, Heading, DeviceStatus } from '@/components'
 import { authClient } from '@/lib'
+import { useDeviceHeartbeat } from '@/hooks'
 import { useMqttStore } from '@/store/mqtt/mqtt.store'
 import { formatTime12h, formatRelativeHeartbeat } from '@/utils'
 import { ZoneType, ZoneTypeLabels } from '@/config/mappings'
@@ -39,14 +40,12 @@ const DEVICES: DeviceConfig[] = [
     id: 'sensors',
     name: 'Sensores',
     description: `Estación Meteorológica ${ZoneTypeLabels[ZoneType.ZONA_A]}`,
-    baseTopic: `PristinoPlant/Environmental_Monitoring/${ZoneType.ZONA_A}`,
+    baseTopic: `PristinoPlant/Environmental_Monitoring/Zona_a`,
     hasMaskNvs: true,
     heartbeatTimeoutMs: 60000,
     hasDiagnostics: true,
   },
 ]
-
-type ConnectionState = 'online' | 'offline' | 'unknown' | 'zombie'
 
 const formatVETime = (timestamp: number | string | Date) => {
   return formatTime12h(timestamp, true)
@@ -58,7 +57,6 @@ export function DeviceDebugger() {
 
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>(DEVICES[0].id)
   const [connectivityLogs, setConnectivityLogs] = useState<DeviceLog[]>([])
-  const [now, setNow] = useState(() => Date.now())
 
   const [showTimeline, setShowTimeline] = useState(false)
 
@@ -94,6 +92,21 @@ export function DeviceDebugger() {
   const unifiedAuditTopic = `${selectedDevice.baseTopic}/audit`
   const auditStateTopic = `${selectedDevice.baseTopic}/audit/state`
 
+  const { connectionState } = useDeviceHeartbeat(statusTopic)
+
+  useEffect(() => {
+    const fetchLogs = async () => {
+      const res = await getConnectivityLogs(15)
+
+      if (res.ok && res.logs) setConnectivityLogs(res.logs)
+    }
+
+    fetchLogs()
+    const interval = setInterval(fetchLogs, 45000)
+
+    return () => clearInterval(interval)
+  }, [])
+
   const hardwarePresence = useMemo(() => {
     const msg = messages[auditStateTopic]
 
@@ -120,44 +133,6 @@ export function DeviceDebugger() {
   }, [messages, auditStateTopic])
 
   useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 5000)
-
-    return () => clearInterval(interval)
-  }, [])
-
-  useEffect(() => {
-    const fetchLogs = async () => {
-      const res = await getConnectivityLogs(15)
-
-      if (res.ok && res.logs) setConnectivityLogs(res.logs)
-    }
-
-    fetchLogs()
-    const interval = setInterval(fetchLogs, 45000)
-
-    return () => clearInterval(interval)
-  }, [])
-
-  const getStatus = useCallback(
-    (topic: string, timeout: number = 60000): ConnectionState => {
-      const data = messages[topic] as { payload: unknown; receivedAt: number } | undefined
-
-      if (!data) return 'unknown'
-      const statusVal = String(data.payload).trim()
-
-      if (statusVal === 'offline') return 'offline'
-      if (statusVal === 'online') {
-        const isZombie = now - data.receivedAt > timeout
-
-        return isZombie ? 'zombie' : 'online'
-      }
-
-      return 'unknown'
-    },
-    [messages, now],
-  )
-
-  useEffect(() => {
     if (status === 'connected') {
       subscribe(statusTopic)
       subscribe(topicReceived)
@@ -165,8 +140,6 @@ export function DeviceDebugger() {
       subscribe(auditStateTopic)
     }
   }, [status, subscribe, statusTopic, topicReceived, unifiedAuditTopic, auditStateTopic])
-
-  const connectionState = getStatus(statusTopic, selectedDevice.heartbeatTimeoutMs)
 
   // Lista de widgets activos combinando hardware y UI local (para el grid de tools)
   const hardwareAudits = useMemo(() => {
@@ -291,7 +264,7 @@ export function DeviceDebugger() {
           />
         }
         description={selectedDevice.description}
-        title={selectedDevice.name}
+        title="Depuración IoT"
       />
 
       {/* Toolbox Grid */}

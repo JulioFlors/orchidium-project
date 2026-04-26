@@ -54,14 +54,25 @@ export async function GET(_request: Request) {
         if (row.time instanceof Date) {
           timeStr = row.time.toISOString()
         } else if (typeof row.time === 'bigint' || typeof row.time === 'number') {
-          const ms = Number(BigInt(row.time) / BigInt(1000000))
+          const val = Number(row.time)
 
-          timeStr = new Date(ms).toISOString()
+          // Detección de escala:
+          // > 1e18: Nanosegundos (InfluxDB default)
+          // > 1e12: Milisegundos (Unix ms)
+          // < 1e12: Segundos (Unix s)
+          if (val > 1000000000000000) {
+            timeStr = new Date(val / 1000000).toISOString()
+          } else if (val > 100000000000) {
+            timeStr = new Date(val).toISOString()
+          } else {
+            timeStr = new Date(val * 1000).toISOString()
+          }
         } else {
           timeStr = new Date(String(row.time)).toISOString()
         }
-      } catch {
-        timeStr = new Date().toISOString()
+      } catch (err) {
+        Logger.error('Fallo parseando tiempo de Influx:', { time: row.time, err })
+        timeStr = new Date().toISOString() // Mantener fallback pero loggear
       }
 
       events.push({

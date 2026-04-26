@@ -4,7 +4,7 @@
 #              y la estación meteorológica exterior (lluvia e iluminancia).
 # Fecha: 25-04-2026
 # Versión: v0.10.0
-# notes_release: [📡 Red]: Resiliencia Climática: Implementado Modo Cuarentena (Backoff) para evitar reinicios constantes ante fallos SSL (-202) por mal internet. Se aumentó el timeout de conexión a 30s. [⚙️ Boot]: Sincronización de Arranque: El sistema ahora espera la conexión WiFi inicial antes de encender sensores o recuperar tareas, eliminando ruidos en el ADC de lluvia y optimizando el uso de RAM durante el booteo. [💧 Lluvia]: Calibración de Garúa: Ajustados umbrales ADC (3100/3500) para mantener activo el evento de lluvia durante lloviznas leves y condiciones de alta humedad nocturna.
+# notes_release: [📡 Red]: Resiliencia Climática: Implementado Modo Cuarentena (Backoff) para evitar reinicios constantes ante fallos SSL (-202) por mal internet. Se aumentó el timeout de conexión a 30s. [⚙️ Boot]: Sincronización de Arranque: El sistema ahora espera la conexión WiFi inicial antes de encender sensores o recuperar tareas, eliminando ruidos en el ADC de lluvia y optimizando el uso de RAM durante el booteo. [💧 Lluvia]: Reducción de Sensibilidad: Ajustados umbrales ADC (2600/3200) para evitar falsos positivos provocados por la alta humedad nocturna y ruidos residuales, manteniendo la detección de lloviznas.
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib.
@@ -18,7 +18,7 @@ from micropython import const
 
 # ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
-DEBUG = True
+DEBUG = False
 
 # ---- Configuración MQTT (Constantes const() para ahorro de RAM) ----
 # El broker esperará ~1.5x este valor antes de desconectar al cliente.
@@ -952,8 +952,8 @@ def setup_sensors():
             r_avg = raw_sum // valid_samples
             
             # Validación Inicial (Sondeo):
-            # Un sensor SECO debería leer 4095.
-            # Un sensor MOJADO por la LLUVIA puede leer ~3500.
+            # El sensor SECO debería leer 4095.
+            # El sensor con LLUVIA Residual o Garuando puede leer entre 3000 y 3300
             if r_avg > 1500:
                 rain_sensor_analog = adc_rain
                 if DEBUG: print(f"\n💧  Sensor Lluvia: {Colors.CYAN}Conectado{Colors.RESET} (Lectura Raw inicial: {r_avg})")
@@ -2098,8 +2098,8 @@ async def rain_monitor_task():
     # Umbrales (ADC 0-4095)
     # RAIN_START_VALUE  = 2300 # Mojado (OLD)
     # RAIN_STOP_VALUE   = 2800 # Seco (OLD)
-    RAIN_START_VALUE  = 3100 # Mojado (Inicia evento)
-    RAIN_STOP_VALUE   = 3500 # Seco (Finaliza evento)
+    RAIN_START_VALUE  = 2600 # Mojado (Inicia evento)
+    RAIN_STOP_VALUE   = 3200 # Seco (Finaliza evento)
     RAW_INTENSITY_MIN = 1700 # 100%
     
     # Tiempos de Configuración
