@@ -95,6 +95,7 @@ function setupMqttHandlers() {
         'PristinoPlant/Actuator_Controller/cmd/received',
         'PristinoPlant/Actuator_Controller/irrigation/state',
         'PristinoPlant/Actuator_Controller/status',
+        'PristinoPlant/Actuator_Controller/status/boot',
         'PristinoPlant/Weather_Station/Exterior/readings',
         'PristinoPlant/Weather_Station/Exterior/rain/state',
         'PristinoPlant/Weather_Station/Exterior/rain/event',
@@ -121,29 +122,24 @@ function setupMqttHandlers() {
       // 1. Monitoreo de Conexión del Nodo Actuador
       if (topic === 'PristinoPlant/Actuator_Controller/status') {
         if (message === 'online') {
-          const wasOnline = retryManager.lastActuatorState === 'online'
+          if (retryManager.lastActuatorState === 'online') {
+            // Ignorar heartbeats periódicos para no generar spam de lux_sampling
+            return
+          }
 
           retryManager.lastActuatorState = 'online'
+          resetSamplingState() // Limpiar caché solo en reconexión real
+          Logger.node('ONLINE')
 
-          // Nodo arrancó -> Limpiar caché para forzar re-envío
-          resetSamplingState()
-
-          if (!wasOnline) {
-            Logger.node('ONLINE')
-            await prisma.deviceLog
-              .create({
-                data: {
-                  device: 'Actuator_Controller',
-                  status: 'ONLINE',
-                  notes: 'Dispositivo conectado / Heartbeat recuperado.',
-                },
-              })
-              .catch((err) => Logger.error('Fallo persistiendo deviceLog (ONLINE)', err))
-          } else {
-            Logger.warn(
-              '[ MQTT ] Reconexión rápida del nodo detectada (sin LWT). Re-sincronizando.',
-            )
-          }
+          await prisma.deviceLog
+            .create({
+              data: {
+                device: 'Actuator_Controller',
+                status: 'ONLINE',
+                notes: 'Dispositivo conectado / Heartbeat recuperado.',
+              },
+            })
+            .catch((err) => Logger.error('Fallo persistiendo deviceLog (ONLINE)', err))
 
           syncNodeSampling()
           await processPostponedTasks()
@@ -210,6 +206,20 @@ function setupMqttHandlers() {
 
           retryManager.clear()
         }
+
+        return
+      }
+
+      // 1.5 Detección de Reinicio Rápido (Boot Explícito)
+      if (topic === 'PristinoPlant/Actuator_Controller/status/boot') {
+        Logger.warn(
+          '[ MQTT ] Reinicio rápido del nodo detectado (BOOT explícito). Re-sincronizando.',
+        )
+        retryManager.lastActuatorState = 'online'
+        resetSamplingState()
+        syncNodeSampling()
+        await processPostponedTasks()
+        await resumeInterruptedTasks()
 
         return
       }

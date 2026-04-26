@@ -1703,12 +1703,18 @@ async def mqtt_connector_task(client_id):
 
                 # Publicamos que estamos ONLINE
                 client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=1)
+                await asyncio.sleep_ms(300)
+
+                # Publicamos evento explícito de BOOT para que el scheduler detecte reinicios rápidos
+                client.publish(MQTT_TOPIC_STATUS + "/boot", b"reboot", retain=False, qos=1)
+                await asyncio.sleep_ms(300)
 
                 if DEBUG:
                     print(f"📡  Controlador {Colors.GREEN}online{Colors.RESET}", end="\n")
 
                 # Publica el estado actual de las auditorías (Digital Twin) tras conectar
                 publish_audit_state()
+                await asyncio.sleep_ms(300)
 
                 # Suscripción a tópicos
                 client.subscribe(MQTT_TOPIC_CMD, qos=1)
@@ -1720,7 +1726,7 @@ async def mqtt_connector_task(client_id):
 
                 # [Estabilización] Esperamos 5s a que se envíen los paquetes de suscripción y status (QoS 1)
                 # Esto "vacia" el buffer de salida TCP antes de la ráfaga de estados.
-                await asyncio.sleep(5)
+                await asyncio.sleep_ms(300)
 
                 # Notifica el cambio de estado
                 state_changed.set()
