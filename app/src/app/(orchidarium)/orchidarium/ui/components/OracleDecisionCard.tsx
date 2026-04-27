@@ -1,10 +1,20 @@
 'use client'
 
-import { FaCloudSunRain, FaSatelliteDish, FaTintSlash, FaBalanceScale } from 'react-icons/fa'
+import { useState } from 'react'
+import {
+  FaCloudSunRain,
+  FaSatelliteDish,
+  FaTintSlash,
+  FaBalanceScale,
+  FaInfoCircle,
+} from 'react-icons/fa'
+import { motion, AnimatePresence } from 'motion/react'
 
 import { OracleForecast } from '@/actions/insights/insight-actions'
 
 export function OracleDecisionCard({ forecast }: { forecast: OracleForecast | undefined }) {
+  const [showPressureInfo, setShowPressureInfo] = useState(false)
+
   if (!forecast) {
     return (
       <div className="bg-surface/50 flex h-full flex-col items-center justify-center gap-3 rounded-xl border border-white/10 p-6 text-center">
@@ -20,9 +30,13 @@ export function OracleDecisionCard({ forecast }: { forecast: OracleForecast | un
   const owmProb = forecast.sources.owm?.precipProb ?? 0
   const omProb = forecast.sources.om?.precipProb ?? 0
 
+  const localLux = forecast.localSensors?.lux ?? 0
+  const isSunnyLocal = localLux > 18000 // Umbral de sol intenso local
+
   // Lógica de visualización de consenso
-  const hasConflict = Math.abs(owmProb - omProb) > 0.4
-  const willRain = forecast.precipProb >= 0.7
+  const hasConflict =
+    Math.abs(owmProb - omProb) > 0.4 || (forecast.precipProb > 0.6 && isSunnyLocal)
+  const willRain = forecast.precipProb >= 0.7 && !isSunnyLocal
   const drySoil = forecast.soilMoisture !== null && forecast.soilMoisture < 0.35
 
   let decisionTitle = 'Riego Permitido'
@@ -34,6 +48,10 @@ export function OracleDecisionCard({ forecast }: { forecast: OracleForecast | un
     decisionTitle = 'Riego Probablemente Bloqueado'
     decisionDesc = `Pronóstico de lluvia (${(forecast.precipProb * 100).toFixed(0)}%). Será refutado si hay sol intenso localmente.`
     decisionColor = 'text-blue-400'
+  } else if (isSunnyLocal && forecast.precipProb > 0.5) {
+    decisionTitle = 'Riego Permitido (Refutado)'
+    decisionDesc = `Aunque hay pronóstico de lluvia, el sol intenso local (${localLux.toLocaleString()} lx) sugiere nubes pasajeras.`
+    decisionColor = 'text-amber-400'
   } else if (!drySoil && forecast.soilMoisture !== null) {
     decisionTitle = 'Riego Innecesario'
     decisionDesc = `Imágenes satelitales reportan suelo húmedo (${(forecast.soilMoisture * 100).toFixed(0)}%).`
@@ -78,7 +96,9 @@ export function OracleDecisionCard({ forecast }: { forecast: OracleForecast | un
           <div className="mt-2 flex items-center gap-2 rounded-md border border-amber-500/20 bg-amber-500/10 p-2">
             <FaBalanceScale className="h-3 w-3 text-amber-400" />
             <span className="text-[10px] font-bold tracking-wider text-amber-400 uppercase">
-              Discrepancia Detectada: Validando con Lux local
+              {isSunnyLocal && forecast.precipProb > 0.5
+                ? 'Discrepancia: Sol intenso detectado localmente'
+                : 'Discrepancia Detectada: Validando con Lux local'}
             </span>
           </div>
         )}
@@ -117,7 +137,16 @@ export function OracleDecisionCard({ forecast }: { forecast: OracleForecast | un
           </span>
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-secondary/80 text-[11px]">Presión</span>
+              <button
+                className="flex items-center gap-1 text-left"
+                type="button"
+                onClick={() => setShowPressureInfo(!showPressureInfo)}
+              >
+                <span className="text-secondary/80 text-[11px] underline decoration-white/20 underline-offset-2">
+                  Presión
+                </span>
+                <FaInfoCircle className="text-secondary/40 h-2.5 w-2.5" />
+              </button>
               <span className="text-[11px] font-bold">
                 {forecast.pressure?.toFixed(0) ?? '--'} hPa
               </span>
@@ -125,10 +154,66 @@ export function OracleDecisionCard({ forecast }: { forecast: OracleForecast | un
             <div className="flex items-center justify-between">
               <span className="text-secondary/80 text-[11px]">Viento</span>
               <span className="text-[11px] font-bold">
-                {forecast.windSpeed?.toFixed(1) ?? '--'} km/h
+                {forecast.windSpeed !== null && forecast.windSpeed !== undefined
+                  ? `${forecast.windSpeed.toFixed(1)} km/h`
+                  : '-- km/h'}
               </span>
             </div>
           </div>
+
+          <AnimatePresence>
+            {showPressureInfo && (
+              <>
+                <div
+                  className="fixed inset-0 z-40 bg-black/40 backdrop-blur-xs md:hidden"
+                  onClick={() => setShowPressureInfo(false)}
+                />
+                <motion.div
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  className="bg-surface absolute right-0 bottom-full z-50 mb-2 w-48 rounded-lg border border-white/10 p-3 shadow-2xl md:right-[-10%] md:w-56"
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                >
+                  <h4 className="mb-2 text-[10px] font-bold tracking-widest text-white uppercase">
+                    Guía de Presión
+                  </h4>
+                  <ul className="flex flex-col gap-2">
+                    <li className="flex flex-col">
+                      <span className="text-[10px] font-bold text-green-400 underline underline-offset-2">
+                        {'>'} 1013 hPa
+                      </span>
+                      <span className="text-secondary/80 text-[9px]">
+                        Alta Presión. Tiempo estable y despejado.
+                      </span>
+                    </li>
+                    <li className="flex flex-col">
+                      <span className="text-[10px] font-bold text-amber-400 underline underline-offset-2">
+                        1005 - 1012 hPa
+                      </span>
+                      <span className="text-secondary/80 text-[9px]">
+                        Transición. Tiempo variable o nubosidad.
+                      </span>
+                    </li>
+                    <li className="flex flex-col">
+                      <span className="text-[10px] font-bold text-red-400 underline underline-offset-2">
+                        {'<'} 1005 hPa
+                      </span>
+                      <span className="text-secondary/80 text-[9px]">
+                        Baja Presión. Riesgo de tormentas y viento.
+                      </span>
+                    </li>
+                  </ul>
+                  <button
+                    className="text-primary mt-3 w-full border-t border-white/5 pt-2 text-[9px] font-bold uppercase"
+                    type="button"
+                    onClick={() => setShowPressureInfo(false)}
+                  >
+                    Cerrar
+                  </button>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 

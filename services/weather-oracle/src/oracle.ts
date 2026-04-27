@@ -40,7 +40,7 @@ export async function syncOpenMeteo() {
   const lat = process.env.LATITUDE || '8.31'
   const lon = process.env.LONGITUDE || '-62.71'
 
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,weather_code,surface_pressure&timezone=auto&forecast_days=3`
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,weather_code,surface_pressure,wind_speed_10m&timezone=auto&forecast_days=3`
 
   Logger.info(`Sincronizando Open-Meteo para las coordenadas Lat:${lat} Lon:${lon}...`)
 
@@ -61,6 +61,7 @@ export async function syncOpenMeteo() {
       const precipProb = (hourly.precipitation_probability[i] || 0) / 100
       const weatherCode = hourly.weather_code[i]
       const pressure = hourly.surface_pressure[i]
+      const windSpeed = hourly.wind_speed_10m[i]
 
       const condition = mapWeatherCode(weatherCode)
 
@@ -76,6 +77,7 @@ export async function syncOpenMeteo() {
           humidity,
           precipProb,
           pressure,
+          windSpeed,
           condition,
           updatedAt: new Date(),
         },
@@ -85,6 +87,7 @@ export async function syncOpenMeteo() {
           humidity,
           precipProb,
           pressure,
+          windSpeed,
           condition,
           source,
         },
@@ -144,6 +147,7 @@ export async function syncOpenWeatherMap() {
       // OWM 'pop' (Probability of precipitation) es 0-1
       const precipProb = item.pop || 0
       const pressure = item.main.pressure
+      const windSpeed = item.wind?.speed ? item.wind.speed * 3.6 : 0 // Convert m/s to km/h
 
       const weatherCode = item.weather[0]?.id || 0
       const condition = mapOWMWeatherCode(weatherCode)
@@ -160,6 +164,7 @@ export async function syncOpenWeatherMap() {
           humidity,
           precipProb,
           pressure,
+          windSpeed,
           condition,
           updatedAt: new Date(),
         },
@@ -169,6 +174,7 @@ export async function syncOpenWeatherMap() {
           humidity,
           precipProb,
           pressure,
+          windSpeed,
           condition,
           source,
         },

@@ -231,6 +231,86 @@ export async function processDay(
     return
   }
 
+  // ── 2.1 Fallback de Clima (si no hay sensores físicos en EXTERIOR) ──────────
+  if (isExterior && countTemp === 0) {
+    try {
+      const weatherData = await prisma.weatherForecast.findMany({
+        where: {
+          timestamp: { gte: dayStart, lt: dayEnd },
+          source: { in: ['Open-Meteo', 'OpenWeatherMap'] },
+        },
+        orderBy: [{ source: 'asc' }, { timestamp: 'asc' }],
+      })
+
+      // Preferimos Open-Meteo por resolución horaria
+      const hasOpenMeteo = weatherData.some((d) => d.source === 'Open-Meteo')
+      const finalWeather = hasOpenMeteo
+        ? weatherData.filter((d) => d.source === 'Open-Meteo')
+        : weatherData
+
+      if (finalWeather.length > 0) {
+        Logger.info(
+          `[${dayLabel}] [${zone}] ☁️  Fallback: Usando datos de ${finalWeather[0].source}`,
+        )
+        for (const record of finalWeather) {
+          const tDate = record.timestamp
+          const tIso = tDate.toISOString()
+          const localHour = localHourCaracas(tDate)
+          const isDaytime = localHour >= 8 && localHour <= 16
+          const isNighttime = localHour >= 20 || localHour < 6
+
+          // Temperatura
+          const vTemp = record.temperature
+
+          sumTemp += vTemp
+          countTemp++
+          if (vTemp < minTemp) {
+            minTemp = vTemp
+            minTempTime = tIso
+          }
+          if (vTemp > maxTemp) {
+            maxTemp = vTemp
+            maxTempTime = tIso
+          }
+          if (isDaytime) {
+            sumTempDay += vTemp
+            countTempDay++
+          }
+          if (isNighttime) {
+            sumTempNight += vTemp
+            countTempNight++
+          }
+
+          // Humedad
+          const vHum = record.humidity
+
+          sumHum += vHum
+          countHum++
+          if (vHum < minHum) {
+            minHum = vHum
+            minHumTime = tIso
+          }
+          if (vHum > maxHum) {
+            maxHum = vHum
+            maxHumTime = tIso
+          }
+
+          // VPD diurno
+          if (isDaytime) {
+            const vpd = calculateVPD(vTemp, vHum)
+
+            vpdSum += vpd
+            vpdCount++
+            if (vpd < vpdMin) vpdMin = vpd
+            if (vpd > vpdMax) vpdMax = vpd
+          }
+        }
+      }
+    } catch (err) {
+      Logger.error(`[${dayLabel}] [${zone}] Fallo en el fallback de clima`, err)
+    }
+  }
+
   if (rowCount === 0) {
     Logger.warn(`[${dayLabel}] [${zone}] Sin datos. Skipping.`)
 

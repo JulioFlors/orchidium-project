@@ -27,6 +27,11 @@ export interface OracleForecast {
     owm?: { precipProb: number; temp: number }
     om?: { precipProb: number; temp: number }
   }
+  localSensors?: {
+    lux: number | null
+    temp: number | null
+    hum: number | null
+  }
 }
 
 /**
@@ -101,9 +106,11 @@ export async function getAllLatestBotanicalInsights(): Promise<{
   }
 }
 
+import { influxClient } from '@/lib/server/influxdb'
+
 /**
  * Obtiene el último pronóstico capturado por el Oráculo del Clima,
- * fusionando el clima general con la última lectura de suelo satelital.
+ * fusionando el clima general con la última lectura de suelo satelital y sensores locales.
  */
 export async function getLatestOracleForecast(): Promise<{
   success: boolean
@@ -139,6 +146,28 @@ export async function getLatestOracleForecast(): Promise<{
       orderBy: { timestamp: 'desc' },
     })
 
+    // 3. Obtener telemetría local actual (última lectura de EXTERIOR)
+    let localSensors: { lux: number | null; temp: number | null; hum: number | null } = {
+      lux: null,
+      temp: null,
+      hum: null,
+    }
+
+    try {
+      const localQuery = `SELECT last("illuminance") as lux, last("temperature") as temp, last("humidity") as hum FROM "environment_metrics" WHERE "zone" = 'EXTERIOR'`
+      const localStream = influxClient.query(localQuery)
+
+      for await (const row of localStream) {
+        localSensors = {
+          lux: row.lux ? Number(row.lux) : null,
+          temp: row.temp ? Number(row.temp) : null,
+          hum: row.hum ? Number(row.hum) : null,
+        }
+      }
+    } catch {
+      // Si falla Influx, localSensors queda en null
+    }
+
     if (!primary) {
       return {
         success: false,
@@ -161,6 +190,7 @@ export async function getLatestOracleForecast(): Promise<{
           owm: owm ? { precipProb: owm.precipProb, temp: owm.temperature } : undefined,
           om: om ? { precipProb: om.precipProb, temp: om.temperature } : undefined,
         },
+        localSensors,
       },
     }
   } catch (error) {
