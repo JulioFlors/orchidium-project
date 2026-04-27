@@ -1,3 +1,5 @@
+import tls from 'tls'
+
 import { InfluxDBClient } from '@influxdata/influxdb3-client'
 
 import { Logger } from './logger'
@@ -21,8 +23,36 @@ const isInternalHost =
 
 // ---- Deshabilitamos TLS para entornos locales/Docker ----
 // El SDK v3 usa fetch/gRPC que reaccionan a NODE_TLS_REJECT_UNAUTHORIZED
+// y también validan el hostname (ALTNAME).
 if (!isPublicCloud && isInternalHost) {
+  // Silenciar el warning molesto de Node.js
+  const originalEmit = process.emit
+
+  // @ts-expect-error - Sobreescritura necesaria para silenciar warning TLS
+  process.emit = function (name: string | symbol, data: unknown, ...args: unknown[]) {
+    if (
+      name === 'warning' &&
+      data &&
+      typeof data === 'object' &&
+      'name' in data &&
+      'message' in data &&
+      data.name === 'Warning' &&
+      typeof data.message === 'string' &&
+      data.message.includes('NODE_TLS_REJECT_UNAUTHORIZED')
+    ) {
+      return false
+    }
+
+    return (originalEmit as unknown as (n: string | symbol, ...a: unknown[]) => boolean).call(
+      process,
+      name,
+      data,
+      ...args,
+    )
+  }
+
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+  tls.checkServerIdentity = () => undefined
 }
 
 export const influxClient = new InfluxDBClient({

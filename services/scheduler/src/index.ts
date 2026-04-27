@@ -350,8 +350,8 @@ async function initScheduler() {
     syncNodeSampling('off')
   })
 
-  // Cron de cierre oficial diario (Media noche 00:01 AM)
-  new Cron('52 0 * * *', { timezone: 'America/Caracas' }, async () => {
+  // Cron de cierre oficial diario (01:05 AM - TEST)
+  new Cron('6 1 * * *', { timezone: 'America/Caracas' }, async () => {
     try {
       Logger.info('Procesando Telemetría de las Estaciones Meteorológicas.')
       const yesterday = new Date()
