@@ -40,7 +40,7 @@ const DEVICES: DeviceConfig[] = [
     id: 'sensors',
     name: 'Sensores',
     description: `Estación Meteorológica ${ZoneTypeLabels[ZoneType.ZONA_A]}`,
-    baseTopic: `PristinoPlant/Environmental_Monitoring/Zona_a`,
+    baseTopic: `PristinoPlant/Environmental_Monitoring/Zona_A`,
     hasMaskNvs: true,
     heartbeatTimeoutMs: 60000,
     hasDiagnostics: true,
@@ -222,13 +222,12 @@ export function DeviceDebugger() {
     return id.split('/').pop()?.toUpperCase() || 'HUB'
   }
 
-  // Renderizar widgets en el orden FIFO de activación del usuario
+  // Renderizar widgets: Prioridad al orden manual del usuario + Auditorías activas en hardware
   const orderedWidgets = useMemo(() => {
-    // El widgetOrder define el orden estricto.
-    // Si hay widgets activos en el hardware que no están en widgetOrder,
-    // se añaden al final (pero NO se auto-muestran, solo se marcan como activos en el grid).
-    return widgetOrder.filter((w) => activeDisplayWidgets.includes(w) || widgetOrder.includes(w))
-  }, [widgetOrder, activeDisplayWidgets])
+    const allActive = new Set([...widgetOrder, ...hardwareAudits])
+
+    return Array.from(allActive)
+  }, [widgetOrder, hardwareAudits])
 
   // Determinar la última señal de vida (Heartbeat)
   // Prioridad: Logs de Connectivity (BD) para persistencia, luego Mensajes MQTT para tiempo real.

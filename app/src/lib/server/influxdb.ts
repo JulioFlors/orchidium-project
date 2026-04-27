@@ -26,8 +26,10 @@ export const influxClient =
     token: INFLUX_TOKEN,
     database: INFLUX_BUCKET,
     transportOptions: {
+      // Ignorar fallos de identidad del servidor en hosts internos
       // Si no es la nube pública, relajamos la verificación de SSL para evitar bloqueos
       rejectUnauthorized: isPublicCloud ? true : !isInternalHost,
+      checkServerIdentity: () => undefined,
     },
   })
 

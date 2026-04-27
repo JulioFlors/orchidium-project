@@ -345,7 +345,10 @@ async function processZoneStateEvent(
     Logger.success(`[ ${eventType} ] ${source}/${zone} -> ${value}`)
   } else {
     // Otros eventos de estado (Device_Status, etc.)
-    if (!hasStateChanged(source, zone, eventType, value)) return
+    // El estado del dispositivo SIEMPRE se persiste para permitir hidratación SSR
+    const isDeviceStatus = eventType === 'Device_Status'
+
+    if (!isDeviceStatus && !hasStateChanged(source, zone, eventType, value)) return
 
     const point = Point.measurement('system_events')
       .setTag('source', source)
@@ -372,7 +375,9 @@ async function start() {
     token: INFLUX_TOKEN,
     database: INFLUX_BUCKET,
     transportOptions: {
+      // Ignorar fallos de identidad del servidor en hosts internos
       rejectUnauthorized: isPublicCloud ? true : !isInternalHost,
+      checkServerIdentity: () => undefined,
     },
   })
 
@@ -416,9 +421,31 @@ async function start() {
     const firmwareSource = topicParts[1]
 
     if (firmwareSource === 'Actuator_Controller') {
+      // Manejo de Reinicio Físico (Boot)
+      if (topic.endsWith('/status/boot')) {
+        Logger.warn(`[ BOOT ] Nodo reiniciado: ${firmwareSource}. Limpiando caché de estados.`)
+        stateCache.clear()
+
+        // Persistir el BOOT como un latido 'online' para hidratación SSR
+        const point = Point.measurement('system_events')
+          .setTag('source', firmwareSource)
+          .setTag('context', 'status')
+          .setTag('event_type', 'Device_Status')
+          .setStringField('value', 'online')
+
+        await writeToInflux(point)
+
+        return
+      }
+
       if (topic.endsWith('/status')) {
-        // Solo persistir si el estado cambió
-        if (hasStateChanged(firmwareSource, undefined, 'Device_Status', messageValue)) {
+        // Persistimos siempre el status para Actuator_Controller para permitir hidratación SSR
+        const isDeviceStatus = true
+
+        if (
+          isDeviceStatus ||
+          hasStateChanged(firmwareSource, undefined, 'Device_Status', messageValue)
+        ) {
           const point = Point.measurement('system_events')
             .setTag('source', firmwareSource)
             .setTag('context', 'status')
@@ -464,6 +491,25 @@ async function start() {
 
       if (!zone) {
         Logger.warn(`Zona desconocida: ${zoneSlug}`)
+
+        return
+      }
+
+      // Manejo de BOOT para sensores
+      if (topic.endsWith('/status/boot')) {
+        Logger.warn(
+          `[ BOOT ] Nodo sensor reiniciado: ${firmwareSource}/${zoneSlug}. Limpiando caché.`,
+        )
+        stateCache.clear()
+
+        const point = Point.measurement('system_events')
+          .setTag('source', firmwareSource)
+          .setTag('zone', zone)
+          .setTag('context', 'status')
+          .setTag('event_type', 'Device_Status')
+          .setStringField('value', 'online')
+
+        await writeToInflux(point)
 
         return
       }

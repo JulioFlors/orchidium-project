@@ -12,7 +12,8 @@ if (!INFLUX_TOKEN) {
 
 const url = new URL(INFLUX_URL)
 const isPublicCloud = url.hostname.endsWith('influxdata.com')
-const isInternalHost = url.hostname === 'influxdb' || url.hostname === 'localhost'
+const isInternalHost =
+  url.hostname.includes('influxdb') || url.hostname === 'localhost' || url.hostname === '127.0.0.1'
 
 export const influxClient = new InfluxDBClient({
   host: INFLUX_URL,
@@ -20,5 +21,6 @@ export const influxClient = new InfluxDBClient({
   database: INFLUX_BUCKET,
   transportOptions: {
     rejectUnauthorized: isPublicCloud ? true : !isInternalHost,
+    checkServerIdentity: () => undefined,
   },
 })

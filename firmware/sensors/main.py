@@ -788,8 +788,31 @@ async def main():
 
 # ---- Función Auxiliar: Parada del Programa ----
 def stopped_program():
+    """
+    #### Parada Local de Emergencia (Sensores)
+    * Publica 'offline' para evitar latencias de LWT.
+    * Invalida el cliente MQTT.
+    """
     if DEBUG:
         print(f"\n\n📡  Programa {Colors.GREEN}Detenido{Colors.RESET}")
+
+    # Publicamos 'offline' explícitamente antes de la desconexión limpia.
+    if client and hasattr(client, 'sock') and client.sock and wlan and wlan.isconnected():
+        try:
+            client.publish(MQTT_TOPIC_STATUS, b"offline", retain=True, qos=1)
+            from utime import sleep_ms
+            sleep_ms(300)
+        except:
+            pass
+
+    force_disconnect_mqtt()
+
+    if wlan and wlan.isconnected():
+        try:
+            wlan.disconnect()
+            log(f"📡  WiFi     {Colors.GREEN}Desconectado{Colors.RESET}\n")
+        except:
+            pass
 
 # ---- Función Auxiliar: Safe Reset ----
 def safe_reset():

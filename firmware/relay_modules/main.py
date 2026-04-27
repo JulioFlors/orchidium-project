@@ -467,7 +467,7 @@ async def publish_audit_state():
                 # 🔒 Pedimos permiso para usar el socket
                 async with mqtt_lock:
                     # Publicamos directo (MQTT convierte string a bytes)
-                    client.publish(MQTT_TOPIC_AUDIT_STATE, payload, retain=True, qos=0)
+                    client.publish(MQTT_TOPIC_AUDIT_STATE, payload, retain=False, qos=0)
             except (MQTTException, OSError) as e:
                 if DEBUG: log_mqtt_exception("Fallo sincronización estado auditoría", e)
                 # Invalidamos el cliente para que el loop principal detecte el fallo
@@ -2048,8 +2048,8 @@ async def state_publisher_task():
             # 🔒 Pedimos permiso para usar el socket
             async with mqtt_lock:
                 # Publicamos SOLO al tópico Unificado (/state)
-                # El frontend (ControlPanel) y el scheduler ya consumen exclusivamente este tópico.
-                client.publish(MQTT_TOPIC_STATE, payload, retain=True, qos=0)
+                # El frontend (ControlPanel) y the scheduler ya consumen exclusivamente este tópico.
+                client.publish(MQTT_TOPIC_STATE, payload, retain=False, qos=0)
 
             # Liberamos el payload de la RAM
             del payload
@@ -2156,7 +2156,7 @@ async def rain_monitor_task():
                     # 🔒 Pedimos permiso para usar el socket
                     async with mqtt_lock:
                         payload_start = '{"state":"Raining","timestamp":%d}' % time()
-                        client.publish(MQTT_TOPIC_RAIN_STATE, payload_start, retain=True, qos=0)
+                        client.publish(MQTT_TOPIC_RAIN_STATE, payload_start, retain=False, qos=0)
                 if DEBUG: print(f"\n🌧️  Lluvia INICIADA (Raw: {raw}) | Modo Ráfaga: {INTERVAL_BURST}s")
 
             # ---- ESTADO B: Lloviendo (Acumulando) ----
@@ -2202,7 +2202,7 @@ async def rain_monitor_task():
                         # 🔒 Pedimos permiso para usar el socket
                         async with mqtt_lock:
                             payload_dry = '{"state":"Dry","timestamp":%d}' % time()
-                            client.publish(MQTT_TOPIC_RAIN_STATE, payload_dry, retain=True, qos=0)
+                            client.publish(MQTT_TOPIC_RAIN_STATE, payload_dry, retain=False, qos=0)
                             client.publish(MQTT_TOPIC_RAIN_EVENT, payload, qos=1)
                             # Enviamos el último lote de ráfaga
                             if payload_batch:
@@ -2459,8 +2459,8 @@ def stopped_program():
     """
     #### Parada Local de Emergencia
     * Log de parada.
-    * Apaga físicamente todos los relés sin realizar operaciones de red.
-    * Crucial para que herramientas como mpremote puedan entrar al REPL rápidamente.
+    * Apaga físicamente todos los relés.
+    * Publica 'offline' explícitamente para evitar latencias de LWT.
     """
     if DEBUG:
         print(f"\n\n📡  Programa {Colors.GREEN}Detenido{Colors.RESET}")
@@ -2471,7 +2471,17 @@ def stopped_program():
             relay_info['pin'].value(0)
             relay_info['state'] = 'OFF'
         except Exception:
-            pass # Ignoramos errores de hardware al apagar
+            pass 
+
+    # Publicamos 'offline' explícitamente antes de la desconexión limpia.
+    # Es VITAL usar retain=True para que el estado persista tras el DISCONNECT.
+    if client and hasattr(client, 'sock') and client.sock and wlan and wlan.isconnected():
+        try:
+            client.publish(MQTT_TOPIC_STATUS, b"offline", retain=True, qos=1)
+            from utime import sleep_ms
+            sleep_ms(300) 
+        except:
+            pass
 
     # Invalidamos el cliente MQTT forzando una reconexión completa.
     force_disconnect_mqtt()
@@ -2483,7 +2493,7 @@ def stopped_program():
             if DEBUG:
                 print(f"📡  WiFi     {Colors.GREEN}Desconectado{Colors.RESET}\n")
         except Exception:
-            pass # Ignoramos errores de hardware al apagar
+            pass
 
 # ---- Punto de Entrada ----
 if __name__ == '__main__':

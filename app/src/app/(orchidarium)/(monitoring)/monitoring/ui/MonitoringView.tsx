@@ -47,7 +47,11 @@ const fetcher = async (url: string) => {
   return res.json()
 }
 
-export function MonitoringView() {
+interface MonitoringViewProps {
+  initialHeartbeats?: Record<string, { timestamp: number; status: string }>
+}
+
+export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) {
   // ----- Estados -----
   const [zone, setZone] = useState<string>(ZoneType.EXTERIOR)
 
@@ -184,7 +188,12 @@ export function MonitoringView() {
       : `PristinoPlant/Environmental_Monitoring/${formatTopicZone(zone)}/status`
 
   const { messages: mqttMessages, status } = useMqttStore()
-  const { connectionState } = useDeviceHeartbeat(statusTopic)
+  const initialData = initialHeartbeats[statusTopic]
+  const { connectionState } = useDeviceHeartbeat(
+    statusTopic,
+    initialData?.timestamp || null,
+    initialData?.status || 'unknown',
+  )
 
   // Determinamos si estamos esperando datos iniciales
   const isSWRBusy = isCardStatusLoading
@@ -194,7 +203,10 @@ export function MonitoringView() {
     if (connectionState === 'offline') return false
 
     const zoneSuffix = formatTopicZone(zone)
-    const readingsTopic = `PristinoPlant/Weather_Station/${zoneSuffix}/readings`
+    const readingsTopic =
+      zone === ZoneType.EXTERIOR
+        ? `PristinoPlant/Weather_Station/${zoneSuffix}/readings`
+        : `PristinoPlant/Environmental_Monitoring/${zoneSuffix}/readings`
 
     if (mqttMessages[readingsTopic]) return false
     if (status !== 'connected' && isSWRBusy) return true
@@ -205,7 +217,10 @@ export function MonitoringView() {
   // Procesamiento de lecturas MQTT
   const mqttReadings = useMemo(() => {
     const zoneSuffix = formatTopicZone(zone)
-    const readingsTopic = `PristinoPlant/Weather_Station/${zoneSuffix}/readings`
+    const readingsTopic =
+      zone === ZoneType.EXTERIOR
+        ? `PristinoPlant/Weather_Station/${zoneSuffix}/readings`
+        : `PristinoPlant/Environmental_Monitoring/${zoneSuffix}/readings`
 
     const readingsMsg = mqttMessages[readingsTopic]
     const result: Partial<SensorData> = {}
@@ -402,7 +417,8 @@ export function MonitoringView() {
     // Tiempo desde la última actualización del dato
     const minutesSinceLastUpdate = (now ? now - lastUpdateDate.getTime() : 0) / 60000
     // "isStale" solo aplica dentro del horario donde el sensor DEBERÍA estar enviando datos
-    const isStale = sensorIsActive && minutesSinceLastUpdate > 30
+    // Si tienen mas de 10min se asume que no llego el batch de datos nuevos.
+    const isStale = sensorIsActive && minutesSinceLastUpdate > 10
 
     const luxTrend = calculateTrend('illuminance')
 
@@ -418,7 +434,7 @@ export function MonitoringView() {
     }
 
     // ─── PRIORIDAD 2: Dato viejo (isStale) ──────────────────────────────────────────
-    // Si el dato tiene más de 30 min (o 15 min para lluvia), no es confiable.
+    // Si el dato tiene más de 10 min, no es confiable.
     if (isStale) {
       return {
         label: 'Sin Datos',
@@ -613,7 +629,7 @@ export function MonitoringView() {
               isActive={selectedMetric === 'temperature'}
               isLoading={isMqttLoading}
               isOffline={connectionState === 'offline'}
-              status={current.temperature > 28 || current.temperature < 18 ? 'warning' : 'optimal'}
+              status="optimal"
               title="Temperatura"
               trend={calculateTrend('temperature')}
               unit="°C"
@@ -628,7 +644,7 @@ export function MonitoringView() {
               isActive={selectedMetric === 'humidity'}
               isLoading={isMqttLoading}
               isOffline={connectionState === 'offline'}
-              status={current.humidity < 50 ? 'warning' : 'optimal'}
+              status="optimal"
               title="Humedad Relativa"
               trend={calculateTrend('humidity')}
               unit="%"
@@ -664,6 +680,7 @@ export function MonitoringView() {
               isOffline={connectionState === 'offline'}
               status="optimal"
               title="Iluminancia Exterior"
+              trend={calculateTrend('illuminance')}
               unit="lux"
               value={Math.round(current.illuminance).toLocaleString()}
               onClick={() => setSelectedMetric('illuminance')}

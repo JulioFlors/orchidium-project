@@ -38,7 +38,7 @@ export async function GET() {
     })
 
     // 3. Compute next execution date for each schedule
-    const routineTasks = schedules
+    const routineTasksRaw = schedules
       .map((schedule) => {
         try {
           // Parse using Croner with the correct Caracas timezone (matches backend)
@@ -56,7 +56,7 @@ export async function GET() {
             purpose: schedule.purpose,
             zones: schedule.zones,
             duration: schedule.durationMinutes,
-            scheduledAt: nextDate.toISOString(),
+            scheduledAt: nextDate, // Keep as Date for filtering
             status: 'PENDING',
             isRoutine: true,
             routineName: schedule.name,
@@ -66,10 +66,37 @@ export async function GET() {
           return null
         }
       })
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .filter(Boolean) as any[]
+      .filter((t): t is NonNullable<typeof t> => t !== null)
 
-    // 4. Merge and sort
+    // 4. Filter out routine tasks that are already "materialized" in TaskLog
+    // (This prevents showing projections for tasks that were already cancelled or started)
+    const scheduleIds = routineTasksRaw.map((t) => t.originalId)
+    const scheduledDates = routineTasksRaw.map((t) => t.scheduledAt)
+
+    const existingLogs = await prisma.taskLog.findMany({
+      where: {
+        scheduleId: { in: scheduleIds },
+        scheduledAt: { in: scheduledDates },
+      },
+      select: { scheduleId: true, scheduledAt: true },
+    })
+
+    const routineTasks = routineTasksRaw
+      .filter((rt) => {
+        const exists = existingLogs.some(
+          (log) =>
+            log.scheduleId === rt.originalId &&
+            log.scheduledAt.getTime() === rt.scheduledAt.getTime(),
+        )
+
+        return !exists
+      })
+      .map((rt) => ({
+        ...rt,
+        scheduledAt: rt.scheduledAt.toISOString(), // Convert back to string for response
+      }))
+
+    // 5. Merge and sort
     const combinedTasks = [...formattedManualTasks, ...routineTasks].sort((a, b) => {
       const timeA = new Date(a.scheduledAt).getTime()
       const timeB = new Date(b.scheduledAt).getTime()

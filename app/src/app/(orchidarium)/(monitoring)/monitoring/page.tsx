@@ -5,6 +5,7 @@ import { SWRConfig } from 'swr'
 import { MonitoringView } from './ui'
 
 import { getSensorHistory, getRainHistory } from '@/actions'
+import { getLastHeartbeat } from '@/lib/server/environment'
 
 export const metadata: Metadata = {
   title: 'Monitor Ambiental',
@@ -13,10 +14,17 @@ export const metadata: Metadata = {
 
 export default async function Page() {
   // Pre-cargamos los datos para las tarjetas por defecto (EXTERIOR, 12h)
-  const [historyRes, rainRes] = await Promise.all([
+  const [historyRes, rainRes, hbExterior, hbZonaA] = await Promise.all([
     getSensorHistory('12h', 'EXTERIOR'),
     getRainHistory('EXTERIOR'),
+    getLastHeartbeat('Actuator_Controller'),
+    getLastHeartbeat('Environmental_Monitoring', 'ZONA_A'),
   ])
+
+  const initialHeartbeats: Record<string, { timestamp: number; status: string }> = {}
+
+  if (hbExterior) initialHeartbeats['PristinoPlant/Actuator_Controller/status'] = hbExterior
+  if (hbZonaA) initialHeartbeats['PristinoPlant/Environmental_Monitoring/Zona_A/status'] = hbZonaA
 
   const fallback: Record<string, unknown> = {}
 
@@ -30,7 +38,7 @@ export default async function Page() {
 
   return (
     <SWRConfig value={{ fallback }}>
-      <MonitoringView />
+      <MonitoringView initialHeartbeats={initialHeartbeats} />
     </SWRConfig>
   )
 }

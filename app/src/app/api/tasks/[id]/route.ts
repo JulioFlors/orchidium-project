@@ -71,6 +71,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
             source: 'ROUTINE',
             duration: schedule.durationMinutes,
             scheduledAt: nextScheduledAt,
+            executedAt: nextScheduledAt,
             scheduleId: schedule.id,
             notes: `Rutina cancelada manualmente. Motivo: ${reason}`,
           },

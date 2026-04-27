@@ -61,9 +61,14 @@ export async function getSensorHistoryInternal(
   if (fieldsToQuery.length === 0 && metric) return []
 
   const now = new Date()
-  const todayStart = new Date(now)
+  // Offset Venezuela (UTC-4)
+  const VET_OFFSET = 4 * 3600000
 
-  todayStart.setHours(0, 0, 0, 0)
+  // Obtener la medianoche de hoy en VET expresada en tiempo UTC
+  const midnightVET = new Date(now.getTime() - VET_OFFSET)
+
+  midnightVET.setUTCHours(0, 0, 0, 0)
+  const midnightVETInUTC = new Date(midnightVET.getTime() + VET_OFFSET)
 
   // --- Rangos Cortos / Micro-Visión (1h, 12h, 24h) ---
   if (range === '1h' || range === '12h' || range === '24h') {
@@ -71,12 +76,11 @@ export async function getSensorHistoryInternal(
 
     if (range === '1h') timeFilter = `AND time >= now() - interval '1 hours'`
     if (range === '12h') {
-      const start = new Date(todayStart)
+      // 5:00 AM VET (Medianoche + 5h) hasta 7:00 PM VET (Medianoche + 19h)
+      // Estas son las 14h de "Día Botánico" solicitadas.
+      const start = new Date(midnightVETInUTC.getTime() + 5 * 3600000)
+      const end = new Date(midnightVETInUTC.getTime() + 19 * 3600000)
 
-      start.setHours(5, 0, 0, 0)
-      const end = new Date(todayStart)
-
-      end.setHours(19, 0, 0, 0)
       timeFilter = `AND time >= '${start.toISOString()}' AND time <= '${end.toISOString()}'`
     }
 
@@ -106,6 +110,7 @@ export async function getSensorHistoryInternal(
 
   // --- Rangos Largos / Macro-Visión (7d, 30d, all) ---
   const totalDays = range === '7d' ? 7 : range === '30d' ? 30 : 365
+  const todayStart = midnightVETInUTC
   const startDate = new Date(todayStart)
 
   startDate.setDate(startDate.getDate() - totalDays)
@@ -161,11 +166,12 @@ export async function getSensorHistoryInternal(
       allData.push(entry)
     })
 
-    // InfluxDB Fallback for Today
-    const todayISO = now.toISOString().split('T')[0]
+    // InfluxDB Fallback for Today (VET Aware)
+    const todayVET = new Date(now.getTime() - VET_OFFSET)
+    const todayISO = todayVET.toISOString().split('T')[0]
 
     if (!pgData.some((d) => d.date.toISOString().startsWith(todayISO))) {
-      const todayQuery = `SELECT * FROM "environment_metrics" WHERE "zone" = '${zone}' AND time >= '${todayStart.toISOString()}' ORDER BY time ASC`
+      const todayQuery = `SELECT * FROM "environment_metrics" WHERE "zone" = '${zone}' AND time >= '${midnightVETInUTC.toISOString()}' ORDER BY time ASC`
 
       try {
         const reader = influxClient.query(todayQuery)
@@ -230,5 +236,39 @@ export async function getSensorHistoryInternal(
     Logger.error('Error Query Hibrido:', error)
 
     return []
+  }
+}
+
+/**
+ * Obtiene el último latido (timestamp) registrado para un dispositivo.
+ * Se usa para la hidratación SSR del estado de conexión.
+ */
+export async function getLastHeartbeat(source: string, zone?: string) {
+  const zoneFilter = zone ? `AND "zone" = '${zone}'` : ''
+  const query = `
+    SELECT last("value"), time 
+    FROM "system_events" 
+    WHERE "source" = '${source}' 
+    AND "event_type" = 'Device_Status' 
+    ${zoneFilter}
+  `
+
+  try {
+    const reader = influxClient.query(query)
+
+    for await (const row of reader as AsyncIterable<InfluxRow>) {
+      if (row.time) {
+        return {
+          timestamp: new Date(safeTimeToISO(row.time)).getTime(),
+          status: String(row.last || 'unknown'),
+        }
+      }
+    }
+
+    return null
+  } catch (error) {
+    Logger.error(`Error fetching last heartbeat for ${source}:`, error)
+
+    return null
   }
 }

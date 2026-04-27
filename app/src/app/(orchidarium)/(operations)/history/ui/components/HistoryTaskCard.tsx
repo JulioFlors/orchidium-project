@@ -126,11 +126,12 @@ export function HistoryTaskCard({
                 <IoTimeOutline className="h-4 w-4 opacity-40" />
                 <span
                   className={clsx(
-                    ['PENDING', 'WAITING_CONFIRMATION'].includes(task.status) && 'opacity-30',
+                    ['PENDING', 'WAITING_CONFIRMATION', 'CANCELLED'].includes(task.status) &&
+                      'opacity-30',
                   )}
                 >
                   {formatTime12h(
-                    (['PENDING', 'WAITING_CONFIRMATION'].includes(task.status)
+                    (['PENDING', 'WAITING_CONFIRMATION', 'CANCELLED'].includes(task.status)
                       ? task.scheduledAt
                       : task.executedAt) || task.scheduledAt,
                   )}
