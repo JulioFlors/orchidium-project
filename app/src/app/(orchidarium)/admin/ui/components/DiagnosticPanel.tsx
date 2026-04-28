@@ -7,11 +7,12 @@ import {
   IoHardwareChipOutline,
   IoHeartOutline,
   IoInformationCircleOutline,
+  IoPlay,
   IoPlayCircleOutline,
   IoPulseOutline,
   IoSearchOutline,
   IoStatsChartOutline,
-  IoStopCircleOutline,
+  IoStop,
   IoTimeOutline,
   IoTrashOutline,
   IoWifiOutline,
@@ -29,7 +30,7 @@ import clsx from 'clsx'
 
 import { ActionMenu, Card, StatusCircleIcon } from '@/components'
 import { authClient, AUDIT_STORAGE_PREFIX, clearAuditData } from '@/lib'
-import { formatTime12h, formatRelativeHeartbeat } from '@/utils'
+import { formatRelativeHeartbeat, formatSmartDateTime } from '@/utils'
 
 // ---- Interfaces de Auditoría ----
 interface AuditPayload {
@@ -318,6 +319,48 @@ export function ToolboxGrid({
   )
 }
 
+// --- Custom Tooltip para Gráficas ---
+interface TooltipItem {
+  value: number
+  payload: {
+    name: string
+    value: number
+  }
+}
+
+interface CustomTooltipProps {
+  active?: boolean
+  payload?: TooltipItem[]
+  label?: string
+  chartColor: string
+  activeAudit: string | null
+}
+
+function CustomTooltip({ active, payload, label, chartColor, activeAudit }: CustomTooltipProps) {
+  if (active && payload && payload.length) {
+    const val = payload[0].value
+    let formattedVal = val.toFixed(1)
+
+    if (activeAudit === 'rain') {
+      formattedVal = Math.round(val).toString()
+    } else if (activeAudit === 'lux') {
+      formattedVal = val >= 1000 ? `${(val / 1000).toFixed(1)}k` : val.toFixed(1)
+      formattedVal += ' lux'
+    }
+
+    return (
+      <div className="flex flex-col gap-0.5 rounded-lg border border-zinc-800 bg-zinc-900 p-2 shadow-xl outline-none">
+        <span className="font-mono text-xs font-bold" style={{ color: chartColor }}>
+          {formattedVal}
+        </span>
+        <span className="text-xs font-medium text-zinc-400">{label}</span>
+      </div>
+    )
+  }
+
+  return null
+}
+
 // --- Card 2: Consola de Auditoría ---
 interface AuditConsoleCardProps {
   deviceId: string
@@ -499,7 +542,7 @@ export function AuditConsoleCard({
 
               return tsA - tsB
             })
-            .slice(-10) // Estrictamente las últimas 10 muestras para evitar ruido
+            .slice(-30) // Últimas 30 muestras para mayor visibilidad
 
           const nextState = { ...incomingPayload, history: mergedHistory, receivedAt: Date.now() }
 
@@ -545,7 +588,7 @@ export function AuditConsoleCard({
       if (Array.isArray(val) && val.length === 2) {
         const [ts, data] = val
 
-        timeStr = typeof ts === 'number' ? formatTime12h(ts * 1000) : String(ts)
+        timeStr = typeof ts === 'number' ? formatSmartDateTime(ts * 1000) : String(ts)
 
         if (typeof data === 'object' && data !== null) {
           if (activeAudit === 'ram') {
@@ -574,7 +617,7 @@ export function AuditConsoleCard({
     return (
       <div
         className={clsx(
-          'mt-2 h-40 w-full select-none',
+          'mt-2 min-h-[300px] w-full select-none',
           '[&_.recharts-wrapper_*]:outline-none!',
           '[&_.recharts-surface]:outline-none!',
           '[&_.recharts-tooltip-wrapper]:outline-none!',
@@ -597,32 +640,36 @@ export function AuditConsoleCard({
             <XAxis axisLine={false} dataKey="name" tick={false} tickLine={false} />
             <YAxis
               axisLine={false}
-              domain={activeAudit === 'health' ? [-100, -30] : ['auto', 'auto']}
+              domain={
+                activeAudit === 'health'
+                  ? [-100, -30]
+                  : activeAudit === 'lux'
+                    ? [0, 90000]
+                    : activeAudit === 'rain'
+                      ? [0, 4095]
+                      : ['auto', 'auto']
+              }
               fontSize={11}
+              scale="auto"
               stroke="var(--color-secondary)"
               tickFormatter={(value) => {
                 if (activeAudit === 'health') return `${value}dB`
+                if (activeAudit === 'rain') return value.toFixed(0)
 
-                return value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value.toFixed(1)
+                return value >= 1000 ? `${(value / 1000).toFixed(0)}k` : value.toFixed(0)
               }}
               tickLine={false}
               tickMargin={10}
               width={45}
             />
             <Tooltip
-              contentStyle={{
-                backgroundColor: '#18181b',
-                borderColor: '#27272a',
-                borderRadius: '8px',
-                fontSize: '11px',
-              }}
+              content={<CustomTooltip activeAudit={activeAudit} chartColor={chartColor} />}
               cursor={{
                 stroke: chartColor,
                 strokeWidth: 1,
                 strokeDasharray: '4 4',
                 fill: 'transparent',
               }}
-              itemStyle={{ color: chartColor, fontWeight: 'bold' }}
               wrapperStyle={{ outline: 'none' }}
             />
             <Area
@@ -942,34 +989,42 @@ export function AuditConsoleCard({
         <div className="flex items-center gap-2">
           {localReceivedAt && (
             <span className="font-mono text-[10px] font-medium tracking-tight text-zinc-400 opacity-60">
-              {formatTime12h(new Date(localReceivedAt))}
+              {formatSmartDateTime(localReceivedAt)}
             </span>
           )}
           <div className="flex items-center gap-0.5 border-l border-zinc-200 pl-2 dark:border-white/5">
             {isActive ? (
               <button
-                className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-red-500 transition-all hover:bg-red-500/10 disabled:pointer-events-none dark:text-red-400 dark:hover:bg-red-500/20"
+                className="group bg-black-and-white/10 hover:bg-hover-overlay relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-red-500 transition-all disabled:pointer-events-none dark:text-red-400"
                 disabled={isPending}
-                title="Detener Auditoría"
                 type="button"
                 onClick={onStop}
               >
-                <IoStopCircleOutline size={20} />
+                <IoStop size={12} />
+                {/* Custom Tooltip - Cohesión Visual Pristinoplant */}
+                <div className="animate-in fade-in slide-in-from-top-1 border-input-outline bg-surface pointer-events-none absolute -bottom-[34px] left-1/2 z-50 hidden -translate-x-1/2 rounded border px-2.5 py-1.5 text-[10px] font-bold text-white shadow-2xl group-hover:block">
+                  <div className="border-input-outline bg-surface absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 border-t border-l" />
+                  Cancelar
+                </div>
               </button>
             ) : (
               <button
                 className={clsx(
-                  'flex h-8 w-8 items-center justify-center rounded-full transition-all',
-                  !isOnline
-                    ? 'cursor-default opacity-30 grayscale'
-                    : 'cursor-pointer text-emerald-600 hover:bg-emerald-600/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20',
+                  'group bg-black-and-white/10 hover:bg-hover-overlay relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-emerald-600 transition-all dark:text-emerald-400',
+                  !isOnline && 'cursor-default opacity-30 grayscale',
                 )}
                 disabled={isPending || !isOnline}
-                title={isOnline ? 'Iniciar Auditoría' : 'Nodo Fuera de Línea'}
                 type="button"
                 onClick={onStart}
               >
-                <IoPlayCircleOutline size={20} />
+                <IoPlay className="ml-0.5" size={12} />
+                {/* Custom Tooltip - Cohesión Visual Pristinoplant */}
+                {isOnline && (
+                  <div className="animate-in fade-in slide-in-from-top-1 border-input-outline bg-surface pointer-events-none absolute -bottom-[34px] left-1/2 z-50 hidden -translate-x-1/2 rounded border px-2.5 py-1.5 text-[10px] font-bold text-white shadow-2xl group-hover:block">
+                    <div className="border-input-outline bg-surface absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 border-t border-l" />
+                    Iniciar
+                  </div>
+                )}
               </button>
             )}
 

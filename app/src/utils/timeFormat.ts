@@ -68,19 +68,49 @@ export function formatRelativeHeartbeat(dateValue: string | Date | number): stri
 
   if (diffSec < 60) return 'Hace unos segundos'
   if (diffMin < 5) return 'Hace unos minutos'
-  if (diffHours < 1) return `Hace ${diffMin}min`
-  if (diffHours < 12) return `Hace ${diffHours}h`
 
   const timeStr = formatTime12h(date)
 
-  if (diffHours < 24 && date.getDate() === now.getDate()) {
-    return timeStr
+  if (diffHours < 24) {
+    if (date.getDate() === now.getDate()) {
+      return `Hoy, ${timeStr}`
+    } else {
+      return `Ayer, ${timeStr}`
+    }
   }
 
   const day = date.getDate().toString().padStart(2, '0')
   const month = date.toLocaleDateString('es-VE', { month: 'short' }).replace('.', '')
+  const year = date.getFullYear()
 
-  return `${day} ${month}, ${timeStr}`
+  return `${day} ${month}. ${year}`
+}
+
+/**
+ * Formato inteligente: Hoy, Ayer o Fecha Completa.
+ */
+export function formatSmartDateTime(dateValue: string | Date | number): string {
+  if (!dateValue) return '--:--'
+  const date = new Date(dateValue)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+
+  const timeStr = formatTime12h(date)
+
+  if (diffHours < 24) {
+    if (date.getDate() === now.getDate()) {
+      return `Hoy, ${timeStr}`
+    } else {
+      return `Ayer, ${timeStr}`
+    }
+  }
+
+  const day = date.getDate().toString().padStart(2, '0')
+  const month = date.toLocaleDateString('es-VE', { month: 'short' }).replace('.', '')
+  const year = date.getFullYear()
+
+  return `${day} ${month}. ${year}, ${timeStr}`
 }
 
 /**

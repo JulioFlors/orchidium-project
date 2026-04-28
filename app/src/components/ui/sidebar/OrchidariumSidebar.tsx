@@ -1,6 +1,8 @@
+'use client'
 import { AnimatePresence, motion } from 'motion/react'
 import Link from 'next/link'
 import { IoChevronForwardOutline, IoStorefrontOutline } from 'react-icons/io5'
+import useSWR from 'swr'
 
 import { adminRoutes } from '@/config'
 import { PersonIcon, ThemeToggle } from '@/components'
@@ -10,6 +12,11 @@ export function OrchidariumSidebar() {
   const closeSidebar = useUIStore((state) => state.closeSidebar)
   const setSidebarRoute = useUIStore((state) => state.setSidebarRoute)
   const sidebarRoute = useUIStore((state) => state.sidebarRoute)
+
+  const { data } = useSWR('/api/notifications', (url) => fetch(url).then((res) => res.json()), {
+    refreshInterval: 30000,
+  })
+  const unreadCount = data?.unreadCount || 0
 
   // ---- NIVEL 2: sidebarItems ----
   const route = sidebarRoute ? adminRoutes.find((r) => r.slug === sidebarRoute) : null
@@ -45,8 +52,13 @@ export function OrchidariumSidebar() {
 
                 {/* Texto: Columna (Título + Descripción) */}
                 <div className="flex flex-col gap-1">
-                  <span className="text-primary text-sm leading-tight font-semibold">
+                  <span className="text-primary flex items-center justify-between text-sm leading-tight font-semibold">
                     {item.name}
+                    {item.name === 'Notificaciones' && unreadCount > 0 && (
+                      <span className="bg-primary flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] text-white">
+                        {unreadCount > 9 ? '9+' : unreadCount}
+                      </span>
+                    )}
                   </span>
                   {item.description && (
                     <p className="text-secondary text-xs leading-tight font-light">

@@ -128,8 +128,13 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 * [ ] **CRUD Programas de Cultivo:** Creación de secuencias de fertilización completas.
 * [x] **Scheduler Diferido:** Motor de ejecución backend (Polling DB) e UI para agendar Tareas Diferidas Manuales.
 * [x] **Mejora de Trazabilidad Offline/Expiración:** Registro de eventos en timeline para tareas postergadas por nodo offline y mapeo visual de estado `EXPIRED` como "Fallida" en la UI.
-* [ ] **Scheduler UI (Crons Recurrentes):** Interfaz para gestionar `AutomationSchedule` (rutinas continuas).
-* [x] **Confirmación de Agroquímicos (Diferido/Automatizado):** Implementado protocolo de seguridad v4. Las tareas de agroquímicos se pre-agendan 12h antes en `WAITING_CONFIRMATION`. Requieren autorización manual para ejecutarse (estado `AUTHORIZED`). Ventana de confirmación extendida a 24h tras la hora programada antes de expirar.
+* [x] **Scheduler UI (Crons Recurrentes):** Interfaz para gestionar `AutomationSchedule` (rutinas continuas).
+* [x] **Confirmación de Agroquímicos (Diferido/Automatizado):** Implementado protocolo de seguridad v5. Las tareas se pre-agendan 12h antes en `WAITING_CONFIRMATION`. Permanecen en la cola durante la ejecución (`IN_PROGRESS`) para permitir cancelación inmediata. Soporte para posponer 24h/48h.
+* [x] **Auditoría de Acciones (Firma de Admin):** Todas las cancelaciones y omisiones manuales ahora registran el `userId` del administrador, permitiendo trazabilidad total en el historial de operaciones.
+* [x] **Resiliencia ante Desconexiones ESP32:**
+  * [x] Firmware: Reconciliación atómica al arrancar entre estado guardado en NVS y lectura física del sensor de lluvia.
+  * [x] Scheduler: Implementado timeout de 10min para cerrar eventos de lluvia huérfanos si el firmware deja de reportar.
+  * [x] Ingest: Limpieza de `stateCache` selectiva por nodo en eventos de `boot`.
 * [x] **WeatherGuard Básico:** "Si llovió > X mm, cancelar riego" o si hay precipitaciones pronosticadas.
 * [x] **Integración Ingest/Scheduler:** Suscripción reactiva a eventos de lluvia (`rain/event`, `rain/state`) para toma de decisiones instantánea.
 * [x] **Precisión Temporal en Lluvia:** Implementado envío de `timestamp` (Unix/MicroPython) desde el firmware para el inicio y fin de la lluvia, con normalización de época en la ingesta para garantizar historia fidedigna post-reconexión.
@@ -140,6 +145,7 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 
 * [x] **Fase 3.2.1 - Estabilización de Tiempo Real (Smooth Data):**
   * [x] Modificar la API/WebSocket de telemetría para que retorne Medias Móviles Simples (SMA de 10-15 min) en vez de lecturas crudas puras (elimina parpadeos UI por nubes/reflejos).
+  * [x] **Fidelidad Total de Datos (Anti-Zeros):** Eliminada la fabricación de ceros en Ingest y el filtrado preventivo. El sistema registra 0.0 lux si el sensor lo dice. El filtrado para estadísticas se realiza en el agregador diario (08:00-16:00) y la UI ignora valores nulos de otros dispositivos.
 * [x] **Fase 3.2.2 - Agregación de VPD:**
   * [x] Backend: Añadir cálculo de Déficit de Presión de Vapor (VPD) combinando Temp/Humedad para inferir transpiración de fluidos en las orquídeas.
 * [x] **Fase 3.2.3 - Worker de Agregación Diaria (CRON 00:01 - Cierre de Ayer):**
@@ -187,6 +193,8 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 
 ### 📨 Canal de Notificaciones
 
+* [x] **Apartado de Notificaciones Web (`/notifications`):** Vista dedicada para gestionar alertas de mantenimiento y solicitudes de confirmación de agroquímicos.
+* [ ] **Alertas de Mantenimiento Programadas:** Implementar lógica para emitir notificaciones los lunes y jueves para la limpieza del filtro del circuito de riego.
 * [ ] **Integración con Telegram o WhatsApp:** Implementar un bot/canal que permita enviar notificaciones al usuario (alertas, solicitudes de confirmación, reportes). Elegir la opción más rápida, gratuita y mantenible tanto en desarrollo como en producción.
 * [ ] **Web Push Notifications:** Notificaciones del navegador como canal secundario para usuarios que no tengan la app abierta. Permite reaccionar en ventanas de oportunidad (ej: confirmar agroquímicos antes de ejecución).
 

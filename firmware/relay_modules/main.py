@@ -158,6 +158,12 @@ mqtt_lock = asyncio.Lock()
 wlan   = None # Conexión WiFi
 client = None # Cliente  MQTT
 
+# ---- Globales de Telemetría & Recuperación ----
+last_rain_raw = 4095 # Última lectura cruda (Seco por defecto)
+restored_rain_start_ticks = 0
+restored_rain_state = 'Dry'
+RAIN_TARGET_SAMPLES = const(10)
+
 # ---- Colors for logs ----
 if DEBUG:
     class Colors:
@@ -198,13 +204,32 @@ def get_lux_sample():
         except: return None
     return None
 
-def get_rain_sample():
-    if rain_sensor_analog:
-        try:
-            # Retornamos el promedio de 5 lecturas crudas para reducir ruido
-            return sum([rain_sensor_analog.read() for _ in range(5)]) // 5
-        except: return None
-    return None
+async def fetch_rain_raw():
+    """Realiza el oversampling físico del sensor (10 muestras en 500ms)."""
+    global rain_sensor_analog
+    if rain_sensor_analog is None: return None
+    
+    try:
+        raw_sum = 0
+        valid_samples = 0
+        for _ in range(RAIN_TARGET_SAMPLES):
+            try:
+                raw_sum += rain_sensor_analog.read()
+                valid_samples += 1
+            except: pass
+            await asyncio.sleep_ms(50)
+        
+        return int(raw_sum / valid_samples) if valid_samples > 0 else None
+    except:
+        return None
+
+async def get_rain_sample():
+    """Auditoría bajo demanda: Realiza una lectura fresca."""
+    global last_rain_raw
+    val = await fetch_rain_raw()
+    if val is not None:
+        last_rain_raw = val
+    return last_rain_raw
 
 def get_health_sample():
     from network import WLAN, STA_IF # type: ignore
@@ -703,13 +728,27 @@ async def boot_recovery_check():
                     print(f"    └─ ⚠️  Error: Actuador {actuator_id} no encontrado.")
                 NVSManager.clear_task(actuator_id) # Borramos solo esta mala
 
-        # Caso B: Tarea Expirada
-        else:
-            if DEBUG:
-                print(f"    └─ 🗑️  {Colors.YELLOW}Tarea Vencida{Colors.RESET} ID:{actuator_id} (No reanudar)")
-            if actuator_id in relays:
-                relays[actuator_id]['task_id'] = ""
-            NVSManager.clear_task(actuator_id)
+            else:
+                if DEBUG:
+                    print(f"    └─ 🗑️  {Colors.YELLOW}Tarea Vencida{Colors.RESET} ID:{actuator_id} (No reanudar)")
+                if actuator_id in relays:
+                    relays[actuator_id]['task_id'] = ""
+                NVSManager.clear_task(actuator_id)
+
+        # [Smart Recovery] Caso F: Evento de Lluvia Activo
+        elif task_data.get("type") == "rain_event":
+            start_epoch = task_data.get("start_epoch", 0)
+            if start_epoch > 0:
+                elapsed = current_time - start_epoch
+                # Si han pasado menos de 12 horas, reanudamos.
+                if elapsed < 43200:
+                    global restored_rain_start_ticks, restored_rain_state
+                    restored_rain_start_ticks = ticks_ms() - (int(elapsed) * 1000)
+                    restored_rain_state = 'Raining'
+                    if DEBUG:
+                        print(f"    ├─ {Colors.CYAN}REANUDANDO LLUVIA{Colors.RESET} Iniciada hace {int(elapsed)}s")
+                else:
+                    NVSManager.delete_key("rain_event")
 
     # ---- Escritura Física en Disco ----
     # Guardamos los nuevos tiempos recalibrados y las tareas expiradas eliminadas
@@ -2105,43 +2144,107 @@ async def rain_monitor_task():
     # Tiempos de Configuración
     INTERVAL_NORMAL = 600 # 10 minutos
     INTERVAL_BURST  = 60  # 1 minuto
-    TARGET_SAMPLES  = 10
 
-    # Estado Inicial
+    # Estado Inicial (Soportando recuperación de NVS)
+    global restored_rain_state, restored_rain_start_ticks, last_rain_raw
+    
     current_interval = INTERVAL_NORMAL
-    current_state    = 'Dry'
+    current_state    = restored_rain_state
     rain_samples     = 0
-    rain_start_ticks = 0
+    rain_start_ticks = restored_rain_start_ticks
     rain_total_int   = 0
+
+    if current_state == 'Raining':
+        current_interval = INTERVAL_BURST
+        if DEBUG: print(f"\n🌧️  Lluvia RECUPERADA desde NVS | Modo Ráfaga: {INTERVAL_BURST}s")
+
+    # ---- Primera Lectura Inmediata (Sincronización de Arranque) ----
+    # Leemos el sensor ahora mismo para determinar el estado REAL de lluvia.
+    # Si NVS dice "Raining" pero el sensor dice "seco", cerramos el evento.
+    boot_state_to_publish = None  # Estado a publicar por MQTT cuando esté listo
+
+    if rain_sensor_analog is not None:
+        try:
+            raw = await fetch_rain_raw()
+            if raw is not None:
+                last_rain_raw = raw
+
+                if raw < RAIN_START_VALUE:
+                    # ---- Sensor confirma lluvia ----
+                    if current_state != 'Raining':
+                        # NVS no tenía evento → nuevo evento
+                        current_state = 'Raining'
+                        current_interval = INTERVAL_BURST
+                        rain_start_ticks = ticks_ms()
+                        rain_total_int = 0
+                        rain_samples = 0
+                        # Persistir en NVS
+                        try:
+                            NVSManager.save_task({
+                                "type": "rain_event",
+                                "start_epoch": time(),
+                                "key": "rain_event"
+                            })
+                            NVSManager.flush()
+                        except Exception:
+                            pass
+                    # Si NVS ya tenía Raining, mantenemos rain_start_ticks restaurado (no perdemos duración)
+                    boot_state_to_publish = 'Raining'
+                    if DEBUG: print(f"    └─ Sensor confirma lluvia (Raw: {raw})")
+
+                else:
+                    # ---- Sensor dice seco ----
+                    if current_state == 'Raining':
+                        # NVS decía Raining pero ya paró → cerrar evento con duración calculada
+                        if rain_start_ticks > 0:
+                            duration_ms = ticks_diff(ticks_ms(), rain_start_ticks)
+                            duration_sec = duration_ms // 1000
+                            if DEBUG: print(f"    └─ Lluvia terminó offline. Duración: {duration_sec}s")
+                            # El evento finalizado se publicará cuando MQTT esté listo
+                            # (en la primera iteración del while True)
+
+                        current_state = 'Dry'
+                        current_interval = INTERVAL_NORMAL
+                        rain_start_ticks = 0
+                        NVSManager.delete_key("rain_event")
+                        NVSManager.flush()
+
+                    boot_state_to_publish = 'Dry'
+                    if DEBUG: print(f"    └─ Sensor confirma seco (Raw: {raw})")
+
+        except Exception as e:
+            if DEBUG: print(f"\n⚠️  Error en primera lectura de lluvia: {e}")
 
     while True:
         try:
-            if rain_sensor_analog is None:
-                await asyncio.sleep(INTERVAL_NORMAL)
-                continue
+            # Oversampling centralizado (10 muestras cada 50ms = 500ms total)
+            raw = await fetch_rain_raw()
 
-            # Oversampling no bloqueante (10 muestras cada 50ms = 500ms total)
-            raw_sum = 0
-            valid_samples = 0
-            for _ in range(TARGET_SAMPLES):
-                try:
-                    raw_sum += rain_sensor_analog.read()
-                    valid_samples += 1
-                except Exception:
-                    pass
-                await asyncio.sleep_ms(50)
-
-            if valid_samples == 0:
-                if DEBUG: print(f"\n⚠️  Lluvia: No hay muestras válidas (0/{TARGET_SAMPLES})")
+            if raw is None:
+                if DEBUG: print(f"\n⚠️  Lluvia: No hay muestras válidas (0/{RAIN_TARGET_SAMPLES})")
                 await asyncio.sleep(current_interval)
                 continue
 
             raw = int(raw_sum / valid_samples)
+            last_rain_raw = raw # Actualizamos caché para Auditoría (get_rain_sample)
 
             # Cálculo de Intensidad
             clamped_raw = max(RAW_INTENSITY_MIN, min(raw, RAIN_STOP_VALUE))
             delta_max = RAIN_STOP_VALUE - RAW_INTENSITY_MIN
             intensity = round(((RAIN_STOP_VALUE - clamped_raw) / delta_max) * 100)
+
+            # ---- Publicación Diferida del Estado de Arranque ----
+            # Publicamos el estado real (determinado por la primera lectura) cuando MQTT esté listo.
+            if boot_state_to_publish is not None:
+                if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
+                    try:
+                        payload_boot = '{"state":"%s","timestamp":%d}' % (boot_state_to_publish, time())
+                        async with mqtt_lock:
+                            client.publish(MQTT_TOPIC_RAIN_STATE, payload_boot, retain=False, qos=0)
+                        if DEBUG: print(f"    └─ Estado de lluvia publicado al arrancar: {boot_state_to_publish}")
+                    except Exception as e:
+                        if DEBUG: print(f"    └─ ⚠️ Error publicando estado lluvia: {e}")
+                    boot_state_to_publish = None  # Solo una vez
 
             # ---- ESTADO A: Inicia la lluvia ----
             if raw < RAIN_START_VALUE and current_state == 'Dry':
@@ -2151,12 +2254,27 @@ async def rain_monitor_task():
                 rain_total_int = 0
                 rain_samples = 0
                 
-                # Sincronización MQTT con validación de socket
+                # ---- BITÁCORA DE LLUVIA (NVS) ----
+                # Guardamos el inicio del evento para sobrevivir a reinicios
+                try:
+                    NVSManager.save_task({
+                        "type": "rain_event",
+                        "start_epoch": time(),
+                        "key": "rain_event"
+                    })
+                    NVSManager.flush()
+                except Exception as e:
+                    if DEBUG: print(f"⚠️  Error persistiendo lluvia: {e}")
+
+                # Publicar estado 'Raining' por MQTT para que Ingest y Scheduler lo sepan
                 if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
-                    # 🔒 Pedimos permiso para usar el socket
-                    async with mqtt_lock:
-                        payload_start = '{"state":"Raining","timestamp":%d}' % time()
-                        client.publish(MQTT_TOPIC_RAIN_STATE, payload_start, retain=False, qos=0)
+                    try:
+                        payload_raining = '{"state":"Raining","timestamp":%d}' % time()
+                        async with mqtt_lock:
+                            client.publish(MQTT_TOPIC_RAIN_STATE, payload_raining, retain=False, qos=0)
+                    except Exception as e:
+                        if DEBUG: print(f"⚠️  Error publicando Raining: {e}")
+
                 if DEBUG: print(f"\n🌧️  Lluvia INICIADA (Raw: {raw}) | Modo Ráfaga: {INTERVAL_BURST}s")
 
             # ---- ESTADO B: Lloviendo (Acumulando) ----
@@ -2210,6 +2328,10 @@ async def rain_monitor_task():
                         
                         rain_Batch.clear()
 
+                    # ---- Limpieza de Bitácora (NVS) ----
+                    NVSManager.delete_key("rain_event")
+                    NVSManager.flush()
+
                     if DEBUG: print(f"\n⛅  Lluvia TERMINADA. Dur:{duration_sec}s, Int:{avg_int}% | Modo Vigía: {INTERVAL_NORMAL}s")
 
         except (MQTTException, OSError) as e:
@@ -2262,8 +2384,10 @@ async def illuminance_monitor_task():
 
             if illuminance_sensor is not None:
                 # Lectura de sensor BH1750 con auto-escala dinámica
-                lux_val = round(illuminance_sensor.get_auto_luminance(), 1)
-                illuminance_Batch.append(lux_val)
+                lux_raw = illuminance_sensor.get_auto_luminance()
+                if lux_raw is not None:
+                    lux_val = round(lux_raw, 1)
+                    illuminance_Batch.append(lux_val)
                 
                 # Publicar Batch cada 10 minutos (600 segundos)
                 if current_ts - last_lux_publish >= 600:
@@ -2332,7 +2456,17 @@ async def unified_audit_task():
                 sample_fn = AUDIT_SAMPLE_FNS.get(category)
                 if not sample_fn: continue
 
-                val = sample_fn()
+                # Soporte para funciones síncronas y asíncronas (como rain)
+                try:
+                    res = sample_fn()
+                    if hasattr(res, '__await__') or asyncio.iscoroutine(res):
+                        val = await res
+                    else:
+                        val = res
+                except Exception as e:
+                    if DEBUG: print(f"⚠️ Error muestreando {category}: {e}")
+                    val = None
+
                 if val is not None:
                     # Ensamble manual de la categoría en JSON PLANO (Snapshot)
                     if category == "health":
@@ -2350,8 +2484,8 @@ async def unified_audit_task():
                     
                     if DEBUG: print(f"\n🔍  [Batch] {category.upper()} #{AUDIT_COUNTERS[category]}: {val}")
 
-                    # Lógica de Auto-Off (10 pts)
-                    if AUDIT_COUNTERS[category] >= 10:
+                    # Lógica de Auto-Off (50 pts)
+                    if AUDIT_COUNTERS[category] >= 50:
                         AUDIT_MODE[category] = False
                         AUDIT_COUNTERS[category] = 0
                         if category in audit_events:

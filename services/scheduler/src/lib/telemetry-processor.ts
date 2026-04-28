@@ -201,7 +201,7 @@ export async function processDay(
       if (row.illuminance != null && isDaytime) {
         const v = Number(row.illuminance)
 
-        if (!isNaN(v)) {
+        if (!isNaN(v) && v > 0) {
           sumLum += v
           countLum++
           if (v < minLum) {

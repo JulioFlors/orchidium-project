@@ -87,6 +87,10 @@ async function waitForMosquitto(retries = 15) {
 
 // ---- Gestión de Estado Local ----
 let lastRainState: string | null = null
+let lastFirmwareHeartbeat: number = Date.now()
+
+// Timeout para eventos de lluvia huérfanos (10 minutos sin señales de vida)
+const RAIN_ORPHAN_TIMEOUT_MS = 10 * 60 * 1000
 
 function setupMqttHandlers() {
   const subscribe = () => {
@@ -118,6 +122,14 @@ function setupMqttHandlers() {
   mqttClient.on('message', async (topic, payload) => {
     try {
       const message = payload.toString().trim()
+
+      // Heartbeat: cualquier mensaje del firmware actualiza el timestamp
+      if (
+        topic.startsWith('PristinoPlant/Actuator_Controller/') ||
+        topic.startsWith('PristinoPlant/Weather_Station/')
+      ) {
+        lastFirmwareHeartbeat = Date.now()
+      }
 
       // 1. Monitoreo de Conexión del Nodo Actuador
       if (topic === 'PristinoPlant/Actuator_Controller/status') {
@@ -311,6 +323,7 @@ function setupMqttHandlers() {
           Logger.warn('🌧️ [WeatherGuard] Lluvia detectada por sensores en tiempo real.')
         }
         lastRainState = state
+        lastFirmwareHeartbeat = Date.now()
 
         return
       }
@@ -320,12 +333,33 @@ function setupMqttHandlers() {
   })
 }
 
+/**
+ * Verifica si un evento de lluvia ha quedado huérfano (firmware desconectado).
+ * Si han pasado más de 10 minutos sin señales del firmware durante un evento Raining,
+ * se da el evento por terminado.
+ */
+function checkRainOrphanTimeout() {
+  if (lastRainState !== 'Raining') return
+
+  const elapsed = Date.now() - lastFirmwareHeartbeat
+
+  if (elapsed > RAIN_ORPHAN_TIMEOUT_MS) {
+    Logger.warn(
+      `🌧️ [WeatherGuard] Evento de lluvia huérfano detectado. Sin señales del firmware en ${Math.round(elapsed / 60000)}min. Dando por terminado.`,
+    )
+    lastRainState = 'Dry'
+  }
+}
+
 // ---- Lógica de Rutinas (Crons) ----
 async function initScheduler() {
   await waitForPostgres()
 
   // Registrar callback para fallos de ACK y expiración rápida
   retryManager.setOnFailure(handleAckTimeout)
+
+  // Verificación periódica de eventos de lluvia huérfanos (cada 60s)
+  setInterval(checkRainOrphanTimeout, 60_000)
 
   // Cron de limpieza de tareas expiradas (Ventana de 20 min / 24h agroquímicos)
   new Cron('*/5 * * * *', { timezone: 'America/Caracas' }, async () => {
@@ -348,6 +382,23 @@ async function initScheduler() {
   })
   new Cron('1 19 * * *', { timezone: 'America/Caracas' }, () => {
     syncNodeSampling('off')
+  })
+
+  // Cron de Mantenimiento de Filtros (Lunes y Jueves 8:00 AM)
+  new Cron('0 8 * * 1,4', { timezone: 'America/Caracas' }, async () => {
+    try {
+      await prisma.notification.create({
+        data: {
+          type: 'MAINTENANCE_REMINDER',
+          title: 'Mantenimiento de Filtros',
+          description: 'Recordatorio periódico: Limpiar filtros del sistema de riego.',
+          priority: 'NORMAL',
+        },
+      })
+      Logger.info('🔔 Notificación de mantenimiento de filtros generada.')
+    } catch (error) {
+      Logger.error('Error generando notificación de mantenimiento:', error)
+    }
   })
 
   // Cron de cierre oficial diario (Media noche 12:01 AM)
@@ -422,7 +473,7 @@ async function runTask(scheduleId: string) {
     // Lógica especial para Agroquímicos
     if (schedule.purpose === 'FERTIGATION' || schedule.purpose === 'FUMIGATION') {
       // Buscar si ya existe una tarea pre-agendada
-      let taskLog = await prisma.taskLog.findFirst({
+      const taskLog = await prisma.taskLog.findFirst({
         where: {
           scheduleId: schedule.id,
           scheduledAt: {
@@ -434,22 +485,38 @@ async function runTask(scheduleId: string) {
 
       // Si no existe (por algún motivo falló el pre-scheduler), crearla ahora
       if (!taskLog) {
-        taskLog = await prisma.taskLog.create({
+        const nextOccurrence = new Date(Date.now() + 12 * 60 * 60 * 1000)
+        const task = await prisma.taskLog.create({
           data: {
             scheduleId: schedule.id,
             purpose: schedule.purpose,
             zones: schedule.zones,
             status: TaskStatus.WAITING_CONFIRMATION,
             source: 'ROUTINE',
-            scheduledAt: new Date(),
+            scheduledAt: nextOccurrence,
             duration: schedule.durationMinutes,
-            notes: 'Tarea de agroquímicos creada en tiempo de ejecución (Pre-scheduler omitido).',
+            notes: 'Tarea pre-agendada para confirmación (12h de antelación).',
           },
         })
+
+        // Crear notificación de confirmación
+        await prisma.notification.create({
+          data: {
+            type: 'AGROCHEMICAL_CONFIRM',
+            title: 'Confirmación de Agroquímicos',
+            description: `Se requiere preparar el tanque para la rutina: ${schedule.name} programada para el ${nextOccurrence.toLocaleTimeString('es-VE')}`,
+            taskId: task.id,
+            priority: 'HIGH',
+          },
+        })
+
+        Logger.info(
+          `[ AGRO ] Pre-agendada rutina "${schedule.name}" para el ${nextOccurrence.toLocaleString('es-VE')}`,
+        )
       }
 
       // Si está en WAITING_CONFIRMATION, NO se ejecuta. Se queda esperando 24h.
-      if (taskLog.status === TaskStatus.WAITING_CONFIRMATION) {
+      if (taskLog && taskLog.status === TaskStatus.WAITING_CONFIRMATION) {
         Logger.info(
           `[ AGRO ] Tarea ${taskLog.id.slice(0, 8)} (${schedule.name}) en espera de confirmación.`,
         )
@@ -458,7 +525,7 @@ async function runTask(scheduleId: string) {
       }
 
       // Si ya está AUTHORIZED (por confirmación manual anticipada), procesar con Veto ambiental
-      if (taskLog.status === TaskStatus.AUTHORIZED) {
+      if (taskLog && taskLog.status === TaskStatus.AUTHORIZED) {
         if (inference.shouldCancel) {
           Logger.warn(`[ AGRO ] VETO AMBIENTAL aplicado a tarea autorizada: ${inference.reason}`)
           await recordTaskEvent(taskLog.id, TaskStatus.SKIPPED, inference.reason)

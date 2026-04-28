@@ -1,7 +1,9 @@
-import { NextResponse } from 'next/server'
 import { prisma, TaskStatus } from '@package/database'
+import { headers } from 'next/headers'
+import { NextResponse } from 'next/server'
 
 import { Logger } from '@/lib'
+import { auth, sendMqttCommand } from '@/lib/server'
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -11,8 +13,12 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
       return NextResponse.json({ error: 'Missing task id' }, { status: 400 })
     }
 
+    const session = await auth.api.getSession({ headers: await headers() })
+    const userId = session?.user?.id
+    const userName = session?.user?.name || 'Administrador'
+
     // Leer el motivo de cancelación del body (opcional pero esperado)
-    let reason = 'Tarea Cancelada por el Admin antes de iniciar'
+    let reason = `Tarea Cancelada por ${userName} antes de iniciar`
     let scheduledAtOverride: Date | null = null
 
     try {
@@ -82,7 +88,8 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
           data: {
             taskId: task.id,
             status: TaskStatus.CANCELLED,
-            notes: `Rutina cancelada manualmente. Motivo: ${reason}`,
+            notes: `Rutina cancelada por ${userName}. Motivo: ${reason}`,
+            userId,
           },
         })
 
@@ -93,30 +100,68 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     }
 
     // ---- CASO B: Cancelación de Tarea Diferida Tradicional ----
+    const task = await prisma.taskLog.findUnique({
+      where: { id },
+      select: { status: true, purpose: true },
+    })
+
+    if (!task) {
+      return NextResponse.json({ error: 'Task not found' }, { status: 404 })
+    }
+
+    const activeStatuses: TaskStatus[] = [
+      TaskStatus.DISPATCHED,
+      TaskStatus.ACKNOWLEDGED,
+      TaskStatus.IN_PROGRESS,
+    ]
+    const isActivelyRunning = activeStatuses.includes(task.status)
+
+    const finalStatus = isActivelyRunning ? TaskStatus.CANCELLED : TaskStatus.SKIPPED
+    const finalReason =
+      reason ||
+      (isActivelyRunning
+        ? 'Cancelación manual: Interrupción de operación activa.'
+        : 'Omisión manual: Tarea descartada antes de iniciar.')
+
+    // 1. Si está activa, enviar OFF al hardware
+    if (isActivelyRunning) {
+      try {
+        await sendMqttCommand('PristinoPlant/Actuator_Controller/irrigation/cmd', {
+          circuit: task.purpose,
+          state: 'OFF',
+          task_id: id,
+        })
+      } catch (err) {
+        Logger.error('Fallo enviando comando OFF desde API:', err)
+        // Continuamos con el cambio de estado en DB para que la UI refleje la intención
+      }
+    }
+
     const updatedTask = await prisma.$transaction(async (tx) => {
-      const task = await tx.taskLog.update({
+      const updated = await tx.taskLog.update({
         where: { id },
         data: {
-          status: TaskStatus.CANCELLED,
-          notes: reason,
+          status: finalStatus,
+          notes: finalReason,
         },
       })
 
-      // Registrar el evento de cancelación en la línea de tiempo
+      // Registrar el evento con discriminación semántica
       await tx.taskEventLog.create({
         data: {
           taskId: id,
-          status: TaskStatus.CANCELLED,
-          notes: reason,
+          status: finalStatus,
+          notes: finalReason,
+          userId,
         },
       })
 
-      return task
+      return updated
     })
 
     return NextResponse.json(updatedTask)
   } catch (error) {
-    Logger.error('Error cancelando tarea diferida:', error)
+    Logger.error('Error procesando cancelación de tarea:', error)
 
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }

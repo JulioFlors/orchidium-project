@@ -22,6 +22,8 @@ model User {
   role          Role      @default(USER)
   accounts      Account[]
   sessions      Session[]
+  taskEvents    TaskEventLog[]
+  notifications Notification[]
 }
 
 model Session {
@@ -236,6 +238,7 @@ model TaskLog {
   actualStartAt    DateTime?
   completedMinutes Int                 @default(0)
   events           TaskEventLog[]
+  notifications    Notification[]
   agrochemical     Agrochemical?       @relation(fields: [agrochemicalId], references: [id])
   schedule         AutomationSchedule? @relation(fields: [scheduleId], references: [id])
 
@@ -249,7 +252,9 @@ model TaskEventLog {
   timestamp DateTime   @default(now())
   notes     String?
   taskId    String
+  userId    String?
   task      TaskLog    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user      User?      @relation(fields: [userId], references: [id])
 
   @@index([taskId])
   @@index([timestamp])
@@ -494,4 +499,42 @@ enum Severity {
   MEDIUM
   HIGH
   CRITICAL
+}
+enum NotificationType {
+  MAINTENANCE_REMINDER
+  AGROCHEMICAL_CONFIRM
+  SYSTEM_ALERT
+  TASK_STATUS
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  DISMISSED
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model Notification {
+  id           String               @id @default(uuid())
+  type         NotificationType
+  title        String
+  description  String?
+  status       NotificationStatus   @default(UNREAD)
+  priority     NotificationPriority @default(NORMAL)
+  taskId       String?
+  task         TaskLog?             @relation(fields: [taskId], references: [id])
+  targetUserId String?
+  targetUser   User?                @relation(fields: [targetUserId], references: [id])
+  createdAt    DateTime             @default(now())
+  readAt       DateTime?
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([targetUserId])
 }

@@ -2,7 +2,7 @@ import { prisma, TaskStatus, TaskLog } from '@package/database'
 import { Cron } from 'croner'
 
 import { Logger } from './logger'
-import { executeSequence } from './mqtt-handler'
+import { executeSequence, stopSequence } from './mqtt-handler'
 import { InferenceEngine } from './inference-engine'
 
 const recentEvents = new Map<string, number>()
@@ -97,6 +97,7 @@ export async function recordTaskEvent(
             taskId,
             status,
             notes: notes || `Evento: ${status}`,
+            userId: extraData.userId as string | undefined,
           },
         })
       }
@@ -297,7 +298,7 @@ export async function preScheduleAgrochemicals() {
         })
 
         if (!existing) {
-          await prisma.taskLog.create({
+          const task = await prisma.taskLog.create({
             data: {
               scheduleId: schedule.id,
               purpose: schedule.purpose,
@@ -309,6 +310,18 @@ export async function preScheduleAgrochemicals() {
               notes: 'Tarea pre-agendada para confirmación (12h de antelación).',
             },
           })
+
+          // Crear notificación de confirmación
+          await prisma.notification.create({
+            data: {
+              type: 'AGROCHEMICAL_CONFIRM',
+              title: 'Confirmación de Agroquímicos',
+              description: `Se requiere preparar el tanque para la rutina: ${schedule.name} programada para el ${nextOccurrence.toLocaleTimeString('es-VE')}`,
+              taskId: task.id,
+              priority: 'HIGH',
+            },
+          })
+
           Logger.info(
             `[ AGRO ] Pre-agendada rutina "${schedule.name}" para el ${nextOccurrence.toLocaleString('es-VE')}`,
           )
@@ -353,5 +366,63 @@ export async function processAuthorizedTasks() {
     }
   } catch (error) {
     Logger.error('Error en processAuthorizedTasks:', error)
+  }
+}
+
+/**
+ * Cancela una tarea con discriminación semántica y cierre seguro de hardware.
+ */
+export async function cancelTaskExecution(taskId: string, userId?: string, reason?: string) {
+  try {
+    const task = await prisma.taskLog.findUnique({
+      where: { id: taskId },
+    })
+
+    if (!task) return { success: false, error: 'Tarea no encontrada' }
+
+    const activeStatuses: TaskStatus[] = [
+      TaskStatus.DISPATCHED,
+      TaskStatus.ACKNOWLEDGED,
+      TaskStatus.IN_PROGRESS,
+    ]
+    const isActivelyRunning = activeStatuses.includes(task.status)
+
+    const finalStatus = isActivelyRunning ? TaskStatus.CANCELLED : TaskStatus.SKIPPED
+
+    // Buscar nombre del administrador si hay userId
+    let adminName = ''
+
+    if (userId) {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { name: true },
+      })
+
+      if (user?.name) adminName = user.name
+    }
+
+    const adminSuffix = adminName ? ` por ${adminName}` : ''
+
+    const finalReason =
+      reason ||
+      (isActivelyRunning
+        ? `Cancelación manual${adminSuffix}: Interrupción de operación activa.`
+        : `Omisión manual${adminSuffix}: Tarea descartada antes de iniciar.`)
+
+    // 1. Si está activa, enviar OFF al hardware
+    if (isActivelyRunning) {
+      stopSequence(task.purpose, task.id)
+    }
+
+    // 2. Persistir cambio
+    await recordTaskEvent(taskId, finalStatus, finalReason, {
+      userId,
+    })
+
+    return { success: true, status: finalStatus }
+  } catch (error) {
+    Logger.error(`Error cancelando tarea ${taskId}:`, error)
+
+    return { success: false, error: 'Error interno en la cancelación' }
   }
 }

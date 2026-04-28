@@ -3,13 +3,13 @@
 import type { DeviceLog } from '@package/database'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { IoHardwareChipOutline, IoPulseOutline } from 'react-icons/io5'
+import { IoPulseOutline, IoCloseOutline } from 'react-icons/io5'
 import clsx from 'clsx'
 
 import { ToolboxGrid, AuditConsoleCard, HeartbeatCard } from './DiagnosticPanel'
 
 import { getConnectivityLogs } from '@/actions'
-import { Card, Heading, DeviceStatus } from '@/components'
+import { Card, Heading, DeviceStatus, StatusCircleIcon } from '@/components'
 import { authClient } from '@/lib'
 import { useDeviceHeartbeat } from '@/hooks'
 import { useMqttStore } from '@/store/mqtt/mqtt.store'
@@ -46,10 +46,6 @@ const DEVICES: DeviceConfig[] = [
     hasDiagnostics: true,
   },
 ]
-
-const formatVETime = (timestamp: number | string | Date) => {
-  return formatTime12h(timestamp, true)
-}
 
 export function DeviceDebugger() {
   const { subscribe, publishWithAck, messages, status, pendingAcks } = useMqttStore()
@@ -215,19 +211,19 @@ export function DeviceDebugger() {
     [widgetOrder, publishWithAck, topicCmd],
   )
 
-  const getDeviceLabel = (id: string) => {
-    if (id === 'actuator') return 'RELAY'
-    if (id === 'sensors') return 'SENSOR'
-
-    return id.split('/').pop()?.toUpperCase() || 'HUB'
-  }
-
   // Renderizar widgets: Prioridad al orden manual del usuario + Auditorías activas en hardware
   const orderedWidgets = useMemo(() => {
-    const allActive = new Set([...widgetOrder, ...hardwareAudits])
+    const manualOrder = [...widgetOrder]
+
+    // Asegurarse de incluir la timeline si está activa
+    if (showTimeline && !manualOrder.includes('timeline')) {
+      manualOrder.push('timeline')
+    }
+
+    const allActive = new Set([...manualOrder, ...hardwareAudits])
 
     return Array.from(allActive)
-  }, [widgetOrder, hardwareAudits])
+  }, [widgetOrder, hardwareAudits, showTimeline])
 
   // Determinar la última señal de vida (Heartbeat)
   // Prioridad: Logs de Connectivity (BD) para persistencia, luego Mensajes MQTT para tiempo real.
@@ -273,92 +269,123 @@ export function DeviceDebugger() {
         isOnline={connectionState === 'online'}
         showTimeline={showTimeline}
         onCommand={handleCommand}
-        onToggleTimeline={() => setShowTimeline((prev) => !prev)}
+        onToggleTimeline={() => {
+          const isCurrentlyVisible = widgetOrder.includes('timeline') || showTimeline
+
+          if (isCurrentlyVisible) {
+            setShowTimeline(false)
+            setWidgetOrder((prev) => prev.filter((k) => k !== 'timeline'))
+          } else {
+            setShowTimeline(true)
+            setWidgetOrder((prev) => [...prev, 'timeline'])
+          }
+        }}
       />
 
       {/* Widgets Area: Cola FIFO vertical */}
       <div className="animate-in slide-in-from-top-4 flex flex-col gap-6 duration-500">
-        {(showTimeline || orderedWidgets.length > 0) && (
+        {orderedWidgets.length > 0 && (
           <>
-            {showTimeline && (
-              <Card className="bg-surface border-input-outline flex w-full flex-col overflow-hidden rounded-xl border shadow-sm transition-all">
-                <div className="border-black-and-white/5 bg-black-and-white/5 flex items-center justify-between border-b px-5 py-3">
-                  <h4 className="font-mono text-[10px] font-bold tracking-[0.2em] text-zinc-500 uppercase opacity-80 dark:text-zinc-400">
-                    Connectivity/Log Timeline
-                  </h4>
-                </div>
-                <div className="max-h-[400px] flex-1 divide-y divide-zinc-100 overflow-y-auto dark:divide-zinc-800/30">
-                  {connectivityLogs.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center p-10 text-zinc-400">
-                      <span className="font-mono text-[10px] uppercase opacity-40">
-                        No logs recorded
-                      </span>
-                    </div>
-                  ) : (
-                    connectivityLogs.map((log) => (
-                      <div
-                        key={log.id}
-                        className="group hover:bg-hover-overlay flex items-center justify-between px-5 py-4 transition-all"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div
-                            className={clsx(
-                              'flex h-8 w-8 items-center justify-center rounded-lg text-lg ring-1',
-                              log.device === 'actuator'
-                                ? 'bg-indigo-500/10 text-indigo-500 ring-indigo-500/20'
-                                : 'bg-amber-500/10 text-amber-500 ring-amber-500/20',
-                            )}
-                          >
-                            {log.device === 'actuator' ? (
-                              <IoHardwareChipOutline size={16} />
-                            ) : (
-                              <IoPulseOutline size={16} />
-                            )}
-                          </div>
-
-                          <div className="flex flex-col gap-0.5">
-                            <div className="flex items-center gap-2">
-                              <span className="font-mono text-[10px] font-black tracking-widest text-zinc-400 uppercase opacity-60">
-                                {getDeviceLabel(log.device)}
-                              </span>
-                              <div
-                                className={clsx(
-                                  'h-1 w-1 rounded-full',
-                                  log.status === 'ONLINE'
-                                    ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]'
-                                    : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]',
-                                )}
-                              />
-                            </div>
-                            <span
-                              className={clsx(
-                                'text-xs font-bold tracking-tight',
-                                log.status === 'ONLINE'
-                                  ? 'text-zinc-900 dark:text-emerald-400'
-                                  : 'text-red-600 dark:text-red-400',
-                              )}
-                            >
-                              Dispositivo {log.status}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col items-end text-right">
-                          <span className="font-mono text-[10px] font-bold text-zinc-500 dark:text-zinc-400">
-                            {formatVETime(log.timestamp)}
-                          </span>
-                          <span className="text-[10px] font-bold tracking-tight text-zinc-400 opacity-60">
-                            {formatRelativeHeartbeat(log.timestamp)}
-                          </span>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </Card>
-            )}
-
             {orderedWidgets.map((auditId) => {
+              if (auditId === 'timeline') {
+                return (
+                  <Card
+                    key="timeline_card"
+                    className="bg-surface border-input-outline flex w-full flex-col overflow-hidden rounded-xl border shadow-sm transition-all"
+                  >
+                    <div className="border-black-and-white/5 bg-black-and-white/5 flex items-center justify-between border-b px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={clsx(
+                            'h-1.5 w-1.5 rounded-full',
+                            connectionState === 'online'
+                              ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)]'
+                              : 'bg-zinc-400',
+                          )}
+                        />
+                        <h4 className="font-mono text-[10px] font-bold tracking-[0.2em] text-zinc-500 uppercase opacity-80 dark:text-zinc-400">
+                          Connectivity / {selectedDevice.name}
+                        </h4>
+                      </div>
+                      <button
+                        className="group hover:bg-hover-overlay flex h-8 w-8 cursor-pointer items-center justify-center rounded-full transition-all"
+                        type="button"
+                        onClick={() => {
+                          setShowTimeline(false)
+                          setWidgetOrder((prev) => prev.filter((k) => k !== 'timeline'))
+                        }}
+                      >
+                        <IoCloseOutline
+                          className="text-zinc-400 group-hover:text-zinc-600 dark:group-hover:text-zinc-200"
+                          size={18}
+                        />
+                      </button>
+                    </div>
+                    <div className="max-h-[400px] flex-1 divide-y divide-zinc-100 overflow-y-auto dark:divide-zinc-800/30">
+                      {connectivityLogs.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center p-10 text-zinc-400">
+                          <span className="font-mono text-[10px] uppercase opacity-40">
+                            No logs recorded
+                          </span>
+                        </div>
+                      ) : (
+                        connectivityLogs.map((item) => (
+                          <div
+                            key={item.id}
+                            className="group hover:bg-hover-overlay flex items-center justify-between px-5 py-3 transition-all"
+                          >
+                            <div className="flex items-center gap-4">
+                              <StatusCircleIcon
+                                active
+                                glow
+                                className="border-transparent"
+                                glowVariant={item.status === 'ONLINE' ? 'green' : 'red'}
+                                icon={
+                                  item.status === 'ONLINE' ? (
+                                    <IoPulseOutline className="text-emerald-500" size={16} />
+                                  ) : (
+                                    <IoCloseOutline className="text-red-500" size={16} />
+                                  )
+                                }
+                                size="sm"
+                                variant="vibrant"
+                              />
+
+                              <div className="flex flex-col gap-0">
+                                <span
+                                  className={clsx(
+                                    'text-xs font-bold tracking-tight',
+                                    item.status === 'ONLINE'
+                                      ? 'text-zinc-900 dark:text-emerald-400'
+                                      : 'text-red-600 dark:text-red-400',
+                                  )}
+                                >
+                                  {item.status === 'ONLINE'
+                                    ? 'DISPOSITIVO ONLINE'
+                                    : 'DISPOSITIVO OFFLINE'}
+                                </span>
+                                <span className="font-mono text-[9px] font-black tracking-widest text-zinc-400 uppercase opacity-40">
+                                  HEARTBEAT LOG
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-col items-end text-right">
+                              <span className="font-mono text-[10px] font-bold text-zinc-500 dark:text-zinc-400">
+                                {formatTime12h(item.timestamp, true)}
+                              </span>
+                              <span className="text-[10px] font-bold tracking-tight text-zinc-400 opacity-60">
+                                {formatRelativeHeartbeat(item.timestamp)}
+                              </span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </Card>
+                )
+              }
+
               const unifiedPacket = messages[unifiedAuditTopic]?.payload as Record<string, unknown>
 
               // Los datos provienen directamente del stream MQTT (Audit Unified Ticker)

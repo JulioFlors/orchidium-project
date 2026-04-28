@@ -6,12 +6,24 @@ import { Logger } from '@/lib'
 
 export async function GET() {
   try {
-    // 1. Fetch manual pending tasks
+    // 1. Fetch active tasks
     const manualTasks = await prisma.taskLog.findMany({
       where: {
         status: {
-          in: [TaskStatus.PENDING, TaskStatus.CONFIRMED, TaskStatus.IN_PROGRESS],
+          in: [
+            TaskStatus.PENDING,
+            TaskStatus.CONFIRMED,
+            TaskStatus.WAITING_CONFIRMATION,
+            TaskStatus.AUTHORIZED,
+            TaskStatus.DISPATCHED,
+            TaskStatus.ACKNOWLEDGED,
+            TaskStatus.IN_PROGRESS,
+          ],
         },
+      },
+      include: {
+        schedule: { select: { name: true } },
+        agrochemical: { select: { name: true, type: true } },
       },
       orderBy: {
         scheduledAt: 'asc',
@@ -25,7 +37,9 @@ export async function GET() {
       duration: task.duration,
       scheduledAt: task.scheduledAt.toISOString(),
       status: task.status,
-      isRoutine: false,
+      isRoutine: task.source === 'ROUTINE',
+      routineName: task.schedule?.name,
+      agrochemicalName: task.agrochemical?.name,
       notes: task.notes,
       source: task.source,
     }))

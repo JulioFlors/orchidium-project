@@ -94,7 +94,12 @@ export async function getSensorHistoryInternal(
         const entry: Record<string, unknown> = { time: safeTimeToISO(row.time) }
 
         fieldsToQuery.forEach((f) => {
-          entry[f] = Number(row[f] || 0)
+          // Solo asignamos si el campo existe en la fila.
+          // Evitamos el default || 0 que provocaba picos falsos en las gráficas
+          // cuando otros dispositivos reportaban métricas parciales.
+          if (row[f] != null) {
+            entry[f] = Number(row[f])
+          }
         })
         if (row.phase) entry.phase = String(row.phase)
         data.push(entry)
@@ -246,11 +251,14 @@ export async function getSensorHistoryInternal(
 export async function getLastHeartbeat(source: string, zone?: string) {
   const zoneFilter = zone ? `AND "zone" = '${zone}'` : ''
   const query = `
-    SELECT last("value"), time 
+    SELECT "value", "time" 
     FROM "system_events" 
     WHERE "source" = '${source}' 
     AND "event_type" = 'Device_Status' 
     ${zoneFilter}
+    AND time >= now() - interval '24 hours'
+    ORDER BY time DESC
+    LIMIT 1
   `
 
   try {
@@ -260,7 +268,7 @@ export async function getLastHeartbeat(source: string, zone?: string) {
       if (row.time) {
         return {
           timestamp: new Date(safeTimeToISO(row.time)).getTime(),
-          status: String(row.last || 'unknown'),
+          status: String(row.value || 'unknown'),
         }
       }
     }

@@ -88,6 +88,9 @@ function mapZoneSlugToZoneType(zoneSlug: string): ZoneType | undefined {
   return Object.values(ZoneType).includes(zoneType) ? zoneType : undefined
 }
 
+// Fidelidad total: sin filtros de validación de iluminancia.
+// El sensor reporta lo que lee. El backend de Next.js ignora campos ausentes (null).
+
 // ---- Escritura en InfluxDB ----
 
 /**
@@ -423,8 +426,14 @@ async function start() {
     if (firmwareSource === 'Actuator_Controller') {
       // Manejo de Reinicio Físico (Boot)
       if (topic.endsWith('/status/boot')) {
-        Logger.warn(`[ BOOT ] Nodo reiniciado: ${firmwareSource}. Limpiando caché de estados.`)
-        stateCache.clear()
+        Logger.warn(`[ BOOT ] Nodo reiniciado: ${firmwareSource}.`)
+
+        // Limpiar solo las claves de este nodo (no nuclear)
+        for (const key of stateCache.keys()) {
+          if (key.startsWith(`${firmwareSource}:`)) {
+            stateCache.delete(key)
+          }
+        }
 
         // Persistir el BOOT como un latido 'online' para hidratación SSR
         const point = Point.measurement('system_events')
@@ -454,28 +463,9 @@ async function start() {
 
           await writeToInflux(point)
 
-          // ---- Lógica de Limpieza por LWT ----
-          // Si el nodo de la estación meteorológica se cae, invalidamos el estado de lluvia
+          // LWT: Solo registramos el offline. El firmware publicará su estado real de lluvia al reconectar.
           if (messageValue === 'offline') {
-            Logger.warn(`[ LWT ] Limpiando estados para ${firmwareSource} (Offline)`)
-
-            // 1. Forzar estado 'Dry' en system_events
-            await processZoneStateEvent(
-              firmwareSource,
-              ZoneType.EXTERIOR,
-              'rain/state',
-              'Dry',
-              'Rain_State',
-            )
-
-            // 2. Inyectar intensidad 0 en environment_metrics para liberar el motor de inferencia
-            const pointRain = Point.measurement('environment_metrics')
-              .setTag('source', firmwareSource)
-              .setTag('zone', ZoneType.EXTERIOR)
-              .setTag('context', 'readings')
-              .setFloatField('rain_intensity', 0)
-
-            await writeToInflux(pointRain)
+            Logger.warn(`[ LWT ] ${firmwareSource} desconectado. Sin fabricación de datos.`)
           }
         }
       }
@@ -497,10 +487,14 @@ async function start() {
 
       // Manejo de BOOT para sensores
       if (topic.endsWith('/status/boot')) {
-        Logger.warn(
-          `[ BOOT ] Nodo sensor reiniciado: ${firmwareSource}/${zoneSlug}. Limpiando caché.`,
-        )
-        stateCache.clear()
+        Logger.warn(`[ BOOT ] Nodo sensor reiniciado: ${firmwareSource}/${zoneSlug}.`)
+
+        // Limpiar solo las claves de este nodo (no nuclear)
+        for (const key of stateCache.keys()) {
+          if (key.startsWith(`${firmwareSource}:`)) {
+            stateCache.delete(key)
+          }
+        }
 
         const point = Point.measurement('system_events')
           .setTag('source', firmwareSource)

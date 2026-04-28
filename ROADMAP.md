@@ -124,3 +124,8 @@ Interfaz para crear/editar/eliminar rutinas de automatización (`AutomationSched
 * Notificaciones de desconexión/reconexión de nodos vía Telegram/WhatsApp.
 * Flexible por zona: nuevos nodos Sensors se registran automáticamente.
 * Ver: `docs/observability_architecture.md`.
+### v0.8.0 - Resiliencia y Fidelidad (Abril 2026)
+- **Fidelidad Absoluta:** Eliminación de filtros de telemetría en Ingest. El sistema ahora acepta datos reales del sensor y delega la lógica de limpieza a las estadísticas.
+- **Resiliencia de Hardware:** ESP32 capaz de reconciliar estado al arrancar y Scheduler con lógica de cierre por timeout (Orfandad).
+- **Ciclo de Vida de Tareas:** Protocolo de seguridad v5 para agroquímicos con persistencia en cola y confirmación manual.
+- **Auditoría de Usuario:** Trazabilidad de firmas de administradores en todas las operaciones manuales.

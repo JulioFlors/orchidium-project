@@ -2,6 +2,9 @@
 
 import { prisma, TaskStatus } from '@package/database'
 import { revalidatePath } from 'next/cache'
+import { headers } from 'next/headers'
+
+import { auth } from '@/lib/server'
 
 interface TaskConfirmationResult {
   success: boolean
@@ -61,11 +64,15 @@ export async function confirmAgrochemicalTask(taskId: string): Promise<TaskConfi
       }
     }
 
+    const session = await auth.api.getSession({ headers: await headers() })
+    const userId = session?.user?.id
+    const userName = session?.user?.name || 'Administrador'
+
     await prisma.taskLog.update({
       where: { id: taskId },
       data: {
         status: TaskStatus.AUTHORIZED,
-        notes: 'Tanque auxiliar confirmado por el usuario.',
+        notes: `Tanque auxiliar confirmado por ${userName}.`,
       },
     })
 
@@ -74,7 +81,8 @@ export async function confirmAgrochemicalTask(taskId: string): Promise<TaskConfi
       data: {
         taskId,
         status: TaskStatus.AUTHORIZED,
-        notes: 'Confirmación manual: tanque preparado.',
+        notes: `Confirmación manual por ${userName}: tanque preparado.`,
+        userId,
       },
     })
 
@@ -108,7 +116,11 @@ export async function skipAgrochemicalTask(
       }
     }
 
-    const skipNote = reason || 'Omitida manualmente por el usuario.'
+    const session = await auth.api.getSession({ headers: await headers() })
+    const userId = session?.user?.id
+    const userName = session?.user?.name || 'Administrador'
+
+    const skipNote = reason || `Omitida manualmente por ${userName}.`
 
     await prisma.taskLog.update({
       where: { id: taskId },
@@ -123,6 +135,7 @@ export async function skipAgrochemicalTask(
         taskId,
         status: TaskStatus.SKIPPED,
         notes: skipNote,
+        userId,
       },
     })
 
@@ -165,12 +178,16 @@ export async function rescheduleAgrochemicalTask(
       }
     }
 
+    const session = await auth.api.getSession({ headers: await headers() })
+    const userId = session?.user?.id
+    const userName = session?.user?.name || 'Administrador'
+
     await prisma.taskLog.update({
       where: { id: taskId },
       data: {
         scheduledAt: newDate,
         status: TaskStatus.WAITING_CONFIRMATION, // Vuelve a esperar confirmación para la nueva fecha
-        notes: `Reprogramada para el ${newDate.toLocaleString('es-VE')}.`,
+        notes: `Reprogramada por ${userName} para el ${newDate.toLocaleString('es-VE')}.`,
       },
     })
 
@@ -178,7 +195,57 @@ export async function rescheduleAgrochemicalTask(
       data: {
         taskId,
         status: TaskStatus.WAITING_CONFIRMATION,
-        notes: `Reprogramada por el usuario para: ${newDate.toISOString()}`,
+        notes: `Reprogramada por ${userName} para: ${newDate.toISOString()}`,
+        userId,
+      },
+    })
+
+    revalidatePath('/orchidarium')
+    revalidatePath('/history')
+    revalidatePath('/queue')
+
+    return { success: true }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error)
+
+    return { success: false, error: msg }
+  }
+}
+
+/**
+ * Pospone una tarea de agroquímicos por un número fijo de horas (24 o 48).
+ * La tarea vuelve al estado WAITING_CONFIRMATION.
+ */
+export async function postponeAgrochemicalTask(
+  taskId: string,
+  hours: 24 | 48,
+): Promise<TaskConfirmationResult> {
+  try {
+    const task = await prisma.taskLog.findUnique({ where: { id: taskId } })
+
+    if (!task) return { success: false, error: 'Tarea no encontrada.' }
+
+    const session = await auth.api.getSession({ headers: await headers() })
+    const userId = session?.user?.id
+    const userName = session?.user?.name || 'Administrador'
+
+    const newDate = new Date(task.scheduledAt.getTime() + hours * 60 * 60 * 1000)
+
+    await prisma.taskLog.update({
+      where: { id: taskId },
+      data: {
+        scheduledAt: newDate,
+        status: TaskStatus.WAITING_CONFIRMATION,
+        notes: `Pospuesta ${hours}h por ${userName}.`,
+      },
+    })
+
+    await prisma.taskEventLog.create({
+      data: {
+        taskId,
+        status: TaskStatus.WAITING_CONFIRMATION,
+        notes: `Pospuesta ${hours}h por ${userName} para: ${newDate.toISOString()}`,
+        userId,
       },
     })
 

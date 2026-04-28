@@ -6,9 +6,13 @@ import { clsx } from 'clsx'
 import { IoCalendarOutline, IoTimeOutline, IoCloseOutline } from 'react-icons/io5'
 import { RxStopwatch } from 'react-icons/rx'
 import { MdLayers } from 'react-icons/md'
+import { useSWRConfig } from 'swr'
 
-import { Badge, StatusCircleIcon, ActionMenu, ActionMenuItem } from '@/components/ui'
+import { TaskStatusBadge } from './TaskStatusBadge'
+
+import { Badge, StatusCircleIcon, ActionMenu, ActionMenuItem, Button } from '@/components/ui'
 import { formatTime12h } from '@/utils'
+import { useToast } from '@/hooks'
 import { TaskPurpose, ZoneType, TaskPurposeLabels, ZoneTypeLabels } from '@/config/mappings'
 
 interface PendingTask {
@@ -20,6 +24,7 @@ interface PendingTask {
   status: string
   isRoutine?: boolean
   routineName?: string
+  agrochemicalName?: string
   notes?: string
   source?: string
 }
@@ -46,22 +51,53 @@ interface QueueTaskCardProps {
  */
 export function QueueTaskCard({ task, onCancel, icon, colorClassName }: QueueTaskCardProps) {
   const dateObj = new Date(task.scheduledAt)
+  const { mutate } = useSWRConfig()
+  const { success, error: toastError } = useToast()
+
   const isPast = dateObj < new Date()
-  const isCancellable = task.status === 'PENDING'
   const actionLabel = TaskPurposeLabels[task.purpose] || task.purpose
 
+  const handleAction = async (
+    actionPromise: Promise<{ success: boolean; error?: string }>,
+    successMsg: string,
+  ) => {
+    try {
+      const res = await actionPromise
+
+      if (res.success) {
+        success(successMsg)
+        mutate('/api/planner/queue')
+      } else {
+        toastError(res.error || 'Error al ejecutar la acción')
+      }
+    } catch {
+      toastError('Error de red')
+    }
+  }
+
   const menuItems: ActionMenuItem[] = [
-    ...(task.purpose === 'FERTIGATION' || task.purpose === 'FUMIGATION'
+    ...(task.status === 'WAITING_CONFIRMATION' ||
+    task.status === 'PENDING' ||
+    task.status === 'AUTHORIZED'
       ? [
           {
-            label: 'Posponer 48h',
+            label: 'Posponer 24h',
             icon: <IoCalendarOutline className="text-blue-400" />,
             onClick: async () => {
-              const newDate = new Date(new Date(task.scheduledAt).getTime() + 48 * 60 * 60000)
-              const { rescheduleAgrochemicalTask } =
+              const { postponeAgrochemicalTask } =
                 await import('@/actions/tasks/task-confirmation-actions')
 
-              await rescheduleAgrochemicalTask(task.id, newDate)
+              handleAction(postponeAgrochemicalTask(task.id, 24), 'Tarea pospuesta 24h')
+            },
+          },
+          {
+            label: 'Posponer 48h',
+            icon: <IoCalendarOutline className="text-indigo-400" />,
+            onClick: async () => {
+              const { postponeAgrochemicalTask } =
+                await import('@/actions/tasks/task-confirmation-actions')
+
+              handleAction(postponeAgrochemicalTask(task.id, 48), 'Tarea pospuesta 48h')
             },
           },
         ]
@@ -104,13 +140,28 @@ export function QueueTaskCard({ task, onCancel, icon, colorClassName }: QueueTas
               <h3 className="text-primary tds-xs:truncate tds-xs:whitespace-nowrap order-1 text-[15px] leading-tight font-bold antialiased">
                 {actionLabel}
               </h3>
-              <div className="order-3 flex">
+              <div className="order-3 flex items-center gap-2">
                 <SourceBadge isRoutine={task.isRoutine} />
+                <TaskStatusBadge
+                  isPast={isPast}
+                  status={
+                    task.status as
+                      | 'PENDING'
+                      | 'IN_PROGRESS'
+                      | 'COMPLETED'
+                      | 'CANCELED'
+                      | 'FAILED'
+                      | 'EXPIRED'
+                  }
+                />
               </div>
             </div>
+
             <div className="text-secondary tds-xs:mt-1 order-2 flex items-center gap-2 text-[11px] font-medium opacity-60">
               {task.isRoutine ? (
                 <span className="truncate">{task.routineName}</span>
+              ) : task.agrochemicalName ? (
+                <span className="truncate">{task.agrochemicalName}</span>
               ) : (
                 <>
                   <span className="font-mono text-[10px]">#{task.id.substring(0, 8)}</span>
@@ -164,8 +215,40 @@ export function QueueTaskCard({ task, onCancel, icon, colorClassName }: QueueTas
               </div>
             </div>
 
-            {/* Acción */}
-            <div className="flex shrink-0">{isCancellable && <ActionMenu items={menuItems} />}</div>
+            {/* Acciones */}
+            <div className="flex shrink-0 items-center gap-2">
+              {task.status === 'WAITING_CONFIRMATION' && (
+                <div className="flex items-center gap-2 pr-2">
+                  <Button
+                    className="h-8 px-3 text-[11px]"
+                    size="sm"
+                    variant="primary"
+                    onClick={async () => {
+                      const { confirmAgrochemicalTask } =
+                        await import('@/actions/tasks/task-confirmation-actions')
+
+                      handleAction(confirmAgrochemicalTask(task.id), 'Tarea autorizada')
+                    }}
+                  >
+                    Confirmar
+                  </Button>
+                  <Button
+                    className="h-8 px-3 text-[11px]"
+                    size="sm"
+                    variant="ghost"
+                    onClick={async () => {
+                      const { skipAgrochemicalTask } =
+                        await import('@/actions/tasks/task-confirmation-actions')
+
+                      handleAction(skipAgrochemicalTask(task.id), 'Tarea omitida')
+                    }}
+                  >
+                    Omitir
+                  </Button>
+                </div>
+              )}
+              <ActionMenu items={menuItems} />
+            </div>
           </div>
         </div>
       </div>

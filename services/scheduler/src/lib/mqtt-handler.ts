@@ -209,6 +209,29 @@ export function executeSequence(
 }
 
 /**
+ * Envía un comando de parada inmediata para un circuito.
+ */
+export function stopSequence(purpose: TaskPurpose, taskId: string) {
+  const payload = {
+    circuit: purpose,
+    state: 'OFF',
+    task_id: taskId,
+  }
+
+  const message = JSON.stringify(payload)
+
+  mqttClient.publish(ACTUATOR_TOPIC, message, {
+    qos: 1,
+    retain: false,
+  })
+
+  // Limpiamos reintentos de ON si existían para esta tarea
+  retryManager.confirmByTaskId(taskId)
+
+  Logger.warn(`Enviando PARADA (OFF) para: ${purpose} [Task: ${taskId.slice(0, 8)}]`)
+}
+
+/**
  * Envía un comando de sistema (eco, reset, etc) al Nodo Actuador.
  */
 export function executeSystemCommand(command: string, isPersistent: boolean = false) {
