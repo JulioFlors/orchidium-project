@@ -51,7 +51,6 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
   FAILED: <IoCloseCircleOutline />,
   EXPIRED: <IoCloseCircleOutline />,
   CANCELLED: <IoWarningOutline />,
-  SKIPPED: <IoHourglassOutline />,
   WAITING_CONFIRMATION: <IoHourglassOutline />,
 }
 

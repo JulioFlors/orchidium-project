@@ -30,7 +30,6 @@ const STATUS_ICONS: Record<string, ReactNode> = {
   COMPLETED: <IoCheckmarkCircle className="text-green-600" />,
 
   // 4. Fase Terminal (Gris, Naranja y Rojos)
-  SKIPPED: <IoHourglassOutline className="text-slate-400" />,
   CANCELLED: <IoAlertCircleOutline className="text-orange-600" />,
   FAILED: <IoAlertCircleOutline className="text-red-500" />,
   EXPIRED: <IoAlertCircleOutline className="text-red-500" />,

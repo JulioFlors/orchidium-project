@@ -17,7 +17,6 @@ export async function getHistoryTasks(limit = 20, offset = 0) {
             TaskStatus.FAILED,
             TaskStatus.EXPIRED,
             TaskStatus.CANCELLED,
-            TaskStatus.SKIPPED,
             TaskStatus.DISPATCHED,
             TaskStatus.ACKNOWLEDGED,
             TaskStatus.WAITING_CONFIRMATION,

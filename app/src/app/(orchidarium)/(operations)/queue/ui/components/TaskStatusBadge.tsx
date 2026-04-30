@@ -31,10 +31,6 @@ export function TaskStatusBadge({ status, isPast }: { status: string; isPast?: b
       label: 'Cancelada',
       className: 'border-none bg-red-500/10 text-red-600 dark:text-red-400',
     },
-    SKIPPED: {
-      label: 'Omitida',
-      className: 'border-none bg-slate-500/10 text-slate-500',
-    },
     EXPIRED: {
       label: 'Expirada',
       className: 'border-none bg-slate-500/20 text-slate-400',

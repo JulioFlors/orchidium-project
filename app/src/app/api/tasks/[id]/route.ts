@@ -116,12 +116,12 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     ]
     const isActivelyRunning = activeStatuses.includes(task.status)
 
-    const finalStatus = isActivelyRunning ? TaskStatus.CANCELLED : TaskStatus.SKIPPED
+    const finalStatus = TaskStatus.CANCELLED
     const finalReason =
       reason ||
       (isActivelyRunning
-        ? 'Cancelación manual: Interrupción de operación activa.'
-        : 'Omisión manual: Tarea descartada antes de iniciar.')
+        ? 'Tarea Cancelada durante su ejecución.'
+        : 'Tarea Cancelada antes de su ejecución.')
 
     // 1. Si está activa, enviar OFF al hardware
     if (isActivelyRunning) {

@@ -237,13 +237,13 @@ export function QueueTaskCard({ task, onCancel, icon, colorClassName }: QueueTas
                     size="sm"
                     variant="ghost"
                     onClick={async () => {
-                      const { skipAgrochemicalTask } =
+                      const { cancelAgrochemicalTask } =
                         await import('@/actions/tasks/task-confirmation-actions')
 
-                      handleAction(skipAgrochemicalTask(task.id), 'Tarea omitida')
+                      handleAction(cancelAgrochemicalTask(task.id), 'Tarea cancelada')
                     }}
                   >
-                    Omitir
+                    Cancelar
                   </Button>
                 </div>
               )}

@@ -28,7 +28,7 @@ export async function recordTaskEvent(
     return await prisma.$transaction(async (tx) => {
       const currentTask = await tx.taskLog.findUnique({
         where: { id: taskId },
-        select: { status: true, notes: true, actualStartAt: true },
+        select: { status: true, notes: true, actualStartAt: true, completedMinutes: true },
       })
 
       if (!currentTask) {
@@ -41,7 +41,6 @@ export async function recordTaskEvent(
         TaskStatus.COMPLETED,
         TaskStatus.CANCELLED,
         TaskStatus.EXPIRED,
-        TaskStatus.SKIPPED,
       ]
 
       const isCurrentTerminal = terminalStatuses.includes(currentTask.status)
@@ -117,18 +116,62 @@ export async function recordTaskEvent(
  */
 export async function processTaskLog(taskLog: TaskLog) {
   try {
-    executeSequence(taskLog.purpose, taskLog.duration, taskLog.id, taskLog.scheduledAt)
+    let durationToExecute = taskLog.duration
+    let isResumption = false
 
-    await recordTaskEvent(
-      taskLog.id,
-      TaskStatus.DISPATCHED,
-      'Comandos MQTT enviados al Nodo Actuador.',
-      {
-        executedAt: new Date(),
-      },
+    // [Smart Recalibration]: Usamos los minutos ya completados registrados en la DB
+    // y el tiempo transcurrido si la tarea quedó en un limbo IN_PROGRESS.
+    const alreadyCompletedSec = (taskLog.completedMinutes || 0) * 60
+
+    if (alreadyCompletedSec > 0 || taskLog.actualStartAt) {
+      isResumption = true
+      let elapsedInCurrentRun = 0
+
+      if (taskLog.actualStartAt && taskLog.status === TaskStatus.IN_PROGRESS) {
+        elapsedInCurrentRun = Math.floor(
+          (Date.now() - new Date(taskLog.actualStartAt).getTime()) / 1000,
+        )
+      }
+
+      durationToExecute = taskLog.duration - (alreadyCompletedSec + elapsedInCurrentRun)
+
+      if (durationToExecute <= 0) {
+        Logger.warn(
+          `Tarea ${taskLog.id.slice(0, 8)} ya alcanzó su meta de riego. Marcando como completada.`,
+        )
+        await recordTaskEvent(
+          taskLog.id,
+          TaskStatus.COMPLETED,
+          `Riego finalizado tras recuperaciones (Total: ${taskLog.duration}s).`,
+        )
+
+        return
+      }
+    }
+
+    // Despacho hacia MQTT con la duración (original o recalibrada)
+    executeSequence(taskLog.purpose, durationToExecute, taskLog.id, taskLog.scheduledAt)
+
+    let durationText = `${durationToExecute} s`
+
+    if (durationToExecute >= 60) {
+      const mins = Math.floor(durationToExecute / 60)
+      const secs = durationToExecute % 60
+
+      durationText = `${mins} min${secs > 0 ? ` y ${secs} s` : ''}`
+    }
+
+    const notes = isResumption
+      ? `Reanudado por ${durationText}.`
+      : 'Comandos MQTT enviados al Nodo Actuador.'
+
+    await recordTaskEvent(taskLog.id, TaskStatus.DISPATCHED, notes, {
+      executedAt: new Date(),
+    })
+
+    Logger.success(
+      `${isResumption ? 'Reanudación' : 'Despacho'} de Tarea Log ${taskLog.id.slice(0, 8)} con ${durationToExecute}s.`,
     )
-
-    Logger.success(`Circuito de Tarea Log ${taskLog.id.slice(0, 8)} despachado.`)
   } catch (error) {
     Logger.error('Fallo crítico ejecutando taskLog', error)
     await prisma.taskLog
@@ -177,20 +220,29 @@ export async function resumeInterruptedTasks() {
  * Ventana de oportunidad: 20 minutos.
  */
 export async function processPostponedTasks() {
-  const twentyMinsAgo = new Date(Date.now() - 20 * 60000)
+  const now = Date.now()
 
-  const postponed = await prisma.taskLog.findMany({
+  // Buscamos tareas candidatas a reintento
+  const candidates = await prisma.taskLog.findMany({
     where: {
-      status: { in: [TaskStatus.PENDING, TaskStatus.FAILED] },
-      OR: [
-        { notes: { contains: 'Nodo Actuador no está conectado' } },
-        { notes: { contains: 'Reintentando al reconectar' } },
-        { notes: { contains: 'Interrumpida' } },
-      ],
-      scheduledAt: { gte: twentyMinsAgo },
+      status: { in: [TaskStatus.PENDING, TaskStatus.FAILED, TaskStatus.IN_PROGRESS] },
+      // Para PENDING/FAILED filtramos por notas, pero para IN_PROGRESS
+      // siempre queremos intentar re-sincronizar tras una reconexión.
     },
     orderBy: { scheduledAt: 'asc' },
   })
+
+  const postponed: TaskLog[] = []
+
+  for (const task of candidates) {
+    // Ventana Dinámica: 20 min + Duración de la tarea
+    const dynamicWindowMs = (20 * 60 + task.duration) * 1000
+    const expirationTime = task.scheduledAt.getTime() + dynamicWindowMs
+
+    if (now <= expirationTime) {
+      postponed.push(task)
+    }
+  }
 
   if (postponed.length > 0) {
     const isSingle = postponed.length === 1
@@ -219,16 +271,15 @@ export async function handleAckTimeout(taskId: string, notes?: string) {
 
 /**
  * Limpia tareas que excedieron su ventana de oportunidad.
- * - Tareas normales (IRRIGATION, etc.): 20 minutos.
+ * - Tareas normales (IRRIGATION, etc.): 20 minutos + Duración.
  * - Agroquímicos (FERTIGATION, FUMIGATION): 24 horas después de la hora programada.
  */
 export async function cleanupExpiredTasks() {
-  const now = new Date()
-  const twentyMinsAgo = new Date(now.getTime() - 20 * 60000)
-  const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60000)
+  const now = Date.now()
+  const twentyFourHoursAgo = new Date(now - 24 * 60 * 60000)
 
-  // 1. Limpieza de tareas estándar (20 min)
-  const standardTasksToExpire = await prisma.taskLog.findMany({
+  // 1. Limpieza de tareas estándar (Ventana Dinámica)
+  const standardCandidates = await prisma.taskLog.findMany({
     where: {
       status: { in: [TaskStatus.PENDING, TaskStatus.FAILED] },
       purpose: { notIn: ['FERTIGATION', 'FUMIGATION'] },
@@ -237,9 +288,18 @@ export async function cleanupExpiredTasks() {
         { notes: { contains: 'Reintentando al reconectar' } },
         { notes: { contains: 'Interrumpida' } },
       ],
-      scheduledAt: { lt: twentyMinsAgo },
     },
   })
+
+  const standardTasksToExpire: TaskLog[] = []
+
+  for (const task of standardCandidates) {
+    const dynamicWindowMs = (20 * 60 + task.duration) * 1000
+
+    if (now > task.scheduledAt.getTime() + dynamicWindowMs) {
+      standardTasksToExpire.push(task)
+    }
+  }
 
   // 2. Limpieza de agroquímicos (24h)
   const agroTasksToExpire = await prisma.taskLog.findMany({
@@ -357,7 +417,7 @@ export async function processAuthorizedTasks() {
 
         if (inference.shouldCancel) {
           Logger.warn(`[ AGRO ] VETO AMBIENTAL aplicado a tarea autorizada: ${inference.reason}`)
-          await recordTaskEvent(task.id, TaskStatus.SKIPPED, inference.reason)
+          await recordTaskEvent(task.id, TaskStatus.CANCELLED, inference.reason)
           continue
         }
       }
@@ -387,7 +447,7 @@ export async function cancelTaskExecution(taskId: string, userId?: string, reaso
     ]
     const isActivelyRunning = activeStatuses.includes(task.status)
 
-    const finalStatus = isActivelyRunning ? TaskStatus.CANCELLED : TaskStatus.SKIPPED
+    const finalStatus = TaskStatus.CANCELLED
 
     // Buscar nombre del administrador si hay userId
     let adminName = ''
@@ -407,7 +467,7 @@ export async function cancelTaskExecution(taskId: string, userId?: string, reaso
       reason ||
       (isActivelyRunning
         ? `Cancelación manual${adminSuffix}: Interrupción de operación activa.`
-        : `Omisión manual${adminSuffix}: Tarea descartada antes de iniciar.`)
+        : `Cancelación manual${adminSuffix}: Tarea descartada antes de iniciar.`)
 
     // 1. Si está activa, enviar OFF al hardware
     if (isActivelyRunning) {

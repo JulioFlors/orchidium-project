@@ -97,7 +97,7 @@ export function HistoryView() {
   const isModalTerminal = useMemo(() => {
     if (!selectedTask) return false
 
-    return ['COMPLETED', 'CANCELLED', 'SKIPPED', 'EXPIRED'].includes(selectedTask.status)
+    return ['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(selectedTask.status)
   }, [selectedTask])
 
   const { data: timelineEvents = [], isLoading: isTimelineLoading } = useSWR<TaskEvent[]>(

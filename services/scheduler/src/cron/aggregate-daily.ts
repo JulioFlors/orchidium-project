@@ -140,8 +140,8 @@ export async function aggregateDailyStats(targetDate = new Date()) {
           const tDate = rowTimeToDate(row.time)
           const tIso = tDate.toISOString()
           const localHour = localHourCaracas(tDate)
-          const isDaytime = localHour >= 8 && localHour < 16
-          const isNighttime = localHour >= 20 || localHour < 6
+          const isDaytime = localHour >= 8 && localHour <= 16
+          const isNighttime = localHour >= 19 || localHour <= 5
 
           // ── Temperatura (24h) ───────────────────────────────────────────
           if (row.temperature != null) {

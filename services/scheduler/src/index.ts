@@ -528,7 +528,7 @@ async function runTask(scheduleId: string) {
       if (taskLog && taskLog.status === TaskStatus.AUTHORIZED) {
         if (inference.shouldCancel) {
           Logger.warn(`[ AGRO ] VETO AMBIENTAL aplicado a tarea autorizada: ${inference.reason}`)
-          await recordTaskEvent(taskLog.id, TaskStatus.SKIPPED, inference.reason)
+          await recordTaskEvent(taskLog.id, TaskStatus.CANCELLED, inference.reason)
 
           return
         }
@@ -542,7 +542,7 @@ async function runTask(scheduleId: string) {
 
     // Lógica estándar para otras tareas (IRRIGATION, etc.)
     if (inference.shouldCancel) {
-      Logger.warn(`⏭️ Rutina SALTADA: ${schedule.name}. Motivo: ${inference.reason}`)
+      Logger.warn(`❌ Rutina CANCELADA: ${schedule.name}. Motivo: ${inference.reason}`)
 
       if (inference.reason && !inference.reason.includes('Cancelación manual')) {
         await prisma.taskLog.create({
@@ -550,7 +550,7 @@ async function runTask(scheduleId: string) {
             scheduleId: schedule.id,
             purpose: schedule.purpose,
             zones: schedule.zones,
-            status: TaskStatus.SKIPPED,
+            status: TaskStatus.CANCELLED,
             source: 'ROUTINE',
             scheduledAt: new Date(),
             duration: schedule.durationMinutes,

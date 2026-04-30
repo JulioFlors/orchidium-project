@@ -119,7 +119,7 @@ export async function processDay(
       const tIso = tDate.toISOString()
       const localHour = localHourCaracas(tDate)
       const isDaytime = localHour >= 8 && localHour <= 16
-      const isNighttime = localHour >= 20 || localHour < 6
+      const isNighttime = localHour >= 19 || localHour <= 5
 
       // Temperatura (24h)
       if (row.temperature != null) {
@@ -201,7 +201,7 @@ export async function processDay(
       if (row.illuminance != null && isDaytime) {
         const v = Number(row.illuminance)
 
-        if (!isNaN(v) && v > 0) {
+        if (!isNaN(v) && v >= 0) {
           sumLum += v
           countLum++
           if (v < minLum) {

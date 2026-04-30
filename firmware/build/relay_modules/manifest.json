@@ -1,9 +1,9 @@
 {
   "name": "Relay Modules",
   "description": "Nodo Actuador + Meteorológica Exterior",
-  "version": "0.10.0",
-  "date": "25-04-2026",
-  "notes_release": "[📡 Red]: Resiliencia Climática: Implementado Modo Cuarentena (Backoff) para evitar reinicios constantes ante fallos SSL (-202) por lluvia. Se aumentó el timeout de conexión a 30s. [⚙️ Boot]: Sincronización de Arranque: El sistema ahora espera la conexión WiFi inicial antes de encender sensores o recuperar tareas, eliminando ruidos en el ADC de lluvia y optimizando el uso de RAM durante el booteo.",
+  "version": "0.10.1",
+  "date": "30-04-2026",
+  "notes_release": "[🌡️ Clima]: Estación Exterior: Integrado sensor DHT22 (GPIO 23) para telemetría de Temperatura y Humedad Relativa. Implementado muestreo asíncrono desfasado (5s) y publicaciones de batch escalonadas (2s) para máxima estabilidad SSL. [🔍 Auditoría]: Diagnóstico Remoto: Integrado soporte para auditoría de clima bajo demanda en tiempo real.",
   "files": [
     "app.mpy",
     "boot.py",

@@ -254,7 +254,7 @@ model TaskEventLog {
   taskId    String
   userId    String?
   task      TaskLog    @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  user      User?      @relation(fields: [userId], references: [id])
+  user      User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([taskId])
   @@index([timestamp])
@@ -437,7 +437,6 @@ enum TaskStatus {
   FAILED
   IN_PROGRESS
   PENDING
-  SKIPPED
   WAITING_CONFIRMATION
   AUTHORIZED
   DISPATCHED

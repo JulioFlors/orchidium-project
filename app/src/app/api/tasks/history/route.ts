@@ -20,7 +20,6 @@ export async function GET(request: Request) {
             TaskStatus.FAILED,
             TaskStatus.EXPIRED,
             TaskStatus.CANCELLED,
-            TaskStatus.SKIPPED,
             TaskStatus.DISPATCHED,
             TaskStatus.ACKNOWLEDGED,
             TaskStatus.WAITING_CONFIRMATION,

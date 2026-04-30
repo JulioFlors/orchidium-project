@@ -105,7 +105,6 @@ export const TaskStatusLabels: Record<TaskStatus, string> = {
   [TaskStatus.CANCELLED]: 'Cancelada',
   [TaskStatus.FAILED]: 'Fallida',
   [TaskStatus.EXPIRED]: 'Fallida',
-  [TaskStatus.SKIPPED]: 'Omitida',
   [TaskStatus.CONFIRMED]: 'Confirmada',
   [TaskStatus.IN_PROGRESS]: 'Ejecutando',
   [TaskStatus.WAITING_CONFIRMATION]: 'Esperando',
@@ -162,7 +161,6 @@ export const TaskStatusStyles: Record<TaskStatus, string> = {
   [TaskStatus.COMPLETED]: 'text-green-600',
 
   // 4. Fase Terminal (Gris, Naranja y Rojos)
-  [TaskStatus.SKIPPED]: 'text-slate-400',
   [TaskStatus.CANCELLED]: 'text-orange-600',
   [TaskStatus.FAILED]: 'text-red-500',
   [TaskStatus.EXPIRED]: 'text-red-500',
@@ -190,6 +188,6 @@ export const AgrochemicalPurposeStyles: Record<AgrochemicalPurpose, string> = {
  * Define qué métricas de telemetría están disponibles para cada zona.
  */
 export const ZoneMetrics: Partial<Record<ZoneType, string[]>> = {
-  [ZoneType.EXTERIOR]: ['illuminance', 'rain_intensity'],
+  [ZoneType.EXTERIOR]: ['temperature', 'humidity', 'illuminance', 'rain_intensity'],
   [ZoneType.ZONA_A]: ['temperature', 'humidity', 'illuminance'],
 }

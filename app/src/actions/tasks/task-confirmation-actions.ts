@@ -72,7 +72,7 @@ export async function confirmAgrochemicalTask(taskId: string): Promise<TaskConfi
       where: { id: taskId },
       data: {
         status: TaskStatus.AUTHORIZED,
-        notes: `Tanque auxiliar confirmado por ${userName}.`,
+        notes: `Tanque de agroquímicos preparado por ${userName}.`,
       },
     })
 
@@ -98,10 +98,10 @@ export async function confirmAgrochemicalTask(taskId: string): Promise<TaskConfi
 }
 
 /**
- * Omite una tarea de agroquímicos (no se preparó el tanque, se pospone, etc.).
- * Cambia WAITING_CONFIRMATION → SKIPPED con nota auditable.
+ * Cancela una tarea de agroquímicos (no se preparó el tanque, etc.).
+ * Cambia WAITING_CONFIRMATION → CANCELLED con nota auditable.
  */
-export async function skipAgrochemicalTask(
+export async function cancelAgrochemicalTask(
   taskId: string,
   reason?: string,
 ): Promise<TaskConfirmationResult> {
@@ -120,12 +120,12 @@ export async function skipAgrochemicalTask(
     const userId = session?.user?.id
     const userName = session?.user?.name || 'Administrador'
 
-    const skipNote = reason || `Omitida manualmente por ${userName}.`
+    const skipNote = reason || `Cancelada por ${userName}.`
 
     await prisma.taskLog.update({
       where: { id: taskId },
       data: {
-        status: TaskStatus.SKIPPED,
+        status: TaskStatus.CANCELLED,
         notes: skipNote,
       },
     })
@@ -133,7 +133,7 @@ export async function skipAgrochemicalTask(
     await prisma.taskEventLog.create({
       data: {
         taskId,
-        status: TaskStatus.SKIPPED,
+        status: TaskStatus.CANCELLED,
         notes: skipNote,
         userId,
       },

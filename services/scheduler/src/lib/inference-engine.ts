@@ -72,7 +72,7 @@ export class InferenceEngine {
       const previousCancellation = await prisma.taskLog.findFirst({
         where: {
           scheduleId: schedule.id,
-          status: { in: [TaskStatus.CANCELLED, TaskStatus.SKIPPED] },
+          status: TaskStatus.CANCELLED,
           scheduledAt: { gte: fiveMinAgo, lte: fiveMinFromNow },
         },
         orderBy: { scheduledAt: 'desc' },

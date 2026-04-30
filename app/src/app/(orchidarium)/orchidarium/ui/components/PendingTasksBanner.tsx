@@ -6,7 +6,7 @@ import { IoFlask, IoCheckmarkCircle, IoCloseCircle, IoCalendarOutline } from 're
 import {
   confirmAgrochemicalTask,
   getPendingConfirmationTasks,
-  skipAgrochemicalTask,
+  cancelAgrochemicalTask,
 } from '@/actions/tasks/task-confirmation-actions'
 
 interface PendingTask {
@@ -66,7 +66,7 @@ export function PendingTasksBanner() {
 
   const handleSkip = async (taskId: string) => {
     startTransition(async () => {
-      const result = await skipAgrochemicalTask(taskId)
+      const result = await cancelAgrochemicalTask(taskId)
 
       if (result.success) {
         setTasks((prev) => prev.filter((t) => t.id !== taskId))
@@ -131,7 +131,7 @@ export function PendingTasksBanner() {
                 onClick={() => handleSkip(task.id)}
               >
                 <IoCloseCircle className="h-4 w-4" />
-                Omitir
+                Cancelar
               </button>
               <button
                 className="flex items-center gap-1.5 rounded-lg border border-blue-500/30 bg-blue-500/10 px-4 py-2 text-xs font-bold text-blue-300 transition-colors hover:bg-blue-500/20 disabled:opacity-50"

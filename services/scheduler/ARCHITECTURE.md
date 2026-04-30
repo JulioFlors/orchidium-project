@@ -74,7 +74,7 @@ Las reglas fueron definidas directamente por los cultivadores (padres del desarr
 
 | # | Regla | Condición | Acción | Aplica a |
 | --- | --- | --- | --- | --- |
-| 1 | Cancelación Manual | TaskLog con status CANCELLED/SKIPPED ±5min | SKIP | Todos |
+| 1 | Cancelación Manual | TaskLog con status CANCELLED ±5min | SKIP | Todos |
 | 2 | Telemetría + Clasificación | Obtener datos sensores + DayClassifier | — | — |
 | 3 | Lluvia Real en Curso | `rain_intensity > 0` (sensor gotas) | SKIP | Todos |
 | 4 | Lluvia Acumulada (12h) | `>20min` en últimas 12h | SKIP | IRRIGATION |

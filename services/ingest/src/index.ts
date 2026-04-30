@@ -463,9 +463,9 @@ async function start() {
 
           await writeToInflux(point)
 
-          // LWT: Solo registramos el offline. El firmware publicará su estado real de lluvia al reconectar.
+          // LWT: registramos el la desconexion del nodo `offline`.
           if (messageValue === 'offline') {
-            Logger.warn(`[ LWT ] ${firmwareSource} desconectado. Sin fabricación de datos.`)
+            Logger.warn(`[ LWT ] ${firmwareSource} Desconectado.`)
           }
         }
       }
