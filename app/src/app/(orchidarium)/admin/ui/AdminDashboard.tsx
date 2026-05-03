@@ -3,10 +3,17 @@
 import type { User } from '@package/database'
 
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { IoPeopleOutline, IoSettingsOutline, IoBugOutline } from 'react-icons/io5'
+import {
+  IoPeopleOutline,
+  IoSettingsOutline,
+  IoBugOutline,
+  IoNotificationsOutline,
+} from 'react-icons/io5'
+import useSWR from 'swr'
 import clsx from 'clsx'
 
 import { UsersTable } from './UsersTable'
+import { NotificationsView } from './NotificationsView'
 import { DeviceDebugger } from './components'
 
 import { LogoutButton } from '@/app/(shop)/account/ui/LogoutButton'
@@ -23,12 +30,17 @@ interface Props {
   initialView: AdminView
 }
 
-export type AdminView = 'users' | 'iot_debug'
+export type AdminView = 'users' | 'iot_debug' | 'notifications'
 
 export function AdminDashboard({ user, users, initialView }: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+
+  const { data } = useSWR('/api/notifications', (url) => fetch(url).then((res) => res.json()), {
+    refreshInterval: 30000,
+  })
+  const unreadCount = data?.unreadCount || 0
 
   // Sincronizamos con los parámetros de la URL para cambios posteriores,
   // pero usamos initialView para el renderizado inicial inmediato.
@@ -113,6 +125,27 @@ export function AdminDashboard({ user, users, initialView }: Props) {
             <IoPeopleOutline size={20} />
             Gestión de Usuarios
           </button>
+
+          <button
+            className={clsx(
+              'focus-sidebar-content flex w-full justify-start! gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition-all',
+              currentView === 'notifications'
+                ? 'bg-surface/60 text-primary shadow-sm'
+                : 'text-secondary',
+            )}
+            type="button"
+            onClick={() => setView('notifications')}
+          >
+            <div className="relative">
+              <IoNotificationsOutline size={20} />
+              {unreadCount > 0 && (
+                <span className="bg-primary absolute -top-1.5 -right-1.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold text-white ring-2 ring-white dark:ring-zinc-900">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </div>
+            Notificaciones
+          </button>
         </Card>
       </div>
 
@@ -137,6 +170,8 @@ export function AdminDashboard({ user, users, initialView }: Props) {
             <DeviceDebugger />
           </div>
         )}
+
+        {currentView === 'notifications' && <NotificationsView />}
       </div>
     </div>
   )

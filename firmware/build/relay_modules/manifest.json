@@ -1,9 +1,9 @@
 {
   "name": "Relay Modules",
   "description": "Nodo Actuador + Meteorológica Exterior",
-  "version": "0.10.1",
-  "date": "30-04-2026",
-  "notes_release": "[🌡️ Clima]: Estación Exterior: Integrado sensor DHT22 (GPIO 23) para telemetría de Temperatura y Humedad Relativa. Implementado muestreo asíncrono desfasado (5s) y publicaciones de batch escalonadas (2s) para máxima estabilidad SSL. [🔍 Auditoría]: Diagnóstico Remoto: Integrado soporte para auditoría de clima bajo demanda en tiempo real.",
+  "version": "0.10.5",
+  "date": "02-05-2026",
+  "notes_release": "[⚡ Estabilidad]: Restaurada arquitectura de red v0.10.1 para corregir fugas de sockets (ENOMEM). [🐞 Fix]: Eliminada 'tormenta MQTT'. [🌡️ Clima]: Mantenido soporte DHT22 con reporte de desconexión (ETIMEDOUT) y modo silencioso para sensor de lluvia ausente.",
   "files": [
     "app.mpy",
     "boot.py",

@@ -13,7 +13,16 @@ import { useDeviceHeartbeat, useToast } from '@/hooks'
 import { useMqttStore } from '@/store/mqtt/mqtt.store'
 import { formatTime12h, formatDateLong } from '@/utils/timeFormat'
 
-type MetricType = 'temperature' | 'humidity' | 'illuminance' | 'rain_intensity' | 'rain_events'
+type MetricType =
+  | 'temperature'
+  | 'humidity'
+  | 'illuminance'
+  | 'rain_intensity'
+  | 'rain_events'
+  | 'dli'
+  | 'vpd_avg'
+  | 'dif'
+  | 'high_humidity_hours'
 
 interface SensorData {
   [key: string]: string | number | boolean | undefined
@@ -33,6 +42,16 @@ interface RainData {
   averageIntensity: number
   eventCount: number
   events?: { time: string; duration: number; intensity: number }[]
+}
+
+interface SensorHistoryResponse {
+  data: SensorData[]
+  liveKPIs: {
+    dli: number | null
+    vpdAvg: number | null
+    dif: number | null
+    isLive: boolean
+  } | null
 }
 
 const fetcher = async (url: string) => {
@@ -113,27 +132,33 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     }
   }
 
-  // 1. Consulta para "Current Status" / Tarjetas (Rango fijo 24h, todos los campos de la zona)
+  // 1. Consulta para "Current Status" / Tarjetas (Rango fijo 12h)
   const {
-    data: cardStatusData = [],
+    data: cardStatusResponse,
     error: cardStatusError,
     isLoading: isCardStatusLoading,
-  } = useSWR<SensorData[]>(`/api/environment/history?range=12h&zone=${zone}`, fetcher, {
+  } = useSWR<SensorHistoryResponse>(`/api/environment/history?range=12h&zone=${zone}`, fetcher, {
     refreshInterval: 30000,
     revalidateOnFocus: false,
     errorRetryCount: 3,
     errorRetryInterval: 5000,
   })
 
+  const cardStatusData = useMemo(() => cardStatusResponse?.data || [], [cardStatusResponse])
+  const liveKPIs = cardStatusResponse?.liveKPIs || null
+
   // 2. Consulta para "Chart Data" (Solo se activa si hay una métrica seleccionada)
   const {
-    data: chartData = [],
+    data: chartResponse,
     error: chartError,
     isLoading: isChartLoading,
-  } = useSWR<SensorData[]>(
-    selectedMetric && selectedMetric !== 'rain_events'
+  } = useSWR<SensorHistoryResponse | SensorData[]>(
+    selectedMetric &&
+      !['rain_events', 'dli', 'vpd_avg', 'dif', 'high_humidity_hours'].includes(selectedMetric)
       ? `/api/environment/history?range=${currentRange}&zone=${zone}&metric=${selectedMetric}`
-      : null,
+      : selectedMetric && ['dli', 'vpd_avg', 'dif', 'high_humidity_hours'].includes(selectedMetric)
+        ? `/api/environment/history?range=${currentRange}&zone=${zone}`
+        : null,
     fetcher,
     {
       refreshInterval: 30000,
@@ -142,6 +167,8 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
       errorRetryInterval: 5000,
     },
   )
+
+  const chartData = Array.isArray(chartResponse) ? chartResponse : chartResponse?.data || []
 
   // 3. Consulta para "Rain Events" (Siempre activa en EXTERIOR, usa su propio rango independiente)
   const {
@@ -187,7 +214,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
       ? 'PristinoPlant/Actuator_Controller/status'
       : `PristinoPlant/Environmental_Monitoring/${formatTopicZone(zone)}/status`
 
-  const { messages: mqttMessages, status } = useMqttStore()
+  const { messages: mqttMessages } = useMqttStore()
   const initialData = initialHeartbeats[statusTopic]
   const { connectionState } = useDeviceHeartbeat(
     statusTopic,
@@ -199,7 +226,11 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
   const isSWRBusy = isCardStatusLoading
 
   const isMqttLoading = useMemo(() => {
-    if (!isSWRBusy && cardStatusData.length > 0) return false
+    // Si ya tenemos datos históricos de InfluxDB, mostramos esos inmediatamente
+    // mientras esperamos telemetría viva. Esto evita el "vacío" tras reinicios.
+    if (cardStatusData.length > 0) return false
+
+    // Si el dispositivo está offline, no tiene sentido mostrar "Cargando..." infinitamente
     if (connectionState === 'offline') return false
 
     const zoneSuffix = formatTopicZone(zone)
@@ -208,11 +239,12 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
         ? `PristinoPlant/Weather_Station/${zoneSuffix}/readings`
         : `PristinoPlant/Environmental_Monitoring/${zoneSuffix}/readings`
 
+    // Si llega un mensaje MQTT, dejamos de cargar
     if (mqttMessages[readingsTopic]) return false
-    if (status !== 'connected' && isSWRBusy) return true
 
+    // Solo mostramos loading si SWR está en su carga inicial Y no tenemos datos previos
     return isSWRBusy
-  }, [status, mqttMessages, zone, connectionState, isSWRBusy, cardStatusData.length])
+  }, [mqttMessages, zone, connectionState, isSWRBusy, cardStatusData.length])
 
   // Procesamiento de lecturas MQTT
   const mqttReadings = useMemo(() => {
@@ -249,34 +281,46 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
   }, [mqttMessages, zone])
 
   const current = useMemo(() => {
-    // Utility to ensure we don't return NaN to the UI
+    // Utility to ensure we handle invalid numbers as null for the UI to show '--'
     const sanitize = (val: unknown) => {
+      if (val === null || val === undefined) return null
       const num = Number(val)
 
-      return isNaN(num) ? 0 : num
+      return isNaN(num) ? null : num
     }
 
-    const base =
-      cardStatusData.length > 0
-        ? cardStatusData[cardStatusData.length - 1]
-        : {
-            time: new Date().toISOString(),
-            temperature: 0,
-            humidity: 0,
-            illuminance: 0,
-            rain_intensity: 0,
-          }
+    // Buscamos el último valor no nulo y verificamos que no sea antiguo (> 20 min)
+    const getLastValid = (key: string) => {
+      const STALE_THRESHOLD = 20 * 60 * 1000 // 20 minutos
+      const now = new Date().getTime()
 
-    const merged: SensorData = {
-      ...base,
-      temperature: sanitize(base.temperature),
-      humidity: sanitize(base.humidity),
-      illuminance: sanitize(base.illuminance),
-      rain_intensity: sanitize(base.rain_intensity),
+      for (let i = cardStatusData.length - 1; i >= 0; i--) {
+        if (cardStatusData[i][key] != null) {
+          const sampleTime = new Date(cardStatusData[i].time).getTime()
+
+          // Si el dato es más viejo que el umbral, lo consideramos caducado
+          if (now - sampleTime > STALE_THRESHOLD) return null
+
+          return cardStatusData[i][key]
+        }
+      }
+
+      return null
+    }
+
+    const merged: Record<string, number | string | null> = {
+      time:
+        cardStatusData.length > 0
+          ? cardStatusData[cardStatusData.length - 1].time
+          : new Date().toISOString(),
+      temperature: sanitize(getLastValid('temperature')),
+      humidity: sanitize(getLastValid('humidity')),
+      illuminance: sanitize(getLastValid('illuminance')),
+      rain_intensity: sanitize(getLastValid('rain_intensity')),
     }
 
     if (mqttReadings) {
-      let timestamp = now ? now / 1000 : new Date(base.time).getTime() / 1000
+      let timestamp = now ? now / 1000 : new Date(String(merged.time)).getTime() / 1000
 
       if (mqttReadings.time) {
         const rawTime = Number(mqttReadings.time)
@@ -317,9 +361,13 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
   }
 
   const calculateTrend = (key: 'temperature' | 'humidity' | 'illuminance') => {
-    if (cardStatusData.length < 5) return 'stable'
-    const last = Number(cardStatusData[cardStatusData.length - 1][key])
-    const prev = Number(cardStatusData[cardStatusData.length - 5][key])
+    // Filtramos los datos que realmente tienen esta métrica poblada (no nulos)
+    const validData = cardStatusData.filter((d) => d[key] != null)
+
+    if (validData.length < 5) return 'stable'
+
+    const last = Number(validData[validData.length - 1][key])
+    const prev = Number(validData[validData.length - 5][key])
     const threshold = key === 'illuminance' ? 150 : 0.5
 
     if (last > prev + threshold) return 'up'
@@ -386,6 +434,41 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
                 dateLabel: formatDateLong(endDate),
               }
             }) || [],
+        }
+      case 'dli':
+        return {
+          dataKey: 'dli',
+          color: '#a855f7',
+          unit: 'mol/m²/d',
+          title: 'Integral de Luz (DLI)',
+          icon: <Sun className="h-4 w-4" />,
+          chartType: 'bar' as const,
+        }
+      case 'vpd_avg':
+        return {
+          dataKey: 'vpd_avg',
+          color: '#06b6d4',
+          unit: 'kPa',
+          title: 'Déficit de Presión (VPD)',
+          icon: <Droplets className="h-4 w-4" />,
+        }
+      case 'dif':
+        return {
+          dataKey: 'dif',
+          color: '#f97316',
+          unit: '°C',
+          title: 'Diferencial Térmico (DIF)',
+          icon: <Thermometer className="h-4 w-4" />,
+          chartType: 'bar' as const,
+        }
+      case 'high_humidity_hours':
+        return {
+          dataKey: 'high_humidity_hours',
+          color: '#ef4444',
+          unit: 'h',
+          title: 'Riesgo Fúngico (HR > 85%)',
+          icon: <Moon className="h-4 w-4" />,
+          chartType: 'bar' as const,
         }
       default:
         return null
@@ -633,7 +716,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               title="Temperatura"
               trend={calculateTrend('temperature')}
               unit="°C"
-              value={current.temperature.toFixed(1)}
+              value={current.temperature !== null ? Number(current.temperature).toFixed(1) : '--'}
               onClick={() => setSelectedMetric('temperature')}
             />
 
@@ -648,7 +731,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               title="Humedad Relativa"
               trend={calculateTrend('humidity')}
               unit="%"
-              value={current.humidity.toFixed(1)}
+              value={current.humidity !== null ? Number(current.humidity).toFixed(1) : '--'}
               onClick={() => setSelectedMetric('humidity')}
             />
 
@@ -664,13 +747,50 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               title="Iluminancia Orquideario"
               trend={calculateTrend('illuminance')}
               unit="lux"
-              value={Math.round(current.illuminance).toLocaleString()}
+              value={
+                current.illuminance !== null
+                  ? Math.round(Number(current.illuminance)).toLocaleString()
+                  : '--'
+              }
               onClick={() => setSelectedMetric('illuminance')}
             />
           </div>
         ) : (
-          <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-3 tds-xl:gap-6 grid grid-cols-1 gap-5">
+          <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-6 tds-xl:gap-6 grid grid-cols-1 gap-5">
             <EnvironmentCard
+              className="tds-sm:order-1 tds-lg:col-span-2"
+              color="orange"
+              hasData={cardStatusData.length > 0}
+              icon={<Thermometer className="h-6 w-6" />}
+              isActive={selectedMetric === 'temperature'}
+              isLoading={isMqttLoading}
+              isOffline={connectionState === 'offline'}
+              status="optimal"
+              title="Temperatura"
+              trend={calculateTrend('temperature')}
+              unit="°C"
+              value={current.temperature !== null ? Number(current.temperature).toFixed(1) : '--'}
+              onClick={() => setSelectedMetric('temperature')}
+            />
+
+            <EnvironmentCard
+              className="tds-sm:order-2 tds-lg:col-span-2"
+              color="blue"
+              hasData={cardStatusData.length > 0}
+              icon={<Droplets className="h-6 w-6" />}
+              isActive={selectedMetric === 'humidity'}
+              isLoading={isMqttLoading}
+              isOffline={connectionState === 'offline'}
+              status="optimal"
+              title="Humedad Relativa"
+              trend={calculateTrend('humidity')}
+              unit="%"
+              value={current.humidity !== null ? Number(current.humidity).toFixed(1) : '--'}
+              onClick={() => setSelectedMetric('humidity')}
+            />
+
+            <EnvironmentCard
+              className="tds-sm:order-3 tds-lg:col-span-2"
               color="yellow"
               description="Estación Meteorológica"
               hasData={cardStatusData.length > 0}
@@ -682,11 +802,12 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               title="Iluminancia Exterior"
               trend={calculateTrend('illuminance')}
               unit="lux"
-              value={Math.round(current.illuminance).toLocaleString()}
+              value={current.illuminance !== null ? Number(current.illuminance).toFixed(1) : '--'}
               onClick={() => setSelectedMetric('illuminance')}
             />
 
             <EnvironmentCard
+              className="tds-sm:order-4 tds-lg:col-span-3"
               color="blue"
               description={
                 rainData ? (
@@ -719,7 +840,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
 
             <EnvironmentCard
               hasData
-              className="tds-sm:col-span-2 tds-lg:col-span-1"
+              className="tds-sm:col-span-2 tds-sm:order-5 tds-lg:col-span-3"
               color={climate.color}
               description={climate.description}
               icon={climate.icon}
@@ -734,6 +855,115 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
             />
           </div>
         )}
+      </div>
+
+      <div className="mt-8 flex flex-col gap-6">
+        <Heading
+          description="Indicadores avanzados de salud y metabolismo vegetal (DLI, VPD, DIF)"
+          title="Análisis Botánico"
+        />
+
+        <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-4 tds-xl:gap-6 grid grid-cols-1 gap-5">
+          <EnvironmentCard
+            color="purple"
+            description={
+              currentRange === '12h' || currentRange === '24h'
+                ? liveKPIs?.dli
+                  ? 'Acumulado hoy (mol/m²/d)'
+                  : 'Calculando luz...'
+                : 'Histórico diario (mol/m²/d)'
+            }
+            hasData={cardStatusData.length > 0 || !!liveKPIs}
+            icon={<Sun className="h-6 w-6" />}
+            isActive={selectedMetric === 'dli'}
+            isLoading={isCardStatusLoading}
+            status="optimal"
+            title="DLI (Luz Total)"
+            unit={currentRange === '12h' || currentRange === '24h' ? '⚡ Live' : 'mol'}
+            value={
+              currentRange === '12h' || currentRange === '24h'
+                ? liveKPIs?.dli?.toFixed(2) || '--'
+                : cardStatusData.length > 0 && cardStatusData[cardStatusData.length - 1].dli != null
+                  ? Number(cardStatusData[cardStatusData.length - 1].dli).toFixed(2)
+                  : '--'
+            }
+            onClick={() => setSelectedMetric('dli')}
+          />
+
+          <EnvironmentCard
+            color="cyan"
+            description={
+              currentRange === '12h' || currentRange === '24h'
+                ? liveKPIs?.vpdAvg
+                  ? 'Promedio diurno actual'
+                  : 'Calculando VPD...'
+                : 'Déficit de Presión (kPa)'
+            }
+            hasData={cardStatusData.length > 0 || !!liveKPIs}
+            icon={<Droplets className="h-6 w-6" />}
+            isActive={selectedMetric === 'vpd_avg'}
+            isLoading={isCardStatusLoading}
+            status="optimal"
+            title="VPD (Transpiración)"
+            unit={currentRange === '12h' || currentRange === '24h' ? '⚡ Live' : 'kPa'}
+            value={
+              currentRange === '12h' || currentRange === '24h'
+                ? liveKPIs?.vpdAvg?.toFixed(2) || '--'
+                : cardStatusData.length > 0 &&
+                    cardStatusData[cardStatusData.length - 1].vpd_avg != null
+                  ? Number(cardStatusData[cardStatusData.length - 1].vpd_avg).toFixed(2)
+                  : '--'
+            }
+            onClick={() => setSelectedMetric('vpd_avg')}
+          />
+
+          <EnvironmentCard
+            color="orange"
+            description={
+              currentRange === '12h' || currentRange === '24h'
+                ? liveKPIs?.dif
+                  ? 'Diferencial proyectado'
+                  : 'Esperando noche/día'
+                : 'Contraste Térmico (°C)'
+            }
+            hasData={cardStatusData.length > 0 || !!liveKPIs}
+            icon={<Thermometer className="h-6 w-6" />}
+            isActive={selectedMetric === 'dif'}
+            isLoading={isCardStatusLoading}
+            status="optimal"
+            title="DIF (Diferencial)"
+            unit={currentRange === '12h' || currentRange === '24h' ? '⚡ Live' : '°C'}
+            value={
+              currentRange === '12h' || currentRange === '24h'
+                ? liveKPIs?.dif != null
+                  ? `${liveKPIs.dif > 0 ? '+' : ''}${liveKPIs.dif}`
+                  : '--'
+                : cardStatusData.length > 0 && cardStatusData[cardStatusData.length - 1].dif != null
+                  ? `${Number(cardStatusData[cardStatusData.length - 1].dif) > 0 ? '+' : ''}${cardStatusData[cardStatusData.length - 1].dif}`
+                  : '--'
+            }
+            onClick={() => setSelectedMetric('dif')}
+          />
+
+          <EnvironmentCard
+            color="red"
+            description="Horas con Humedad > 85%"
+            hasData={cardStatusData.length > 0}
+            icon={<Moon className="h-6 w-6" />}
+            isActive={selectedMetric === 'high_humidity_hours'}
+            isLoading={isCardStatusLoading}
+            status="optimal"
+            title="Riesgo Fúngico"
+            unit="horas"
+            value={
+              cardStatusData.length > 0 &&
+              cardStatusData[cardStatusData.length - 1].high_humidity_hours != null
+                ? Number(cardStatusData[cardStatusData.length - 1].high_humidity_hours)
+                : '--'
+            }
+            onClick={() => setSelectedMetric('high_humidity_hours')}
+          />
+        </div>
       </div>
 
       <div className="mt-2 w-full">

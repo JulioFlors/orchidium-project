@@ -16,6 +16,8 @@ import {
   IoTimeOutline,
   IoTrashOutline,
   IoWifiOutline,
+  IoThermometerOutline,
+  IoWaterOutline,
 } from 'react-icons/io5'
 import {
   Area,
@@ -52,11 +54,25 @@ const TOOL_COLORS: Record<
     pulse: 'bg-slate-400',
   },
   timeline: {
-    bg: 'from-indigo-500/20 to-indigo-500/5',
-    ring: 'ring-indigo-500/10',
-    border: 'border-indigo-500/20',
-    icon: 'text-indigo-400',
-    pulse: 'bg-indigo-400',
+    bg: 'from-emerald-500/20 to-emerald-500/5',
+    ring: 'ring-emerald-500/10',
+    border: 'border-emerald-500/20',
+    icon: 'text-emerald-400',
+    pulse: 'bg-emerald-400',
+  },
+  temp: {
+    bg: 'from-orange-500/20 to-orange-500/5',
+    ring: 'ring-orange-500/10',
+    border: 'border-orange-500/20',
+    icon: 'text-orange-400',
+    pulse: 'bg-orange-400',
+  },
+  hum: {
+    bg: 'from-fuchsia-500/20 to-fuchsia-500/5',
+    ring: 'ring-fuchsia-500/10',
+    border: 'border-fuchsia-500/20',
+    icon: 'text-fuchsia-400',
+    pulse: 'bg-fuchsia-400',
   },
   lux: {
     bg: 'from-amber-500/20 to-amber-500/5',
@@ -107,6 +123,8 @@ const AUDIT_CHART_COLORS: Record<string, string> = {
   rain: '#3b82f6',
   ram: '#818cf8',
   health: '#a855f7', // purple-500
+  temp: '#fb923c', // orange-400
+  hum: '#e879f9', // fuchsia-400
 }
 
 const fallbackColor = {
@@ -306,6 +324,32 @@ export function ToolboxGrid({
           onClick={() => onCommand('audit_health_on', 'health')}
         />
         <ToolCard
+          active={activeAudits.includes('temp')}
+          colorKey="temp"
+          disabled={!isOnline || hardwarePresence.temp === false}
+          icon={
+            <IoThermometerOutline
+              className={clsx(!activeAudits.includes('temp') && TOOL_COLORS.temp.icon)}
+              size={24}
+            />
+          }
+          label={hardwarePresence.temp === false ? 'Temp (Off)' : 'Temperatura'}
+          onClick={() => onCommand('audit_temp_on', 'temp')}
+        />
+        <ToolCard
+          active={activeAudits.includes('hum')}
+          colorKey="hum"
+          disabled={!isOnline || hardwarePresence.hum === false}
+          icon={
+            <IoWaterOutline
+              className={clsx(!activeAudits.includes('hum') && TOOL_COLORS.hum.icon)}
+              size={24}
+            />
+          }
+          label={hardwarePresence.hum === false ? 'Hum (Off)' : 'Humedad'}
+          onClick={() => onCommand('audit_hum_on', 'hum')}
+        />
+        <ToolCard
           colorKey="services"
           disabled={!isOnline}
           icon={<IoPulseOutline className="rotate-90 text-red-500" size={24} />}
@@ -346,6 +390,10 @@ function CustomTooltip({ active, payload, label, chartColor, activeAudit }: Cust
     } else if (activeAudit === 'lux') {
       formattedVal = val >= 1000 ? `${(val / 1000).toFixed(1)}k` : val.toFixed(1)
       formattedVal += ' lux'
+    } else if (activeAudit === 'temp') {
+      formattedVal = `${val.toFixed(1)} °C`
+    } else if (activeAudit === 'hum') {
+      formattedVal = `${val.toFixed(1)} %`
     }
 
     return (
@@ -398,9 +446,11 @@ export function AuditConsoleCard({
 
   // ---- Hidratación Segura y Carga de Cache ----
   useEffect(() => {
-    queueMicrotask(() => {
+    // Usamos un pequeño delay para asegurar que el layout y las animaciones
+    // hayan terminado antes de intentar renderizar gráficas (evita width -1 en Recharts)
+    const timer = setTimeout(() => {
       setHasMounted(true)
-      if (activeAudit && ['lux', 'rain', 'ram', 'health'].includes(activeAudit)) {
+      if (activeAudit && ['lux', 'rain', 'ram', 'health', 'temp', 'hum'].includes(activeAudit)) {
         const cached = window.localStorage.getItem(
           `${AUDIT_STORAGE_PREFIX}history_${deviceId}_${activeAudit}`,
         )
@@ -416,7 +466,9 @@ export function AuditConsoleCard({
           }
         }
       }
-    })
+    }, 100)
+
+    return () => clearTimeout(timer)
   }, [activeAudit, deviceId])
 
   // Auto-limpieza si la sesión caduca
@@ -425,21 +477,23 @@ export function AuditConsoleCard({
       clearAuditData()
     }
   }, [session])
-  // ---- Limpieza Automática al Cerrar ----
-  const unmountRef = useRef({ isActive, onStop })
+  // ---- Limpieza Automática al Cerrar (Safe Cleanup) ----
+  const unmountRef = useRef({ isActive, onStop, isManualStopping: false })
 
   useEffect(() => {
-    unmountRef.current = { isActive, onStop }
+    unmountRef.current.isActive = isActive
+    unmountRef.current.onStop = onStop
   }, [isActive, onStop])
 
   useEffect(() => {
+    // Capturamos la referencia al objeto actual para el cleanup
+    const cleanupRef = unmountRef.current
+
     return () => {
-      // Si el componente se desmonta y la auditoría seguía activa en el dispositivo,
-      // enviamos el comando de parada.
-      // NOTA: MqttStore.publishWithAck ahora evita duplicados, por lo que si ya
-      // había un comando de parada en cola, esta llamada será ignorada.
-      if (unmountRef.current.isActive && unmountRef.current.onStop) {
-        unmountRef.current.onStop()
+      // SOLO enviamos parada si el componente se desmonta de forma "huérfana"
+      // (ej. el usuario cambia de pestaña del admin) y NO si fue un stop manual.
+      if (cleanupRef.isActive && cleanupRef.onStop && !cleanupRef.isManualStopping) {
+        cleanupRef.onStop()
       }
     }
   }, [])
@@ -479,7 +533,9 @@ export function AuditConsoleCard({
         // Error silencioso
       }
     } else {
-      const isChartable = ['lux', 'rain', 'ram', 'health'].includes(activeAudit || '')
+      const isChartable = ['lux', 'rain', 'ram', 'health', 'temp', 'hum'].includes(
+        activeAudit || '',
+      )
 
       if (isChartable) {
         setDisplayPayload((prev: unknown) => {
@@ -500,7 +556,15 @@ export function AuditConsoleCard({
             const val = hasKey
               ? ((incomingPayload as Record<string, unknown>)[activeAudit] ??
                 (incomingPayload as Record<string, unknown>).val)
-              : incomingPayload
+              : activeAudit === 'temp' &&
+                  typeof incomingPayload === 'object' &&
+                  incomingPayload !== null
+                ? (incomingPayload as { t?: number }).t
+                : activeAudit === 'hum' &&
+                    typeof incomingPayload === 'object' &&
+                    incomingPayload !== null
+                  ? (incomingPayload as { h?: number }).h
+                  : incomingPayload
 
             // Solo agregamos si el valor es válido (no nulo/undefined)
             if (val !== undefined && val !== null) {
@@ -579,7 +643,15 @@ export function AuditConsoleCard({
   const renderTrendChart = () => {
     const history = (displayPayload as { history?: unknown[] })?.history
 
-    if (!Array.isArray(history) || history.length === 0) return null
+    // Evitamos renderizar el gráfico si el componente no ha terminado de montarse
+    // o si el historial está vacío, para evitar errores de Recharts (width -1)
+    if (!hasMounted || !Array.isArray(history) || history.length === 0) {
+      return (
+        <div className="flex h-60 w-full items-center justify-center opacity-20">
+          <IoStatsChartOutline className="animate-pulse" size={40} />
+        </div>
+      )
+    }
 
     const chartData = history.map((val, idx) => {
       let value = 0
@@ -599,6 +671,14 @@ export function AuditConsoleCard({
             const h = data as { rssi?: number }
 
             value = Number(h.rssi ?? 0)
+          } else if (activeAudit === 'temp') {
+            const t = data as { t?: number }
+
+            value = Number(t.t ?? 0)
+          } else if (activeAudit === 'hum') {
+            const h = data as { h?: number }
+
+            value = Number(h.h ?? 0)
           } else {
             value = Number(data)
           }
@@ -612,8 +692,6 @@ export function AuditConsoleCard({
       return { name: timeStr, value }
     })
 
-    if (!hasMounted) return <div className="mt-2 h-40 w-full" />
-
     return (
       <div
         className={clsx(
@@ -624,7 +702,7 @@ export function AuditConsoleCard({
           '[&_.recharts-accessibility-focus]:hidden',
         )}
       >
-        <ResponsiveContainer height="100%" width="100%">
+        <ResponsiveContainer height={300} minWidth={0} width="100%">
           <AreaChart accessibilityLayer={false} data={chartData}>
             <defs>
               <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
@@ -647,7 +725,11 @@ export function AuditConsoleCard({
                     ? [0, 90000]
                     : activeAudit === 'rain'
                       ? [0, 4095]
-                      : ['auto', 'auto']
+                      : activeAudit === 'temp'
+                        ? [0, 50]
+                        : activeAudit === 'hum'
+                          ? [0, 100]
+                          : ['auto', 'auto']
               }
               fontSize={11}
               scale="auto"
@@ -655,6 +737,8 @@ export function AuditConsoleCard({
               tickFormatter={(value) => {
                 if (activeAudit === 'health') return `${value}dB`
                 if (activeAudit === 'rain') return value.toFixed(0)
+                if (activeAudit === 'temp') return `${value}°`
+                if (activeAudit === 'hum') return `${value}%`
 
                 return value >= 1000 ? `${(value / 1000).toFixed(0)}k` : value.toFixed(0)
               }}
@@ -998,7 +1082,10 @@ export function AuditConsoleCard({
                 className="group bg-black-and-white/10 hover:bg-hover-overlay relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-red-500 transition-all disabled:pointer-events-none dark:text-red-400"
                 disabled={isPending}
                 type="button"
-                onClick={onStop}
+                onClick={() => {
+                  unmountRef.current.isManualStopping = true
+                  onStop?.()
+                }}
               >
                 <IoStop size={12} />
                 {/* Custom Tooltip - Cohesión Visual Pristinoplant */}
@@ -1048,7 +1135,10 @@ export function AuditConsoleCard({
                   label: 'Cerrar',
                   icon: <IoCloseOutline />,
                   onClick: () => {
+                    // Marcamos como parada manual para evitar duplicados en el unmount
+                    unmountRef.current.isManualStopping = true
                     onStop?.()
+
                     if (activeAudit && typeof window !== 'undefined') {
                       window.sessionStorage.removeItem(`audit_history_${deviceId}_${activeAudit}`)
                     }

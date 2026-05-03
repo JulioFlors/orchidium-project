@@ -243,6 +243,23 @@ function mprun {
     )
 
     # ---------------------------------------------------------
+    # SUBCOMANDO: reset (Recuperación Nuclear)
+    # Ejecución: mprun reset
+    # ---------------------------------------------------------
+    if ($Port -eq "reset") {
+        Write-Host "`n☢️  Iniciando Reseteo Nuclear del ESP32..." -ForegroundColor Red
+        Write-Host "    ├─ Borrando Flash..." -ForegroundColor Gray
+        esptool.exe erase-flash
+        
+        Write-Host "    ├─ Instalando Firmware v1.26.0..." -ForegroundColor Gray
+        esptool.exe write-flash 0x1000 C:\Dev\pristinoplant\firmware\ESP32_2025-08-09_v1.26.0.bin
+        
+        Write-Host "    └─ Reinstalando Librerías y Código..." -ForegroundColor Gray
+        mprun -b -l
+        return
+    }
+
+    # ---------------------------------------------------------
     # TRUCO: Soporte para banderas Unix (--build, --lib)
     # Si el usuario escribe "mprun --build", PowerShell asignará 
     # "--build" a $Port. Aquí lo detectamos y lo corregimos.

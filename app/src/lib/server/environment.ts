@@ -1,7 +1,12 @@
 import { prisma } from '@package/database'
 
-import { getHourInCaracas } from '../../utils/timeFormat'
 import { Logger } from '../logger'
+import {
+  calculateVPD,
+  calculateDLIIncrement,
+  isDaytimeCaracas,
+  isNighttimeCaracas,
+} from '../botany'
 
 import { influxClient } from './influxdb'
 
@@ -61,10 +66,7 @@ export async function getSensorHistoryInternal(
   if (fieldsToQuery.length === 0 && metric) return []
 
   const now = new Date()
-  // Offset Venezuela (UTC-4)
   const VET_OFFSET = 4 * 3600000
-
-  // Obtener la medianoche de hoy en VET expresada en tiempo UTC
   const midnightVET = new Date(now.getTime() - VET_OFFSET)
 
   midnightVET.setUTCHours(0, 0, 0, 0)
@@ -75,14 +77,7 @@ export async function getSensorHistoryInternal(
     let timeFilter = `AND time >= now() - interval '24 hours'`
 
     if (range === '1h') timeFilter = `AND time >= now() - interval '1 hours'`
-    if (range === '12h') {
-      // 5:00 AM VET (Medianoche + 5h) hasta 7:00 PM VET (Medianoche + 19h)
-      // Estas son las 14h de "Día Botánico" solicitadas.
-      const start = new Date(midnightVETInUTC.getTime() + 5 * 3600000)
-      const end = new Date(midnightVETInUTC.getTime() + 19 * 3600000)
-
-      timeFilter = `AND time >= '${start.toISOString()}' AND time <= '${end.toISOString()}'`
-    }
+    if (range === '12h') timeFilter = `AND time >= now() - interval '12 hours'`
 
     const query = `SELECT * FROM "environment_metrics" WHERE "zone" = '${zone}' ${timeFilter} ORDER BY time ASC`
 
@@ -90,26 +85,85 @@ export async function getSensorHistoryInternal(
       const reader = influxClient.query(query)
       const data: Record<string, unknown>[] = []
 
+      // Variables para Preámbulo de KPIs (Live)
+      let liveDLI = 0
+      let lastLuxTime: Date | null = null
+      let vpdSum = 0
+      let vpdCount = 0
+      let tempSumDay = 0
+      let tempCountDay = 0
+      let tempSumNight = 0
+      let tempCountNight = 0
+
       for await (const row of reader as AsyncIterable<InfluxRow>) {
-        const entry: Record<string, unknown> = { time: safeTimeToISO(row.time) }
+        const tDate = new Date(safeTimeToISO(row.time))
+        const entry: Record<string, unknown> = { time: tDate.toISOString() }
 
         fieldsToQuery.forEach((f) => {
-          // Solo asignamos si el campo existe en la fila.
-          // Evitamos el default || 0 que provocaba picos falsos en las gráficas
-          // cuando otros dispositivos reportaban métricas parciales.
           if (row[f] != null) {
             entry[f] = Number(row[f])
           }
         })
         if (row.phase) entry.phase = String(row.phase)
         data.push(entry)
+
+        // ── Cálculo de Live KPIs (Solo para el día actual) ──
+        if (tDate >= midnightVETInUTC) {
+          const isDay = isDaytimeCaracas(tDate)
+          const isNight = isNighttimeCaracas(tDate)
+
+          // 1. DLI Live
+          if (row.illuminance != null && isDay) {
+            const lux = Number(row.illuminance)
+
+            if (lastLuxTime) {
+              const deltaSec = (tDate.getTime() - lastLuxTime.getTime()) / 1000
+
+              if (deltaSec > 0 && deltaSec < 900) {
+                liveDLI += calculateDLIIncrement(lux, deltaSec)
+              }
+            }
+            lastLuxTime = tDate
+          }
+
+          // 2. VPD Live
+          if (row.temperature != null && row.humidity != null && isDay) {
+            vpdSum += calculateVPD(Number(row.temperature), Number(row.humidity))
+            vpdCount++
+          }
+
+          // 3. DIF Live (Promedios diurno/nocturno en curso)
+          if (row.temperature != null) {
+            const t = Number(row.temperature)
+
+            if (isDay) {
+              tempSumDay += t
+              tempCountDay++
+            }
+            if (isNight) {
+              tempSumNight += t
+              tempCountNight++
+            }
+          }
+        }
       }
 
-      return data
+      // Consolidar Preámbulo
+      const liveKPIs = {
+        dli: liveDLI > 0 ? Number((liveDLI / 1_000_000).toFixed(2)) : null,
+        vpdAvg: vpdCount > 0 ? Number((vpdSum / vpdCount).toFixed(3)) : null,
+        dif:
+          tempCountDay > 0 && tempCountNight > 0
+            ? Number((tempSumDay / tempCountDay - tempSumNight / tempCountNight).toFixed(2))
+            : null,
+        isLive: true,
+      }
+
+      return { data, liveKPIs }
     } catch (error) {
       Logger.error(`Error InfluxDB (${range}):`, error)
 
-      return []
+      return { data: [], liveKPIs: null }
     }
   }
 
@@ -168,6 +222,13 @@ export async function getSensorHistoryInternal(
         entry.rain_intensity = stat.totalRainDuration > 0 ? 100 : 0
       }
 
+      // KPIs Botánicos (Procesados)
+      if (fieldsToQuery.includes('dli')) entry.dli = stat.dli
+      if (fieldsToQuery.includes('dif')) entry.dif = stat.dif
+      if (fieldsToQuery.includes('vpd_avg')) entry.vpd_avg = stat.vpdAvg
+      if (fieldsToQuery.includes('high_humidity_hours'))
+        entry.high_humidity_hours = stat.highHumidityHours
+
       allData.push(entry)
     })
 
@@ -195,12 +256,14 @@ export async function getSensorHistoryInternal(
               .map((r) => ({ val: Number(r[f]), time: r.time }))
               .filter((v) => !isNaN(v.val))
 
-            // Aplicar filtro botánico (08:00 - 16:00) solo para Iluminancia en el punto de "Hoy"
+            // Aplicar filtro botánico (08:00:00 - 16:00:59) solo para Iluminancia en el punto de "Hoy"
             if (f === 'illuminance') {
               values = values.filter((v) => {
-                const hour = getHourInCaracas(safeTimeToISO(v.time))
+                const dDate = new Date(safeTimeToISO(v.time))
+                const hour = (dDate.getUTCHours() - 4 + 24) % 24
+                const min = dDate.getUTCMinutes()
 
-                return hour >= 8 && hour <= 16
+                return (hour >= 8 && hour < 16) || (hour === 16 && min === 0)
               })
             }
 
@@ -236,11 +299,11 @@ export async function getSensorHistoryInternal(
       }
     }
 
-    return allData
+    return { data: allData, liveKPIs: null }
   } catch (error) {
     Logger.error('Error Query Hibrido:', error)
 
-    return []
+    return { data: [], liveKPIs: null }
   }
 }
 

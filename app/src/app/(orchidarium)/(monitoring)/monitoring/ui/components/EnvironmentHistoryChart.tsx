@@ -1,5 +1,6 @@
 'use client'
 
+import { useMemo } from 'react'
 import {
   Area,
   AreaChart,
@@ -12,8 +13,6 @@ import {
   YAxis,
 } from 'recharts'
 import { clsx } from 'clsx'
-
-import { getHourInCaracas } from '@/utils/timeFormat'
 
 interface EnvironmentHistoryChartProps {
   data: Record<string, number | string | boolean | undefined>[]
@@ -257,37 +256,51 @@ export function EnvironmentHistoryChart({
 
   const gradientId = `color-${dataKey}`
 
-  // Detectar si tenemos datos estadísticos (Macro-Visión)
-  const isMacro = data.length > 0 && data[0][`min_${dataKey}`] !== undefined
+  // Optimizamos el procesamiento de datos con useMemo para evitar lags en el renderizado
+  const stats = useMemo(() => {
+    // Detectar si tenemos datos estadísticos (Macro-Visión) en cualquier punto del dataset
+    const isMacroDetected = data.length > 0 && data.some((d) => d[`min_${dataKey}`] !== undefined)
 
-  const count = data.length
-  let min = 0
-  let max = 0
-  let avg = 0
+    // Filtrar datos nulos para la métrica activa antes de calcular estadísticas
+    const validPoints = data.filter((d) => d[dataKey] != null)
+    const count = validPoints.length
+    let min = 0
+    let max = 0
+    let avg = 0
 
-  if (count > 0) {
-    let statsData = data
+    if (count > 0) {
+      let statsData = validPoints
 
-    if (dataKey === 'illuminance' && !isMacro) {
-      // Filtrar por horario diurno (8 AM - 4 PM) solo para estadísticas de tiempo real (micro-visión)
-      // Los datos Macro (Postgres) ya vienen pre-filtrados botánicamente.
-      statsData = data.filter((d) => {
-        const hour = getHourInCaracas(String(d.time))
+      if (dataKey === 'illuminance' && !isMacroDetected) {
+        // Filtrar por horario diurno (08:00:00 - 16:00:59)
+        statsData = validPoints.filter((d) => {
+          const dDate = new Date(String(d.time))
+          const hour = (dDate.getUTCHours() - 4 + 24) % 24
+          const min = dDate.getUTCMinutes()
 
-        return hour >= 8 && hour <= 16
-      })
+          return (hour >= 8 && hour < 16) || (hour === 16 && min === 0)
+        })
+      }
+
+      const values = statsData.map((d) => Number(d[dataKey]))
+      const minValues = isMacroDetected
+        ? statsData.map((d) => Number(d[`min_${dataKey}`] ?? d[dataKey]))
+        : values
+      const maxValues = isMacroDetected
+        ? statsData.map((d) => Number(d[`max_${dataKey}`] ?? d[dataKey]))
+        : values
+
+      if (values.length > 0) {
+        min = Math.min(...minValues)
+        max = Math.max(...maxValues)
+        avg = values.reduce((sum, val) => sum + val, 0) / values.length
+      }
     }
 
-    const values = statsData.map((d) => Number(d[dataKey] || 0))
-    const minValues = isMacro ? statsData.map((d) => Number(d[`min_${dataKey}`] || 0)) : values
-    const maxValues = isMacro ? statsData.map((d) => Number(d[`max_${dataKey}`] || 0)) : values
+    return { isMacro: isMacroDetected, count, min, max, avg }
+  }, [data, dataKey])
 
-    if (values.length > 0) {
-      min = Math.min(...minValues)
-      max = Math.max(...maxValues)
-      avg = values.reduce((sum, val) => sum + val, 0) / values.length
-    }
-  }
+  const { isMacro, count, min, max, avg } = stats
 
   const formatStat = (val: number) => {
     if (val >= 1000) return `${(val / 1000).toFixed(1)}k`
@@ -378,6 +391,7 @@ export function EnvironmentHistoryChart({
                 width={45}
               />
               <Tooltip
+                animationDuration={0}
                 content={
                   <CustomTooltip
                     color={color}
@@ -393,13 +407,15 @@ export function EnvironmentHistoryChart({
                   strokeDasharray: '4 4',
                   fill: 'transparent',
                 }}
+                isAnimationActive={false}
                 wrapperStyle={{ outline: 'none' }}
               />
 
               {/* Banda estadística (Solo en Macro-Visión) */}
               {isMacro && (
                 <Area
-                  animationDuration={800}
+                  connectNulls
+                  animationDuration={200}
                   dataKey={(d) => [d[`min_${dataKey}`], d[`max_${dataKey}`]]}
                   fill={color}
                   fillOpacity={0.1}
@@ -410,8 +426,9 @@ export function EnvironmentHistoryChart({
 
               {/* Línea de Promedio / Principal */}
               <Area
+                connectNulls
                 activeDot={{ style: { outline: 'none' } }}
-                animationDuration={800}
+                animationDuration={200}
                 dataKey={dataKey}
                 fill={isMacro ? 'none' : `url(#${gradientId})`}
                 fillOpacity={1}
@@ -440,6 +457,7 @@ export function EnvironmentHistoryChart({
                 width={45}
               />
               <Tooltip
+                animationDuration={0}
                 content={
                   <CustomTooltip
                     color={color}
@@ -450,9 +468,10 @@ export function EnvironmentHistoryChart({
                   />
                 }
                 cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
+                isAnimationActive={false}
                 wrapperStyle={{ outline: 'none' }}
               />
-              <Bar animationDuration={800} dataKey={dataKey} fill={color} radius={[4, 4, 0, 0]} />
+              <Bar animationDuration={200} dataKey={dataKey} fill={color} radius={[4, 4, 0, 0]} />
             </BarChart>
           )}
         </ResponsiveContainer>

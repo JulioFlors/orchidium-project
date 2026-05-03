@@ -32,6 +32,7 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 
 * [x] **Refuerzo de Protocolos:** Implementar regla MANDATORIA en `SKILL.md` para actualización proactiva de `todos.md` y `ROADMAP.md` por parte de agentes.
 * [x] **Guía de Scripts de Utilidad:** Documentación técnica para estandarización de la creación de herramientas locales (Postgres/InfluxDB) con soporte para batching.
+* [x] **Documentación Botánica Avanzada:** Formalización de DIF, DLI, VPD y Riesgo Fúngico en las especificaciones del orquideario (docs/specs).
 * [ ] **Estandarización de Tópicos MQTT:**
   * [ ] Cambiar tópico base de sensores: `Environmental_Monitoring` -> `weather_station`.
   * [ ] Normalizar Zonas: Usar capitalización de base de datos (`ZONA_A`) en lugar de formateo manual.

@@ -51,6 +51,7 @@ except ImportError:
 def connect_wifi_sync():
     """**Conexión wifi síncrona** `Boot.py` `OTA` `Mantenimiento` `timeout = 60`"""
     wlan = WLAN(STA_IF)
+    wlan.active(False)
     wlan.active(True)
     
     if not wlan.isconnected():

@@ -34,7 +34,7 @@ interface Notification {
   }
 }
 
-export default function NotificationsPage() {
+export function NotificationsView() {
   const { data, mutate, isLoading } = useSWR<{
     notifications: Notification[]
     unreadCount: number
@@ -90,7 +90,7 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="mx-auto mt-9 flex w-full max-w-5xl flex-col gap-8 px-4 pb-12">
+    <div className="fade-in flex flex-col gap-6">
       <Heading
         action={
           notifications.some((n) => n.status === 'UNREAD') && (

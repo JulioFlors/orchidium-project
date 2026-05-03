@@ -16,7 +16,9 @@ El Motor de Inferencia calculará las siguientes métricas derivadas basadas en 
 
 - **Propósito:** Mide la "fuerza de secado" del aire. Indica qué tan fácil pueden transpirar las orquídeas.
 - **Cálculo:** Se deriva combinando la Temperatura y la Humedad Relativa.
-- **Decisión:** Un VPD muy alto (aire muy seco) obligará a cerrar estomas (estrés hídrico). Un VPD muy bajo (0.2 kPa) impide la transpiración y atrae hongos. **Ideal para orquídeas:** 0.8 - 1.2 kPa.
+- **Decisión:** Un VPD muy alto (aire muy seco) obliga a cerrar estomas. Un VPD muy bajo impide la transpiración y atrae hongos.
+- **Matiz Botánico (CAM):** Dado que muchas orquídeas (*Cattleya*) abren estomas de **noche**, el VPD nocturno debe estar entre **0.4 - 0.6 kPa** para permitir la transpiración necesaria para el transporte de Calcio sin agotar sus reservas hídricas.
+- **Ideal General:** 0.8 - 1.2 kPa (Día).
 
 ### B. DLI (Daily Light Integral)
 

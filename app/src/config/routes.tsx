@@ -7,7 +7,6 @@ import {
   IoImagesOutline,
   IoLeafOutline,
   IoListOutline,
-  IoNotificationsOutline,
   IoPricetagsOutline,
   IoWaterOutline,
 } from 'react-icons/io5'
@@ -159,12 +158,6 @@ export const adminRoutes: AdminRoute[] = [
         url: '/history',
         icon: <IoListOutline />,
         description: 'Registro de ejecuciones pasadas',
-      },
-      {
-        name: 'Notificaciones',
-        url: '/notifications',
-        icon: <IoNotificationsOutline />,
-        description: 'Alertas del sistema y tareas de agroquímicos',
       },
     ],
   },

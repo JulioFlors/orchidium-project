@@ -88,6 +88,7 @@ async function waitForMosquitto(retries = 15) {
 // ---- Gestión de Estado Local ----
 let lastRainState: string | null = null
 let lastFirmwareHeartbeat: number = Date.now()
+let lastSyncTimestamp: number = 0
 
 // Timeout para eventos de lluvia huérfanos (10 minutos sin señales de vida)
 const RAIN_ORPHAN_TIMEOUT_MS = 10 * 60 * 1000
@@ -139,23 +140,7 @@ function setupMqttHandlers() {
             return
           }
 
-          retryManager.lastActuatorState = 'online'
-          resetSamplingState() // Limpiar caché solo en reconexión real
-          Logger.node('ONLINE')
-
-          await prisma.deviceLog
-            .create({
-              data: {
-                device: 'Actuator_Controller',
-                status: 'ONLINE',
-                notes: 'Dispositivo conectado / Heartbeat recuperado.',
-              },
-            })
-            .catch((err) => Logger.error('Fallo persistiendo deviceLog (ONLINE)', err))
-
-          syncNodeSampling()
-          await processPostponedTasks()
-          await resumeInterruptedTasks()
+          await handleNodeSync(false)
         } else if (message === 'offline' && retryManager.lastActuatorState !== 'offline') {
           const previousState = retryManager.lastActuatorState
 
@@ -224,14 +209,7 @@ function setupMqttHandlers() {
 
       // 1.5 Detección de Reinicio Rápido (Boot Explícito)
       if (topic === 'PristinoPlant/Actuator_Controller/status/boot') {
-        Logger.warn(
-          '[ MQTT ] Reinicio rápido del nodo detectado (BOOT explícito). Re-sincronizando.',
-        )
-        retryManager.lastActuatorState = 'online'
-        resetSamplingState()
-        syncNodeSampling()
-        await processPostponedTasks()
-        await resumeInterruptedTasks()
+        await handleNodeSync(true)
 
         return
       }
@@ -349,6 +327,52 @@ function checkRainOrphanTimeout() {
     )
     lastRainState = 'Dry'
   }
+}
+
+/**
+ * Orquesta la sincronización completa del nodo tras una reconexión o reinicio.
+ * Implementa un bloqueo de 5 segundos para evitar ráfagas redundantes.
+ */
+async function handleNodeSync(isBoot: boolean = false) {
+  const now = Date.now()
+  const timeSinceLastSync = now - lastSyncTimestamp
+
+  // Si ya sincronizamos hace menos de 5 segundos, ignoramos la redundancia
+  if (timeSinceLastSync < 5000) {
+    if (isBoot) {
+      Logger.debug('[ MQTT ] Boot redundante detectado. Ignorando sincronización duplicada.')
+    }
+
+    return
+  }
+
+  lastSyncTimestamp = now
+
+  // Marcamos estado ONLINE tanto en consola como en Influx/Historial
+  Logger.node('ONLINE')
+
+  if (isBoot) {
+    Logger.warn('[ MQTT ] Reinicio rápido del nodo detectado (BOOT explícito). Re-sincronizando.')
+  }
+
+  // Registro en la base de datos para el Timeline/Widget
+  await prisma.deviceLog
+    .create({
+      data: {
+        device: 'Actuator_Controller',
+        status: 'ONLINE',
+        notes: isBoot
+          ? 'Reinicio rápido del nodo (BOOT explícito).'
+          : 'Dispositivo conectado / Heartbeat recuperado.',
+      },
+    })
+    .catch((err) => Logger.error('Fallo persistiendo deviceLog (ONLINE)', err))
+
+  retryManager.lastActuatorState = 'online'
+  resetSamplingState()
+  syncNodeSampling()
+  await processPostponedTasks()
+  await resumeInterruptedTasks()
 }
 
 // ---- Lógica de Rutinas (Crons) ----

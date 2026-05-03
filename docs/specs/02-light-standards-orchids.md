@@ -8,15 +8,15 @@ Para el cultivo de orquídeas, el lux es la unidad estándar de referencia en la
 
 ## Tabla de Requerimientos por Género
 
-| Nivel de Luz | Lux (min - max) | Géneros Típicos | Color de Hoja Ideal |
-| :--- | :--- | :--- | :--- |
-| **Bajo** | 10,000 - 15,000 | Phalaenopsis, Paphiopedilum | Verde oscuro moderado |
-| **Medio** | 15,000 - 25,000 | Oncidium, Miltoniopsis, Odontoglossum | Verde pasto |
-| **Alto** | 25,500 - 35,000 | Cattleya, Dendrobium, Laelia | Verde claro / amarillento |
-| **Muy Alto** | 35,000 - 50,000+ | Vanda, Brassavola, Epidendrum | Verde muy claro |
+| Nivel de Luz | Lux (min - max) | DLI Sugerido (mol/m²/d) | Géneros Típicos | Color de Hoja Ideal |
+| :--- | :--- | :--- | :--- | :--- |
+| **Bajo** | 10,000 - 15,000 | 4 - 6 | Phalaenopsis, Paphiopedilum | Verde oscuro moderado |
+| **Medio** | 15,000 - 25,000 | 6 - 10 | Oncidium, Miltoniopsis | Verde pasto |
+| **Alto** | 25,500 - 35,000 | 10 - 15 | Cattleya, Dendrobium, Laelia | Verde claro / amarillento |
+| **Muy Alto** | 35,000 - 50,000+ | 15 - 30+ | Vanda, Brassavola, Epidendrum | Verde muy claro |
 
 > [!IMPORTANT]
-> **Duración del día**: No solo importa la intensidad absoluta (lux), sino el fotoperiodo. La mayoría de las orquídeas tropicales requieren entre 10 y 14 horas de luz diaria.
+> **DLI vs Lux**: Mientras que el Lux mide la intensidad instantánea, el **DLI (Daily Light Integral)** mide el volumen total de luz recibido en el día. Una orquídea puede sobrevivir a un pico de 40,000 lux (si es breve), pero lo que determina su floración es alcanzar el objetivo de DLI diario (ej. 12 mol).
 
 ## Equivalencias Comunes
 

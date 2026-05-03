@@ -12,10 +12,6 @@ function rowTimeToDate(rawTime: unknown): Date {
   return s.length > 13 ? new Date(Number(s.substring(0, 13))) : new Date(Number(s))
 }
 
-function localHourCaracas(d: Date): number {
-  return (d.getUTCHours() - 4 + 24) % 24
-}
-
 function toCaracasTimeStr(isoStr: string | null): string | null {
   if (!isoStr) return null
   const d = new Date(isoStr)
@@ -117,8 +113,11 @@ export async function processDay(
       rowCount++
       const tDate = rowTimeToDate(row.time)
       const tIso = tDate.toISOString()
-      const localHour = localHourCaracas(tDate)
-      const isDaytime = localHour >= 8 && localHour <= 16
+      const localHour = (tDate.getUTCHours() - 4 + 24) % 24
+      const localMin = tDate.getUTCMinutes()
+
+      // Rango Botánico Estricto: 08:00:00 a 16:00:59
+      const isDaytime = (localHour >= 8 && localHour < 16) || (localHour === 16 && localMin === 0)
       const isNighttime = localHour >= 19 || localHour <= 5
 
       // Temperatura (24h)
@@ -229,86 +228,6 @@ export async function processDay(
     Logger.error(`[${dayLabel}] [${zone}] Error InfluxDB`, err)
 
     return
-  }
-
-  // ── 2.1 Fallback de Clima (si no hay sensores físicos en EXTERIOR) ──────────
-  if (isExterior && countTemp === 0) {
-    try {
-      const weatherData = await prisma.weatherForecast.findMany({
-        where: {
-          timestamp: { gte: dayStart, lt: dayEnd },
-          source: { in: ['Open-Meteo', 'OpenWeatherMap'] },
-        },
-        orderBy: [{ source: 'asc' }, { timestamp: 'asc' }],
-      })
-
-      // Preferimos Open-Meteo por resolución horaria
-      const hasOpenMeteo = weatherData.some((d) => d.source === 'Open-Meteo')
-      const finalWeather = hasOpenMeteo
-        ? weatherData.filter((d) => d.source === 'Open-Meteo')
-        : weatherData
-
-      if (finalWeather.length > 0) {
-        Logger.info(
-          `[${dayLabel}] [${zone}] ☁️  Fallback: Usando datos de ${finalWeather[0].source}`,
-        )
-        for (const record of finalWeather) {
-          const tDate = record.timestamp
-          const tIso = tDate.toISOString()
-          const localHour = localHourCaracas(tDate)
-          const isDaytime = localHour >= 8 && localHour <= 16
-          const isNighttime = localHour >= 20 || localHour < 6
-
-          // Temperatura
-          const vTemp = record.temperature
-
-          sumTemp += vTemp
-          countTemp++
-          if (vTemp < minTemp) {
-            minTemp = vTemp
-            minTempTime = tIso
-          }
-          if (vTemp > maxTemp) {
-            maxTemp = vTemp
-            maxTempTime = tIso
-          }
-          if (isDaytime) {
-            sumTempDay += vTemp
-            countTempDay++
-          }
-          if (isNighttime) {
-            sumTempNight += vTemp
-            countTempNight++
-          }
-
-          // Humedad
-          const vHum = record.humidity
-
-          sumHum += vHum
-          countHum++
-          if (vHum < minHum) {
-            minHum = vHum
-            minHumTime = tIso
-          }
-          if (vHum > maxHum) {
-            maxHum = vHum
-            maxHumTime = tIso
-          }
-
-          // VPD diurno
-          if (isDaytime) {
-            const vpd = calculateVPD(vTemp, vHum)
-
-            vpdSum += vpd
-            vpdCount++
-            if (vpd < vpdMin) vpdMin = vpd
-            if (vpd > vpdMax) vpdMax = vpd
-          }
-        }
-      }
-    } catch (err) {
-      Logger.error(`[${dayLabel}] [${zone}] Fallo en el fallback de clima`, err)
-    }
   }
 
   if (rowCount === 0) {
