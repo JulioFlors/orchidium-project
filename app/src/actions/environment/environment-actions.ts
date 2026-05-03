@@ -12,11 +12,23 @@ export async function getSensorHistory(
   range: string,
   zone: string,
   metric?: string | null,
-): Promise<{ success: boolean; data?: Record<string, unknown>[]; error?: string }> {
+): Promise<{
+  success: boolean
+  data?: Record<string, unknown>[]
+  liveKPIs?: {
+    dli: number | null
+    vpdAvg: number | null
+    dif: number | null
+    isLive: boolean
+  } | null
+  error?: string
+}> {
   try {
-    const data = await getSensorHistoryInternal(range, zone, metric)
+    const result = await getSensorHistoryInternal(range, zone, metric)
+    const data = Array.isArray(result) ? result : result.data
+    const liveKPIs = Array.isArray(result) ? null : result.liveKPIs
 
-    return { success: true, data }
+    return { success: true, data, liveKPIs }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error)
 
@@ -32,7 +44,8 @@ export async function getRainHistory(zone: string = 'EXTERIOR') {
   // pero lo mantenemos simple llamando al motor interno si es necesario.
   // En este caso, reutilizamos la lógica de history filtrando por rain_intensity.
   try {
-    const data = await getSensorHistoryInternal('24h', zone, 'rain_intensity')
+    const result = await getSensorHistoryInternal('24h', zone, 'rain_intensity')
+    const data = Array.isArray(result) ? result : result.data
 
     return { success: true, data }
   } catch (error) {
