@@ -139,7 +139,9 @@ class CommandRetryManager {
 
     // 2. Fallo Visual (al minuto 2 de insistencia si el nodo está online)
     if (command.attempts === 3) {
-      Logger.warn(`Fallo visual (min 2). Reportando al historial mientras se sigue insistiendo.`)
+      Logger.warn(
+        `Sin confirmación del nodo (Intento ${command.attempts}). Re-despachando comando para asegurar estado.`,
+      )
       this.handleTimeout(
         command.payload,
         'Sin respuesta del Nodo Actuador (Sordo). Reintentando cada 60s...',

@@ -43,6 +43,13 @@ export interface InferenceResult {
   metadata?: Record<string, unknown>
 }
 
+// Factores de corrección por estructura (Malla Sombra / Humectación Suelo)
+// Solo se aplican si el sensor interior está offline para aproximar el microclima.
+const FALLBACK_OFFSETS = {
+  TEMP: -2, // El interior suele estar más fresco bajo la malla sombra
+  HUM: 8, // El interior suele retener más humedad por la vegetación
+}
+
 /**
  * Motor de Inferencia v4 — Gestión Ambiental Inteligente.
  *
@@ -91,11 +98,23 @@ export class InferenceEngine {
       const dayClass = await classifyCurrentDay()
 
       const purpose = schedule.purpose
-      const interiorHum = localConditions.interior.hum
-      const interiorTemp = localConditions.interior.temp
+
+      // Lógica de Fallback Inteligente: 
+      // Si falta INTERIOR, usamos EXTERIOR ajustado por la inercia térmica/hídrica del orquideario.
+      const isFallback = localConditions.interior.hum <= 0
+      
+      const interiorHum = isFallback
+        ? Math.min(99, localConditions.exterior.hum + FALLBACK_OFFSETS.HUM)
+        : localConditions.interior.hum
+
+      const interiorTemp = isFallback
+        ? localConditions.exterior.temp + FALLBACK_OFFSETS.TEMP
+        : localConditions.interior.temp
+
+      const dataUsed = isFallback ? 'EXTERIOR (Ajuste Fallback)' : 'INTERIOR'
 
       Logger.info(
-        `[ INFERENCE ] Evaluando "${schedule.name}" (${purpose}) → HR: ${interiorHum.toFixed(0)}% | Temp: ${interiorTemp.toFixed(1)}°C | Día: ${dayClass.type}`,
+        `[ INFERENCE ] Evaluando "${schedule.name}" (${purpose}) → HR: ${interiorHum.toFixed(0)}% | Temp: ${interiorTemp.toFixed(1)}°C | Día: ${dayClass.type} | Datos: ${dataUsed}`,
       )
 
       // ── 3. HARD BLOCK: Lluvia Real en Curso ──
@@ -147,7 +166,7 @@ export class InferenceEngine {
         // Solo evaluar si tenemos datos reales del sensor
         const recentRainCheck = await this.getRecentRainAccumulation(4)
         const rainedRecently = recentRainCheck.durationSeconds > 0
-        const cloudyDay = dayClass.type === 'OVERCAST' || dayClass.type === 'RAINY'
+        const cloudyDay = dayClass.type === 'NUBLADO' || dayClass.type === 'LLUVIOSO'
 
         if (
           interiorHum > THRESHOLDS.MAX_HUMIDITY_CRITICAL &&
@@ -156,7 +175,7 @@ export class InferenceEngine {
         ) {
           return {
             shouldCancel: true,
-            reason: `HR interior ${interiorHum.toFixed(0)}% (crítica) + ${cloudyDay ? `día ${dayClass.type}` : `lluvia reciente (${Math.round(recentRainCheck.durationSeconds / 60)}min)`}. Omitiendo ${purpose}.`,
+            reason: `HR ${dataUsed.toLowerCase()} ${interiorHum.toFixed(0)}% (crítica) + ${cloudyDay ? `día ${dayClass.type}` : `lluvia reciente (${Math.round(recentRainCheck.durationSeconds / 60)}min)`}. Omitiendo ${purpose}.`,
             action: 'SKIP',
             metadata: { localConditions, dayClass },
           }
@@ -171,7 +190,7 @@ export class InferenceEngine {
         interiorHum > THRESHOLDS.MAX_HUMIDITY_FOR_MISTING &&
         interiorTemp < 28 &&
         dayClass.avgLuxSince8am < THRESHOLDS.OVERCAST_LUX_THRESHOLD &&
-        dayClass.type !== 'UNKNOWN'
+        dayClass.type !== 'DESCONOCIDO'
       ) {
         return {
           shouldCancel: true,
@@ -186,7 +205,7 @@ export class InferenceEngine {
       // TODO: Este umbral está calibrado para temporada seca
       if (
         purpose === 'HUMIDIFICATION' &&
-        dayClass.type !== 'UNKNOWN' &&
+        dayClass.type !== 'DESCONOCIDO' &&
         dayClass.avgLuxSince8am <= THRESHOLDS.OVERCAST_LUX_THRESHOLD
       ) {
         return {
@@ -207,7 +226,7 @@ export class InferenceEngine {
 
         // TODO: Calibrar HR cuando DHT22 esté activo. 95% es el umbral solicitado.
         const conditionB =
-          dayClass.avgLuxSince8am < 20000 && dayClass.type !== 'UNKNOWN' && interiorHum > 95
+          dayClass.avgLuxSince8am < 20000 && dayClass.type !== 'DESCONOCIDO' && interiorHum > 95
 
         const conditionC = forecast.consensusPrecipProb > 0.95
 
@@ -327,7 +346,7 @@ export class InferenceEngine {
    */
   private static async getLatestLocalConditions() {
     const result = {
-      exterior: { lux: 0, rain_intensity: 0 },
+      exterior: { lux: 0, rain_intensity: 0, temp: 0, hum: 0 },
       interior: { temp: 0, hum: 0, lux: 0 },
     }
 
@@ -349,6 +368,8 @@ export class InferenceEngine {
         if (!foundExterior && row.source === 'Weather_Station') {
           result.exterior.lux = Number(row.illuminance || 0)
           result.exterior.rain_intensity = Number(row.rain_intensity || 0)
+          result.exterior.temp = Number(row.temperature || 0)
+          result.exterior.hum = Number(row.humidity || 0)
           foundExterior = true
         } else if (!foundInterior && row.source === 'Environmental_Monitoring') {
           result.interior.temp = Number(row.temperature || 0)

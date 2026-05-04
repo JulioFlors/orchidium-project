@@ -16,7 +16,13 @@ import { influxClient } from './influx'
  * Promedio de temporada seca (marzo/abril): > 40k lux.
  * Día nublado confirmado: promedio < 26k lux.
  */
-export type DayType = 'EXTREMELY_SUNNY' | 'SUNNY' | 'TEMPERATE' | 'OVERCAST' | 'RAINY' | 'UNKNOWN'
+export type DayType =
+  | 'EXTREMADAMENTE_SOLEADO'
+  | 'SOLEADO'
+  | 'TEMPLADO'
+  | 'NUBLADO'
+  | 'LLUVIOSO'
+  | 'DESCONOCIDO'
 
 export interface DayClassification {
   type: DayType
@@ -29,11 +35,11 @@ export interface DayClassification {
 // Umbrales calibrados con observaciones de campo (marzo-abril 2026)
 // TODO: Recalibrar cuando haya datos de temporada de lluvia (mayo+)
 const LUX_THRESHOLDS = {
-  EXTREMELY_SUNNY: 40000, // Promedio típico de sequía → radiación sostenida
-  SUNNY: 30000, // Radiación directa confirmada por MonitoringView
-  TEMPERATE: 26000, // Umbral operativo del cultivador: <26k = nublado
-  OVERCAST: 15000, // Luz filtrada / nube densa (MonitoringView)
-  // < 15000 = RAINY (cielo cerrado, posible lluvia)
+  EXTREMADAMENTE_SOLEADO: 40000, // Promedio típico de sequía → radiación sostenida
+  SOLEADO: 30000, // Radiación directa confirmada por MonitoringView
+  TEMPLADO: 26000, // Umbral operativo del cultivador: <26k = nublado
+  NUBLADO: 15000, // Luz filtrada / nube densa (MonitoringView)
+  // < 15000 = LLUVIOSO (cielo cerrado, posible lluvia)
 }
 
 // TODO: Umbral de "nublado consecutivo" — ajustar con datos reales
@@ -43,7 +49,7 @@ const OVERCAST_LUX_THRESHOLD = 15000
  * Clasifica el tipo de día actual basándose en datos de iluminancia acumulados.
  *
  * Solo funciona entre las 8:00 AM y las 4:00 PM (hora local).
- * Fuera de ese rango retorna UNKNOWN porque la iluminancia no es
+ * Fuera de ese rango retorna DESCONOCIDO porque la iluminancia no es
  * representativa del estado del cielo.
  */
 export async function classifyCurrentDay(): Promise<DayClassification> {
@@ -68,7 +74,7 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
   // Si aún no son las 8am, no hay datos representativos
   if (currentHour < 8) {
     return {
-      type: 'UNKNOWN',
+      type: 'DESCONOCIDO',
       avgLuxSince8am: 0,
       currentLux: 0,
       overcastMinutes: 0,
@@ -122,27 +128,31 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
     `
     const overcastStream = influxClient.query(overcastQuery)
     let overcastMinutes = 0
-    let lastTime: Date | null = null
+    let lastTime: Date = now // Empezamos desde "ahora" para incluir el intervalo actual
     let stillOvercast = true
 
     for await (const row of overcastStream) {
-      if (!stillOvercast) break
-
       const lux = Number(row.illuminance || 0)
 
       if (lux < OVERCAST_LUX_THRESHOLD) {
         const rowTime = new Date(String(row.time))
+        const diffMs = lastTime.getTime() - rowTime.getTime()
 
-        if (lastTime) {
-          const diffMs = lastTime.getTime() - rowTime.getTime()
-
-          overcastMinutes += diffMs / 60000
-        }
-
+        overcastMinutes += diffMs / 60000
         lastTime = rowTime
       } else {
+        // Si encontramos un punto que NO está nublado, rompemos la cadena consecutiva
         stillOvercast = false
+        // Pero debemos incluir el tiempo desde el último punto nublado hasta este punto de quiebre
+        // Sin embargo, para simplificar "consecutivo hasta ahora", si el más reciente no es nublado, es 0.
+        break
       }
+    }
+
+    // Si el dato más reciente no es nublado, el contador debe ser 0 obligatoriamente
+    if (!stillOvercast && overcastMinutes > 0) {
+      // Re-verificación: si el primer registro (el más reciente) no era nublado, stillOvercast cambió a false inmediatamente
+      // La lógica anterior es correcta: si el primer registro es > threshold, overcastMinutes queda en 0.
     }
 
     overcastMinutes = Math.round(overcastMinutes)
@@ -150,16 +160,16 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
     // 4. Clasificar por promedio acumulado
     let type: DayType
 
-    if (avgLux >= LUX_THRESHOLDS.EXTREMELY_SUNNY) {
-      type = 'EXTREMELY_SUNNY'
-    } else if (avgLux >= LUX_THRESHOLDS.SUNNY) {
-      type = 'SUNNY'
-    } else if (avgLux >= LUX_THRESHOLDS.TEMPERATE) {
-      type = 'TEMPERATE'
-    } else if (avgLux >= LUX_THRESHOLDS.OVERCAST) {
-      type = 'OVERCAST'
+    if (avgLux >= LUX_THRESHOLDS.EXTREMADAMENTE_SOLEADO) {
+      type = 'EXTREMADAMENTE_SOLEADO'
+    } else if (avgLux >= LUX_THRESHOLDS.SOLEADO) {
+      type = 'SOLEADO'
+    } else if (avgLux >= LUX_THRESHOLDS.TEMPLADO) {
+      type = 'TEMPLADO'
+    } else if (avgLux >= LUX_THRESHOLDS.NUBLADO) {
+      type = 'NUBLADO'
     } else {
-      type = 'RAINY'
+      type = 'LLUVIOSO'
     }
 
     Logger.info(
@@ -177,7 +187,7 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
     Logger.warn('[ DAY CLASSIFIER ] Error al clasificar el día:', error)
 
     return {
-      type: 'UNKNOWN',
+      type: 'DESCONOCIDO',
       avgLuxSince8am: 0,
       currentLux: 0,
       overcastMinutes: 0,

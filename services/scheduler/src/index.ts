@@ -390,10 +390,6 @@ async function handleNodeSync(isBoot: boolean = false) {
     Logger.node('ONLINE')
   }
 
-  if (isBoot) {
-    Logger.warn(`[ MQTT ] ${notes} (BOOT explícito). Re-sincronizando.`)
-  }
-
   // Registro en la base de datos para el Timeline/Widget
   // Solo registramos si realmente el estado cambió o es un REBOOT explícito
   if (retryManager.lastActuatorState !== 'online' || statusToSave === 'REBOOT') {
