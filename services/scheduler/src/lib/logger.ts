@@ -73,10 +73,11 @@ export const Logger = {
   },
   mqtt: (msg: string) => console.log(formatLog('📡', 'MQTT', colors.magenta, msg)),
   cron: (msg: string) => console.log(formatLog('⏰', 'CRON', colors.cyan, msg)),
-  node: (status: 'ONLINE' | 'OFFLINE') => {
+  node: (status: 'ONLINE' | 'OFFLINE' | 'REBOOT') => {
     const isOnline = status === 'ONLINE'
-    const color = isOnline ? colors.green : colors.red
-    const icon = isOnline ? '✅' : '❌'
+    const isReboot = status === 'REBOOT'
+    const color = isOnline ? colors.green : isReboot ? colors.blue : colors.red
+    const icon = isOnline ? '✅' : isReboot ? '🔄' : '❌'
 
     console.log(formatLog(icon, 'NODE', color, status))
   },

@@ -1,4 +1,4 @@
-import { prisma, TaskStatus, CollisionGuard, ZoneType } from '@package/database'
+import { prisma, TaskStatus, CollisionGuard, ZoneType, DeviceStatus } from '@package/database'
 import { Cron } from 'croner'
 
 import { Logger } from './lib/logger'
@@ -158,11 +158,8 @@ function setupMqttHandlers() {
 
       // 1.5 Detección de Reinicio Rápido (Boot Explícito)
       if (topic === 'PristinoPlant/Actuator_Controller/status/boot') {
-        // Si el nodo ya figuraba como online, forzamos un offline previo para el historial
-        if (retryManager.lastActuatorState === 'online') {
-          await handleNodeOffline('Reinicio detectado por mensaje BOOT (LWT omitido).')
-        }
-
+        // No forzamos un offline previo, saltamos directamente al sync
+        // para que evalúe si es un REBOOT o una sesión nueva.
         await handleNodeSync(true)
 
         return
@@ -367,38 +364,86 @@ async function handleNodeSync(isBoot: boolean = false) {
 
   // Determinamos la semántica del mensaje ONLINE
   let notes = 'Dispositivo conectado / Heartbeat recuperado.'
+  let statusToSave: DeviceStatus = 'ONLINE'
 
   if (isBoot) {
+    // Calculamos el tiempo desde el último latido físico en vez del lastSync
+    const timeSinceLastHeartbeat = now - lastFirmwareHeartbeat
+
     // Si ha pasado más de 30 minutos desde el último heartbeat exitoso,
-    // asumimos que el dispositivo estuvo apagado intencionalmente y no es un "reinicio" técnico.
-    if (timeSinceLastSync > 30 * 60 * 1000) {
+    // asumimos que el dispositivo estuvo apagado intencionalmente y es una nueva sesión.
+    if (timeSinceLastHeartbeat > 30 * 60 * 1000) {
       notes = 'Controlador Conectado (Sesión nueva tras inactividad prolongada).'
+      statusToSave = 'ONLINE'
     } else {
       notes = 'Reinicio del controlador.'
+      statusToSave = 'REBOOT'
     }
   }
 
   lastSyncTimestamp = now
 
-  // Marcamos estado ONLINE tanto en consola como en Influx/Historial
-  Logger.node('ONLINE')
+  // Marcamos estado tanto en consola como en Influx/Historial
+  if (statusToSave === 'REBOOT') {
+    Logger.node('REBOOT')
+  } else {
+    Logger.node('ONLINE')
+  }
 
   if (isBoot) {
     Logger.warn(`[ MQTT ] ${notes} (BOOT explícito). Re-sincronizando.`)
   }
 
   // Registro en la base de datos para el Timeline/Widget
-  // Solo registramos si realmente el estado cambió o es un BOOT explícito
-  if (retryManager.lastActuatorState !== 'online' || isBoot) {
+  // Solo registramos si realmente el estado cambió o es un REBOOT explícito
+  if (retryManager.lastActuatorState !== 'online' || statusToSave === 'REBOOT') {
     await prisma.deviceLog
       .create({
         data: {
           device: 'Actuator_Controller',
-          status: 'ONLINE',
+          status: statusToSave,
           notes: notes,
         },
       })
-      .catch((err) => Logger.error('Fallo persistiendo deviceLog (ONLINE)', err))
+      .catch((err) => Logger.error('Fallo persistiendo deviceLog (ONLINE/REBOOT)', err))
+  }
+
+  // Si es un REBOOT en caliente, el hardware apagó los pines.
+  // Por ende, cualquier tarea que estuviera ejecutándose fue interrumpida de facto.
+  if (statusToSave === 'REBOOT') {
+    const interruptedTasks = await prisma.taskLog.findMany({
+      where: {
+        status: {
+          in: [TaskStatus.ACKNOWLEDGED, TaskStatus.IN_PROGRESS, TaskStatus.DISPATCHED],
+        },
+      },
+    })
+
+    for (const task of interruptedTasks) {
+      retryManager.confirmByTaskId(task.id)
+
+      let extraNotes = 'Interrumpida: El Nodo Actuador se reinició inesperadamente.'
+      let addedMinutes = 0
+
+      if (task.actualStartAt && task.status === TaskStatus.IN_PROGRESS) {
+        const elapsedMs = Date.now() - new Date(task.actualStartAt).getTime()
+
+        addedMinutes = Math.floor(elapsedMs / 60000)
+        extraNotes = `Interrumpida tras ${addedMinutes} min de riego efectivo por reinicio.`
+      }
+
+      await recordTaskEvent(task.id, TaskStatus.FAILED, extraNotes, {
+        completedMinutes: { increment: addedMinutes },
+      })
+    }
+
+    if (interruptedTasks.length > 0) {
+      const isSingle = interruptedTasks.length === 1
+      const taskText = isSingle ? 'tarea activa' : 'tareas activas'
+      const actionText = isSingle ? 'pausó' : 'pausaron'
+
+      Logger.warn(`Se ${actionText} ${interruptedTasks.length} ${taskText} debido al reinicio.`)
+    }
   }
 
   retryManager.lastActuatorState = 'online'

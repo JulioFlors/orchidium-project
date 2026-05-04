@@ -1738,7 +1738,7 @@ async def mqtt_connector_task(client_id):
 
     # Definimos el timeout (ms)
     # [WDT Safety]: Debe ser mayor que MQTT_SOCKET_TIMEOUT
-    wd_timeout_ms = (MQTT_SOCKET_TIMEOUT + 5) * 1000
+    wd_timeout_ms = (MQTT_SOCKET_TIMEOUT + 15) * 1000
 
     # Cronómetro de fallas de conexión MQTT
     mqtt_disconnect_start = None

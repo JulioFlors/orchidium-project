@@ -3,7 +3,7 @@
 import type { DeviceLog } from '@package/database'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { IoPulseOutline, IoCloseOutline } from 'react-icons/io5'
+import { IoPulseOutline, IoCloseOutline, IoReloadOutline } from 'react-icons/io5'
 import clsx from 'clsx'
 
 import { ToolboxGrid, AuditConsoleCard, HeartbeatCard } from './DiagnosticPanel'
@@ -337,10 +337,18 @@ export function DeviceDebugger() {
                             <div className="flex items-center gap-4">
                               <StatusCircleIcon
                                 glow
-                                glowVariant={item.status === 'ONLINE' ? 'green' : 'red'}
+                                glowVariant={
+                                  item.status === 'ONLINE'
+                                    ? 'green'
+                                    : item.status === 'REBOOT'
+                                      ? 'blue'
+                                      : 'red'
+                                }
                                 icon={
                                   item.status === 'ONLINE' ? (
                                     <IoPulseOutline size={16} />
+                                  ) : item.status === 'REBOOT' ? (
+                                    <IoReloadOutline size={16} />
                                   ) : (
                                     <IoCloseOutline size={16} />
                                   )

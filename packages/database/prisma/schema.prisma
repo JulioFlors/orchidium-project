@@ -386,6 +386,7 @@ model PestSighting {
 enum DeviceStatus {
   ONLINE
   OFFLINE
+  REBOOT
 }
 
 enum Role {
