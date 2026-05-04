@@ -748,3 +748,17 @@ git push origin main
 git checkout Dev
 # Ciclo de git completado
 ```
+
+```bash
+git checkout Dev
+git add .
+git commit -F commit.txt
+rm commit.txt
+git push
+git checkout main
+git pull origin main
+git merge Dev
+git push origin main
+git checkout Dev
+# Ciclo de git completado
+```

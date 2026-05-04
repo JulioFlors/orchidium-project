@@ -76,68 +76,29 @@ function normalizeHsl(h: number, s: number, l: number) {
 }
 
 /**
- * Deriva los 4 colores del sistema de glow partiendo de un HSL.
+ * Deriva los colores del sistema de glow partiendo de un HSL.
+ * Se utilizan transparencias (hsla) para que el efecto glass se adapte al modo claro/oscuro.
  */
 function deriveGlowColors(h: number, s: number, l: number): GlowColors {
   return {
     borderHover: `hsl(${h}, ${s}%, ${l}%)`,
-    bgHover: `hsl(${h}, ${s * 0.65}%, 12%)`,
-    borderRest: `hsl(${h}, ${s * 0.3}%, 13%)`,
-    bgRest: `hsl(${h}, ${s * 0.5}%, 12%)`,
+    bgHover: `hsla(${h}, ${s}%, ${l}%, 0.45)`,
+    borderRest: `hsla(${h}, ${s}%, ${l}%, 0.25)`,
+    bgRest: `hsla(${h}, ${s}%, ${l}%, 0.1)`,
   }
 }
 
-// --- Mapeo Estático (Referencia) ---
+// --- Mapeo Estático (Basado en el sistema dinámico) ---
 
 const GLOW_MAP: Record<GlowVariant, GlowColors> = {
-  yellow: {
-    borderHover: '#FFB224',
-    bgHover: '#3B2C0F',
-    borderRest: '#2F271A',
-    bgRest: '#221A0C',
-  },
-  blue: {
-    borderHover: '#0070F3',
-    bgHover: '#081E39',
-    borderRest: '#17212E',
-    bgRest: '#081321',
-  },
-  violet: {
-    borderHover: '#8E4EC6',
-    bgHover: '#241830',
-    borderRest: '#241E29',
-    bgRest: '#16101C',
-  },
-  pink: {
-    borderHover: '#E93D82',
-    bgHover: '#371422',
-    borderRest: '#1E1318',
-    bgRest: '#180B10',
-  },
-  red: {
-    borderHover: '#E5484D',
-    bgHover: '#361617',
-    borderRest: '#2C1D1E',
-    bgRest: '#1F0F10',
-  },
-  green: {
-    borderHover: '#3B8D4B',
-    bgHover: '#152618',
-    borderRest: '#1D271F',
-    bgRest: '#0F1911',
-  },
-  cyan: {
-    borderHover: '#12A594',
-    bgHover: '#0C2926',
-    borderRest: '#182725',
-    bgRest: '#0A1917',
-  },
-  orange: {
-    borderHover: '#F97316',
-    bgHover: '#331B0E',
-    borderRest: '#2B1D16',
-    bgRest: '#1B110B',
-  },
+  yellow: deriveGlowColors(40, 100, 56),
+  blue: deriveGlowColors(212, 100, 48),
+  violet: deriveGlowColors(272, 60, 56),
+  pink: deriveGlowColors(336, 82, 58),
+  red: deriveGlowColors(358, 82, 57),
+  green: deriveGlowColors(131, 51, 45),
+  cyan: deriveGlowColors(173, 82, 38),
+  orange: deriveGlowColors(24, 98, 53),
 }
 
 // --- Componente ---
@@ -203,21 +164,34 @@ export function StatusCircleIcon({
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center justify-center rounded-full border shadow-sm transition-all duration-300',
+        'flex shrink-0 items-center justify-center rounded-full border shadow-xs transition-all duration-300',
         sizeClasses[size],
         // Bases por variante
         variant === 'canvas' && 'bg-canvas border-input-outline',
         variant === 'surface' && 'bg-surface border-input-outline',
-        variant === 'vibrant' && 'bg-hover-overlay border-transparent',
-        // Capa de Glow
-        glow && 'border-(--_glow-border-rest) bg-(--_glow-rest)',
-        glow && 'group-hover:border-(--_glow-border-hover) group-hover:bg-(--_glow-hover)',
+
+        // Lógica para Vibrant/Glow (Acrílico)
+        (glow || variant === 'vibrant') && 'bg-surface border-(--_glow-border-rest)',
+        (glow || variant === 'vibrant') && 'bg-linear-to-br from-(--_glow-rest) to-transparent',
+
+        // Hover adaptativo (Intensificación)
+        (glow || variant === 'vibrant') &&
+          'group-hover:border-(--_glow-border-hover) group-hover:from-(--_glow-hover) group-hover:to-(--_glow-rest)',
+
         colorClassName,
         className,
       )}
       style={{ ...glowStyles, ...style }}
     >
-      {icon}
+      <div
+        className={cn(
+          'relative z-10 transition-colors duration-300',
+          (glow || variant === 'vibrant') &&
+            'group-hover:text-black-and-white text-(--_glow-border-hover)',
+        )}
+      >
+        {icon}
+      </div>
     </div>
   )
 }

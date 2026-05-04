@@ -336,15 +336,13 @@ export function DeviceDebugger() {
                           >
                             <div className="flex items-center gap-4">
                               <StatusCircleIcon
-                                active
                                 glow
-                                className="border-transparent"
                                 glowVariant={item.status === 'ONLINE' ? 'green' : 'red'}
                                 icon={
                                   item.status === 'ONLINE' ? (
-                                    <IoPulseOutline className="text-emerald-500" size={16} />
+                                    <IoPulseOutline size={16} />
                                   ) : (
-                                    <IoCloseOutline className="text-red-500" size={16} />
+                                    <IoCloseOutline size={16} />
                                   )
                                 }
                                 size="sm"
@@ -352,29 +350,20 @@ export function DeviceDebugger() {
                               />
 
                               <div className="flex flex-col gap-0">
-                                <span
-                                  className={clsx(
-                                    'text-xs font-bold tracking-tight',
-                                    item.status === 'ONLINE'
-                                      ? 'text-zinc-900 dark:text-emerald-400'
-                                      : 'text-red-600 dark:text-red-400',
-                                  )}
-                                >
-                                  {item.status === 'ONLINE'
-                                    ? 'DISPOSITIVO ONLINE'
-                                    : 'DISPOSITIVO OFFLINE'}
+                                <span className="text-primary text-sm font-bold tracking-tight">
+                                  {item.status}
                                 </span>
-                                <span className="font-mono text-[9px] font-black tracking-widest text-zinc-400 uppercase opacity-40">
-                                  HEARTBEAT LOG
+                                <span className="text-secondary text-sm font-medium italic opacity-80">
+                                  {item.notes || 'Registro de estado'}
                                 </span>
                               </div>
                             </div>
 
                             <div className="flex flex-col items-end text-right">
-                              <span className="font-mono text-[10px] font-bold text-zinc-500 dark:text-zinc-400">
+                              <span className="text-primary font-mono text-sm font-bold">
                                 {formatTime12h(item.timestamp, true)}
                               </span>
-                              <span className="text-[10px] font-bold tracking-tight text-zinc-400 opacity-60">
+                              <span className="text-secondary text-sm font-medium tracking-tight opacity-70">
                                 {formatRelativeHeartbeat(item.timestamp)}
                               </span>
                             </div>

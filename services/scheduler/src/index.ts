@@ -136,72 +136,21 @@ function setupMqttHandlers() {
       if (topic === 'PristinoPlant/Actuator_Controller/status') {
         if (message === 'online') {
           if (retryManager.lastActuatorState === 'online') {
-            // Ignorar heartbeats periódicos para no generar spam de lux_sampling
+            // Ignorar heartbeats periódicos para no generar spam de registros
             return
           }
 
           await handleNodeSync(false)
         } else if (message === 'offline' && retryManager.lastActuatorState !== 'offline') {
           const previousState = retryManager.lastActuatorState
+          const reason =
+            previousState === 'unknown'
+              ? 'LWT: Estado inicial detectado como Offline.'
+              : 'LWT: El dispositivo se desconectó inesperadamente (Fallo de red/energía).'
 
-          retryManager.lastActuatorState = 'offline'
-          Logger.node('OFFLINE')
-          resetSamplingState()
-
-          await prisma.deviceLog
-            .create({
-              data: {
-                device: 'Actuator_Controller',
-                status: 'OFFLINE',
-                notes:
-                  previousState === 'unknown'
-                    ? 'LWT: Estado inicial detectado como Offline.'
-                    : 'LWT: El dispositivo se desconectó inesperadamente.',
-              },
-            })
-            .catch((err) => Logger.error('Fallo persistiendo deviceLog (OFFLINE)', err))
-
-          const interruptedTasks = await prisma.taskLog.findMany({
-            where: {
-              status: {
-                in: [TaskStatus.ACKNOWLEDGED, TaskStatus.IN_PROGRESS, TaskStatus.DISPATCHED],
-              },
-            },
-          })
-
-          for (const task of interruptedTasks) {
-            retryManager.confirmByTaskId(task.id)
-
-            // Todas las tareas interrumpidas (DISPATCHED, ACKNOWLEDGED, IN_PROGRESS)
-            // vuelven a FAILED para ser reanudadas automáticamente tras la reconexión.
-            let extraNotes = 'Interrumpida: El Nodo Actuador perdió conexión inesperadamente.'
-            let addedMinutes = 0
-
-            // Si ya estaba en progreso, calculamos cuánto tiempo se ejecutó para registro
-            if (task.actualStartAt && task.status === TaskStatus.IN_PROGRESS) {
-              const elapsedMs = Date.now() - new Date(task.actualStartAt).getTime()
-
-              addedMinutes = Math.floor(elapsedMs / 60000)
-              extraNotes = `Interrumpida tras ${addedMinutes} min de riego efectivo.`
-            }
-
-            await recordTaskEvent(task.id, TaskStatus.FAILED, extraNotes, {
-              completedMinutes: { increment: addedMinutes },
-            })
-          }
-
-          if (interruptedTasks.length > 0) {
-            const isSingle = interruptedTasks.length === 1
-            const taskText = isSingle ? 'tarea' : 'tareas'
-            const actionText = isSingle ? 'pausó' : 'pausaron'
-            const nameInfo = isSingle ? ` (${interruptedTasks[0].purpose})` : ''
-
-            Logger.warn(
-              `Se ${actionText} ${interruptedTasks.length} ${taskText}${nameInfo} para su recuperación automática.`,
-            )
-          }
-
-          retryManager.clear()
+          await handleNodeOffline(reason)
+        } else if (message === 'rebooting') {
+          await handleNodeOffline('Reinicio seguro solicitado por el sistema o el usuario.')
         }
 
         return
@@ -209,6 +158,11 @@ function setupMqttHandlers() {
 
       // 1.5 Detección de Reinicio Rápido (Boot Explícito)
       if (topic === 'PristinoPlant/Actuator_Controller/status/boot') {
+        // Si el nodo ya figuraba como online, forzamos un offline previo para el historial
+        if (retryManager.lastActuatorState === 'online') {
+          await handleNodeOffline('Reinicio detectado por mensaje BOOT (LWT omitido).')
+        }
+
         await handleNodeSync(true)
 
         return
@@ -330,6 +284,71 @@ function checkRainOrphanTimeout() {
 }
 
 /**
+ * Gestiona la desconexión del nodo y la limpieza de tareas interrumpidas.
+ */
+async function handleNodeOffline(reason: string) {
+  if (retryManager.lastActuatorState === 'offline') return
+
+  retryManager.lastActuatorState = 'offline'
+  Logger.node('OFFLINE')
+  resetSamplingState()
+
+  // 1. Registro en el Historial (Postgres)
+  await prisma.deviceLog
+    .create({
+      data: {
+        device: 'Actuator_Controller',
+        status: 'OFFLINE',
+        notes: reason,
+      },
+    })
+    .catch((err) => Logger.error('Fallo persistiendo deviceLog (OFFLINE)', err))
+
+  // 2. Gestionar tareas que estaban en ejecución
+  const interruptedTasks = await prisma.taskLog.findMany({
+    where: {
+      status: {
+        in: [TaskStatus.ACKNOWLEDGED, TaskStatus.IN_PROGRESS, TaskStatus.DISPATCHED],
+      },
+    },
+  })
+
+  for (const task of interruptedTasks) {
+    retryManager.confirmByTaskId(task.id)
+
+    // Todas las tareas interrumpidas (DISPATCHED, ACKNOWLEDGED, IN_PROGRESS)
+    // vuelven a FAILED para ser reanudadas automáticamente tras la reconexión.
+    let extraNotes = 'Interrumpida: El Nodo Actuador perdió conexión inesperadamente.'
+    let addedMinutes = 0
+
+    // Si ya estaba en progreso, calculamos cuánto tiempo se ejecutó para registro
+    if (task.actualStartAt && task.status === TaskStatus.IN_PROGRESS) {
+      const elapsedMs = Date.now() - new Date(task.actualStartAt).getTime()
+
+      addedMinutes = Math.floor(elapsedMs / 60000)
+      extraNotes = `Interrumpida tras ${addedMinutes} min de riego efectivo.`
+    }
+
+    await recordTaskEvent(task.id, TaskStatus.FAILED, extraNotes, {
+      completedMinutes: { increment: addedMinutes },
+    })
+  }
+
+  if (interruptedTasks.length > 0) {
+    const isSingle = interruptedTasks.length === 1
+    const taskText = isSingle ? 'tarea' : 'tareas'
+    const actionText = isSingle ? 'pausó' : 'pausaron'
+    const nameInfo = isSingle ? ` (${interruptedTasks[0].purpose})` : ''
+
+    Logger.warn(
+      `Se ${actionText} ${interruptedTasks.length} ${taskText}${nameInfo} para su recuperación automática.`,
+    )
+  }
+
+  retryManager.clear()
+}
+
+/**
  * Orquesta la sincronización completa del nodo tras una reconexión o reinicio.
  * Implementa un bloqueo de 5 segundos para evitar ráfagas redundantes.
  */
@@ -346,27 +365,41 @@ async function handleNodeSync(isBoot: boolean = false) {
     return
   }
 
+  // Determinamos la semántica del mensaje ONLINE
+  let notes = 'Dispositivo conectado / Heartbeat recuperado.'
+
+  if (isBoot) {
+    // Si ha pasado más de 30 minutos desde el último heartbeat exitoso,
+    // asumimos que el dispositivo estuvo apagado intencionalmente y no es un "reinicio" técnico.
+    if (timeSinceLastSync > 30 * 60 * 1000) {
+      notes = 'Controlador Conectado (Sesión nueva tras inactividad prolongada).'
+    } else {
+      notes = 'Reinicio del controlador.'
+    }
+  }
+
   lastSyncTimestamp = now
 
   // Marcamos estado ONLINE tanto en consola como en Influx/Historial
   Logger.node('ONLINE')
 
   if (isBoot) {
-    Logger.warn('[ MQTT ] Reinicio rápido del nodo detectado (BOOT explícito). Re-sincronizando.')
+    Logger.warn(`[ MQTT ] ${notes} (BOOT explícito). Re-sincronizando.`)
   }
 
   // Registro en la base de datos para el Timeline/Widget
-  await prisma.deviceLog
-    .create({
-      data: {
-        device: 'Actuator_Controller',
-        status: 'ONLINE',
-        notes: isBoot
-          ? 'Reinicio rápido del nodo (BOOT explícito).'
-          : 'Dispositivo conectado / Heartbeat recuperado.',
-      },
-    })
-    .catch((err) => Logger.error('Fallo persistiendo deviceLog (ONLINE)', err))
+  // Solo registramos si realmente el estado cambió o es un BOOT explícito
+  if (retryManager.lastActuatorState !== 'online' || isBoot) {
+    await prisma.deviceLog
+      .create({
+        data: {
+          device: 'Actuator_Controller',
+          status: 'ONLINE',
+          notes: notes,
+        },
+      })
+      .catch((err) => Logger.error('Fallo persistiendo deviceLog (ONLINE)', err))
+  }
 
   retryManager.lastActuatorState = 'online'
   resetSamplingState()

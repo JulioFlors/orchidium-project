@@ -47,83 +47,83 @@ const TOOL_COLORS: Record<
   { bg: string; ring: string; border: string; icon: string; pulse: string }
 > = {
   services: {
-    bg: 'from-slate-500/20 to-slate-500/5',
-    ring: 'ring-slate-500/10',
-    border: 'border-slate-500/20',
-    icon: 'text-slate-400',
+    bg: 'from-slate-500/30 to-slate-500/10',
+    ring: 'ring-slate-500/15',
+    border: 'border-slate-500/30',
+    icon: 'text-slate-500',
     pulse: 'bg-slate-400',
   },
   timeline: {
-    bg: 'from-emerald-500/20 to-emerald-500/5',
-    ring: 'ring-emerald-500/10',
-    border: 'border-emerald-500/20',
-    icon: 'text-emerald-400',
+    bg: 'from-emerald-500/30 to-emerald-500/10',
+    ring: 'ring-emerald-500/15',
+    border: 'border-emerald-500/30',
+    icon: 'text-emerald-500',
     pulse: 'bg-emerald-400',
   },
   temp: {
-    bg: 'from-orange-500/20 to-orange-500/5',
-    ring: 'ring-orange-500/10',
-    border: 'border-orange-500/20',
-    icon: 'text-orange-400',
+    bg: 'from-orange-500/30 to-orange-500/10',
+    ring: 'ring-orange-500/15',
+    border: 'border-orange-500/30',
+    icon: 'text-orange-500',
     pulse: 'bg-orange-400',
   },
   hum: {
-    bg: 'from-fuchsia-500/20 to-fuchsia-500/5',
-    ring: 'ring-fuchsia-500/10',
-    border: 'border-fuchsia-500/20',
-    icon: 'text-fuchsia-400',
+    bg: 'from-fuchsia-500/30 to-fuchsia-500/10',
+    ring: 'ring-fuchsia-500/15',
+    border: 'border-fuchsia-500/30',
+    icon: 'text-fuchsia-500',
     pulse: 'bg-fuchsia-400',
   },
   lux: {
-    bg: 'from-amber-500/20 to-amber-500/5',
-    ring: 'ring-amber-500/10',
-    border: 'border-amber-500/20',
-    icon: 'text-amber-400',
+    bg: 'from-amber-500/30 to-amber-500/10',
+    ring: 'ring-amber-500/15',
+    border: 'border-amber-500/30',
+    icon: 'text-amber-500',
     pulse: 'bg-amber-400',
   },
   rain: {
-    bg: 'from-blue-500/20 to-blue-500/5',
-    ring: 'ring-blue-500/10',
-    border: 'border-blue-500/20',
-    icon: 'text-blue-400',
+    bg: 'from-blue-500/30 to-blue-500/10',
+    ring: 'ring-blue-500/15',
+    border: 'border-blue-500/30',
+    icon: 'text-blue-500',
     pulse: 'bg-blue-400',
   },
   heartbeat: {
-    bg: 'from-red-500/20 to-red-500/5',
-    ring: 'ring-red-500/10',
-    border: 'border-red-500/20',
-    icon: 'text-red-400',
+    bg: 'from-red-500/30 to-red-500/10',
+    ring: 'ring-red-500/15',
+    border: 'border-red-500/30',
+    icon: 'text-red-500',
     pulse: 'bg-red-400',
   },
   nvs: {
-    bg: 'from-amber-500/20 to-amber-500/5',
-    ring: 'ring-amber-500/10',
-    border: 'border-amber-500/20',
-    icon: 'text-amber-400',
+    bg: 'from-amber-500/30 to-amber-500/10',
+    ring: 'ring-amber-500/15',
+    border: 'border-amber-500/30',
+    icon: 'text-amber-500',
     pulse: 'bg-amber-400',
   },
   ram: {
-    bg: 'from-indigo-500/20 to-indigo-500/5',
-    ring: 'ring-indigo-500/10',
-    border: 'border-indigo-500/20',
-    icon: 'text-indigo-400',
+    bg: 'from-indigo-500/30 to-indigo-500/10',
+    ring: 'ring-indigo-500/15',
+    border: 'border-indigo-500/30',
+    icon: 'text-indigo-500',
     pulse: 'bg-indigo-400',
   },
   health: {
-    bg: 'from-purple-500/20 to-purple-500/5',
-    ring: 'ring-purple-500/10',
-    border: 'border-purple-500/20',
-    icon: 'text-purple-400',
+    bg: 'from-purple-500/30 to-purple-500/10',
+    ring: 'ring-purple-500/15',
+    border: 'border-purple-500/30',
+    icon: 'text-purple-500',
     pulse: 'bg-purple-400',
   },
 }
 
 const AUDIT_CHART_COLORS: Record<string, string> = {
   lux: '#fbbf24', // amber-400
-  rain: '#3b82f6',
-  ram: '#818cf8',
-  health: '#a855f7', // purple-500
   temp: '#fb923c', // orange-400
+  rain: '#3b82f6', // blue
+  ram: '#818cf8', // indigo
+  health: '#a855f7', // purple-500
   hum: '#e879f9', // fuchsia-400
 }
 
@@ -171,16 +171,18 @@ function ToolCard({ icon, label, colorKey, onClick, pending, active, disabled }:
         'group relative flex aspect-square min-h-[110px] w-full flex-col items-center justify-center gap-4 overflow-hidden p-6 transition-all duration-300 select-none',
         !pending && !disabled ? 'cursor-pointer' : 'cursor-wait',
         active
-          ? clsx(`bg-linear-to-br ${colors.bg} ${colors.border} text-white`)
+          ? clsx(
+              `bg-linear-to-br ${colors.bg} ${colors.border} text-neutral-400 dark:text-neutral-200`,
+            )
           : 'border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900',
-        !disabled && 'hover:bg-zinc-50 dark:hover:border-zinc-700 dark:hover:bg-zinc-800/80',
+        !disabled && 'hover:bg-hover-overlay',
         pending && `${colors.border} ring-4 ${colors.ring}`,
         disabled && 'pointer-events-none cursor-not-allowed opacity-30 grayscale',
       )}
       onClick={!pending && !disabled ? onClick : undefined}
     >
       {!disabled && (
-        <div className="absolute inset-0 bg-white/0 transition-colors group-hover:bg-white/5 dark:group-hover:bg-white/2" />
+        <div className="bg-hover-overlay absolute inset-0 opacity-0 transition-opacity group-hover:opacity-100" />
       )}
       <div
         className={clsx(
@@ -191,11 +193,13 @@ function ToolCard({ icon, label, colorKey, onClick, pending, active, disabled }:
       {active && (
         <div className="absolute top-4 right-4 h-1.5 w-1.5 rounded-full bg-current shadow-[0_0_8px_currentColor]" />
       )}
-      <div className="relative z-10 text-current">
+      <div className="relative z-10">
         <div
           className={clsx(
             'text-4xl transition-all duration-300',
-            active ? 'drop-shadow-sm' : 'text-zinc-400 group-hover:text-current',
+            active
+              ? 'text-black-and-white drop-shadow-sm'
+              : 'text-zinc-400 group-hover:text-zinc-900 dark:text-zinc-500 dark:group-hover:text-zinc-100',
             pending && 'opacity-20',
           )}
         >
@@ -206,7 +210,7 @@ function ToolCard({ icon, label, colorKey, onClick, pending, active, disabled }:
         className={clsx(
           'z-10 text-center text-[10px] font-black tracking-[0.15em] uppercase transition-colors',
           active
-            ? 'text-white'
+            ? 'text-black-and-white'
             : 'text-zinc-500 group-hover:text-zinc-900 dark:text-zinc-500 dark:group-hover:text-zinc-100',
         )}
       >
@@ -275,9 +279,7 @@ export function ToolboxGrid({
           colorKey="heartbeat"
           icon={
             <IoHeartOutline
-              className={clsx(
-                activeAudits.includes('heartbeat') ? 'text-red-500' : TOOL_COLORS.heartbeat.icon,
-              )}
+              className={clsx(!activeAudits.includes('heartbeat') && TOOL_COLORS.heartbeat.icon)}
               size={24}
             />
           }
