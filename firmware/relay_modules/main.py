@@ -2,9 +2,9 @@
 # Relay Modules: Actuator Controller Firmware.
 # Descripción: Firmware dedicado para el control de las electroválvulas, la bomba
 #              y la estación meteorológica exterior (lluvia e iluminancia).
-# Fecha: 02-05-2026
-# Versión: v0.10.5
-# notes_release: [⚡ Estabilidad]: Restaurada arquitectura de red v0.10.1 para corregir fugas de sockets (ENOMEM). [🐞 Fix]: Eliminada 'tormenta MQTT'. [🌡️ Clima]: Mantenido soporte DHT22 con reporte de desconexión (ETIMEDOUT) y modo silencioso para sensor de lluvia ausente.
+# Fecha: 05-05-2026
+# Versión: v0.11.0
+# notes_release: [⚡ Estabilidad MQTT]: Inyectados parches de monkey-patching para timeouts SSL (Anti-Bloqueo) y sockets resilientes. [🩹 Robustez]: Prevención de sesiones zombie y optimización de escritura robusta. [📦 RAM Safe]: Iteración de PIDs optimizada para evitar fragmentación de memoria. [⚙️ Infra]: Hardening de Mosquitto con límites de conexión y expiración de sesiones.
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib.
@@ -590,7 +590,7 @@ async def boot_recovery_check():
 
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
-    from utime import localtime, time # type: ignore
+    from utime import localtime, ticks_ms, time # type: ignore
 
     # Ventanas de oportunidad para recuperación tras reinicio
     IRRIGATION_RECOVERY_WINDOW = 1200 # 20 min
@@ -1067,7 +1067,7 @@ def setup_sensors():
             # Validación Inicial (Sondeo):
             # El sensor SECO debería leer 4095.
             # El sensor con LLUVIA Residual o Garuando puede leer entre 3000 y 3300
-            if r_avg > 1500:
+            if r_avg > 1400:
                 rain_sensor_analog = adc_rain
                 if DEBUG:
                     print(f"\n💧  Conectando {Colors.YELLOW}Sensor de Lluvia{Colors.RESET}")
@@ -1442,6 +1442,48 @@ def force_disconnect_mqtt():
         collect()
         if DEBUG: print(f"📡  Cliente  {Colors.GREEN}Desconectado{Colors.RESET}")
 
+# ---- Función Auxiliar: Flush de Batches de Telemetría (Pre-Shutdown) ----
+def flush_telemetry_batches():
+    """Publica los batches acumulados en RAM antes de perder la conexión MQTT."""
+    if not (client and hasattr(client, 'sock') and client.sock and wlan and wlan.isconnected()):
+        return
+
+    from utime import sleep_ms
+    try:
+        # Batch Iluminancia
+        if illuminance_Batch.count > 0:
+            items = illuminance_Batch.get_all()
+            if items:
+                h_str = ",".join(['[%d,{"illuminance":%s}]' % (it[0], str(it[1])) for it in items])
+                client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"history":[%s]}' % h_str, qos=0)
+                illuminance_Batch.clear()
+                if DEBUG: print(f"    ├─ ☀️  Flush Lux: {len(items)} muestras")
+                sleep_ms(500) # Pequeña pausa para el stack de red
+    except: pass
+
+    try:
+        # Batch Temperatura
+        if temperature_Batch.count > 0:
+            items = temperature_Batch.get_all()
+            if items:
+                t_str = ",".join(['[%d,{"temperature":%s}]' % (it[0], str(it[1])) for it in items])
+                client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"history":[%s]}' % t_str, qos=0)
+                temperature_Batch.clear()
+                if DEBUG: print(f"    ├─ 🌡️  Flush Temp: {len(items)} muestras")
+                sleep_ms(500) # Pequeña pausa para el stack de red
+    except: pass
+
+    try:
+        # Batch Humedad
+        if humidity_Batch.count > 0:
+            items = humidity_Batch.get_all()
+            if items:
+                h_str = ",".join(['[%d,{"humidity":%s}]' % (it[0], str(it[1])) for it in items])
+                client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"history":[%s]}' % h_str, qos=0)
+                humidity_Batch.clear()
+                if DEBUG: print(f"    └─ 💧  Flush Hum: {len(items)} muestras")
+    except: pass
+
 # ---- FUNCIÓN AUXILIAR: Gestión de desconexión (Graceful Shutdown - Relay Modules) ----
 def shutdown():
     """
@@ -1449,6 +1491,7 @@ def shutdown():
     * Publica `offline` explícitamente.
     * Apaga fisicamente todos los relés.
     * Publica el estado `OFF` de todos los relés.
+    * Flush de batches de telemetría acumulados.
     * Desconecta MQTT y WiFi.
     """
 
@@ -1463,6 +1506,9 @@ def shutdown():
     # Publicamos en MQTT (Solo si hay conexión)
     if client and hasattr(client, 'sock') and client.sock and wlan and wlan.isconnected():
         try:
+            # Flush de batches acumulados antes de desconectar
+            flush_telemetry_batches()
+
             # Publicamos el LWT explícitamente para que el broker lo retenga.
             # El LWT para el cliente MQTT solo se envía si el cliente se desconecta inesperadamente. 
             # Si nos desconectamos limpiamente,
@@ -1630,16 +1676,22 @@ async def mqtt_connector_task(client_id):
     from gc            import collect
     from machine       import Timer
     from umqtt.simple2 import MQTTClient, MQTTException  # type: ignore
-    from utime         import ticks_ms, ticks_diff, time # type: ignore
+    from utime         import sleep_ms, ticks_diff, ticks_ms, time # type: ignore
 
     # =========================================================================
     # 🩹 MONKEY-PATCHING: Optimizaciones inyectadas a la librería MQTT
     # =========================================================================
 
-    # 🩹 Parche 1: SSL / Escritura Robusta (Sobrevive a buffer Lleno/Red saturada)
+    # 🩹 Parche 1: Escritura Robusta y Anti-Bloqueo (Buffer Safety)
+    # ─────────────────────────────────────────────────────────────────
+    # umqtt original puede bloquearse si el buffer de salida TCP está 
+    # lleno o si la red se degrada durante una escritura TLS.
+    # Solución: Implementamos un bucle con poller y cronómetro manual.
+    # Si tras 'socket_timeout' no se puede escribir ni un byte, 
+    # lanzamos MQTTException(3) para evitar colgar el hilo.
+    # ─────────────────────────────────────────────────────────────────
     def _robust_write(self, bytes_wr, length=-1):
-        """Asegura que todos los bytes se envíen, con protección Anti-Deadlock."""
-        from utime import sleep_ms, ticks_ms, ticks_diff # type: ignore
+        """Asegura el envío total de datos con protección contra saturación de red."""
 
         data = bytes_wr if length == -1 else bytes_wr[:length]
         total_written = 0 # bytes transferidos
@@ -1673,7 +1725,13 @@ async def mqtt_connector_task(client_id):
 
         return total_written
 
-    # 🩹 Parche 2: Lectura Resiliente (Evita bloqueos Zombie en Caídas)
+    # 🩹 Parche 2: Lectura Resiliente (Anti-Zombie de Recepción)
+    # ─────────────────────────────────────────────────────────────────
+    # Evita que el cliente se quede esperando datos de un socket muerto
+    # que no ha reportado error de sistema pero no envía tráfico.
+    # Maneja errores específicos de MicroPython (11, 110, 116) que 
+    # suelen ocurrir en micro-cortes de WiFi o congestión TLS.
+    # ─────────────────────────────────────────────────────────────────
     def _resilient_read(self, expected_length):
         """Maneja interrupciones de red TCP/SSL limpiamente, evitando bucles infinitos."""
         if expected_length < 0:
@@ -1711,9 +1769,16 @@ async def mqtt_connector_task(client_id):
                 
         return buffer
 
-    # 🩹 Parche 3: Timeout sin Fuga de RAM (Evita .items() en diccionario de pings)
+    # 🩹 Parche 3: Gestión de Timeouts sin Fugas de RAM
+    # ─────────────────────────────────────────────────────────────────
+    # La implementación original usa .items() en el diccionario de PIDs,
+    # lo cual crea una copia temporal (lista de tuplas) en cada iteración.
+    # En ESP32, esto causa fragmentación de RAM y eventuales Crash.
+    # Solución: Iteramos sobre las llaves directamente, minimizando el
+    # uso de memoria dinámica durante la verificación de ACKs.
+    # ─────────────────────────────────────────────────────────────────
     def _ram_safe_message_timeout(self):
-        """Limpia los PIDs vencidos sin crear copias costosas del diccionario en RAM."""
+        """Limpia los PIDs vencidos sin fragmentar la memoria RAM."""
         current_time = ticks_ms()
         expired_pids = []
         
@@ -1729,7 +1794,41 @@ async def mqtt_connector_task(client_id):
             self.rcv_pids.pop(pid)
             self.cbstat(pid, 0) # Informamos el estado de timeout al callback
 
+    # 🩹 Parche 4: SSL Handshake con Timeout (Anti-Bloqueo Infinito)
+    # ─────────────────────────────────────────────────────────────────
+    # simple2.py hace setblocking(True) antes de ussl.wrap_socket(),
+    # lo que causa bloqueo INFINITO si el broker no responde al TLS.
+    # Solución: Interceptamos wrap_socket para inyectar settimeout()
+    # DESPUÉS del setblocking(True) pero ANTES del handshake real.
+    # Resultado: El handshake falla con OSError(110) tras N segundos
+    # en vez de colgar el hilo principal y disparar el WDT.
+    # ─────────────────────────────────────────────────────────────────
+    _original_connect = MQTTClient.connect
+
+    def _safe_ssl_connect(self, clean_session=True):
+        """Wrapper que inyecta timeout al SSL handshake sin tocar la librería."""
+        try:
+            import ussl  # type: ignore
+        except ImportError:
+            import ssl as ussl  # type: ignore
+
+        _orig_wrap = ussl.wrap_socket
+
+        def _timed_wrap_socket(sock, **kwargs):
+            # Inyectamos timeout: overridea el setblocking(True) anterior
+            sock.settimeout(self.socket_timeout)
+            return _orig_wrap(sock, **kwargs)
+
+        # Parcheamos temporalmente wrap_socket durante esta llamada
+        ussl.wrap_socket = _timed_wrap_socket
+        try:
+            return _original_connect(self, clean_session)
+        finally:
+            # Restauramos el original (limpieza)
+            ussl.wrap_socket = _orig_wrap
+
     # 💉 Inyección de los parches a la clase ANTES de instanciarla
+    MQTTClient.connect = _safe_ssl_connect
     MQTTClient._write = _robust_write
     MQTTClient._read = _resilient_read
     MQTTClient._message_timeout = _ram_safe_message_timeout
@@ -1813,15 +1912,19 @@ async def mqtt_connector_task(client_id):
                     # Esto permite que el Broker guarde las suscripciones y mensajes QOS 1 mientras estemos offline.
                     client.connect(clean_session=True)
                 finally:
-                    # SI la función retorna con éxito.
-                    # desactivamos el timer.
+                    # Desactivamos el timer de seguridad (siempre, éxito o fallo)
                     wd_timer.deinit()
 
-                    # Reseteamos cronómetro.
-                    mqtt_disconnect_start = None
+                # Solo tras conexión EXITOSA
+                # Reseteamos el cronómetro de fallas MQTT
+                mqtt_disconnect_start = None
 
                 if DEBUG:
                     print(f"📡  Conexión MQTT {Colors.GREEN}Establecida{Colors.RESET}", end="\n")
+
+                # Reseteamos relojes para evitar zombie instantáneo tras reconexión
+                client.last_cpacket = ticks_ms()
+                last_manual_ping = ticks_ms()
 
                 # Reseteamos el contador tras conexión exitosa
                 consecutive_mqtt_failures = 0
@@ -2319,7 +2422,7 @@ async def rain_monitor_task():
                         payload_boot = '{"state":"%s","timestamp":%d}' % (boot_state_to_publish, boot_timestamp_to_publish)
                         async with mqtt_lock:
                             client.publish(MQTT_TOPIC_RAIN_STATE, payload_boot, retain=False, qos=0)
-                        if DEBUG: print(f"    └─ Estado de lluvia publicado al arrancar: {boot_state_to_publish}")
+                        if DEBUG: print(f"    └─ Rain Monitor: {boot_state_to_publish}")
                     except Exception as e:
                         if DEBUG: print(f"    └─ ⚠️ Error publicando estado lluvia: {e}")
                         force_disconnect_mqtt()
@@ -2568,30 +2671,37 @@ async def climate_monitor_task():
                 # Publicar Batches cada 10 minutos (600 segundos)
                 current_ts = time()
                 if current_ts - last_dht_publish >= 600:
-                    if temperature_Batch.count == 10 or humidity_Batch.count == 10:
-                        if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
-                            async with mqtt_lock:
-                                # Lote A: Temperatura
-                                if temperature_Batch.count > 0:
+                    has_temp = temperature_Batch.count > 0
+                    has_hum  = humidity_Batch.count > 0
+
+                    if (has_temp or has_hum) and client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
+                        try:
+                            # Lote A: Temperatura
+                            if has_temp:
+                                async with mqtt_lock:
                                     t_str = ",".join(['[%d,{"temperature":%s}]' % (it[0], str(it[1])) for it in temperature_Batch.get_all()])
                                     client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"history":[%s]}' % t_str, qos=0)
                                     temperature_Batch.clear()
-                                
-                                # Offset de 2s entre publicaciones para no saturar el stack de red
+
+                            # Offset de 2s entre publicaciones (FUERA del lock)
+                            if has_temp and has_hum:
                                 await asyncio.sleep(2)
 
-                                # Lote B: Humedad
-                                if humidity_Batch.count > 0:
+                            # Lote B: Humedad
+                            if has_hum:
+                                async with mqtt_lock:
                                     h_str = ",".join(['[%d,{"humidity":%s}]' % (it[0], str(it[1])) for it in humidity_Batch.get_all()])
                                     client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"history":[%s]}' % h_str, qos=0)
                                     humidity_Batch.clear()
 
-                                if DEBUG: print(f"\n🌡️  DHT22: {Colors.YELLOW}Batches Temp + HRL Publicados{Colors.RESET}")
-                            
-                            last_dht_publish = current_ts
-                    else:
-                        # Buffer vacío: Reseteamos timer para la siguiente ventana
-                        last_dht_publish = current_ts
+                            if DEBUG: print(f"\n🌡️  DHT22: {Colors.YELLOW}Batches Temp + HRL Publicados{Colors.RESET}")
+                        except (MQTTException, OSError) as e:
+                            if DEBUG: log_mqtt_exception("Fallo publicando Batch DHT22", e)
+                            force_disconnect_mqtt()
+                            await check_critical_mqtt_errors(e)
+
+                    # Siempre reseteamos el timer (evita reintentos infinitos en ventanas vacías)
+                    last_dht_publish = current_ts
 
         except (MQTTException, OSError) as e:
             if DEBUG: log_mqtt_exception("Error de red en climate_monitor_task()", e)
@@ -2810,6 +2920,9 @@ def stopped_program():
     # Es VITAL usar retain=True para que el estado persista tras el DISCONNECT.
     if client and hasattr(client, 'sock') and client.sock and wlan and wlan.isconnected():
         try:
+            # Flush de batches acumulados antes de desconectar
+            flush_telemetry_batches()
+
             client.publish(MQTT_TOPIC_STATUS, b"offline", retain=True, qos=1)
             from utime import sleep_ms
             sleep_ms(300) 

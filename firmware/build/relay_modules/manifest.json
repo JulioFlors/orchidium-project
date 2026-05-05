@@ -1,9 +1,9 @@
 {
   "name": "Relay Modules",
   "description": "Nodo Actuador + Meteorológica Exterior",
-  "version": "0.10.5",
-  "date": "02-05-2026",
-  "notes_release": "[⚡ Estabilidad]: Restaurada arquitectura de red v0.10.1 para corregir fugas de sockets (ENOMEM). [🐞 Fix]: Eliminada 'tormenta MQTT'. [🌡️ Clima]: Mantenido soporte DHT22 con reporte de desconexión (ETIMEDOUT) y modo silencioso para sensor de lluvia ausente.",
+  "version": "0.11.0",
+  "date": "05-05-2026",
+  "notes_release": "[⚡ Estabilidad MQTT]: Inyectados parches de monkey-patching para timeouts SSL y sockets resilientes. [🩹 Robustez]: Prevención de sesiones zombie y optimización de escritura robusta. [📦 RAM Safe]: Gestión de PIDs optimizada para evitar fragmentación. [⚙️ Infra]: Hardening de Mosquitto con límites de conexión y expiración de sesiones.",
   "files": [
     "app.mpy",
     "boot.py",
