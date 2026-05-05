@@ -88,6 +88,7 @@ async function waitForMosquitto(retries = 15) {
 // ---- Gestión de Estado Local ----
 let lastRainState: string | null = null
 let lastFirmwareHeartbeat: number = Date.now()
+let lastActuatorHeartbeat: number = Date.now()
 let lastSyncTimestamp: number = 0
 
 // Timeout para eventos de lluvia huérfanos (10 minutos sin señales de vida)
@@ -124,7 +125,7 @@ function setupMqttHandlers() {
     try {
       const message = payload.toString().trim()
 
-      // Heartbeat: cualquier mensaje del firmware actualiza el timestamp
+      // Heartbeat: cualquier mensaje del firmware actualiza el timestamp general
       if (
         topic.startsWith('PristinoPlant/Actuator_Controller/') ||
         topic.startsWith('PristinoPlant/Weather_Station/')
@@ -135,6 +136,8 @@ function setupMqttHandlers() {
       // 1. Monitoreo de Conexión del Nodo Actuador
       if (topic === 'PristinoPlant/Actuator_Controller/status') {
         if (message === 'online') {
+          lastActuatorHeartbeat = Date.now()
+
           if (retryManager.lastActuatorState === 'online') {
             // Ignorar heartbeats periódicos para no generar spam de registros
             return
@@ -145,12 +148,12 @@ function setupMqttHandlers() {
           const previousState = retryManager.lastActuatorState
           const reason =
             previousState === 'unknown'
-              ? 'LWT: Estado inicial detectado como Offline.'
-              : 'LWT: El dispositivo se desconectó inesperadamente (Fallo de red/energía).'
+              ? 'Estado inicial detectado como Offline.'
+              : 'El dispositivo se desconectó inesperadamente (Fallo de red/energía).'
 
-          await handleNodeOffline(reason)
+          await handleNodeOffline(reason, 'BROKER')
         } else if (message === 'rebooting') {
-          await handleNodeOffline('Reinicio seguro solicitado por el sistema o el usuario.')
+          await handleNodeOffline('Reinicio seguro solicitado por el sistema o el usuario.', 'NODE')
         }
 
         return
@@ -158,6 +161,8 @@ function setupMqttHandlers() {
 
       // 1.5 Detección de Reinicio Rápido (Boot Explícito)
       if (topic === 'PristinoPlant/Actuator_Controller/status/boot') {
+        lastActuatorHeartbeat = Date.now()
+
         // No forzamos un offline previo, saltamos directamente al sync
         // para que evalúe si es un REBOOT o una sesión nueva.
         await handleNodeSync(true)
@@ -281,13 +286,27 @@ function checkRainOrphanTimeout() {
 }
 
 /**
+ * Verifica si el nodo actuador ha dejado de enviar señales de vida (online).
+ * Timeout: 90 segundos.
+ */
+function checkActuatorTimeout() {
+  if (retryManager.lastActuatorState === 'offline') return
+
+  const elapsed = Date.now() - lastActuatorHeartbeat
+
+  if (elapsed > 90_000) {
+    handleNodeOffline(`Inactividad detectada (Timeout 90s sin mensajes 'online').`, 'SCHEDULER')
+  }
+}
+
+/**
  * Gestiona la desconexión del nodo y la limpieza de tareas interrumpidas.
  */
-async function handleNodeOffline(reason: string) {
+async function handleNodeOffline(reason: string, origin: 'BROKER' | 'NODE' | 'SCHEDULER') {
   if (retryManager.lastActuatorState === 'offline') return
 
   retryManager.lastActuatorState = 'offline'
-  Logger.node('OFFLINE')
+  Logger.node('OFFLINE', origin)
   resetSamplingState()
 
   // 1. Registro en el Historial (Postgres)
@@ -296,7 +315,7 @@ async function handleNodeOffline(reason: string) {
       data: {
         device: 'Actuator_Controller',
         status: 'OFFLINE',
-        notes: reason,
+        notes: `[${origin}] ${reason}`,
       },
     })
     .catch((err) => Logger.error('Fallo persistiendo deviceLog (OFFLINE)', err))
@@ -444,7 +463,8 @@ async function handleNodeSync(isBoot: boolean = false) {
 
   retryManager.lastActuatorState = 'online'
   resetSamplingState()
-  syncNodeSampling()
+  syncNodeSampling(undefined, true)
+  retryManager.retryAllPending()
   await processPostponedTasks()
   await resumeInterruptedTasks()
 }
@@ -456,8 +476,9 @@ async function initScheduler() {
   // Registrar callback para fallos de ACK y expiración rápida
   retryManager.setOnFailure(handleAckTimeout)
 
-  // Verificación periódica de eventos de lluvia huérfanos (cada 60s)
+  // Verificación periódica de inactividad de nodos y eventos (cada 15s)
   setInterval(checkRainOrphanTimeout, 60_000)
+  setInterval(checkActuatorTimeout, 15_000)
 
   // Cron de limpieza de tareas expiradas (Ventana de 20 min / 24h agroquímicos)
   new Cron('*/5 * * * *', { timezone: 'America/Caracas' }, async () => {
@@ -476,10 +497,18 @@ async function initScheduler() {
 
   // Cron para sincronizar muestreo de iluminancia (Amanecer 4:59am / Anochecer 7:01pm)
   new Cron('59 4 * * *', { timezone: 'America/Caracas' }, () => {
-    syncNodeSampling('on')
+    if (retryManager.lastActuatorState === 'online') {
+      syncNodeSampling('on')
+    } else {
+      Logger.warn('Sampling sync postponed: Actuator Node is OFFLINE.')
+    }
   })
   new Cron('1 19 * * *', { timezone: 'America/Caracas' }, () => {
-    syncNodeSampling('off')
+    if (retryManager.lastActuatorState === 'online') {
+      syncNodeSampling('off')
+    } else {
+      Logger.warn('Sampling sync postponed: Actuator Node is OFFLINE.')
+    }
   })
 
   // Cron de Mantenimiento de Filtros (Lunes y Jueves 8:00 AM)

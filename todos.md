@@ -156,6 +156,11 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
   * [x] Persistir resumen procesado diario en base de datos central (PostgreSQL).
   * [x] **Corrección:** Ejecución a las 00:01 AM para procesar el día anterior completo (Yesterday).
 * [x] **Motor de Inferencias (v4):** Implementado lazo cerrado de decisión con **Consenso de APIs** (OWM + OpenMeteo) y **Refutación por Sensores** (Lux/HR). Incluye protocolo de **Veto Ambiental Estricto** para agroquímicos (Lluvia 4h + Nubosidad + HR > 95% + API > 95%).
+* [x] **Optimización de Diagnóstico e Inteligencia Ambiental (v5):**
+  * [x] Sincronizados IDs de dispositivos entre Frontend y Base de Datos para asegurar la visibilidad en el Timeline.
+  * [x] Implementado Fallback Robusto en el Motor de Inferencia basado en presencia real de sensores.
+  * [x] Calibrados umbrales de nubosidad (15k-26k lux) y lógica de continuidad de datos.
+  * [x] Preservadas notas de diagnóstico originales según preferencia del usuario.
 * [ ] **Machine Learning Ligero:** Función para cruzar avistamientos de plagas (Fase 1.1) con los históricos de InfluxDB.
 
 ### 🌤️ 3.3 WeatherGuard (Inteligencia Predictiva Híbrida)

@@ -43,11 +43,22 @@ export interface InferenceResult {
   metadata?: Record<string, unknown>
 }
 
-// Factores de corrección por estructura (Malla Sombra / Humectación Suelo)
-// Solo se aplican si el sensor interior está offline para aproximar el microclima.
+/**
+ * OFFSETS DE CALIBRACIÓN EMPÍRICA (PRELIMINARES)
+ *
+ * // TODO: Estas inferencias deben ser validadas y recalibradas una vez el orquideario
+ * esté en producción y se cuente con un histórico suficiente de datos (InfluxDB).
+ *
+ * NOTA GEOGRÁFICA: Ciudad Guayana, Venezuela (Trópico).
+ * El comportamiento térmico/hídrico varía drásticamente entre:
+ * - Temporada de Sequía (Verano): Mayor gradiente térmico exterior/interior.
+ * - Temporada de Lluvia (Invierno): Humedad ambiente saturada, gradientes mínimos.
+ *
+ * // TODO: Implementar un modelo de regresión o tabla de consulta por temporada (Mes/Día).
+ */
 const FALLBACK_OFFSETS = {
-  TEMP: -2, // El interior suele estar más fresco bajo la malla sombra
-  HUM: 8, // El interior suele retener más humedad por la vegetación
+  TEMP: -2.0, // Estimación inicial: El orquideario suele estar más fresco
+  HUM: 8.0, // Estimación inicial: Mayor retención por riego y masa foliar
 }
 
 /**
@@ -99,10 +110,12 @@ export class InferenceEngine {
 
       const purpose = schedule.purpose
 
-      // Lógica de Fallback Inteligente: 
-      // Si falta INTERIOR, usamos EXTERIOR ajustado por la inercia térmica/hídrica del orquideario.
-      const isFallback = localConditions.interior.hum <= 0
-      
+      // Lógica de Fallback de Emergencia:
+      // // TODO: En ausencia de datos de INTERIOR, se utilizan datos de EXTERIOR
+      // aplicando una compensación estática PRELIMINAR. Este método es un marcador
+      // de posición hasta que se implemente una inferencia basada en correlación histórica.
+      const isFallback = !localConditions.foundInterior
+
       const interiorHum = isFallback
         ? Math.min(99, localConditions.exterior.hum + FALLBACK_OFFSETS.HUM)
         : localConditions.interior.hum
@@ -111,7 +124,7 @@ export class InferenceEngine {
         ? localConditions.exterior.temp + FALLBACK_OFFSETS.TEMP
         : localConditions.interior.temp
 
-      const dataUsed = isFallback ? 'EXTERIOR (Ajuste Fallback)' : 'INTERIOR'
+      const dataUsed = isFallback ? 'EXTERIOR (Fallback Preliminar)' : 'INTERIOR'
 
       Logger.info(
         `[ INFERENCE ] Evaluando "${schedule.name}" (${purpose}) → HR: ${interiorHum.toFixed(0)}% | Temp: ${interiorTemp.toFixed(1)}°C | Día: ${dayClass.type} | Datos: ${dataUsed}`,
@@ -348,6 +361,8 @@ export class InferenceEngine {
     const result = {
       exterior: { lux: 0, rain_intensity: 0, temp: 0, hum: 0 },
       interior: { temp: 0, hum: 0, lux: 0 },
+      foundExterior: false,
+      foundInterior: false,
     }
 
     try {
@@ -371,11 +386,13 @@ export class InferenceEngine {
           result.exterior.temp = Number(row.temperature || 0)
           result.exterior.hum = Number(row.humidity || 0)
           foundExterior = true
+          result.foundExterior = true
         } else if (!foundInterior && row.source === 'Environmental_Monitoring') {
           result.interior.temp = Number(row.temperature || 0)
           result.interior.hum = Number(row.humidity || 0)
           result.interior.lux = Number(row.illuminance || 0)
           foundInterior = true
+          result.foundInterior = true
         }
       }
 

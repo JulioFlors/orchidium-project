@@ -7,6 +7,9 @@ description: Protocolo maestro de desarrollo. Define convenciones git, manejo de
 
 > [!IMPORTANT]
 > **ESTÁNDARES DE MARKDOWN (PASO 8)**: Es mandatorio cumplir con el espaciado de encabezados y listas. El sistema de linting ahora está unificado bajo ESLint; asegúrate de ejecutar `pnpm lint:fix` antes de cualquier entrega importante.
+>
+> [!CAUTION]
+> **PROHIBICIÓN DE GIT (PASO 2)**: El Agente tiene **PROHIBIDO** ejecutar `git commit`, `git push` o cualquier comando que altere el repositorio remoto. El Agente solo debe generar/actualizar el archivo `commit.txt`. Ignorar esta regla es una violación directa del protocolo.
 
 Este documento define las directrices, convenciones y flujos de trabajo ESTRICTOS para el desarrollo del proyecto "Pristinoplant".
 

@@ -29,7 +29,7 @@ interface DeviceConfig {
 
 const DEVICES: DeviceConfig[] = [
   {
-    id: 'actuator',
+    id: 'Actuator_Controller',
     name: 'Controlador',
     description: 'Nodo Actuador + Estación Meteorológica Exterior',
     baseTopic: 'PristinoPlant/Actuator_Controller',
@@ -37,7 +37,7 @@ const DEVICES: DeviceConfig[] = [
     hasDiagnostics: true,
   },
   {
-    id: 'sensors',
+    id: 'Weather_Station',
     name: 'Sensores',
     description: `Estación Meteorológica ${ZoneTypeLabels[ZoneType.ZONA_A]}`,
     baseTopic: `PristinoPlant/Environmental_Monitoring/Zona_A`,

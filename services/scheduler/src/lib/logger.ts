@@ -73,13 +73,14 @@ export const Logger = {
   },
   mqtt: (msg: string) => console.log(formatLog('📡', 'MQTT', colors.magenta, msg)),
   cron: (msg: string) => console.log(formatLog('⏰', 'CRON', colors.cyan, msg)),
-  node: (status: 'ONLINE' | 'OFFLINE' | 'REBOOT') => {
+  node: (status: 'ONLINE' | 'OFFLINE' | 'REBOOT', origin?: string) => {
     const isOnline = status === 'ONLINE'
     const isReboot = status === 'REBOOT'
     const color = isOnline ? colors.green : isReboot ? colors.blue : colors.red
     const icon = isOnline ? '✅' : isReboot ? '🔄' : '❌'
+    const displayStatus = origin ? `${status} [${origin}]` : status
 
-    console.log(formatLog(icon, 'NODE', color, status))
+    console.log(formatLog(icon, 'NODE', color, displayStatus))
   },
   oracle: (msg: string) => console.log(formatLog('🔮', 'ORCL', colors.blue, msg)),
 }

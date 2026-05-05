@@ -102,6 +102,14 @@ class CommandRetryManager {
     }
   }
 
+  retryAllPending() {
+    if (this.pending.size === 0) return
+    Logger.debug(`Reintentando ${this.pending.size} comandos pendientes tras reconexión...`)
+    for (const key of this.pending.keys()) {
+      this.retry(key)
+    }
+  }
+
   clear() {
     if (this.pending.size === 0) return
     const isSingle = this.pending.size === 1
@@ -140,11 +148,11 @@ class CommandRetryManager {
     // 2. Fallo Visual (al minuto 2 de insistencia si el nodo está online)
     if (command.attempts === 3) {
       Logger.warn(
-        `Sin confirmación del nodo (Intento ${command.attempts}). Re-despachando comando para asegurar estado.`,
+        `Sin confirmación del nodo (Intento ${command.attempts}). Re-despachando comando.`,
       )
       this.handleTimeout(
         command.payload,
-        'Sin respuesta del Nodo Actuador (Sordo). Reintentando cada 60s...',
+        'Sin respuesta del Nodo Actuador (Sordo). Reintentando cada 60s',
       )
     }
 
@@ -237,11 +245,17 @@ export function stopSequence(purpose: TaskPurpose, taskId: string) {
  * Envía un comando de sistema (eco, reset, etc) al Nodo Actuador.
  */
 export function executeSystemCommand(command: string, isPersistent: boolean = false) {
-  mqttClient.publish(SYSTEM_CMD_TOPIC, command, {
-    qos: 1,
-    retain: false,
-  })
-  Logger.info(`Comando: ${colors.magenta}${command}${colors.reset}`)
+  // Solo publicamos de inmediato si el nodo está online
+  if (retryManager.lastActuatorState === 'online') {
+    mqttClient.publish(SYSTEM_CMD_TOPIC, command, {
+      qos: 1,
+      retain: false,
+    })
+    Logger.info(`Comando: ${colors.magenta}${command}${colors.reset}`)
+  } else {
+    Logger.info(`Comando: ${colors.magenta}${command}${colors.reset} (Encolado - Nodo Offline)`)
+  }
+
   retryManager.track(SYSTEM_CMD_TOPIC, command, new Date(), isPersistent)
 }
 
@@ -255,16 +269,16 @@ export function resetSamplingState() {
  * Sincroniza el estado del monitoreo del nodo basado en la hora actual.
  * Asegura que el nodo tenga el estado de muestreo correcto (Amanecer/Anochecer).
  */
-export function syncNodeSampling(forcedState?: 'on' | 'off') {
+export function syncNodeSampling(forcedState?: 'on' | 'off', forcePublish: boolean = false) {
   let targetState: 'on' | 'off'
 
   if (forcedState) {
     targetState = forcedState
-  } else if (lastSamplingState) {
+  } else if (lastSamplingState && !forcePublish) {
     // Si no se fuerza y ya tenemos un estado estipulado, usarlo.
     targetState = lastSamplingState
   } else {
-    // Inicialización por hora solo si no hay estado previo (primer arranque)
+    // Inicialización por hora solo si no hay estado previo (primer arranque) o se fuerza
     const now = new Date()
     const options: Intl.DateTimeFormatOptions = {
       timeZone: 'America/Caracas',
@@ -276,16 +290,16 @@ export function syncNodeSampling(forcedState?: 'on' | 'off') {
     targetState = hour >= 5 && hour < 19 ? 'on' : 'off'
   }
 
-  // Evitar duplicados si el estado no ha cambiado
-  if (lastSamplingState === targetState && !forcedState) return
+  // Evitar duplicados si el estado no ha cambiado (y no se está forzando publicación)
+  if (lastSamplingState === targetState && !forcedState && !forcePublish) return
 
   lastSamplingState = targetState
 
   if (targetState === 'on') {
-    Logger.info('☀  Iniciando muestreo de iluminancia (Amanecer)')
+    if (!forcePublish) Logger.info('☀  Iniciando muestreo de iluminancia (Amanecer)')
     executeSystemCommand('lux_sampling:on', true)
   } else {
-    Logger.info('🌙  Suspendiendo muestreo de iluminancia (Anochecer)')
+    if (!forcePublish) Logger.info('🌙  Suspendiendo muestreo de iluminancia (Anochecer)')
     executeSystemCommand('lux_sampling:off', true)
   }
 }

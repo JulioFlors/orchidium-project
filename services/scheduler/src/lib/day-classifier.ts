@@ -42,8 +42,8 @@ const LUX_THRESHOLDS = {
   // < 15000 = LLUVIOSO (cielo cerrado, posible lluvia)
 }
 
-// TODO: Umbral de "nublado consecutivo" — ajustar con datos reales
-const OVERCAST_LUX_THRESHOLD = 15000
+// Umbral de "nublado consecutivo" — sincronizado con InferenceEngine
+const OVERCAST_LUX_THRESHOLD = 26000
 
 /**
  * Clasifica el tipo de día actual basándose en datos de iluminancia acumulados.
@@ -133,18 +133,23 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
 
     for await (const row of overcastStream) {
       const lux = Number(row.illuminance || 0)
+      const rowTime = new Date(String(row.time))
+
+      // Protección contra vacíos de datos: si el salto entre registros es > 20 min,
+      // no podemos asegurar que el estado fue consecutivo.
+      const jumpMs = lastTime.getTime() - rowTime.getTime()
+
+      if (jumpMs > 20 * 60000) {
+        stillOvercast = false
+        break
+      }
 
       if (lux < OVERCAST_LUX_THRESHOLD) {
-        const rowTime = new Date(String(row.time))
-        const diffMs = lastTime.getTime() - rowTime.getTime()
-
-        overcastMinutes += diffMs / 60000
+        overcastMinutes += jumpMs / 60000
         lastTime = rowTime
       } else {
         // Si encontramos un punto que NO está nublado, rompemos la cadena consecutiva
         stillOvercast = false
-        // Pero debemos incluir el tiempo desde el último punto nublado hasta este punto de quiebre
-        // Sin embargo, para simplificar "consecutivo hasta ahora", si el más reciente no es nublado, es 0.
         break
       }
     }
