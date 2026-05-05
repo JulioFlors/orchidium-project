@@ -88,7 +88,11 @@ class CommandRetryManager {
     if (command) {
       if (command.timer) clearInterval(command.timer)
       this.pending.delete(key)
-      Logger.success(`Comando confirmado por el nodo: ${colors.magenta}${payload}${colors.reset}`)
+      const attempts = command.attempts > 1 ? ` (en ${command.attempts} intentos)` : ''
+
+      Logger.success(
+        `Comando confirmado por el nodo${attempts}: ${colors.magenta}${payload}${colors.reset}`,
+      )
     }
   }
 
@@ -97,7 +101,9 @@ class CommandRetryManager {
       if (command.payload.includes(taskId)) {
         if (command.timer) clearInterval(command.timer)
         this.pending.delete(key)
-        Logger.debug(`El nodo confirmó ACK para la tarea (ID: ${taskId.slice(0, 8)})`)
+        const attempts = command.attempts > 1 ? ` (en ${command.attempts} intentos)` : ''
+
+        Logger.debug(`El nodo confirmó ACK para la tarea${attempts} (ID: ${taskId.slice(0, 8)})`)
       }
     }
   }
@@ -145,17 +151,16 @@ class CommandRetryManager {
     // Log de reintento SILENCIADO por petición (solo visible en depuración extrema)
     // Logger.warn(`Reintentando entrega al nodo...`)
 
-    // 2. Fallo Visual (al minuto 2 de insistencia si el nodo está online)
+    // 2. Gestión de Persistencia (registro en DB al intento 3)
     if (command.attempts === 3) {
-      Logger.warn(
-        `Sin confirmación del nodo (Intento ${command.attempts}). Re-despachando comando.`,
-      )
       this.handleTimeout(
         command.payload,
         'Sin respuesta del Nodo Actuador (Sordo). Reintentando cada 60s',
       )
     }
 
+    // El re-despacho es silencioso en consola para evitar la percepción de fallo.
+    // El usuario verá el conteo de intentos solo en el mensaje de éxito final.
     mqttClient.publish(command.topic, command.payload, { qos: 1 })
   }
 

@@ -531,6 +531,7 @@ Este comando inicia el broker MQTT y enlaza nuestro archivo de configuración pa
 # Reemplaza `<PATH>` por la ruta absoluta de tu carpeta de trabajo.
 docker run -p 1883:1883 -p 9001:9001 -v <PATH>\mosquitto\config:/mosquitto/config --name broker-mqtt eclipse-mosquitto
 
+```bash
 # Ejemplo
 docker run -p 1883:1883 -p 9001:9001 -v C:\Dev\IOT\PristinoPlant\mosquitto\config:/mosquitto/config --name broker-mqtt eclipse-mosquitto
 ```
@@ -539,6 +540,47 @@ docker run -p 1883:1883 -p 9001:9001 -v C:\Dev\IOT\PristinoPlant\mosquitto\confi
 >
 > * `-it`: Abre la terminal del contenedor.
 > * `-d`: Ejecuta el contenedor en segundo plano.
+
+### 🛠️ Mantenimiento y Solución de Problemas (Broker)
+
+En entornos de producción (VPS) o tras fallos continuos de red, el Broker puede acumular "sesiones zombie" que bloquean la reconexión de los ESP32. Sigue estos pasos para realizar una limpieza profunda.
+
+#### 1. Aplicar cambios en `mosquitto.conf`
+
+Docker no detecta cambios internos en archivos montados como volúmenes. Si editas la configuración, debes reiniciar el contenedor explícitamente:
+
+```bash
+docker compose restart mosquitto
+```
+
+#### 2. Limpieza de Sesiones Zombie (Nuclear Reset)
+
+Si el ESP32 no puede conectar debido a sesiones persistentes antiguas, borra la base de datos de estado:
+
+```bash
+# Detener el servicio
+docker compose stop mosquitto
+
+# Borrar la persistencia (elimina zombies y mensajes retenidos antiguos)
+sudo rm infrastructure/mosquitto/data/mosquitto.db
+
+# Iniciar de nuevo
+docker compose up -d mosquitto
+```
+
+#### 3. Vaciar Historial de Logs (Docker & Archivo)
+
+Si los logs son demasiado grandes o contienen información antigua que dificulta el diagnóstico:
+
+```bash
+# Paso A: Vaciar el archivo físico de logs
+sudo truncate -s 0 infrastructure/mosquitto/log/mosquitto.log
+
+# Paso B: Vaciar el historial de consola de Docker (requiere recrear el contenedor)
+docker compose stop mosquitto
+docker compose rm -f mosquitto
+docker compose up -d mosquitto
+```
 
 ---
 

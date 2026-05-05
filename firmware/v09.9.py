@@ -2,9 +2,9 @@
 # Relay Modules: Actuator Controller Firmware.
 # Descripción: Firmware dedicado para el control de las electroválvulas, la bomba
 #              y la estación meteorológica exterior (lluvia e iluminancia).
-# Fecha: 05-05-2026
-# Versión: v0.11.5
-# notes_release: [⚡ DHT22]: Implementado bucle de reintentos (3x) para estabilizar la inicialización del sensor.
+# Fecha: 15-04-2026
+# Versión: v0.9.9
+# notes_release: [📡 Red]: Detección de Sesiones Zombie: Eliminado el falso positivo en el latido manual MQTT (last_cpacket). El nodo ahora detecta correctamente las caídas de red silenciosas basándose en el PINGRESP del broker, resolviendo las desconexiones por timeout. [📡 Core] Desbloqueo del Event Loop: Optimizado el monkey-patch de escritura robusta en umqtt. Se redujo el backoff de 300ms a 20ms para evitar la asfixia del planificador de uasyncio y la congelación de los actuadores durante ráfagas de red.
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib.
@@ -28,8 +28,7 @@ MQTT_PING_INTERVAL   = const(30) # keepalive//2
 # Intervalo para revisar mensajes MQTT entrantes.
 MQTT_CHECK_INTERVAL  = const(1)  # seg
 # tiempo máximo que (connect, check_msg, ping) esperará antes de fallar y lanzar una excepción.
-# Optimizado para fallar rápido y reintentar.
-# En redes lentas con latencia de subida >500ms
+# Optimizado para redes lentas con latencia de subida >500ms
 MQTT_SOCKET_TIMEOUT  = const(15) # seg
 # tiempo máximo que el cliente esperará para que se complete un intercambio completo de mensajes MQTT(QoS) 1
 # [WDT Safety]: Debe ser MENOR que el Watchdog de Hardware (120s)
@@ -105,12 +104,16 @@ IRRIGATION_CIRCUITS = {
     "SOIL_WETTING":   {"source": "main_water",   "line": "soil_wet"},
 }
 
+# Flag de control para la sincronización del monitoreo de iluminancia (Día/Noche)
+# Si es False, se suspende el muestreo del sensor BH1750 para evitar registros de 0 lux.
+# (Se inicializa en ON por defecto; el Scheduler sincronizará el estado real tras conectar)
+IS_SAMPLING_LUX = True
+
 # ---- Hardware: Actuadores ----
 # Diccionario que mapea un (actuator_id) a otro diccionario que contiene todos los atributos y el estado de ese actuador.
 relays = {}
 
 # ---- Hardware: Sensores ----
-dht_sensor             = None # DHT22 (Temp + Humedad)
 illuminance_sensor     = None # BH1750 (I2C)
 rain_sensor_analog     = None # Sensor de gotas de lluvia (ADC)
 i2c_bus                = None # Bus I2C global para diagnóstico
@@ -134,9 +137,7 @@ audit_events = {
     "lux":      asyncio.Event(),
     "rain":     asyncio.Event(),
     "ram":      asyncio.Event(),
-    "health":   asyncio.Event(),
-    "temp":     asyncio.Event(),
-    "hum":      asyncio.Event()
+    "health":   asyncio.Event()
 }
 # Evento maestro para despertar al Ticker Unificado de Auditoría
 audit_master_event = asyncio.Event()
@@ -156,17 +157,6 @@ mqtt_lock = asyncio.Lock()
 # Variables de control
 wlan   = None # Conexión WiFi
 client = None # Cliente  MQTT
-
-# ---- Globales de Telemetría & Recuperación ----
-last_rain_raw = 4095 # Última lectura cruda (Seco por defecto)
-restored_rain_start_ticks = 0
-restored_rain_state = 'Dry'
-RAIN_TARGET_SAMPLES = const(10)
-
-# Flag de control para la sincronización del monitoreo de iluminancia (Día/Noche)
-# Si es False, se suspende el muestreo del sensor BH1750 para evitar registros de 0 lux.
-# (Se inicializa en ON por defecto; el Scheduler sincronizará el estado real tras conectar)
-IS_SAMPLING_LUX = True
 
 # ---- Colors for logs ----
 if DEBUG:
@@ -198,9 +188,7 @@ AUDIT_MODE = {
     "rain": False,
     "lux": False,
     "health": False,
-    "ram": False,
-    "temp": False,
-    "hum": False
+    "ram": False
 }
 
 # Funciones de Muestreo Unificadas para Auditoría (Lazy Reference)
@@ -210,34 +198,23 @@ def get_lux_sample():
         except: return None
     return None
 
-async def fetch_rain_raw():
-    """Realiza el oversampling físico del sensor (10 muestras en 500ms)."""
-    global rain_sensor_analog
-
-    if rain_sensor_analog is None: return None
-    
-    try:
-        raw_sum = 0
-        valid_samples = 0
-        for _ in range(RAIN_TARGET_SAMPLES):
-            try:
-                raw_sum += rain_sensor_analog.read()
-                valid_samples += 1
-            except: pass
-            await asyncio.sleep_ms(50)
-        
-        return int(raw_sum / valid_samples) if valid_samples > 0 else None
-    except:
-        return None
-
-async def get_rain_sample():
-    """Auditoría bajo demanda: Realiza una lectura fresca."""
-    global last_rain_raw
-
-    val = await fetch_rain_raw()
-    if val is not None:
-        last_rain_raw = val
-    return last_rain_raw
+def get_rain_sample():
+    if rain_sensor_analog:
+        try:
+            # Umbrales (Sincronizado con rain_monitor_task)
+            RAW_INTENSITY_MIN = 1700 # 100%
+            RAIN_STOP_VALUE   = 2800 # 0%
+            
+            raw = sum([rain_sensor_analog.read() for _ in range(5)]) // 5
+            
+            # Cálculo de Intensidad (0-100%)
+            clamped_raw = max(RAW_INTENSITY_MIN, min(raw, RAIN_STOP_VALUE))
+            delta_max = RAIN_STOP_VALUE - RAW_INTENSITY_MIN
+            intensity = round(((RAIN_STOP_VALUE - clamped_raw) / delta_max) * 100)
+            
+            return intensity
+        except: return None
+    return None
 
 def get_health_sample():
     from network import WLAN, STA_IF # type: ignore
@@ -253,21 +230,11 @@ def get_ram_sample():
     # Retornamos tupla (Free, Alloc) para ahorrar RAM (evita dict)
     return (mem_free(), mem_alloc())
 
-def get_dht_sample():
-    """Lectura bajo demanda del DHT22 para auditoría."""
-    if dht_sensor is None: return None
-    try:
-        dht_sensor.measure()
-        return (round(dht_sensor.temperature(), 1), round(dht_sensor.humidity(), 1))
-    except: return None
-
 AUDIT_SAMPLE_FNS = {
-    "lux":      get_lux_sample,
-    "rain":     get_rain_sample,
-    "health":   get_health_sample,
-    "ram":      get_ram_sample,
-    "temp":     get_dht_sample,
-    "hum":      get_dht_sample
+    "lux": get_lux_sample,
+    "rain": get_rain_sample,
+    "health": get_health_sample,
+    "ram": get_ram_sample
 }
 
 # Contadores para el Auto-Apagado de auditorías (RAM)
@@ -275,9 +242,7 @@ AUDIT_COUNTERS = {
     "rain": 0,
     "lux": 0,
     "health": 0,
-    "ram": 0,
-    "temp": 0,
-    "hum": 0
+    "ram": 0
 }
 
 # ---- Utilidades de Telemetría ----
@@ -326,11 +291,9 @@ class RingBuffer:
                 n += 1
         return n
 
-# Buffers de Telemetría (RingBuffer)
+# Buffers de Telemetría
 illuminance_Batch = RingBuffer(10)
 rain_Batch        = RingBuffer(10)
-temperature_Batch = RingBuffer(10)
-humidity_Batch    = RingBuffer(10)
 
 # ---- Función Auxiliar: NVS Manager (Gestión de Estado Persistente optimizada con Caché) ----
 class NVSManager:
@@ -499,24 +462,14 @@ async def publish_audit_state():
     try:
         # Sincronización MQTT con validación de socket
         if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
-            # Mapeo de estados de auditoría a strings JSON
-            rain_on   = "true" if AUDIT_MODE["rain"]   else "false"
-            lux_on    = "true" if AUDIT_MODE["lux"]    else "false"
-            health_on = "true" if AUDIT_MODE["health"] else "false"
-            ram_on    = "true" if AUDIT_MODE["ram"]    else "false"
-            temp_on   = "true" if AUDIT_MODE["temp"]   else "false"
-            hum_on    = "true" if AUDIT_MODE["hum"]    else "false"
-
-            # Mapeo de presencia de hardware
-            hw_lux  = "true" if illuminance_sensor  else "false"
-            hw_rain = "true" if rain_sensor_analog  else "false"
-            hw_dht  = "true" if dht_sensor          else "false"
-
             # Construcción manual de JSON: Mucho más eficiente que dumps() para dicts anidados
-            # El orden de los argumentos debe coincidir exactamente con los marcadores %s
-            payload = '{"rain":%s,"lux":%s,"health":%s,"ram":%s,"temp":%s,"hum":%s,"lux_hw":%s,"rain_hw":%s,"temp_hw":%s,"hum_hw":%s}' % (
-                rain_on, lux_on, health_on, ram_on, temp_on, hum_on,
-                hw_lux, hw_rain, hw_dht, hw_dht
+            payload = '{"rain":%s,"lux":%s,"health":%s,"ram":%s,"lux_hw":%s,"rain_hw":%s}' % (
+                "true" if AUDIT_MODE["rain"] else "false",
+                "true" if AUDIT_MODE["lux"] else "false",
+                "true" if AUDIT_MODE["health"] else "false",
+                "true" if AUDIT_MODE["ram"] else "false",
+                "true" if illuminance_sensor else "false",
+                "true" if rain_sensor_analog else "false"
             )
 
             from umqtt.simple2 import MQTTException # type: ignore
@@ -524,7 +477,7 @@ async def publish_audit_state():
                 # 🔒 Pedimos permiso para usar el socket
                 async with mqtt_lock:
                     # Publicamos directo (MQTT convierte string a bytes)
-                    client.publish(MQTT_TOPIC_AUDIT_STATE, payload, retain=False, qos=0)
+                    client.publish(MQTT_TOPIC_AUDIT_STATE, payload, retain=True, qos=0)
             except (MQTTException, OSError) as e:
                 if DEBUG: log_mqtt_exception("Fallo sincronización estado auditoría", e)
                 # Invalidamos el cliente para que el loop principal detecte el fallo
@@ -590,11 +543,7 @@ async def boot_recovery_check():
 
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
-    from utime import localtime, ticks_ms, time # type: ignore
-
-    # Ventanas de oportunidad para recuperación tras reinicio
-    IRRIGATION_RECOVERY_WINDOW = 1200 # 20 min
-    RAIN_RECOVERY_WINDOW       = 600  # 10 min (Alineado con Scheduler)
+    from utime import localtime, time # type: ignore
 
     if DEBUG:
         print(f"\n🔍  {Colors.BLUE}Verificando NVS Recovery{Colors.RESET}")
@@ -625,6 +574,9 @@ async def boot_recovery_check():
         NVSManager.clear_all_irrigation_tasks()
         NVSManager.flush()
         return
+    
+    # Ventana de oportunidad (20 min) para recuperar un riego interrumpido.
+    RECOVERY_WINDOW = 1200 
 
     # ---- Análisis Temporal (Iterando todas las tareas) ----
     # 2026-Fix: Iteramos sobre los values del diccionario
@@ -666,7 +618,7 @@ async def boot_recovery_check():
                 # Asumimos que si expiró hace poco (dentro de ventana), arranca YA.
                 # Si expiró hace horas, se ignora.
                 time_failed_start = current_time - target_start
-                if time_failed_start < IRRIGATION_RECOVERY_WINDOW:
+                if time_failed_start < RECOVERY_WINDOW:
                     if DEBUG:
                         print(f"    ├─ {Colors.GREEN}EJECUTANDO DIFERIDO ATRASADO{Colors.RESET} ID:{real_actuator_id}")
                     if real_actuator_id in relays:
@@ -699,7 +651,7 @@ async def boot_recovery_check():
                 elapsed_offline = current_time - saved_at_epoch
                  
                 # Si estuvo apagado demasiado tiempo (más de 20 min), se cancela.
-                if elapsed_offline > IRRIGATION_RECOVERY_WINDOW:
+                if elapsed_offline > RECOVERY_WINDOW:
                     if DEBUG:
                         print(f"    └─ 🗑️  {Colors.YELLOW}Tarea Pausada (Vencida){Colors.RESET} ID:{actuator_id} (Offline: {elapsed_offline}s)")
                     if actuator_id in relays:
@@ -738,56 +690,36 @@ async def boot_recovery_check():
 
             continue # Salta el resto de la lógica para este task
 
-        # [Smart Recovery] Casos de Riego (A y B)
-        elif task_data.get("type") in ["irrigation_run", "delayed_start"]:
-            # Caso A: A tiempo (Aún debería estar regando)
-            if remaining_time > 0:
-                if DEBUG:
-                    print(f"    ├─ {Colors.GREEN}RECUPERANDO{Colors.RESET} ID:{actuator_id}")
-                    print(f"    │   └─ Faltan: {remaining_time}s")
+        # Caso A: A tiempo (Aún debería estar regando)
+        if remaining_time > 0:
+            if DEBUG:
+                print(f"    ├─ {Colors.GREEN}RECUPERANDO{Colors.RESET} ID:{actuator_id}")
+                print(f"    │   └─ Faltan: {remaining_time}s")
+            
+            # Restaurar Relé
+            if actuator_id in relays:
+                target_relay = relays[actuator_id]
+                target_relay['pin'].value(1) # ON
+                target_relay['state'] = 'ON'
+                target_relay['task_id'] = task_id
+                state_changed.set()
                 
-                # Restaurar Relé
-                if actuator_id in relays:
-                    target_relay = relays[actuator_id]
-                    target_relay['pin'].value(1) # ON
-                    target_relay['state'] = 'ON'
-                    target_relay['task_id'] = task_id
-                    state_changed.set()
-                    
-                    # Reprogramar Timer
-                    active_irrigation_timers.append((actuator_id, current_time + remaining_time))
-                    if DEBUG:
-                        print(f"    └─ Actuador: {target_relay['name']} -> ON")
-                else:
-                    if DEBUG:
-                        print(f"    └─ ⚠️  Error: Actuador {actuator_id} no encontrado.")
-                    NVSManager.clear_task(actuator_id) # Borramos solo esta mala
-
-            # Caso B: Tarea Expirada
+                # Reprogramar Timer
+                active_irrigation_timers.append((actuator_id, current_time + remaining_time))
+                if DEBUG:
+                    print(f"    └─ Actuador: {target_relay['name']} -> ON")
             else:
                 if DEBUG:
-                    print(f"    └─ 🗑️  {Colors.YELLOW}Tarea Vencida{Colors.RESET} ID:{actuator_id} (No reanudar)")
-                if actuator_id in relays:
-                    relays[actuator_id]['task_id'] = ""
-                NVSManager.clear_task(actuator_id)
+                    print(f"    └─ ⚠️  Error: Actuador {actuator_id} no encontrado.")
+                NVSManager.clear_task(actuator_id) # Borramos solo esta mala
 
-        # [Smart Recovery] Caso F: Evento de Lluvia Activo
-        elif task_data.get("type") == "rain_event":
-            start_epoch = task_data.get("start_epoch", 0)
-            if start_epoch > 0:
-                elapsed = current_time - start_epoch
-                # Si la desconexión fue breve (menos de 10 min), reanudamos.
-                if elapsed < RAIN_RECOVERY_WINDOW:
-                    global restored_rain_start_ticks, restored_rain_state
-                    restored_rain_start_ticks = ticks_ms() - (int(elapsed) * 1000)
-                    restored_rain_state = 'Raining'
-                    if DEBUG:
-                        print(f"    ├─ {Colors.CYAN}REANUDANDO LLUVIA{Colors.RESET} Iniciada hace {int(elapsed)}s")
-                else:
-                    if DEBUG:
-                        print(f"    └─ 🗑️  {Colors.YELLOW}Evento de Lluvia Expirado{Colors.RESET} (Offline: {elapsed}s)")
-                    # ---- Limpieza de Bitácora (NVS) ----
-                    NVSManager.delete_key("rain_event")
+        # Caso B: Tarea Expirada
+        else:
+            if DEBUG:
+                print(f"    └─ 🗑️  {Colors.YELLOW}Tarea Vencida{Colors.RESET} ID:{actuator_id} (No reanudar)")
+            if actuator_id in relays:
+                relays[actuator_id]['task_id'] = ""
+            NVSManager.clear_task(actuator_id)
 
     # ---- Escritura Física en Disco ----
     # Guardamos los nuevos tiempos recalibrados y las tareas expiradas eliminadas
@@ -930,63 +862,12 @@ def setup_relays():
 def setup_sensors():
     """Inicializa los sensores cableados al nodo actuador de forma segura."""
     # Gestión de variables globales
-    global dht_sensor, illuminance_sensor, rain_sensor_analog, i2c_bus, BH1750
+    global illuminance_sensor, rain_sensor_analog, i2c_bus, BH1750
 
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
     from machine import ADC, I2C, Pin, SoftI2C # type: ignore
     from utime import sleep_ms # type: ignore
-
-    # 0. Sensor DHT22
-    try:
-        from dht import DHT22 # type: ignore
-        dht_test = DHT22(Pin(23))
-        
-        if DEBUG:
-            print(f"\n🌡️  Conectando {Colors.YELLOW}DHT22{Colors.RESET}")
-
-        # Bucle de reintentos (Máximo 3 intentos de inicialización)
-        dht_success = False
-        for attempt in range(1, 4):
-            try:
-                if attempt > 1:
-                    if DEBUG: print(f"    ├─ 🔄 Reintentando ({attempt}/3)...")
-                
-                sleep_ms(2000) # Estabilización del sensor
-                dht_test.measure()
-                temp = dht_test.temperature()
-                hum  = dht_test.humidity()
-
-                # Validación de rango físico razonable (descarta pines flotantes)
-                if -10 < temp < 60 and 0 < hum < 100:
-                    dht_sensor = dht_test
-                    dht_success = True
-                    if DEBUG:
-                        print(f"    ├─ ✅ {Colors.GREEN}Conectado{Colors.RESET}")
-                        print(f"    ├─ 📊 Valor: {Colors.YELLOW}{temp:.1f} °C{Colors.RESET}")
-                        print(f"    └─ 📊 Valor: {Colors.BLUE}{hum:.1f} %{Colors.RESET}")
-                    break # Éxito, salimos del bucle
-                else:
-                    if DEBUG:
-                        print(f"    ├─ ❌ {Colors.RED}Fuera de rango{Colors.RESET}")
-                        print(f"    ├─ 📊 Valor: {Colors.YELLOW}{temp:.1f} °C{Colors.RESET}")
-                        print(f"    ├─ 📊 Valor: {Colors.BLUE}{hum:.1f} %{Colors.RESET}")
-                        if attempt < 3: print(f"    ├─ 🔄 Reintentando ({attempt + 1}/3)")
-            except Exception:
-                if attempt == 3: raise # Si falla el último intento, propagamos el error
-                continue # Reintentar
-        
-        if not dht_success:
-            dht_sensor = None
-
-    except Exception as e:
-        if DEBUG:
-            # Error 116 (ETIMEDOUT) suele indicar que el sensor no está conectado físicamente
-            if isinstance(e, OSError) and e.args and e.args[0] == 116:
-                print(f"    └─ ❌ {Colors.RED}Desconectado (Timeout){Colors.RESET}")
-            else:
-                print(f"    └─ ❌ {Colors.RED}Fallo tras reintentos: {e}{Colors.RESET}")
-        dht_sensor = None
 
     # 1. Sensor de Iluminancia (BH1750 / I2C)
     # [Diagnóstico Exhaustivo]: Prueba múltiples configuraciones, SoftI2C y Hardware I2C.
@@ -1038,8 +919,8 @@ def setup_sensors():
                 lux_test = round(illuminance_sensor.get_auto_luminance(), 1)
 
                 if DEBUG:
-                    print(f"    ├─ ✅ {Colors.GREEN}Conectado{Colors.RESET} [{label}]")
-                    print(f"    └─ 📊 Valor: {Colors.YELLOW}{lux_test} lux{Colors.RESET}")
+                    print(f"    └─ ✅ {Colors.GREEN}Conectado{Colors.RESET} [{label}]")
+                    print(f"       Lectura inicial: {Colors.CYAN}{lux_test} lux{Colors.RESET}")
 
                 sensor_connected = True
 
@@ -1063,38 +944,22 @@ def setup_sensors():
         adc_rain = ADC(Pin(35))
         adc_rain.atten(ADC.ATTN_11DB) # Rango 0-3.3V
         
-        # [Oversampling Robusto]: Tomamos 10 muestras para descartar ruido y absorber fallos del ADC
-        raw_sum = 0
-        valid_samples = 0
+        # [Oversampling de Arranque]: Tomamos 10 muestras para descartar ruido de pin flotante
+        r_sum = 0
         for _ in range(10):
-            try:
-                raw_sum += adc_rain.read()
-                valid_samples += 1
-            except Exception:
-                pass
-            sleep_ms(50)
+            r_sum += adc_rain.read()
+            sleep_ms(10)
+        r_avg = r_sum // 10
 
-        if valid_samples == 0:
-            if DEBUG: print(f"\n❌  Sensor Lluvia: {Colors.RED}Desconectado{Colors.RESET} (Fallo lectura ADC)")
-            rain_sensor_analog = None
+        # Validación Inicial (Sondeo): Un cable suelto genera ruido de ~1000.
+        # Un sensor conectado y SECO debe entregar > 3500.
+        # Si lee < 1500 en el arranque, se considera desconectado o ruidoso.
+        if r_avg > 1500:
+            rain_sensor_analog = adc_rain
+            if DEBUG: print(f"\n💧  Sensor Lluvia: {Colors.CYAN}Conectado{Colors.RESET} (Lectura Raw inicial: {r_avg})")
         else:
-            r_avg = raw_sum // valid_samples
-            
-            # Validación Inicial (Sondeo):
-            # El sensor SECO debería leer 4095.
-            # El sensor con LLUVIA Residual o Garuando puede leer entre 3000 y 3300
-            if r_avg > 1400:
-                rain_sensor_analog = adc_rain
-                if DEBUG:
-                    print(f"\n💧  Conectando {Colors.YELLOW}Sensor de Lluvia{Colors.RESET}")
-                    print(f"    ├─ ✅ {Colors.GREEN}Conectado{Colors.RESET}")
-                    print(f"    └─ 📊 Valor: {Colors.BLUE}{r_avg}{Colors.RESET}")
-            else:
-                if DEBUG:
-                    print(f"\n💧  Conectando {Colors.YELLOW}Sensor de Lluvia{Colors.RESET}")
-                    print(f"    ├─ ❌ {Colors.RED}Desconectado{Colors.RESET}")
-                    print(f"    └─ 📊 Valor: {Colors.BLUE}{r_avg}{Colors.RESET}")
-                rain_sensor_analog = None
+            if DEBUG: print(f"\n❌  Sensor Lluvia: {Colors.RED}Desconectado{Colors.RESET} (Ruido/Antena: {r_avg})")
+            rain_sensor_analog = None
 
     except Exception as e:
         if DEBUG: print(f"\n❌  Sensor Lluvia: {Colors.RED}{e}{Colors.RESET}")
@@ -1458,48 +1323,6 @@ def force_disconnect_mqtt():
         collect()
         if DEBUG: print(f"📡  Cliente  {Colors.GREEN}Desconectado{Colors.RESET}")
 
-# ---- Función Auxiliar: Flush de Batches de Telemetría (Pre-Shutdown) ----
-def flush_telemetry_batches():
-    """Publica los batches acumulados en RAM antes de perder la conexión MQTT."""
-    if not (client and hasattr(client, 'sock') and client.sock and wlan and wlan.isconnected()):
-        return
-
-    from utime import sleep_ms
-    try:
-        # Batch Iluminancia
-        if illuminance_Batch.count > 0:
-            items = illuminance_Batch.get_all()
-            if items:
-                h_str = ",".join(['[%d,{"illuminance":%s}]' % (it[0], str(it[1])) for it in items])
-                client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"history":[%s]}' % h_str, qos=0)
-                illuminance_Batch.clear()
-                if DEBUG: print(f"    ├─ ☀️  Flush Lux: {len(items)} muestras")
-                sleep_ms(500) # Pequeña pausa para el stack de red
-    except: pass
-
-    try:
-        # Batch Temperatura
-        if temperature_Batch.count > 0:
-            items = temperature_Batch.get_all()
-            if items:
-                t_str = ",".join(['[%d,{"temperature":%s}]' % (it[0], str(it[1])) for it in items])
-                client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"history":[%s]}' % t_str, qos=0)
-                temperature_Batch.clear()
-                if DEBUG: print(f"    ├─ 🌡️  Flush Temp: {len(items)} muestras")
-                sleep_ms(500) # Pequeña pausa para el stack de red
-    except: pass
-
-    try:
-        # Batch Humedad
-        if humidity_Batch.count > 0:
-            items = humidity_Batch.get_all()
-            if items:
-                h_str = ",".join(['[%d,{"humidity":%s}]' % (it[0], str(it[1])) for it in items])
-                client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"history":[%s]}' % h_str, qos=0)
-                humidity_Batch.clear()
-                if DEBUG: print(f"    └─ 💧  Flush Hum: {len(items)} muestras")
-    except: pass
-
 # ---- FUNCIÓN AUXILIAR: Gestión de desconexión (Graceful Shutdown - Relay Modules) ----
 def shutdown():
     """
@@ -1507,7 +1330,6 @@ def shutdown():
     * Publica `offline` explícitamente.
     * Apaga fisicamente todos los relés.
     * Publica el estado `OFF` de todos los relés.
-    * Flush de batches de telemetría acumulados.
     * Desconecta MQTT y WiFi.
     """
 
@@ -1522,9 +1344,6 @@ def shutdown():
     # Publicamos en MQTT (Solo si hay conexión)
     if client and hasattr(client, 'sock') and client.sock and wlan and wlan.isconnected():
         try:
-            # Flush de batches acumulados antes de desconectar
-            flush_telemetry_batches()
-
             # Publicamos el LWT explícitamente para que el broker lo retenga.
             # El LWT para el cliente MQTT solo se envía si el cliente se desconecta inesperadamente. 
             # Si nos desconectamos limpiamente,
@@ -1541,15 +1360,9 @@ def shutdown():
     force_disconnect_mqtt()
 
     # Desconectamos el WiFi.
-    if wlan:
+    if wlan and wlan.isconnected():
         try:
-            if wlan.isconnected():
-                wlan.disconnect()
-
-            # Reset de Hardware Limpio: Apaga físicamente la radio del ESP32.
-            # Esto limpia el stack TCP/IP y evita errores EBUSY tras el reinicio.
-            wlan.active(False)
-
+            wlan.disconnect()
             if DEBUG:
                 print(f"📡  WiFi     {Colors.GREEN}Desconectado{Colors.RESET}\n")
         except Exception:
@@ -1692,22 +1505,16 @@ async def mqtt_connector_task(client_id):
     from gc            import collect
     from machine       import Timer
     from umqtt.simple2 import MQTTClient, MQTTException  # type: ignore
-    from utime         import sleep_ms, ticks_diff, ticks_ms, time # type: ignore
+    from utime         import ticks_ms, ticks_diff, time # type: ignore
 
     # =========================================================================
     # 🩹 MONKEY-PATCHING: Optimizaciones inyectadas a la librería MQTT
     # =========================================================================
 
-    # 🩹 Parche 1: Escritura Robusta y Anti-Bloqueo (Buffer Safety)
-    # ─────────────────────────────────────────────────────────────────
-    # umqtt original puede bloquearse si el buffer de salida TCP está 
-    # lleno o si la red se degrada durante una escritura TLS.
-    # Solución: Implementamos un bucle con poller y cronómetro manual.
-    # Si tras 'socket_timeout' no se puede escribir ni un byte, 
-    # lanzamos MQTTException(3) para evitar colgar el hilo.
-    # ─────────────────────────────────────────────────────────────────
+    # 🩹 Parche 1: SSL / Escritura Robusta (Sobrevive a buffer Lleno/Red saturada)
     def _robust_write(self, bytes_wr, length=-1):
-        """Asegura el envío total de datos con protección contra saturación de red."""
+        """Asegura que todos los bytes se envíen, con protección Anti-Deadlock."""
+        from utime import sleep_ms, ticks_ms, ticks_diff # type: ignore
 
         data = bytes_wr if length == -1 else bytes_wr[:length]
         total_written = 0 # bytes transferidos
@@ -1728,8 +1535,8 @@ async def mqtt_connector_task(client_id):
                     raise MQTTException(3) # Timeout de escritura (Evita el WDT Crash)
                 
                 # El búfer está lleno, esperamos antes de reintentar.
-                # 500ms da tiempo al stack TCP para drenar en redes lentas (>500ms latencia)
-                sleep_ms(500)
+                # 20ms da tiempo al stack TCP para drenar en redes lentas (>500ms latencia)
+                sleep_ms(20)
                 continue
             
             if written == 0:
@@ -1741,13 +1548,7 @@ async def mqtt_connector_task(client_id):
 
         return total_written
 
-    # 🩹 Parche 2: Lectura Resiliente (Anti-Zombie de Recepción)
-    # ─────────────────────────────────────────────────────────────────
-    # Evita que el cliente se quede esperando datos de un socket muerto
-    # que no ha reportado error de sistema pero no envía tráfico.
-    # Maneja errores específicos de MicroPython (11, 110, 116) que 
-    # suelen ocurrir en micro-cortes de WiFi o congestión TLS.
-    # ─────────────────────────────────────────────────────────────────
+    # 🩹 Parche 2: Lectura Resiliente (Evita bloqueos Zombie en Caídas)
     def _resilient_read(self, expected_length):
         """Maneja interrupciones de red TCP/SSL limpiamente, evitando bucles infinitos."""
         if expected_length < 0:
@@ -1785,16 +1586,9 @@ async def mqtt_connector_task(client_id):
                 
         return buffer
 
-    # 🩹 Parche 3: Gestión de Timeouts sin Fugas de RAM
-    # ─────────────────────────────────────────────────────────────────
-    # La implementación original usa .items() en el diccionario de PIDs,
-    # lo cual crea una copia temporal (lista de tuplas) en cada iteración.
-    # En ESP32, esto causa fragmentación de RAM y eventuales Crash.
-    # Solución: Iteramos sobre las llaves directamente, minimizando el
-    # uso de memoria dinámica durante la verificación de ACKs.
-    # ─────────────────────────────────────────────────────────────────
+    # 🩹 Parche 3: Timeout sin Fuga de RAM (Evita .items() en diccionario de pings)
     def _ram_safe_message_timeout(self):
-        """Limpia los PIDs vencidos sin fragmentar la memoria RAM."""
+        """Limpia los PIDs vencidos sin crear copias costosas del diccionario en RAM."""
         current_time = ticks_ms()
         expired_pids = []
         
@@ -1814,7 +1608,7 @@ async def mqtt_connector_task(client_id):
     MQTTClient._write = _robust_write
     MQTTClient._read = _resilient_read
     MQTTClient._message_timeout = _ram_safe_message_timeout
-
+    
     # =========================================================================
 
     # Definimos el timeout (ms)
@@ -1824,9 +1618,6 @@ async def mqtt_connector_task(client_id):
     # Cronómetro de fallas de conexión MQTT
     mqtt_disconnect_start = None
     last_manual_ping = ticks_ms()
-    
-    # Contador de errores de conexiones consecutivas
-    consecutive_mqtt_failures = 0
 
     while True:
         # Esperamos a que el WiFi esté conectado
@@ -1837,6 +1628,7 @@ async def mqtt_connector_task(client_id):
 
         # 🔄 Gestionamos la (Re)conexión
         if client is None:
+
             # Verificación de falla crítica por tiempo (5 Minutos)
             if mqtt_disconnect_start is None:
                 mqtt_disconnect_start = time()
@@ -1893,37 +1685,23 @@ async def mqtt_connector_task(client_id):
                     # Esto permite que el Broker guarde las suscripciones y mensajes QOS 1 mientras estemos offline.
                     client.connect(clean_session=True)
                 finally:
-                    # Desactivamos el timer de seguridad (siempre, éxito o fallo)
+                    # SI la función retorna con éxito.
+                    # desactivamos el timer.
                     wd_timer.deinit()
 
-                # Solo tras conexión EXITOSA
-                # Reseteamos el cronómetro de fallas MQTT
-                mqtt_disconnect_start = None
+                    # Reseteamos cronómetro.
+                    mqtt_disconnect_start = None
 
                 if DEBUG:
                     print(f"📡  Conexión MQTT {Colors.GREEN}Establecida{Colors.RESET}", end="\n")
 
-                # Reseteamos relojes para evitar zombie instantáneo tras reconexión
-                client.last_cpacket = ticks_ms()
-                last_manual_ping = ticks_ms()
+                # Publicamos que estamos ONLINE
+                # retain=True: El último estado se queda en el Broker para nuevos suscriptores
+                # qos=0: Fire-and-forget (Evita timeouts en redes con RSSI -90)
+                client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=0)
 
-                # Reseteamos el contador tras conexión exitosa
-                consecutive_mqtt_failures = 0
-
-                # Publicamos evento explícito de BOOT para que el scheduler detecte reinicios rápidos
-                client.publish(MQTT_TOPIC_STATUS + "/boot", b"reboot", retain=False, qos=1)
-                await asyncio.sleep_ms(300)
-
-                # Publicamos que estamos ONLINE (Retain=True para limpiar LWT y actualizar UI)
-                client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=1)
-                await asyncio.sleep_ms(300)
-
-                if DEBUG:
-                    print(f"\n📡  Controlador {Colors.GREEN}online{Colors.RESET}", end="\n")
-
-                # Publica el estado actual de las auditorías (Digital Twin) tras conectar.
-                await publish_audit_state()
-                await asyncio.sleep_ms(300)
+                # Publica el estado actual de las auditorías (Digital Twin) tras conectar
+                publish_audit_state()
 
                 # Suscripción a tópicos
                 client.subscribe(MQTT_TOPIC_CMD, qos=1)
@@ -1935,7 +1713,7 @@ async def mqtt_connector_task(client_id):
 
                 # [Estabilización] Esperamos 5s a que se envíen los paquetes de suscripción y status (QoS 1)
                 # Esto "vacia" el buffer de salida TCP antes de la ráfaga de estados.
-                await asyncio.sleep_ms(300)
+                await asyncio.sleep(5)
 
                 # Notifica el cambio de estado
                 state_changed.set()
@@ -1944,23 +1722,11 @@ async def mqtt_connector_task(client_id):
                 if DEBUG: log_mqtt_exception("Fallo la Conexión MQTT", e)
                 
                 await check_critical_mqtt_errors(e)
-                consecutive_mqtt_failures += 1
 
                 # Invalidamos el cliente MQTT forzando una reconexión completa.
                 force_disconnect_mqtt()
-
-                # ---- Backoff Adaptativo ----
-                if consecutive_mqtt_failures >= 3:
-                    # 2 minutos de Espera para que se Estabilice la red
-                    wait_time = 120
-                    if DEBUG:
-                        print(f"⚠️  {Colors.YELLOW}Backoff:{Colors.RESET} {consecutive_mqtt_failures} fallos seguidos.")
-                        print(f"    └─ Esperando {wait_time}s para liberar RAM y estabilizar red.")
-                    collect()
-                    await asyncio.sleep(wait_time)
-                else:
-                    # Backoff estándar
-                    await asyncio.sleep(10)
+                # Backoff extendido para dar tiempo al chip WiFi a limpiar el socket (evita EBUSY)
+                await asyncio.sleep(10)
                 continue
 
         # 🔄 Gestionamos la Conexión Activa
@@ -1980,10 +1746,8 @@ async def mqtt_connector_task(client_id):
                 if lock_acquired:
                     try:
                         # Revisamos si hay mensajes entrantes
-                        # Drenamos la cola MQTT (ráfaga de hasta 15 mensajes)
-                        # umqtt procesa 1 solo msj por llamada. Si se acumulan, PINGRESP se retrasa.
-                        for _ in range(15):
-                            client.check_msg()
+                        # Procesa PINGRESP y actualiza client.last_cpacket
+                        client.check_msg()
                     finally:
                         mqtt_lock.release()
 
@@ -2257,8 +2021,8 @@ async def state_publisher_task():
             # 🔒 Pedimos permiso para usar el socket
             async with mqtt_lock:
                 # Publicamos SOLO al tópico Unificado (/state)
-                # El frontend (ControlPanel) y the scheduler ya consumen exclusivamente este tópico.
-                client.publish(MQTT_TOPIC_STATE, payload, retain=False, qos=0)
+                # El frontend (ControlPanel) y el scheduler ya consumen exclusivamente este tópico.
+                client.publish(MQTT_TOPIC_STATE, payload, retain=True, qos=0)
 
             # Liberamos el payload de la RAM
             del payload
@@ -2298,128 +2062,52 @@ async def rain_monitor_task():
     * Maquina de Estados Finita con validación de histéresis.
     """
 
-    # Estado Inicial (Soportando recuperación de NVS)
-    global restored_rain_state, restored_rain_start_ticks, last_rain_raw
-
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
     from ujson import dumps
-    from utime import ticks_ms, ticks_diff, time
+    from utime import ticks_ms, ticks_diff
     from umqtt.simple2 import MQTTException # type: ignore
 
     # Umbrales (ADC 0-4095)
-    # RAIN_START_VALUE  = 2300 # Mojado (OLD)
-    # RAIN_STOP_VALUE   = 2800 # Seco (OLD)
-    RAIN_START_VALUE  = 2600 # Mojado (Inicia evento)
-    RAIN_STOP_VALUE   = 3200 # Seco (Finaliza evento)
+    RAIN_START_VALUE  = 2300 # Mojado
+    RAIN_STOP_VALUE   = 2800 # Seco
     RAW_INTENSITY_MIN = 1700 # 100%
-
+    
     # Tiempos de Configuración
     INTERVAL_NORMAL = 600 # 10 minutos
     INTERVAL_BURST  = 60  # 1 minuto
+    TARGET_SAMPLES  = 10
 
+    # Estado Inicial
     current_interval = INTERVAL_NORMAL
-    current_state    = restored_rain_state
+    current_state    = 'Dry'
     rain_samples     = 0
-    rain_start_ticks = restored_rain_start_ticks
+    rain_start_ticks = 0
     rain_total_int   = 0
-
-    if current_state == 'Raining':
-        current_interval = INTERVAL_BURST
-        if DEBUG: print(f"\n🌧️  Lluvia RECUPERADA desde NVS | Modo Ráfaga: {INTERVAL_BURST}s")
-
-    # ---- Primera Lectura Inmediata (Sincronización de Arranque) ----
-    # Leemos el sensor ahora mismo para determinar el estado REAL de lluvia.
-    # Si NVS dice "Raining" pero el sensor dice "seco", cerramos el evento.
-    boot_state_to_publish = None # Estado a publicar por MQTT cuando esté listo
-    boot_timestamp_to_publish = time() # Momento exacto de la decisión
-
-    if rain_sensor_analog is not None:
-        try:
-            raw = await fetch_rain_raw()
-            if raw is not None:
-                last_rain_raw = raw
-
-                if raw < RAIN_START_VALUE:
-                    # ---- Sensor confirma lluvia ----
-                    if current_state != 'Raining':
-                        # NVS no tenía evento → nuevo evento
-                        current_state = 'Raining'
-                        current_interval = INTERVAL_BURST
-                        rain_start_ticks = ticks_ms()
-                        rain_total_int = 0
-                        rain_samples = 0
-                        # Persistir en NVS
-                        try:
-                            NVSManager.save_task({
-                                "type": "rain_event",
-                                "start_epoch": time(),
-                                "key": "rain_event"
-                            })
-                            NVSManager.flush()
-                        except Exception:
-                            pass
-
-                    # Si NVS ya tenía Raining, mantenemos rain_start_ticks restaurado (no perdemos duración)
-                    boot_state_to_publish = 'Raining'
-                    if DEBUG: print(f"    ├─ Rain Monitor: {Colors.BLUE}{raw}{Colors.RESET}")
-
-                else:
-                    # ---- Sensor dice seco ----
-                    if current_state == 'Raining':
-                        # NVS decía Raining pero ya paró → cerrar evento con duración calculada
-                        if rain_start_ticks > 0:
-                            duration_ms = ticks_diff(ticks_ms(), rain_start_ticks)
-                            duration_sec = duration_ms // 1000
-                            if DEBUG: print(f"    ├─ Lluvia terminó offline. Duración: {duration_sec}s")
-                            # El evento finalizado se publicará cuando MQTT esté listo
-                            # (en la primera iteración del while True)
-
-                        current_state = 'Dry'
-                        current_interval = INTERVAL_NORMAL
-                        rain_start_ticks = 0
-                        # ---- Limpieza de Bitácora (NVS) ----
-                        NVSManager.delete_key("rain_event")
-                        NVSManager.flush()
-
-                    boot_state_to_publish = 'Dry'
-                    if DEBUG: print(f"    ├─ Rain Monitor: {Colors.YELLOW}{raw}{Colors.RESET}")
-
-        except Exception as e:
-            if DEBUG: print(f"\n⚠️  Error en primera lectura de lluvia: {e}")
 
     while True:
         try:
-            # Si el sensor no está conectado físicamente, suspendemos el monitoreo de forma silenciosa.
             if rain_sensor_analog is None:
                 await asyncio.sleep(INTERVAL_NORMAL)
                 continue
 
-            # ---- Publicación Diferida del Estado de Arranque ----
-            if boot_state_to_publish is not None:
-                if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
-                    try:
-                        # Usamos el timestamp capturado en el arranque, no el de "ahora"
-                        payload_boot = '{"state":"%s","timestamp":%d}' % (boot_state_to_publish, boot_timestamp_to_publish)
-                        async with mqtt_lock:
-                            client.publish(MQTT_TOPIC_RAIN_STATE, payload_boot, retain=False, qos=0)
-                        if DEBUG: print(f"    └─ Rain Monitor: {boot_state_to_publish}")
-                    except Exception as e:
-                        if DEBUG: print(f"    └─ ⚠️ Error publicando estado lluvia: {e}")
-                        force_disconnect_mqtt()
-                        await check_critical_mqtt_errors(e)
-                    boot_state_to_publish = None  # Solo una vez
+            # Oversampling no bloqueante (10 muestras cada 50ms = 500ms total)
+            raw_sum = 0
+            valid_samples = 0
+            for _ in range(TARGET_SAMPLES):
+                try:
+                    raw_sum += rain_sensor_analog.read()
+                    valid_samples += 1
+                except Exception:
+                    pass
+                await asyncio.sleep_ms(50)
 
-            # Oversampling centralizado (10 muestras cada 50ms = 500ms total)
-            raw = await fetch_rain_raw()
-
-            if raw is None:
-                if DEBUG: print(f"\n⚠️  Lluvia: No hay muestras válidas (0/{RAIN_TARGET_SAMPLES})")
+            if valid_samples == 0:
+                if DEBUG: print(f"\n⚠️  Lluvia: No hay muestras válidas (0/{TARGET_SAMPLES})")
                 await asyncio.sleep(current_interval)
                 continue
 
-            # Actualizamos caché para Auditoría (get_rain_sample)
-            last_rain_raw = raw 
+            raw = int(raw_sum / valid_samples)
 
             # Cálculo de Intensidad
             clamped_raw = max(RAW_INTENSITY_MIN, min(raw, RAIN_STOP_VALUE))
@@ -2434,30 +2122,11 @@ async def rain_monitor_task():
                 rain_total_int = 0
                 rain_samples = 0
                 
-                # ---- BITÁCORA DE LLUVIA (NVS) ----
-                # Guardamos el inicio del evento para sobrevivir a reinicios
-                try:
-                    NVSManager.save_task({
-                        "type": "rain_event",
-                        "start_epoch": time(),
-                        "key": "rain_event"
-                    })
-                    NVSManager.flush()
-                except Exception as e:
-                    if DEBUG: print(f"⚠️  Error persistiendo lluvia: {e}")
-
-                # Publicar estado 'Raining' por MQTT para que Ingest y Scheduler lo sepan
+                # Sincronización MQTT con validación de socket
                 if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
-                    try:
-                        payload_raining = '{"state":"Raining","timestamp":%d}' % time()
-                        # 🔒 Pedimos permiso para usar el socket
-                        async with mqtt_lock:
-                            client.publish(MQTT_TOPIC_RAIN_STATE, payload_raining, retain=False, qos=0)
-                    except Exception as e:
-                        if DEBUG: print(f"⚠️  Error publicando Raining: {e}")
-                        force_disconnect_mqtt()
-                        await check_critical_mqtt_errors(e)
-
+                    # 🔒 Pedimos permiso para usar el socket
+                    async with mqtt_lock:
+                        client.publish(MQTT_TOPIC_RAIN_STATE, b"Raining", retain=True, qos=0)
                 if DEBUG: print(f"\n🌧️  Lluvia INICIADA (Raw: {raw}) | Modo Ráfaga: {INTERVAL_BURST}s")
 
             # ---- ESTADO B: Lloviendo (Acumulando) ----
@@ -2471,19 +2140,15 @@ async def rain_monitor_task():
                 # Si el batch se llena, enviamos un adelanto (cada 10 muestras / 10 min de ráfaga)
                 if rain_samples % 10 == 0:
                     if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
-                        try:
-                            # Construcción de JSON manual para ahorrar RAM (Zero-Dict Batching)
-                            history_str = ",".join(['[%d,{"rain_intensity":%s}]' % (it[0], str(it[1])) for it in rain_Batch.get_all()])
-                            payload_batch = '{"history":[%s]}' % history_str
+                        from utime import time as utime_time
+                        # Construcción de JSON manual para ahorrar RAM (Zero-Dict Batching)
+                        history_str = ",".join(['[%d,{"rain_intensity":%s}]' % (it[0], str(it[1])) for it in rain_Batch.get_all()])
+                        payload_batch = '{"history":[%s]}' % history_str
 
-                            async with mqtt_lock:
-                                client.publish(MQTT_TOPIC_EXTERIOR_METRICS, payload_batch, qos=0)
-                                rain_Batch.clear()
-                                if DEBUG: print(f"\n🌧️  Enviando Batch de Lluvia Intermedio")
-                        except Exception as e:
-                            if DEBUG: print(f"⚠️  Error enviando Batch Lluvia: {e}")
-                            force_disconnect_mqtt()
-                            await check_critical_mqtt_errors(e)
+                        async with mqtt_lock:
+                            client.publish(MQTT_TOPIC_EXTERIOR_METRICS, payload_batch, qos=0)
+                            rain_Batch.clear()
+                            if DEBUG: print(f"\n🌧️  Enviando Batch de Lluvia Intermedio")
 
                 # ---- ESTADO C: Termina la lluvia (Publicación del evento final) ----
                 if raw > RAIN_STOP_VALUE:
@@ -2496,34 +2161,24 @@ async def rain_monitor_task():
                     
                     # Sincronización MQTT con validación de socket
                     if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
-                        try:
-                            # Construcción de JSON manual para el evento y el batch final
-                            payload = '{"duration_seconds":%d,"average_intensity_percent":%d,"timestamp":%d}' % (duration_sec, avg_int, time())
-                            
-                            history_items = rain_Batch.get_all()
-                            payload_batch = None
-                            if history_items:
-                                history_str = ",".join(['[%d,{"rain_intensity":%s}]' % (it[0], str(it[1])) for it in history_items])
-                                payload_batch = '{"history":[%s]}' % history_str
-                            
-                            # 🔒 Pedimos permiso para usar el socket
-                            async with mqtt_lock:
-                                payload_dry = '{"state":"Dry","timestamp":%d}' % time()
-                                client.publish(MQTT_TOPIC_RAIN_STATE, payload_dry, retain=False, qos=0)
-                                client.publish(MQTT_TOPIC_RAIN_EVENT, payload, qos=1)
-                                # Enviamos el último lote de ráfaga
-                                if payload_batch:
-                                    client.publish(MQTT_TOPIC_EXTERIOR_METRICS, payload_batch, qos=0)
-
-                            rain_Batch.clear()
-                        except Exception as e:
-                            if DEBUG: print(f"⚠️  Error finalizando Lluvia: {e}")
-                            force_disconnect_mqtt()
-                            await check_critical_mqtt_errors(e)
-
-                    # ---- Limpieza de Bitácora (NVS) ----
-                    NVSManager.delete_key("rain_event")
-                    NVSManager.flush()
+                        # Construcción de JSON manual para el evento y el batch final
+                        payload = '{"duration_seconds":%d,"average_intensity_percent":%d}' % (duration_sec, avg_int)
+                        
+                        history_items = rain_Batch.get_all()
+                        payload_batch = None
+                        if history_items:
+                            history_str = ",".join(['[%d,{"rain_intensity":%s}]' % (it[0], str(it[1])) for it in history_items])
+                            payload_batch = '{"history":[%s]}' % history_str
+                        
+                        # 🔒 Pedimos permiso para usar el socket
+                        async with mqtt_lock:
+                            client.publish(MQTT_TOPIC_RAIN_STATE, b"Dry", retain=True, qos=0)
+                            client.publish(MQTT_TOPIC_RAIN_EVENT, payload, qos=1)
+                            # Enviamos el último lote de ráfaga
+                            if payload_batch:
+                                client.publish(MQTT_TOPIC_EXTERIOR_METRICS, payload_batch, qos=0)
+                        
+                        rain_Batch.clear()
 
                     if DEBUG: print(f"\n⛅  Lluvia TERMINADA. Dur:{duration_sec}s, Int:{avg_int}% | Modo Vigía: {INTERVAL_NORMAL}s")
 
@@ -2577,10 +2232,8 @@ async def illuminance_monitor_task():
 
             if illuminance_sensor is not None:
                 # Lectura de sensor BH1750 con auto-escala dinámica
-                lux_raw = illuminance_sensor.get_auto_luminance()
-                if lux_raw is not None:
-                    lux_val = round(lux_raw, 1)
-                    illuminance_Batch.append(lux_val)
+                lux_val = round(illuminance_sensor.get_auto_luminance(), 1)
+                illuminance_Batch.append(lux_val)
                 
                 # Publicar Batch cada 10 minutos (600 segundos)
                 if current_ts - last_lux_publish >= 600:
@@ -2615,85 +2268,6 @@ async def illuminance_monitor_task():
         
         await asyncio.sleep(60)
 
-# ---- CORRUTINA: Gestión del Sensor DHT22 ----
-async def climate_monitor_task():
-    """
-    #### Monitoreo de Temperatura y Humedad Relativa (DHT22)
-    * Muestra asíncrona cada 60s (desplazada 5s respecto a lux).
-    * Envía 2 batches independientes (temp, hum) cada 10 min.
-    * Offset de 2s entre publicaciones para no saturar el stack de red
-    """
-    from utime import time
-    from umqtt.simple2 import MQTTException # type: ignore
-
-    last_dht_publish = time()
-
-    # Offset de 5s para evitar colisión bit-bang vs I2C al inicio de los loops
-    await asyncio.sleep(5)
-
-    while True:
-        try:
-            if dht_sensor is not None:
-                try:
-                    # dht.measure() es bloqueante (~25ms) y apaga interrupciones.
-                    dht_sensor.measure()
-                    temp = round(dht_sensor.temperature(), 1)
-                    hum  = round(dht_sensor.humidity(), 1)
-
-                    # Validación de rango (descarta lecturas corruptas por ruido)
-                    if -10 < temp < 60:
-                        temperature_Batch.append(temp)
-                    if 0 < hum < 100:
-                        humidity_Batch.append(hum)
-
-                except Exception:
-                    pass # Lectura fallida (ruido/sensor ocupado). Se ignora.
-
-                # Publicar Batches cada 10 minutos (600 segundos)
-                current_ts = time()
-                if current_ts - last_dht_publish >= 600:
-                    has_temp = temperature_Batch.count > 0
-                    has_hum  = humidity_Batch.count > 0
-
-                    if (has_temp or has_hum) and client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
-                        try:
-                            # Lote A: Temperatura
-                            if has_temp:
-                                async with mqtt_lock:
-                                    t_str = ",".join(['[%d,{"temperature":%s}]' % (it[0], str(it[1])) for it in temperature_Batch.get_all()])
-                                    client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"history":[%s]}' % t_str, qos=0)
-                                    temperature_Batch.clear()
-
-                            # Offset de 2s entre publicaciones (FUERA del lock)
-                            if has_temp and has_hum:
-                                await asyncio.sleep(2)
-
-                            # Lote B: Humedad
-                            if has_hum:
-                                async with mqtt_lock:
-                                    h_str = ",".join(['[%d,{"humidity":%s}]' % (it[0], str(it[1])) for it in humidity_Batch.get_all()])
-                                    client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"history":[%s]}' % h_str, qos=0)
-                                    humidity_Batch.clear()
-
-                            if DEBUG: print(f"\n🌡️  DHT22: {Colors.YELLOW}Batches Temp + HRL Publicados{Colors.RESET}")
-                        except (MQTTException, OSError) as e:
-                            if DEBUG: log_mqtt_exception("Fallo publicando Batch DHT22", e)
-                            force_disconnect_mqtt()
-                            await check_critical_mqtt_errors(e)
-
-                    # Siempre reseteamos el timer (evita reintentos infinitos en ventanas vacías)
-                    last_dht_publish = current_ts
-
-        except (MQTTException, OSError) as e:
-            if DEBUG: log_mqtt_exception("Error de red en climate_monitor_task()", e)
-            force_disconnect_mqtt()
-            await check_critical_mqtt_errors(e)
-            await asyncio.sleep(5)
-        except Exception as e:
-            if DEBUG: print(f"\n⚠️  Error en climate_monitor_task(): {e}")
-        
-        await asyncio.sleep(60)
-
 # ---- TRABAJADOR UNIFICADO: Sincronización y Batching de Auditorías ----
 async def unified_audit_task():
     """
@@ -2724,31 +2298,11 @@ async def unified_audit_task():
             current_ts = time()
             dirty = False
 
-            dht_data = None # Cache temporal para evitar doble lectura del sensor en el mismo ciclo
-            
             for category in active_keys:
                 sample_fn = AUDIT_SAMPLE_FNS.get(category)
                 if not sample_fn: continue
 
-                # Ejecución del muestreo (Soporta síncronas y asíncronas)
-                try:
-                    # Optimización DHT: Si es temp o hum, usamos la caché del ciclo o leemos una vez
-                    if category in ("temp", "hum"):
-                        if dht_data is None:
-                            dht_data = get_dht_sample()
-                        val = dht_data
-                    else:
-                        res = sample_fn()
-                        # En MicroPython, las corrutinas (async def) retornan un generador.
-                        # Esta es la forma más ligera y compatible de detectarlas sin romper la RAM.
-                        if type(res).__name__ == 'generator':
-                            val = await res
-                        else:
-                            val = res
-                except Exception as e:
-                    if DEBUG: print(f"⚠️ Error muestreando {category}: {e}")
-                    val = None
-
+                val = sample_fn()
                 if val is not None:
                     # Ensamble manual de la categoría en JSON PLANO (Snapshot)
                     if category == "health":
@@ -2760,12 +2314,6 @@ async def unified_audit_task():
                     elif category == "rain":
                         # Enviamos la intensidad actual
                         fragments.append('"%s":%s' % (category, str(val)))
-                    elif category == "temp":
-                        # Enviamos solo temperatura
-                        fragments.append('"temp":{"t":%s}' % (str(val[0])))
-                    elif category == "hum":
-                        # Enviamos solo humedad
-                        fragments.append('"hum":{"h":%s}' % (str(val[1])))
                     
                     AUDIT_COUNTERS[category] += 1
                     dirty = True
@@ -2835,19 +2383,18 @@ async def main():
             print(f"⚠️  No se pudo iniciar el Watchdog: {e}")
         wdt = None
 
-    # ---- Tareas Asíncronas de Red ----
-    # (Re)conexión WiFi (Prioridad de red)
-    # Iniciamos la tarea de fondo para que gestione futuras reconexiones
-    asyncio.create_task(wifi_coro())
-
     # ---- Inicialización del Hardware ----
     setup_relays()
     setup_sensors()
 
     # ---- Boot Recovery Check ----
+    # [CRÍTICO]: Debe ejecutarse ANTES de crear las tareas de monitoreo para 
+    # evitar condiciones de carrera (ej: empezar a muestrear lux antes de cargar el estado off).
     await boot_recovery_check()
 
-    # ---- Resto de Tareas Asíncronas ----
+    # ---- Tareas Asíncronas ----
+    # (Re)conexión WiFi (Prioridad de red)
+    asyncio.create_task(wifi_coro())
     # Reconexión MQTT (Depende de WiFi)
     asyncio.create_task(mqtt_connector_task(client_id))
     # Consumidor de mensajes MQTT (Patrón Productor-Consumidor)
@@ -2860,8 +2407,6 @@ async def main():
     asyncio.create_task(rain_monitor_task())
     # Gestion de la Estación Meteorológica Exterior (iluminancia)
     asyncio.create_task(illuminance_monitor_task())
-    # Gestion del DHT22 Exterior (Clima: Temp + Humedad)
-    asyncio.create_task(climate_monitor_task())
 
     # ---- Auditorías (Unified) ----
     asyncio.create_task(unified_audit_task())
@@ -2883,8 +2428,8 @@ def stopped_program():
     """
     #### Parada Local de Emergencia
     * Log de parada.
-    * Apaga físicamente todos los relés.
-    * Publica 'offline' explícitamente para evitar latencias de LWT.
+    * Apaga físicamente todos los relés sin realizar operaciones de red.
+    * Crucial para que herramientas como mpremote puedan entrar al REPL rápidamente.
     """
     if DEBUG:
         print(f"\n\n📡  Programa {Colors.GREEN}Detenido{Colors.RESET}")
@@ -2895,20 +2440,7 @@ def stopped_program():
             relay_info['pin'].value(0)
             relay_info['state'] = 'OFF'
         except Exception:
-            pass 
-
-    # Publicamos 'offline' explícitamente antes de la desconexión limpia.
-    # Es VITAL usar retain=True para que el estado persista tras el DISCONNECT.
-    if client and hasattr(client, 'sock') and client.sock and wlan and wlan.isconnected():
-        try:
-            # Flush de batches acumulados antes de desconectar
-            flush_telemetry_batches()
-
-            client.publish(MQTT_TOPIC_STATUS, b"offline", retain=True, qos=1)
-            from utime import sleep_ms
-            sleep_ms(300) 
-        except:
-            pass
+            pass # Ignoramos errores de hardware al apagar
 
     # Invalidamos el cliente MQTT forzando una reconexión completa.
     force_disconnect_mqtt()
@@ -2920,7 +2452,7 @@ def stopped_program():
             if DEBUG:
                 print(f"📡  WiFi     {Colors.GREEN}Desconectado{Colors.RESET}\n")
         except Exception:
-            pass
+            pass # Ignoramos errores de hardware al apagar
 
 # ---- Punto de Entrada ----
 if __name__ == '__main__':
