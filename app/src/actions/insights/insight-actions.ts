@@ -154,7 +154,7 @@ export async function getLatestOracleForecast(): Promise<{
     }
 
     try {
-      const localQuery = `SELECT last("illuminance") as lux, last("temperature") as temp, last("humidity") as hum FROM "environment_metrics" WHERE "zone" = 'EXTERIOR'`
+      const localQuery = `SELECT last("illuminance") as lux, last("temperature") as temp, last("humidity") as hum FROM "environment_metrics" WHERE "zone" = '${ZoneType.EXTERIOR}'`
       const localStream = influxClient.query(localQuery)
 
       for await (const row of localStream) {

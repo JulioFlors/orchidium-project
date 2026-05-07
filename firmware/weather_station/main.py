@@ -1,8 +1,9 @@
 # -----------------------------------------------------------------------------
-# Sensors: Environmental Monitoring Firmware.
-# Descripción: Firmware dedicado al Monitoreo de las condiciones ambientales del Invernadero.
-# Versión: v0.7.5 - Sincronización de Arquitectura y Estabilidad de Red
-# Fecha: 27-03-2026
+# Weather Station: Environmental Monitoring Firmware.
+# Descripción: Nodo de Monitoreo Ambiental del Orquideario (ZONA_A).
+# Fecha: 07-05-2026
+# Version: v0.8.1
+# notes_release: Sincronización Estándar: Implementación de Auditoría Granular (RAM, RSSI) y Resiliencia MQTT mejorada. Compatible con UI Debugger.
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib. 
@@ -18,17 +19,69 @@ from micropython import const
 # Desactivar en Producción. Desactiva logs de desarrollo.
 DEBUG = True
 
+# ---- Configuración MQTT (const() para ahorro de RAM) ----
+# El broker esperará ~1.5x este valor antes de desconectar al cliente.
+MQTT_KEEPALIVE       = const(60) # ~1.5x = 90 seg
+# Intervalo para enviar pings de 'keepalive' al broker MQTT.
+MQTT_PING_INTERVAL   = const(30) # keepalive//2
+# Intervalo para revisar mensajes MQTT entrantes.
+MQTT_CHECK_INTERVAL  = const(1)  # seg
+# tiempo máximo que (connect, check_msg, ping) esperará antes de fallar y lanzar una excepción.
+# Optimizado para fallar rápido y reintentar.
+# En redes lentas con latencia de subida >500ms
+MQTT_SOCKET_TIMEOUT  = const(30) # seg
+# tiempo máximo que el cliente esperará para que se complete un intercambio completo de mensajes MQTT(QoS) 1
+# [WDT Safety]: Debe ser MENOR que el Watchdog de Hardware (120s)
+MQTT_MESSAGE_TIMEOUT = const(45) # seg
+
+# ---- Configuración Resiliencia / Watchdog ----
+# Tiempo máximo sin conexión MQTT/WiFi antes de forzar un Hard Reset (10 minutos)
+MAX_OFFLINE_RESET_SEC = const(600)
+# Tiempo del Watchdog Timer (Hardware) en milisegundos (120 segundos (2 min))
+# [WDT Safety]: Debe ser mayor que SOCKET_TIMEOUT y MESSAGE_TIMEOUT para evitar reinicios durante operaciones lentas.
+WDT_TIMEOUT_MS = const(120000)
+
+# ---- Tópicos MQTT Pre-calculados (Optimización de RAM) ----
+# Usamos b"" (bytes) y constantes para evitar concatenación en tiempo de ejecución.
+
+# ---- Sistema y Conectividad (Diagnóstico/LWT) ----
+# [LWT/Status]: Indica si el dispositivo está "online" u "offline" (usado para Last Will).
+BASE_TOPIC = b"PristinoPlant/Weather_Station/ZONA_A"
+
+# [LWT/Status]: Indica si el dispositivo está "online" u "offline" (usado para Last Will).
+MQTT_TOPIC_STATUS         = const(BASE_TOPIC + b"/status")
+
+# [Audit Data]: Canal para streaming de datos unificados (RAM, RSSI, Lecturas frescas, etc).
+MQTT_TOPIC_AUDIT          = const(BASE_TOPIC + b"/audit")
+
+# [Audit Flag]: Indica qué tareas de auditoría están activas internamente (para sincronización de UI).
+MQTT_TOPIC_AUDIT_STATE    = const(BASE_TOPIC + b"/audit/state")
+
+# [Env Data]: Tópico para el paquete de datos ambientales históricos (JSON Batch).
+MQTT_TOPIC_ENV_DATA       = const(BASE_TOPIC + b"/readings")
+
+# [General Cmd]: Recibe comandos de sistema (reset, audit_on, etc).
+MQTT_TOPIC_CMD            = const(BASE_TOPIC + b"/cmd")
+
+# [Feedback]: Confirmación inmediata con el payload original de recepción de comando para la UI.
+MQTT_TOPIC_CMD_RECEIVED   = const(BASE_TOPIC + b"/cmd/received")
+
+# ---- Parámetros LWT (Last Will and Testament) ----
+LWT_TOPIC = MQTT_TOPIC_STATUS
+LWT_MESSAGE = const(b"offline")
+
 # ---- Colors for logs ----
-class Colors:
-    RESET   = const('\x1b[0m')
-    DIM     = const('\x1b[90m')
-    RED     = const('\x1b[91m')
-    GREEN   = const('\x1b[92m')
-    YELLOW  = const('\x1b[93m')
-    BLUE    = const('\x1b[94m')
-    MAGENTA = const('\x1b[95m')
-    CYAN    = const('\x1b[96m')
-    WHITE   = const('\x1b[97m')
+if DEBUG:
+    class Colors:
+        RESET   = '\x1b[0m'
+        DIM     = '\x1b[90m'
+        RED     = '\x1b[91m'
+        GREEN   = '\x1b[92m'
+        YELLOW  = '\x1b[93m'
+        BLUE    = '\x1b[94m'
+        MAGENTA = '\x1b[95m'
+        CYAN    = '\x1b[96m'
+        WHITE   = '\x1b[97m'
 
 # ---- Función Auxiliar: Logs de Desarrollo ----
 def log(*args, **kwargs):
@@ -45,10 +98,10 @@ class RingBuffer:
         self.index = 0
 
     def append(self, item):
-        from utime import localtime # type: ignore
-        h, m = localtime()[3:5]
-        timestamp = f"{h:02d}:{m:02d}"
-        self.buffer[self.index] = {"t": timestamp, "v": item}
+        from utime import time # type: ignore
+        # Almacenamos el timestamp de Unix (segundos desde 1970) si es posible,
+        # o simplemente el valor. Ingest se encargará de la corrección de época.
+        self.buffer[self.index] = [time(), item]
         self.index = (self.index + 1) % self.size
 
     def get_all(self):
@@ -70,51 +123,132 @@ BATCH_SIZE = const(10)     # Número de lecturas antes de encender la radio
 audit_env = RingBuffer(BATCH_SIZE)
 samples_count = 0   # Contador de muestras en RAM
 
-# ---- Configuración MQTT (Aplanada con Constantes) ----
-# El broker esperará ~1.5x este valor antes de desconectar al cliente.
-MQTT_KEEPALIVE        = const(60) # ~1.5x = 90 seg
-# Intervalo para enviar pings de 'keepalive' al broker MQTT.
-MQTT_PING_INTERVAL    = const(30) # keepalive//2
-# Intervalo para revisar mensajes MQTT entrantes.
-MQTT_CHECK_INTERVAL   = const(10) # seg
-# Intervalo de la tarea que publica la telemetría/lecturas
-MQTT_PUBLISH_INTERVAL = const(30) # 30 seg
-# tiempo máximo que (connect, check_msg, ping) esperará antes de fallar y lanzar una excepción.
-MQTT_SOCKET_TIMEOUT   = const(15) # seg
-# tiempo máximo que el cliente esperará para que se complete un intercambio completo de mensajes MQTT(QoS) 1
-# [WDT Safety]: Debe ser MENOR que el Watchdog de Hardware (65s)
-MQTT_MESSAGE_TIMEOUT  = const(30) # seg
 
-# ---- Configuración Resiliencia / Watchdog ----
-# Tiempo máximo sin conexión WiFi antes de forzar un Hard Reset (5 minutos)
-MAX_OFFLINE_RESET_SEC = const(300)
-# Tiempo del Watchdog Timer (Hardware) en milisegundos (65 segundos (1m 5s))
-WDT_TIMEOUT_MS = const(65000) 
 
-# ---- Tópicos MQTT ----
-BASE_TOPIC = b"PristinoPlant/Environmental_Monitoring/Zona_A"
-
-# Tópico de estado de este dispositivo
-MQTT_TOPIC_STATUS = const(BASE_TOPIC + b"/status")
-# Tópico para el paquete de datos ambientales (JSON)
-MQTT_TOPIC_ENV_DATA = const(BASE_TOPIC + b"/readings")
-# Tópico para recibir comandos en Texto plano. (Reiniciar dispositivo)
-MQTT_TOPIC_CMD = const(BASE_TOPIC + b"/cmd")
-
-# ---- Parámetros LWT (Last Will and Testament) ----
-LWT_TOPIC = MQTT_TOPIC_STATUS
-LWT_MESSAGE = const(b"offline")
 
 # ---- Hardware Global ----
 # Sensor de Temp/Humedad
 dht_sensor = None
 # Sensor de Iluminancia I2C
 illuminance_sensor = None
+# Bus I2C global para diagnóstico
+i2c_bus = None
 
 # ---- Variables Globales de Estado ----
 wlan    = None # Conexión WiFi
 client  = None # Cliente  MQTT
 CONNECTED_ALLOWED = False # Control de ahorro de energía (True = Radio encendida)
+
+# Buffer de mensajes MQTT para el patrón Productor-Consumidor
+mqtt_message_buffer = []
+
+# Diccionario de Sincronización para Auditorías Independientes
+audit_events = {
+    "lux":      asyncio.Event(),
+    "rain":     asyncio.Event(),
+    "ram":      asyncio.Event(),
+    "health":   asyncio.Event(),
+    "temp":     asyncio.Event(),
+    "hum":      asyncio.Event()
+}
+# Evento maestro para despertar al Ticker Unificado de Auditoría
+audit_master_event = asyncio.Event()
+
+# Evento asíncrono para despertar a la tarea de procesamiento de mensajes MQTT
+mqtt_msg_event = asyncio.Event()
+
+# Candado asíncrono para evitar colisiones en el socket SSL
+mqtt_lock = asyncio.Lock()
+
+# ---- Lógica de Auditoría (Bajo Demanda) ----
+AUDIT_MODE = {
+    "rain": False,
+    "lux": False,
+    "health": False,
+    "ram": False,
+    "temp": False,
+    "hum": False
+}
+
+def get_lux_sample():
+    if illuminance_sensor:
+        try:
+            from bh1750 import BH1750 # type: ignore
+            return round(illuminance_sensor.luminance(BH1750.CONT_HIRES_1), 1)
+        except: return None
+    return None
+
+def get_health_sample():
+    if wlan and wlan.isconnected():
+        return (wlan.status('rssi'), wlan.ifconfig()[0])
+    return None
+
+def get_ram_sample():
+    from gc import collect, mem_alloc, mem_free
+    collect()
+    return (mem_free(), mem_alloc())
+
+def get_dht_sample():
+    if dht_sensor is None: return None
+    try:
+        dht_sensor.measure()
+        return (round(dht_sensor.temperature(), 1), round(dht_sensor.humidity(), 1))
+    except: return None
+
+AUDIT_SAMPLE_FNS = {
+    "lux":      get_lux_sample,
+    "rain":     lambda: None, # EMA no tiene sensor de lluvia analógico usualmente, o es digital
+    "health":   get_health_sample,
+    "ram":      get_ram_sample,
+    "temp":     get_dht_sample,
+    "hum":      get_dht_sample
+}
+
+AUDIT_COUNTERS = {
+    "rain": 0, "lux": 0, "health": 0, "ram": 0, "temp": 0, "hum": 0
+}
+
+# ---- Función Auxiliar: Sincronizar Estado de RAM (Audit Mode) ----
+async def publish_audit_state():
+    """Publica el estado de AUDIT_MODE usando formateo de strings para ahorrar RAM."""
+    try:
+        # Sincronización MQTT con validación de socket
+        if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
+            # Mapeo de estados de auditoría a strings JSON
+            rain_on   = "true" if AUDIT_MODE["rain"]   else "false"
+            lux_on    = "true" if AUDIT_MODE["lux"]    else "false"
+            health_on = "true" if AUDIT_MODE["health"] else "false"
+            ram_on    = "true" if AUDIT_MODE["ram"]    else "false"
+            temp_on   = "true" if AUDIT_MODE["temp"]   else "false"
+            hum_on    = "true" if AUDIT_MODE["hum"]    else "false"
+
+            # Mapeo de presencia de hardware
+            hw_lux  = "true" if illuminance_sensor  else "false"
+            hw_rain = "false" # EMA no tiene sensor de lluvia analógico usualmente
+            hw_dht  = "true" if dht_sensor          else "false"
+
+            # Construcción manual de JSON: Mucho más eficiente que dumps() para dicts anidados
+            payload = '{"rain":%s,"lux":%s,"health":%s,"ram":%s,"temp":%s,"hum":%s,"lux_hw":%s,"rain_hw":%s,"temp_hw":%s,"hum_hw":%s}' % (
+                rain_on, lux_on, health_on, ram_on, temp_on, hum_on,
+                hw_lux, hw_rain, hw_dht, hw_dht
+            )
+
+            from umqtt.simple2 import MQTTException # type: ignore
+            try:
+                # 🔒 Pedimos permiso para usar el socket
+                async with mqtt_lock:
+                    # Publicamos directo (MQTT convierte string a bytes)
+                    client.publish(MQTT_TOPIC_AUDIT_STATE, payload, retain=False, qos=0)
+            except (MQTTException, OSError) as e:
+                if DEBUG: log_mqtt_exception("Fallo sincronización estado auditoría", e)
+                # Invalidamos el cliente para que el loop principal detecte el fallo
+                force_disconnect_mqtt()
+                await check_critical_mqtt_errors(e)
+            except Exception as e:
+                if DEBUG: print(f"⚠️  Error inesperado en publish_audit_state: {e}")
+
+    except Exception as e:
+        if DEBUG: print(f"⚠️  Error preparando payload de auditoría: {e}")
 
 # ---- Función Auxiliar: Uso del disco ----
 def log_disk_usage():
@@ -321,33 +455,66 @@ def sub_callback(topic, msg, retained, dup):
             clean_payload = msg_str.strip()
             type_label = "TEXT"
 
-        header = f"\n📡  {Colors.BLUE}Recibido{Colors.RESET}"
-        if retained: header += f" {Colors.YELLOW}[Retained]{Colors.RESET}"
-        if dup:      header += f" {Colors.MAGENTA}[Duplicate]{Colors.RESET}"
-
-        log(header)
-        log(f"    ├─ Tópico: {Colors.GREEN}{topic_str}{Colors.RESET}")
-        log(f"    ├─ {type_label}:   {Colors.BLUE}{clean_payload}{Colors.RESET}")
+        # Log de recepción
+        if DEBUG:
+            header = f"\n📡  {Colors.BLUE}Recibido{Colors.RESET}"
+            if retained: header += f" {Colors.YELLOW}[Retained]{Colors.RESET}"
+            if dup:      header += f" {Colors.MAGENTA}[Duplicate]{Colors.RESET}"
+            print(header)
+            print(f"    ├─ Tópico: {Colors.GREEN}{topic_str}{Colors.RESET}")
+            print(f"    ├─ {type_label}:   {Colors.BLUE}{clean_payload}{Colors.RESET}")
 
         # ---- 🛡️ Lógica para los Comandos del Sistema (/cmd) ----
         if topic == MQTT_TOPIC_CMD:
-            if msg_str.lower() == "reset":
-                log(f"    └─ Acción: {Colors.CYAN}Reboot the Device{Colors.RESET}")
-                
-                try:
-                    if client and wlan and wlan.isconnected():
-                        client.publish(MQTT_TOPIC_STATUS, b"rebooting", retain=True, qos=1)
-                except: pass
+            cmd = msg_str.lower()
+            
+            # --- Respuesta de Recepción (Feedback) ---
+            # El broker MQTT enviará el mensaje original al tópico /received para la UI.
+            try:
+                if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
+                    # No bloqueamos con Lock aquí porque sub_callback es síncrono 
+                    # y check_msg ya tiene el lock si se usa correctamente.
+                    client.publish(MQTT_TOPIC_CMD_RECEIVED, msg, retain=False, qos=0)
+            except: pass
 
-                log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo{Colors.RESET}")
+            if cmd == "reset":
+                if DEBUG: print(f"    └─ Acción: {Colors.CYAN}Reboot the Device{Colors.RESET}")
+                safe_reset()
 
-                from machine import reset #type: ignore
-                from utime   import sleep #type: ignore
-                sleep(5)
-                reset()
+            # Gestión de Auditorías (audit_on:tipo / audit_off:tipo)
+            elif cmd.startswith("audit_"):
+                parts = cmd.split(":")
+                if len(parts) == 2:
+                    action = parts[0] # audit_on / audit_off
+                    a_type = parts[1] # ram, lux, rain, health, etc.
+                    
+                    if a_type in AUDIT_MODE:
+                        is_on = (action == "audit_on")
+                        AUDIT_MODE[a_type] = is_on
+                        # Reseteamos contador para evitar fugas de RAM/CPU
+                        AUDIT_COUNTERS[a_type] = 0 
+                        
+                        if is_on:
+                            # Notificamos a la corrutina ticker que despierte
+                            audit_master_event.set()
+                            # Notificamos a la corrutina específica si es necesario
+                            if a_type in audit_events:
+                                audit_events[a_type].set()
+                            
+                            # [ESPECIAL]: Si activamos auditoría, forzamos radio ON
+                            global CONNECTED_ALLOWED
+                            CONNECTED_ALLOWED = True
+                        
+                        if DEBUG:
+                            color = Colors.GREEN if is_on else Colors.RED
+                            status = "Activada" if is_on else "Desactivada"
+                            print(f"    └─ Auditoría {a_type}: {color}{status}{Colors.RESET}")
+                        
+                        # Encolamos la sincronización de estado de auditoría
+                        mqtt_msg_event.set()
 
     except Exception as e:
-        log(f"\n❌  Error en sub_callback(): {Colors.RED}{e}{Colors.RESET}")
+        if DEBUG: print(f"\n❌  Error en sub_callback(): {Colors.RED}{e}{Colors.RESET}")
 
 # ---- Función Auxiliar: Desconecta/Invalida Cliente MQTT ----
 def force_disconnect_mqtt():
@@ -486,22 +653,22 @@ async def check_critical_mqtt_errors(e):
     
     if isinstance(e, OSError) and e.args and e.args[0] in [-17040, -202, 12]:
         if DEBUG:
-            log(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Fallo crítico de SSL/Red/RAM ({e.args[0]}).")
-            log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo.{Colors.RESET}\n")
+            print(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Fallo crítico de SSL/Red/RAM ({e.args[0]}).")
+            print(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo.{Colors.RESET}\n")
         import machine
         machine.reset()
 
     if isinstance(e, MQTTException) and e.args and e.args[0] == 3:
          if DEBUG:
-             log(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Buffer de escritura lleno (Fragmentación RAM).")
-             log(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo...{Colors.RESET}\n")
+             print(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Buffer de escritura lleno (Fragmentación RAM).")
+             print(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo...{Colors.RESET}\n")
          import machine
          machine.reset()
 
-# ---- CORUTINA: Gestión de Conexión MQTT (Sensors) ----
+# ---- CORUTINA: Gestión de Conexión MQTT (Standard Resilience) ----
 async def mqtt_connector_task(client_id):
     """Gestiona la (re)conexión y operación MQTT con verificación activa."""
-    global client
+    global client, CONNECTED_ALLOWED
 
     from gc      import collect
     from machine import Timer
@@ -511,8 +678,6 @@ async def mqtt_connector_task(client_id):
     # =========================================================================
     # 🩹 MONKEY-PATCHING: Optimizaciones inyectadas a la librería MQTT
     # =========================================================================
-
-    # 🩹 Parche 1: Escritura Robusta
     def _robust_write(self, bytes_wr, length=-1):
         from utime import sleep_ms
         data = bytes_wr if length == -1 else bytes_wr[:length]
@@ -531,7 +696,6 @@ async def mqtt_connector_task(client_id):
             total_written += written
         return total_written
 
-    # 🩹 Parche 2: Lectura Resiliente
     def _resilient_read(self, expected_length):
         if expected_length < 0: raise MQTTException(2)
         buffer = b''
@@ -552,7 +716,6 @@ async def mqtt_connector_task(client_id):
             else: buffer += chunk
         return buffer
 
-    # 🩹 Parche 3: Limpieza Segura de RAM en Timeouts
     def _ram_safe_message_timeout(self):
         current_time = ticks_ms()
         expired_pids = []
@@ -569,12 +732,13 @@ async def mqtt_connector_task(client_id):
     MQTTClient._message_timeout = _ram_safe_message_timeout
     # =========================================================================
 
-    wd_timeout_ms = (MQTT_SOCKET_TIMEOUT + 5) * 1000
+    wd_timeout_ms = (MQTT_SOCKET_TIMEOUT + 15) * 1000
     mqtt_disconnect_start = None
     last_manual_ping = ticks_ms()
 
     while True:
-        if not CONNECTED_ALLOWED:
+        # Si no hay auditoría activa ni el sensor_publish_task lo permite, esperamos
+        if not CONNECTED_ALLOWED and not any(AUDIT_MODE.values()):
             await asyncio.sleep(5)
             continue
 
@@ -588,7 +752,7 @@ async def mqtt_connector_task(client_id):
             
             if (time() - mqtt_disconnect_start > MAX_OFFLINE_RESET_SEC):
                 from machine import reset
-                log(f"\n💀  {Colors.RED}DEATH: El MQTT no conectó en {MAX_OFFLINE_RESET_SEC//60} minutos.{Colors.RESET}")
+                if DEBUG: print(f"\n💀  {Colors.RED}DEATH: El MQTT no conectó.{Colors.RESET}")
                 await asyncio.sleep(1)
                 reset()
 
@@ -614,24 +778,28 @@ async def mqtt_connector_task(client_id):
                 wd_timer.init(period=wd_timeout_ms, mode=Timer.ONE_SHOT, callback=_connection_timeout_handler)
 
                 collect()
-                log_disk_usage()
-                log_ram_usage()
-                
-                log(f"\n📡  Conectando {Colors.BLUE}Broker MQTT{Colors.RESET}")
+                if DEBUG:
+                    log_disk_usage()
+                    log_ram_usage()
+                    print(f"\n📡  Conectando {Colors.BLUE}Broker MQTT{Colors.RESET}")
 
                 try:
-                    # clean_session=False para recibir cmds mientras dormía
                     client.connect(clean_session=False)
                 finally:
                     wd_timer.deinit()
 
                 mqtt_disconnect_start = None
-                log(f"📡  Conexión MQTT {Colors.GREEN}Establecida{Colors.RESET}", end="\n")
+                if DEBUG: print(f"📡  Conexión MQTT {Colors.GREEN}Establecida{Colors.RESET}")
+                
+                # Sincronización Inicial de Estado
                 client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=1)
                 client.subscribe(MQTT_TOPIC_CMD, qos=1)
+                
+                # Publicamos nuestro estado de auditoría actual
+                await publish_audit_state()
 
             except (MQTTException, OSError) as e:
-                log_mqtt_exception("Fallo la Conexión MQTT", e)
+                if DEBUG: log_mqtt_exception("Fallo la Conexión MQTT", e)
                 await check_critical_mqtt_errors(e)
                 force_disconnect_mqtt()
                 await asyncio.sleep(10)
@@ -640,31 +808,105 @@ async def mqtt_connector_task(client_id):
         # Gestión de Conexión Activa
         if client:
             try:
-                async with mqtt_lock:
-                    client.check_msg()
+                # 1. Procesamiento de Mensajes (Feedback / Auditoría / Cmds)
+                mqtt_msg_event.clear()
+                
+                # Intentamos obtener el lock para check_msg
+                lock_acquired = False
+                try:
+                    await asyncio.wait_for(mqtt_lock.acquire(), 5)
+                    lock_acquired = True
+                except asyncio.TimeoutError: pass
+
+                if lock_acquired:
+                    try:
+                        for _ in range(5):
+                            client.check_msg()
+                    finally:
+                        mqtt_lock.release()
+
+                # 2. Sincronización de estado de auditoría (si fue solicitada por cmd)
+                if mqtt_msg_event.is_set():
+                    await publish_audit_state()
+                    mqtt_msg_event.clear()
 
                 now_ms = ticks_ms()
 
-                # Ping Manual (Crítico para NAT)
+                # 3. Ping Manual (Crítico para NAT) + Heartbeat
                 if ticks_diff(now_ms, last_manual_ping) > (MQTT_PING_INTERVAL * 1000):
                     async with mqtt_lock:
                         client.ping()
-                    log(f"📡  MQTT: {Colors.CYAN}Ping de vida enviado{Colors.RESET}")
+                        client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=0)
+                    if DEBUG: print(f"📡  MQTT: {Colors.CYAN}Ping de vida enviado{Colors.RESET}")
                     last_manual_ping = now_ms
 
-                # Control Zombie (Margen 1.5x)
+                # 4. Control Zombie (Margen 1.5x)
                 elif ticks_diff(now_ms, client.last_cpacket) > (MQTT_KEEPALIVE * 1500):
                     raise MQTTSessionZombie("Inactividad del broker MQTT excedida")
 
             except (MQTTException, OSError) as e:
-                log_mqtt_exception("Error en Operación MQTT", e)
+                if DEBUG: log_mqtt_exception("Error en Operación MQTT", e)
                 await check_critical_mqtt_errors(e)
                 force_disconnect_mqtt()
-                last_manual_ping = ticks_ms()
                 await asyncio.sleep(10)
                 continue
 
         await asyncio.sleep(MQTT_CHECK_INTERVAL)
+
+# ---- CORUTINA: Ticker Unificado de Auditoría (Streaming) ----
+async def audit_unified_ticker_task():
+    """
+    **Streaming de datos de diagnóstico bajo demanda.**
+    Consolida múltiples auditorías en un único paquete JSON para ahorrar RAM y ancho de banda.
+    """
+    from ujson import dumps # type: ignore
+    from umqtt.simple2 import MQTTException # type: ignore
+
+    while True:
+        # Dormimos hasta que alguna auditoría se active
+        if not any(AUDIT_MODE.values()):
+            audit_master_event.clear()
+            await audit_master_event.wait()
+        
+        # Debounce/Sampling rate de auditoría (1s para streaming fluido)
+        await asyncio.sleep(1)
+
+        # Solo procedemos si estamos conectados
+        if client is None or getattr(client, 'sock', None) is None or not (wlan and wlan.isconnected()):
+            continue
+
+        try:
+            audit_payload = {}
+            any_collected = False
+
+            # Recolectamos datos de cada auditoría activa
+            for a_type, is_active in AUDIT_MODE.items():
+                if is_active:
+                    sample_fn = AUDIT_SAMPLE_FNS.get(a_type)
+                    if sample_fn:
+                        val = sample_fn()
+                        if val is not None:
+                            audit_payload[a_type] = val
+                            any_collected = True
+                    
+                    # Auto-apagado de seguridad tras 300 muestras (~5 min) para ahorrar batería
+                    AUDIT_COUNTERS[a_type] += 1
+                    if AUDIT_COUNTERS[a_type] > 300:
+                        AUDIT_MODE[a_type] = False
+                        AUDIT_COUNTERS[a_type] = 0
+                        mqtt_msg_event.set()
+
+            if any_collected:
+                # Publicación bajo el lock maestro
+                async with mqtt_lock:
+                    client.publish(MQTT_TOPIC_AUDIT, dumps(audit_payload), retain=False, qos=0)
+
+        except (MQTTException, OSError) as e:
+            if DEBUG: log_mqtt_exception("Fallo en Ticker de Auditoría", e)
+            force_disconnect_mqtt()
+            await check_critical_mqtt_errors(e)
+        except Exception as e:
+            if DEBUG: print(f"⚠️  Error en Ticker de Auditoría: {e}")
 
 # ---- CORUTINA: Gestión de la publicacion de sensores ----
 async def sensor_publish_task():
@@ -693,7 +935,7 @@ async def sensor_publish_task():
             lux = round(lux_sensor, 1)
         except: pass
 
-        data_payload = {"t": temp, "h": hum, "l": lux}
+        data_payload = {"temperature": temp, "humidity": hum, "illuminance": lux}
         audit_env.append(data_payload)
         samples_count += 1
         
@@ -737,21 +979,6 @@ async def sensor_publish_task():
 
         await asyncio.sleep(MQTT_PUBLISH_INTERVAL)
 
-# ---- CORUTINA: Latido del Sistema (Heartbeat) ----
-async def heartbeat_task():
-    """Publica cada `PUBLISH_INTERVAL` el estado `online` para confirmar conectividad."""
-    from umqtt.simple2 import MQTTException # type: ignore
-
-    while True:
-        # [v0.7.5]: Solo reportamos latido si la radio está activa
-        if CONNECTED_ALLOWED and client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
-            try:
-                async with mqtt_lock:
-                    client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=0)
-            except (MQTTException, OSError) as e:
-                log_mqtt_exception("Publicación del Heartbeat omitida", e)
-
-        await asyncio.sleep(MQTT_PUBLISH_INTERVAL)
 
 # ---- CORUTINA: Programa Principal ----
 async def main():
@@ -771,7 +998,7 @@ async def main():
     asyncio.create_task(wifi_coro())
     asyncio.create_task(mqtt_connector_task(client_id))
     asyncio.create_task(sensor_publish_task())
-    asyncio.create_task(heartbeat_task())
+    asyncio.create_task(audit_unified_ticker_task())
     
     # ---- Watchdog Timer ----
     try:
@@ -814,20 +1041,32 @@ def stopped_program():
         except:
             pass
 
-# ---- Función Auxiliar: Safe Reset ----
+# ---- Función Auxiliar: Safe Reset (Reinicio Seguro) ----
 def safe_reset():
+    """Cierra conexiones de red y reinicia el dispositivo."""
     from machine import reset # type: ignore
+    from utime   import sleep_ms
+
+    try:
+        # Nos desconectamos educadamente del Router y del Broker
+        shutdown()
+    except: pass
+
+    sleep_ms(1000) # Pausa de estabilización pre-reset
     reset()
 
 # ---- Punto de Entrada ----
 if __name__ == '__main__':
     try:
+        # Iniciar loop asíncrono
         asyncio.run(main())
     except KeyboardInterrupt:
         stopped_program()
     except Exception as e:
         if DEBUG:
             print(f"\n\n❌  Error fatal no capturado: {Colors.RED}{e}{Colors.RESET}\n\n")
-        try: shutdown()
-        except: pass
-        safe_reset()
+        # En caso de error fatal en el Loop principal, intentamos apagar y resetear
+        try:
+            safe_reset()
+        except:
+            pass

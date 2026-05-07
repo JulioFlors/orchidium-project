@@ -78,7 +78,6 @@ const TOPIC_ROUTES: Record<string, PacketProcessor> = {
 // ---- Global Influx Client (puntero) ----
 let influxClient: InfluxDBClient
 
-// ---- Utils ----
 function mapZoneSlugToZoneType(zoneSlug: string): ZoneType | undefined {
   if (zoneSlug === 'Actuator_Controller') return undefined
 
@@ -131,42 +130,31 @@ function formatPointSummary(point: Point): string {
     const val = fields.value?.replace(/"/g, '') || '?'
     const event = tags.event_type || 'Event'
     const source = tags.source || 'Unknown'
+    const zoneStr = tags.zone ? ` [ ${tags.zone} ]` : ''
 
-    return `[ ${event} ] ${source} -> ${val}`
+    return `[ ${event} ] [ ${source} ]${zoneStr} -> ${val}`
   }
 
   // Formato: [ Metrics ] Origen/Zona -> temp:25, hum:60...
   if (measurement === 'environment_metrics') {
     const metrics = Object.entries(fields)
-      .map(([k, v]) => {
-        const short =
-          k === 'temperature'
-            ? 'temp'
-            : k === 'humidity'
-              ? 'hum'
-              : k === 'illuminance'
-                ? 'lux'
-                : k === 'rain_intensity'
-                  ? 'rain'
-                  : k
-
-        return `${short}:${v}`
-      })
+      .map(([k, v]) => `${k}:${v}`)
       .join(', ')
 
     const source = tags.source || 'Unknown'
-    const zone = tags.zone ? `/${tags.zone}` : ''
+    const zoneStr = tags.zone ? ` [ ${tags.zone} ]` : ''
 
-    return `[ Metrics ] ${source}${zone} -> ${metrics}`
+    return `[ Metrics ] [ ${source} ]${zoneStr} -> ${metrics}`
   }
 
   // Formato: [ Rain_Event ] Origen -> 300s | 85%
   if (measurement === 'rain_events') {
     const source = tags.source || 'Unknown'
+    const zoneStr = tags.zone ? ` [ ${tags.zone} ]` : ''
     const dur = fields.duration_seconds || '?'
     const int = fields.intensity_percent || fields.average_intensity_percent || '?'
 
-    return `[ Rain_Event ] ${source} -> ${dur}s | ${int}%`
+    return `[ Rain_Event ] [ ${source} ]${zoneStr} -> ${dur}s | ${int}%`
   }
 
   // Fallback compacto (sin timestamp)
@@ -193,15 +181,31 @@ async function processEnvironmentPacket(
   try {
     const data = JSON.parse(payload)
 
-    if (data.history && Array.isArray(data.history)) {
-      for (const entry of data.history) {
-        if (!Array.isArray(entry) || entry.length !== 2) continue
+    // Estandarización: Usamos siempre 'data' para batches
+    const batch = data.data
 
-        const [timestamp, metrics] = entry as [number, Record<string, string | number>]
+    if (batch && Array.isArray(batch)) {
+      for (const entry of batch) {
+        // Soporta formatos: [timestamp, metrics] o { ...metrics }
+        let unixTimestamp: number
+        let metrics: Record<string, string | number>
+
+        if (Array.isArray(entry) && entry.length === 2) {
+          // Formato [ts, {m}]
+          unixTimestamp = Number(entry[0])
+          metrics = entry[1] as Record<string, string | number>
+        } else if (typeof entry === 'object' && entry !== null) {
+          // Formato { ... }
+          unixTimestamp = Math.floor(Date.now() / 1000)
+          metrics = entry as Record<string, string | number>
+        } else {
+          continue
+        }
 
         // Corrección de Época: MicroPython (2000) vs Unix (1970)
-        // Offset: 946684800 segundos
-        const unixTimestamp = timestamp < 1000000000 ? timestamp + 946684800 : timestamp
+        if (unixTimestamp < 1000000000) {
+          unixTimestamp += 946684800
+        }
 
         const point = Point.measurement('environment_metrics')
           .setTag('source', source)
@@ -209,14 +213,16 @@ async function processEnvironmentPacket(
           .setTag('context', context)
           .setTimestamp(new Date(unixTimestamp * 1000))
 
-        if (metrics.temperature !== undefined)
-          point.setFloatField('temperature', Number(metrics.temperature))
-        if (metrics.humidity !== undefined)
-          point.setFloatField('humidity', Number(metrics.humidity))
-        if (metrics.illuminance !== undefined)
-          point.setFloatField('illuminance', Number(metrics.illuminance))
-        if (metrics.rain_intensity !== undefined)
-          point.setFloatField('rain_intensity', Number(metrics.rain_intensity))
+        // Mapeo Directo (Estandarización Estricta)
+        const t = metrics.temperature
+        const h = metrics.humidity
+        const l = metrics.illuminance
+        const r = metrics.rain_intensity
+
+        if (t !== undefined) point.setFloatField('temperature', Number(t))
+        if (h !== undefined) point.setFloatField('humidity', Number(h))
+        if (l !== undefined) point.setFloatField('illuminance', Number(l))
+        if (r !== undefined) point.setFloatField('rain_intensity', Number(r))
         if (metrics.phase !== undefined) point.setStringField('phase', String(metrics.phase))
 
         await writeToInflux(point)
@@ -225,21 +231,26 @@ async function processEnvironmentPacket(
       return
     }
 
+    // Procesamiento de mensaje único
     const point = Point.measurement('environment_metrics')
       .setTag('source', source)
       .setTag('zone', zone)
       .setTag('context', context)
 
-    if (data.temperature !== undefined) point.setFloatField('temperature', Number(data.temperature))
-    if (data.humidity !== undefined) point.setFloatField('humidity', Number(data.humidity))
-    if (data.illuminance !== undefined) point.setFloatField('illuminance', Number(data.illuminance))
-    if (data.rain_intensity !== undefined)
-      point.setFloatField('rain_intensity', Number(data.rain_intensity))
+    const t = data.temperature
+    const h = data.humidity
+    const l = data.illuminance
+    const r = data.rain_intensity
+
+    if (t !== undefined) point.setFloatField('temperature', Number(t))
+    if (h !== undefined) point.setFloatField('humidity', Number(h))
+    if (l !== undefined) point.setFloatField('illuminance', Number(l))
+    if (r !== undefined) point.setFloatField('rain_intensity', Number(r))
     if (data.phase !== undefined) point.setStringField('phase', String(data.phase))
 
     await writeToInflux(point)
   } catch (e) {
-    Logger.error('Error procesando paquete de datos Ambientales (Batch/Single)', e)
+    Logger.error('Error procesando paquete de datos Ambientales', e)
   }
 }
 
@@ -475,7 +486,7 @@ async function start() {
       if (!hasSensorData) return
     }
 
-    if (firmwareSource === 'Environmental_Monitoring' || firmwareSource === 'Weather_Station') {
+    if (firmwareSource === 'Weather_Station') {
       const zoneSlug = topicParts[2]
       const zone = mapZoneSlugToZoneType(zoneSlug)
 

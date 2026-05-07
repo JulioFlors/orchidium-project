@@ -46,7 +46,7 @@ export async function processDay(
 
   dayEnd.setDate(dayEnd.getDate() + 1)
 
-  const isExterior = zone === 'EXTERIOR'
+  const isExterior = zone === ZoneType.EXTERIOR
   const dayLabel = dayStart.toISOString().split('T')[0]
 
   // ── 1. Lluvia ─────────────────────────────────────────────────────────────

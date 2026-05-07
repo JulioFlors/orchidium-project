@@ -191,3 +191,32 @@ export const ZoneMetrics: Partial<Record<ZoneType, string[]>> = {
   [ZoneType.EXTERIOR]: ['temperature', 'humidity', 'illuminance', 'rain_intensity'],
   [ZoneType.ZONA_A]: ['temperature', 'humidity', 'illuminance'],
 }
+
+/**
+ * Etiquetas estéticas para las métricas (UI)
+ */
+export const MetricLabels: Record<string, string> = {
+  temperature: 'Temperatura',
+  humidity: 'Humedad Relativa',
+  illuminance: 'Iluminancia',
+  rain_intensity: 'Precipitación',
+  rain_events: 'Eventos de Lluvia',
+  dli: 'DLI (Luz Acumulada)',
+  vpd_avg: 'VPD (Presión de Vapor)',
+  dif: 'DIF (Contraste Térmico)',
+  high_humidity_hours: 'Riesgo Fúngico',
+}
+
+/**
+ * Unidades asociadas a cada métrica
+ */
+export const MetricUnits: Record<string, string> = {
+  temperature: '°C',
+  humidity: '%',
+  illuminance: 'lux',
+  rain_intensity: '%',
+  dli: 'mol/m²/d',
+  vpd_avg: 'kPa',
+  dif: '°C',
+  high_humidity_hours: 'horas',
+}

@@ -120,7 +120,7 @@ export async function GET() {
 
     return NextResponse.json(combinedTasks)
   } catch (error) {
-    Logger.error('Error fetching planner queue:', error)
+    Logger.error('Error al obtener la cola del planificador:', error)
 
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }

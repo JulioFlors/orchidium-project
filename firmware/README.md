@@ -125,7 +125,7 @@ Estos archivos (`main.py` y `manifest.json`) deben residir en la **raíz** (`:/`
 * **`boot.py`**: Script de arranque.
 
 **Instalación:**
-Ejecuta estos comandos desde la carpeta específica del firmware que estás configurando (ej. `firmware/sensors/` o `firmware/relay_modules/`).
+Ejecuta estos comandos desde la carpeta específica del firmware que estás configurando (ej. `firmware/weather_station/` o `firmware/relay_modules/`).
 
 ```bash
 mpremote cp -r . :

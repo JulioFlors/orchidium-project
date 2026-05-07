@@ -40,7 +40,7 @@ El motor dispone de las siguientes fuentes de información, listadas por priorid
 | Fuente | Sensores | Datos |
 | :--- | :--- | :--- |
 | **Estación Exterior** (`Weather_Station`) | BH1750, DHT22, Sensor de Gotas | Iluminancia (lux), Temperatura (°C), Humedad Relativa (%), Intensidad de Lluvia |
-| **Estación Interior** (`Environmental_Monitoring`) | BH1750, DHT22 | Iluminancia (lux), Temperatura (°C), Humedad Relativa (%) |
+| **Estación Interior** (`Weather_Station`) | BH1750, DHT22 | Iluminancia (lux), Temperatura (°C), Humedad Relativa (%) |
 
 ### 1.2 Eventos de Lluvia (InfluxDB — `rain_events`)
 
@@ -130,7 +130,7 @@ Para tomar decisiones basadas en datos, se debe registrar **toda** actividad de 
 
 | Fuente | Estado | Prioridad |
 | :--- | :--- | :--- |
-| Estación Interior (`Environmental_Monitoring`) | Sensor DHT22 pendiente de puesta en producción | Alta |
+| Estación Interior (`Weather_Station`) | Sensor DHT22 pendiente de puesta en producción | Alta |
 | Registro manual de agroquímicos (todas las zonas) | Por implementar | Alta |
 | Sensor de humedad de sustrato (capacitivo) | No instalado | Media |
 | Cámara de monitoreo visual | No implementada | Baja |

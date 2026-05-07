@@ -1,109 +1,20 @@
 import { NextResponse } from 'next/server'
 
 import { Logger } from '@/lib'
-import { influxClient } from '@/lib/server'
+import { ZoneType } from '@/config/mappings'
+import { getRainSummaryInternal } from '@/lib/server/environment'
 
 export async function GET(_request: Request) {
   const { searchParams } = new URL(_request.url)
   const range = searchParams.get('range') || '12h'
-  const zone = searchParams.get('zone') || 'EXTERIOR'
-
-  let rangeString = '24h'
-
-  switch (range) {
-    case '1h':
-      rangeString = '1h'
-      break
-    case '7d':
-      rangeString = '7d'
-      break
-    case '30d':
-      rangeString = '30d'
-      break
-    case 'all':
-      rangeString = '365d'
-      break
-    default:
-      rangeString = '24h'
-  }
-
-  const timeFilter = range === 'all' ? '' : `AND time >= now() - interval '${rangeString}'`
-
-  const query = `
-    SELECT 
-      time,
-      duration_seconds,
-      intensity_percent
-    FROM "rain_events"
-    WHERE "zone" = '${zone}'
-    ${timeFilter}
-    ORDER BY time ASC
-  `
+  const zone = (searchParams.get('zone') || ZoneType.EXTERIOR) as ZoneType
 
   try {
-    const reader = influxClient.query(query)
-    const events = []
-    let totalDuration = 0
-    let totalIntensity = 0
+    const summary = await getRainSummaryInternal(range, zone)
 
-    for await (const row of reader) {
-      // Conversión segura de tiempo (nanosegundos a ISO string)
-      let timeStr = ''
-
-      try {
-        if (row.time instanceof Date) {
-          timeStr = row.time.toISOString()
-        } else if (typeof row.time === 'bigint' || typeof row.time === 'number') {
-          const val = Number(row.time)
-
-          // Detección de escala:
-          // > 1e18: Nanosegundos (InfluxDB default)
-          // > 1e12: Milisegundos (Unix ms)
-          // < 1e12: Segundos (Unix s)
-          if (val > 1000000000000000) {
-            timeStr = new Date(val / 1000000).toISOString()
-          } else if (val > 100000000000) {
-            timeStr = new Date(val).toISOString()
-          } else {
-            timeStr = new Date(val * 1000).toISOString()
-          }
-        } else {
-          timeStr = new Date(String(row.time)).toISOString()
-        }
-      } catch (err) {
-        Logger.error('Fallo parseando tiempo de Influx:', { time: row.time, err })
-        timeStr = new Date().toISOString() // Mantener fallback pero loggear
-      }
-
-      events.push({
-        time: timeStr,
-        duration: Number(row.duration_seconds),
-        intensity: Number(row.intensity_percent),
-      })
-      totalDuration += Number(row.duration_seconds)
-      totalIntensity += Number(row.intensity_percent)
-    }
-
-    return NextResponse.json({
-      totalDurationSeconds: totalDuration,
-      averageIntensity: events.length > 0 ? Math.round(totalIntensity / events.length) : 0,
-      eventCount: events.length,
-      events,
-    })
+    return NextResponse.json(summary)
   } catch (error: unknown) {
-    const err = error as Error
-    const errorMessage = err.message || err.toString()
-
-    if (errorMessage.includes('not found') || errorMessage.includes('table')) {
-      return NextResponse.json({
-        totalDurationSeconds: 0,
-        averageIntensity: 0,
-        eventCount: 0,
-        events: [],
-      })
-    }
-
-    Logger.error('Error querying Rain Events:', error)
+    Logger.error('Error al consultar los eventos de lluvia:', error)
 
     return NextResponse.json(
       { error: 'Error al obtener datos de telemetría del pluviómetro' },

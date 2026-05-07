@@ -274,7 +274,7 @@ Singleton del cliente InfluxDB v3. Conecta al bucket `telemetry` que almacena to
 | Source | Zona | Sensores |
 | --- | --- | --- |
 | `Weather_Station` | EXTERIOR | Iluminancia (BH1750), Sensor gotas de lluvia |
-| `Environmental_Monitoring` | INTERIOR (orquideario) | Temperatura, Humedad, Iluminancia (DHT22 + BH1750) |
+| `Weather_Station` | INTERIOR (orquideario) | Temperatura, Humedad, Iluminancia (DHT22 + BH1750) |
 
 **Nota**: La estación meteorológica exterior NO tiene sensor de temperatura/humedad (DHT22). Los datos de temp/hum del exterior se obtienen de las APIs del clima.
 

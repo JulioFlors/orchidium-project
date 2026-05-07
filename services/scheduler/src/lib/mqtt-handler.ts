@@ -41,7 +41,10 @@ interface PendingCommand {
   taskId: string
   attempts: number
   scheduledAt: number
+  originalDurationMin: number
+  sessionTotalAttempts: number
   isPersistent: boolean
+  onFailure?: (taskId: string, notes?: string) => Promise<void>
 }
 
 /**
@@ -96,12 +99,19 @@ class CommandSequencer {
     topic: string,
     payload: string,
     scheduledAt: Date = new Date(),
+    originalDurationMin: number = 0,
     isPersistent: boolean = false,
+    onFailure?: (taskId: string, notes?: string) => Promise<void>,
   ) {
     const taskId = this.extractTaskId(payload) || `sys-${Date.now()}`
 
     // Evitar duplicados exactos en la cola
     if (this.queue.some((c) => c.taskId === taskId)) return
+
+    // Calcular intentos disponibles en la ventana actual (20 + duración - 1 - tiempo_transcurrido)
+    const ageMs = Date.now() - scheduledAt.getTime()
+    const ageMin = Math.floor(ageMs / 60000)
+    const sessionTotalAttempts = Math.max(1, 20 + originalDurationMin - 1 - ageMin)
 
     this.queue.push({
       topic,
@@ -109,7 +119,10 @@ class CommandSequencer {
       taskId,
       attempts: 0,
       scheduledAt: scheduledAt.getTime(),
+      originalDurationMin,
+      sessionTotalAttempts,
       isPersistent,
+      onFailure,
     })
 
     if (this.state === 'READY') {
@@ -135,25 +148,71 @@ class CommandSequencer {
   private dispatch() {
     if (!this.currentCommand || this.state !== 'READY') return
 
-    const { topic, payload } = this.currentCommand
+    const {
+      topic,
+      payload,
+      attempts,
+      taskId,
+      onFailure,
+      scheduledAt,
+      originalDurationMin,
+      isPersistent,
+    } = this.currentCommand
+
+    const now = Date.now()
+    const ageMs = now - scheduledAt
+    const maxWindowMin = 20 + originalDurationMin
+
+    // [🛡️ Ventana de Oportunidad]: Dinámica basada en duración original.
+    if (!isPersistent && ageMs > maxWindowMin * 60 * 1000) {
+      Logger.error(
+        `[ MQTT ] Ventana de oportunidad cerrada (${maxWindowMin} min) para la tarea ${taskId.slice(0, 8)}.`,
+      )
+      if (onFailure) {
+        onFailure(taskId, `Ventana de oportunidad cerrada (${maxWindowMin} min expirados).`).catch(
+          (err) => Logger.error(`Error en callback de expiración para ${taskId.slice(0, 8)}:`, err),
+        )
+      }
+      this.queue.shift()
+      this.currentCommand = null
+      this.processNext()
+
+      return
+    }
+
+    // [🔄 Gestión de Persistencia]: Registro en DB al intento 3 para feedback visual
+    if (attempts === 3) {
+      Logger.warn(
+        `[ MQTT ] Nodo Actuador no responde tras 3 intentos. Sincronizando estado FAILED.`,
+      )
+      if (onFailure) {
+        onFailure(taskId, 'Sin respuesta del Nodo Actuador.').catch((err) =>
+          Logger.error(`Error en callback de persistencia para ${taskId.slice(0, 8)}:`, err),
+        )
+      }
+    }
 
     // Publicamos con QoS 0 por requerimiento de diseño robusto
     mqttClient.publish(topic, payload, { qos: 0 })
 
     this.currentCommand.attempts++
 
-    // Programar reintento por falta de ACK (30s)
+    // Programar reintento por falta de ACK (60s)
     if (this.retryTimer) clearTimeout(this.retryTimer)
     this.retryTimer = setTimeout(() => {
       // Re-intentamos el mismo comando (no avanzamos en la cola)
       this.dispatch()
-    }, 30000)
+    }, 60000)
   }
 
   /**
    * Confirma la recepción de un comando y avanza la cola tras 5s.
    */
-  confirmByTaskId(taskId: string) {
+  confirmByTaskId(taskId: string): {
+    attempts: number
+    originalDurationMin: number
+    sessionTotalAttempts: number
+  } | null {
     if (
       this.currentCommand &&
       (this.currentCommand.taskId === taskId || taskId.includes(this.currentCommand.taskId))
@@ -161,10 +220,15 @@ class CommandSequencer {
       // Limpiar timers de reintento del comando actual
       if (this.retryTimer) clearTimeout(this.retryTimer)
 
-      const attempts =
-        this.currentCommand.attempts > 1 ? ` (en ${this.currentCommand.attempts} intentos)` : ''
+      const result = {
+        attempts: this.currentCommand.attempts,
+        originalDurationMin: this.currentCommand.originalDurationMin,
+        sessionTotalAttempts: this.currentCommand.sessionTotalAttempts,
+      }
 
-      Logger.debug(`El nodo confirmó ACK para la tarea${attempts} (ID: ${taskId.slice(0, 8)})`)
+      const attemptsStr = result.attempts > 1 ? ` (en ${result.attempts} intentos)` : ''
+
+      Logger.debug(`El nodo confirmó ACK para la tarea${attemptsStr} (ID: ${taskId.slice(0, 8)})`)
 
       // Eliminar de la cola
       this.queue.shift()
@@ -175,7 +239,11 @@ class CommandSequencer {
       this.throttleTimer = setTimeout(() => {
         this.processNext()
       }, 5000)
+
+      return result
     }
+
+    return null
   }
 
   /**
@@ -223,6 +291,8 @@ export function executeSequence(
   durationSeconds: number,
   taskId: string,
   scheduledAt: Date = new Date(),
+  onFailure?: (taskId: string, notes?: string) => Promise<void>,
+  originalDurationMin: number = 0,
 ) {
   const durationSec = Math.floor(durationSeconds)
 
@@ -234,13 +304,13 @@ export function executeSequence(
   }
 
   const message = JSON.stringify(payload)
+  const remainingMinutes = Math.round((durationSeconds / 60) * 10) / 10
+  const finalOriginalMin = originalDurationMin || remainingMinutes
 
-  retryManager.track(ACTUATOR_TOPIC, message, scheduledAt)
-
-  const durationMinutes = Math.round((durationSeconds / 60) * 10) / 10
+  retryManager.track(ACTUATOR_TOPIC, message, scheduledAt, finalOriginalMin, false, onFailure)
 
   Logger.info(
-    `Despachando Circuito: ${purpose} (${durationMinutes} min / ${durationSec}s) [Task: ${taskId.slice(0, 8)}]`,
+    `Despachando Circuito: ${purpose} (${remainingMinutes} min / ${durationSec}s) [Task: ${taskId.slice(0, 8)}]`,
   )
 }
 
@@ -279,7 +349,7 @@ export function executeSystemCommand(command: string, isPersistent: boolean = fa
     Logger.info(`Comando: ${colors.magenta}${command}${colors.reset} (Encolado - Nodo Offline)`)
   }
 
-  retryManager.track(SYSTEM_CMD_TOPIC, command, new Date(), isPersistent)
+  retryManager.track(SYSTEM_CMD_TOPIC, command, new Date(), 0, isPersistent)
 }
 
 let lastSamplingState: 'on' | 'off' | null = null

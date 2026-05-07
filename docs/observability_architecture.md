@@ -10,7 +10,7 @@ El servicio de ingesta (`ingest`) registra en InfluxDB todos los eventos de stat
 
 | Fuente | Tópico MQTT | Tag `source` | Tag `event_type` | Tag adicional | Estado |
 | --- | --- | --- | --- | --- | --- |
-| **Nodo Sensors** (por zona) | `PristinoPlant/Environmental_Monitoring/{Zona}/status` | `Environmental_Monitoring` | `Device_Status` | `zone` = `ZONA_A`, `ZONA_B`... | ✅ Implementado |
+| **Nodo Weather_Station** (por zona) | `PristinoPlant/Weather_Station/{Zona}/status` | `Weather_Station` | `Device_Status` | `zone` = `ZONA_A`, `ZONA_B`... | ✅ Implementado |
 | **Nodo Actuador** | `PristinoPlant/Actuator_Controller/status` | `Actuator_Controller` | `Device_Status` | — | ✅ Implementado |
 | **Servicios Backend** | `PristinoPlant/Services/{Nombre}/status` | `Services` | `Service_Status` | `service_name` = `Scheduler-CLOUD`, `Ingest-CLOUD`... | ✅ Implementado |
 
@@ -84,9 +84,8 @@ Tarea "Humectación Suelo" FALLÓ a las 14:30.
 Cuando se habiliten nuevos nodos Sensors:
 
 ```topic
-PristinoPlant/Environmental_Monitoring/Zona_A/status  → zone=ZONA_A ✅
-PristinoPlant/Environmental_Monitoring/Zona_B/status  → zone=ZONA_B ✅ (automático)
-PristinoPlant/Environmental_Monitoring/Exterior/status → zone=EXTERIOR ✅ (automático)
+PristinoPlant/Weather_Station/Zona_A/status   → zone=ZONA_A ✅
+PristinoPlant/Weather_Station/Exterior/status → zone=EXTERIOR ✅
 ```
 
 El ingest parsea la zona del tópico dinámicamente (`topicParts[2]`) y la mapea al enum `ZoneType` del schema Prisma. Solo se necesita:

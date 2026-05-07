@@ -2,9 +2,9 @@
 # Relay Modules: Actuator Controller Firmware.
 # Descripcion: Firmware dedicado para el control de las electrovalvulas, la bomba
 #              y la estacion meteorologica exterior (lluvia e iluminancia).
-# Fecha: 06-05-2026
-# Version: v0.12.0
-# notes_release: [🚀 RAM Optimization]: Eliminada lógica de mantenimiento automático (OTA/Creds) en favor de una limpieza quirúrgica de la memoria heap pre-boot. Maximizada estabilidad para handshakes SSL/MQTT.
+# Fecha: 07-05-2026
+# Version: v0.12.1
+# notes_release: [♻️ Data Refactor]: Finalizada la migración total de terminología 'history' a 'data' en el pipeline de telemetría. Estandarización de variables internas y claves JSON para compatibilidad total con el Ingest.
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib.
@@ -20,7 +20,7 @@ from micropython import const
 # Desactivar en Producción. Desactiva logs de desarrollo.
 DEBUG = False
 
-# ---- Configuración MQTT (Constantes const() para ahorro de RAM) ----
+# ---- Configuración MQTT (const() para ahorro de RAM) ----
 # El broker esperará ~1.5x este valor antes de desconectar al cliente.
 MQTT_KEEPALIVE       = const(60) # ~1.5x = 90 seg
 # Intervalo para enviar pings de 'keepalive' al broker MQTT.
@@ -52,7 +52,7 @@ MAX_BUFFER_SIZE = const(15)
 # [LWT/Status]: Indica si el dispositivo está "online" u "offline" (usado para Last Will).
 MQTT_TOPIC_STATUS         = const(b"PristinoPlant/Actuator_Controller/status")
 
-# [Audit Data]: Canal para streaming de datos unificados (RAM, NVS, Lux history, rain, etc).
+# [Audit Data]: Canal para streaming de datos unificados (RAM, NVS, Lux, rain, etc).
 MQTT_TOPIC_AUDIT          = const(b"PristinoPlant/Actuator_Controller/audit")
 
 # [Audit Flag]: Indica qué tareas de auditoría están activas internamente (para sincronización de UI).
@@ -76,13 +76,13 @@ MQTT_TOPIC_STATE          = const(b"PristinoPlant/Actuator_Controller/irrigation
 
 # ---- Telemetría de la Estación Exterior (Weather Station) ----
 # [Rain State]: Estado binario en tiempo real (Raining / Dry) con histéresis.
-MQTT_TOPIC_RAIN_STATE     = const(b"PristinoPlant/Weather_Station/Exterior/rain/state")
+MQTT_TOPIC_RAIN_STATE     = const(b"PristinoPlant/Weather_Station/EXTERIOR/rain/state")
 
 # [Rain Measurement]: Envío de fin de evento. Incluye duración (segundos) e intensidad promedio (%).
-MQTT_TOPIC_RAIN_EVENT     = const(b"PristinoPlant/Weather_Station/Exterior/rain/event")
+MQTT_TOPIC_RAIN_EVENT     = const(b"PristinoPlant/Weather_Station/EXTERIOR/rain/event")
 
 # [Exterior Metrics]: Batch de lecturas ambientales (lux, lluvia, etc).
-MQTT_TOPIC_EXTERIOR_METRICS = const(b"PristinoPlant/Weather_Station/Exterior/readings")
+MQTT_TOPIC_EXTERIOR_METRICS = const(b"PristinoPlant/Weather_Station/EXTERIOR/readings")
 
 # ---- Parámetros LWT (Last Will and Testament) ----
 LWT_TOPIC = MQTT_TOPIC_STATUS
@@ -1495,8 +1495,8 @@ def flush_telemetry_batches():
         if illuminance_Batch.count > 0:
             items = illuminance_Batch.get_all()
             if items:
-                h_str = ",".join(['[%d,{"illuminance":%s}]' % (it[0], str(it[1])) for it in items])
-                client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"history":[%s]}' % h_str, qos=0)
+                data_str = ",".join(['[%d,{"illuminance":%s}]' % (it[0], str(it[1])) for it in items])
+                client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"data":[%s]}' % data_str, qos=0)
                 illuminance_Batch.clear()
                 if DEBUG: print(f"    ├─ ☀️  Flush Lux: {len(items)} muestras")
                 sleep_ms(500) # Pequeña pausa para el stack de red
@@ -1507,8 +1507,8 @@ def flush_telemetry_batches():
         if temperature_Batch.count > 0:
             items = temperature_Batch.get_all()
             if items:
-                t_str = ",".join(['[%d,{"temperature":%s}]' % (it[0], str(it[1])) for it in items])
-                client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"history":[%s]}' % t_str, qos=0)
+                data_str = ",".join(['[%d,{"temperature":%s}]' % (it[0], str(it[1])) for it in items])
+                client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"data":[%s]}' % data_str, qos=0)
                 temperature_Batch.clear()
                 if DEBUG: print(f"    ├─ 🌡️  Flush Temp: {len(items)} muestras")
                 sleep_ms(500) # Pequeña pausa para el stack de red
@@ -1519,8 +1519,8 @@ def flush_telemetry_batches():
         if humidity_Batch.count > 0:
             items = humidity_Batch.get_all()
             if items:
-                h_str = ",".join(['[%d,{"humidity":%s}]' % (it[0], str(it[1])) for it in items])
-                client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"history":[%s]}' % h_str, qos=0)
+                data_str = ",".join(['[%d,{"humidity":%s}]' % (it[0], str(it[1])) for it in items])
+                client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"data":[%s]}' % data_str, qos=0)
                 humidity_Batch.clear()
                 if DEBUG: print(f"    └─ 💧  Flush Hum: {len(items)} muestras")
     except: pass
@@ -2497,8 +2497,8 @@ async def rain_monitor_task():
                     if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
                         try:
                             # Construcción de JSON manual para ahorrar RAM (Zero-Dict Batching)
-                            history_str = ",".join(['[%d,{"rain_intensity":%s}]' % (it[0], str(it[1])) for it in rain_Batch.get_all()])
-                            payload_batch = '{"history":[%s]}' % history_str
+                            data_str = ",".join(['[%d,{"rain_intensity":%s}]' % (it[0], str(it[1])) for it in rain_Batch.get_all()])
+                            payload_batch = '{"data":[%s]}' % data_str
 
                             async with mqtt_lock:
                                 client.publish(MQTT_TOPIC_EXTERIOR_METRICS, payload_batch, qos=0)
@@ -2524,11 +2524,11 @@ async def rain_monitor_task():
                             # Construcción de JSON manual para el evento y el batch final
                             payload = '{"duration_seconds":%d,"average_intensity_percent":%d,"timestamp":%d}' % (duration_sec, avg_int, time())
                             
-                            history_items = rain_Batch.get_all()
+                            data_items = rain_Batch.get_all()
                             payload_batch = None
-                            if history_items:
-                                history_str = ",".join(['[%d,{"rain_intensity":%s}]' % (it[0], str(it[1])) for it in history_items])
-                                payload_batch = '{"history":[%s]}' % history_str
+                            if data_items:
+                                data_str = ",".join(['[%d,{"rain_intensity":%s}]' % (it[0], str(it[1])) for it in data_items])
+                                payload_batch = '{"data":[%s]}' % data_str
                             
                             # 🔒 Pedimos permiso para usar el socket
                             async with mqtt_lock:
@@ -2615,8 +2615,8 @@ async def illuminance_monitor_task():
                             # 🔒 Pedimos permiso para usar el socket
                             async with mqtt_lock:
                                 # Construcción de JSON manual para ahorrar RAM (Zero-Dict Batching)
-                                history_str = ",".join(['[%d,{"illuminance":%s}]' % (it[0], str(it[1])) for it in illuminance_Batch.get_all()])
-                                payload_batch = '{"history":[%s]}' % history_str
+                                data_str = ",".join(['[%d,{"illuminance":%s}]' % (it[0], str(it[1])) for it in illuminance_Batch.get_all()])
+                                payload_batch = '{"data":[%s]}' % data_str
                                 
                                 client.publish(MQTT_TOPIC_EXTERIOR_METRICS, payload_batch, qos=0)
                                 
@@ -2684,8 +2684,8 @@ async def climate_monitor_task():
                             # Lote A: Temperatura
                             if has_temp:
                                 async with mqtt_lock:
-                                    t_str = ",".join(['[%d,{"temperature":%s}]' % (it[0], str(it[1])) for it in temperature_Batch.get_all()])
-                                    client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"history":[%s]}' % t_str, qos=0)
+                                    data_str = ",".join(['[%d,{"temperature":%s}]' % (it[0], str(it[1])) for it in temperature_Batch.get_all()])
+                                    client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"data":[%s]}' % data_str, qos=0)
                                     temperature_Batch.clear()
 
                             # Offset de 2s entre publicaciones (FUERA del lock)
@@ -2695,8 +2695,8 @@ async def climate_monitor_task():
                             # Lote B: Humedad
                             if has_hum:
                                 async with mqtt_lock:
-                                    h_str = ",".join(['[%d,{"humidity":%s}]' % (it[0], str(it[1])) for it in humidity_Batch.get_all()])
-                                    client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"history":[%s]}' % h_str, qos=0)
+                                    data_str = ",".join(['[%d,{"humidity":%s}]' % (it[0], str(it[1])) for it in humidity_Batch.get_all()])
+                                    client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"data":[%s]}' % data_str, qos=0)
                                     humidity_Batch.clear()
 
                             if DEBUG: print(f"\n🌡️  DHT22: {Colors.YELLOW}Batches Temp + HRL Publicados{Colors.RESET}")
@@ -2779,17 +2779,14 @@ async def unified_audit_task():
                         fragments.append('"%s":{"rssi":%d,"ip":"%s"}' % (category, val[0], val[1]))
                     elif category == "ram":
                         fragments.append('"%s":{"f":%d,"a":%d}' % (category, val[0], val[1]))
-                    elif category == "lux":
-                        fragments.append('"%s":%s' % (category, str(val)))
-                    elif category == "rain":
-                        # Enviamos la intensidad actual
-                        fragments.append('"%s":%s' % (category, str(val)))
                     elif category == "temp":
-                        # Enviamos solo temperatura
-                        fragments.append('"temp":{"t":%s}' % (str(val[0])))
+                        fragments.append('"temperature":%s' % (str(val[0])))
                     elif category == "hum":
-                        # Enviamos solo humedad
-                        fragments.append('"hum":{"h":%s}' % (str(val[1])))
+                        fragments.append('"humidity":%s' % (str(val[1])))
+                    elif category == "lux":
+                        fragments.append('"illuminance":%s' % (str(val)))
+                    elif category == "rain":
+                        fragments.append('"rain_intensity":%s' % (str(val)))
                     
                     AUDIT_COUNTERS[category] += 1
                     dirty = True

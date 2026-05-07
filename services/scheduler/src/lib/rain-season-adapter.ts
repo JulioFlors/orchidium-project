@@ -66,7 +66,7 @@ export async function evaluateRainSeason(options?: {
       SELECT SUM("duration_seconds") as total_rain
       FROM "rain_events"
       WHERE time >= now() - interval '${RAIN_ADAPTER.LOOKBACK_HOURS} hours'
-      AND zone = 'EXTERIOR'
+      AND zone = '${ZoneType.EXTERIOR}'
     `
     const rainStream = influxClient.query(rainQuery)
     let rainAccumulation48h = 0
@@ -95,7 +95,7 @@ export async function evaluateRainSeason(options?: {
       FROM "rain_events"
       WHERE time >= now() - interval '36 hours'
       AND time < now() - interval '12 hours'
-      AND zone = 'EXTERIOR'
+      AND zone = '${ZoneType.EXTERIOR}'
     `
     const rainYesterdayStream = influxClient.query(rainYesterdayQuery)
     let rainYesterday = 0
@@ -110,7 +110,7 @@ export async function evaluateRainSeason(options?: {
       FROM "rain_events"
       WHERE time >= now() - interval '60 hours'
       AND time < now() - interval '36 hours'
-      AND zone = 'EXTERIOR'
+      AND zone = '${ZoneType.EXTERIOR}'
     `
     const rainDayBeforeStream = influxClient.query(rainDayBeforeQuery)
     let rainDayBefore = 0

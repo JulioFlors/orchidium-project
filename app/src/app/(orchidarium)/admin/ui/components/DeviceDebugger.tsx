@@ -38,10 +38,10 @@ const DEVICES: DeviceConfig[] = [
   },
   {
     id: 'Weather_Station',
-    name: 'Sensores',
+    name: 'Estación Meteorológica',
     description: `Estación Meteorológica ${ZoneTypeLabels[ZoneType.ZONA_A]}`,
-    baseTopic: `PristinoPlant/Environmental_Monitoring/Zona_A`,
-    hasMaskNvs: true,
+    baseTopic: `PristinoPlant/Weather_Station/Zona_A`,
+    hasMaskNvs: false,
     heartbeatTimeoutMs: 60000,
     hasDiagnostics: true,
   },

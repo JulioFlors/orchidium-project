@@ -4,8 +4,9 @@ import { SWRConfig } from 'swr'
 
 import { MonitoringView } from './ui'
 
-import { getSensorHistory, getRainHistory } from '@/actions'
+import { getSensorData, getRainData } from '@/actions'
 import { getLastHeartbeat } from '@/lib/server/environment'
+import { ZoneType } from '@/config/mappings'
 
 export const metadata: Metadata = {
   title: 'Monitor Ambiental',
@@ -15,25 +16,30 @@ export const metadata: Metadata = {
 export default async function Page() {
   // Pre-cargamos los datos para las tarjetas por defecto (EXTERIOR, 12h)
   const [historyRes, rainRes, hbExterior, hbZonaA] = await Promise.all([
-    getSensorHistory('12h', 'EXTERIOR'),
-    getRainHistory('EXTERIOR'),
+    getSensorData('12h', ZoneType.EXTERIOR),
+    getRainData(ZoneType.EXTERIOR),
     getLastHeartbeat('Actuator_Controller'),
-    getLastHeartbeat('Environmental_Monitoring', 'ZONA_A'),
+    getLastHeartbeat('Weather_Station', ZoneType.ZONA_A),
   ])
 
   const initialHeartbeats: Record<string, { timestamp: number; status: string }> = {}
 
   if (hbExterior) initialHeartbeats['PristinoPlant/Actuator_Controller/status'] = hbExterior
-  if (hbZonaA) initialHeartbeats['PristinoPlant/Environmental_Monitoring/Zona_A/status'] = hbZonaA
+  if (hbZonaA)
+    initialHeartbeats[`PristinoPlant/Weather_Station/${ZoneType.ZONA_A}/status`] = hbZonaA
 
   const fallback: Record<string, unknown> = {}
 
   if (historyRes.success) {
-    fallback['/api/environment/history?range=12h&zone=EXTERIOR'] = historyRes.data
+    fallback[`/api/environment/data?range=12h&zone=${ZoneType.EXTERIOR}`] = {
+      data: historyRes.data,
+      liveKPIs: historyRes.liveKPIs,
+      lastRainState: historyRes.lastRainState,
+    }
   }
 
   if (rainRes.success) {
-    fallback['/api/environment/rain?range=12h&zone=EXTERIOR'] = rainRes.data
+    fallback[`/api/environment/rain?range=12h&zone=${ZoneType.EXTERIOR}`] = rainRes.data
   }
 
   return (

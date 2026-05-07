@@ -20,7 +20,7 @@ export async function GET() {
 
     return NextResponse.json(tasks)
   } catch (error) {
-    Logger.error('Error fetching pending tasks:', error)
+    Logger.error('Error al obtener la lista de tareas pendientes:', error)
 
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(taskLog, { status: 201 })
   } catch (error) {
-    Logger.error('Error creating deferred task:', error)
+    Logger.error('Error al crear la tarea postergada:', error)
 
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }

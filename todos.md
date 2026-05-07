@@ -34,9 +34,9 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 * [x] **Guía de Scripts de Utilidad:** Documentación técnica para estandarización de la creación de herramientas locales (Postgres/InfluxDB) con soporte para batching.
 * [x] **Documentación Botánica Avanzada:** Formalización de DIF, DLI, VPD y Riesgo Fúngico en las especificaciones del orquideario (docs/specs).
 * [ ] **Estandarización de Tópicos MQTT:**
-  * [ ] Cambiar tópico base de sensores: `Environmental_Monitoring` -> `weather_station`.
-  * [ ] Normalizar Zonas: Usar capitalización de base de datos (`ZONA_A`) en lugar de formateo manual.
-  * [ ] Sincronizar firmware (`sensors`), `ingest`, `scheduler` y `frontend`.
+  * [x] Cambiar tópico base de sensores: `Environmental_Monitoring` -> `Weather_Station` (v0.12.0).
+  * [x] Normalizar Zonas: Usar capitalización de base de datos (`ZONA_A`) en lugar de formateo manual.
+  * [x] Sincronizar firmware (`sensors`), `ingest`, `scheduler` y `frontend`.
 
 ---
 
@@ -234,5 +234,6 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
   * Reducir frecuencia de OTA checks (ej: 1 de cada N boots).
 * [x] **Renombrar Light Intensity a Illuminance:** Uniformar el término técnico en todo el sistema (firmware, ingest, database, frontend) (v0.6.1).
 * [x] **Optimización Status Exterior:** Unificar el status de la estación exterior con el del nodo actuador para ahorrar recursos (v0.6.1).
-* [x] **Migración Sensor Lluvia al Nodo Actuador:** ~~Mover lógica `rain_monitor_task()` del firmware Sensors al firmware Relays.~~ Migrado en v0.6.0. Incluye BH1750 exterior + sensor de gotas de lluvia. Tópicos MQTT bajo `PristinoPlant/Environmental_Monitoring/Exterior/`.
-* [x] **Sensor de Iluminancia externo:** ~~Desarrollar la logica para calcular la diferencia de iluminancia.~~ Implementado en v0.6.0 como `exterior_publish_task()` en el nodo actuador. Publica en `Exterior/readings` para comparar con el BH1750 interior.
+* [x] **Migración Sensor Lluvia al Nodo Actuador:** ~~Mover lógica `rain_monitor_task()` del firmware Sensors al firmware Relays.~~ Migrado en v0.6.0. Incluye BH1750 exterior + sensor de gotas de lluvia. Tópicos MQTT bajo `PristinoPlant/Weather_Station/Exterior/`.
+  * [x] Sensor de Iluminancia externo: ~~Desarrollar la logica para calcular la diferencia de iluminancia.~~ Implementado en v0.6.0 como `exterior_publish_task()` en el nodo actuador. Publica en `Exterior/readings` para comparar con el BH1750 interior.
+* [ ] **Sincronización de Firmware Weather Station:** Actualizar `weather_station/main.py` con las mejoras de resiliencia, auditoría y estandarización aplicadas en `relay_modules/main.py` (v0.12.1+).

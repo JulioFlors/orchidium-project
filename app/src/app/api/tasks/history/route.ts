@@ -35,7 +35,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(tasks)
   } catch (error) {
-    Logger.error('Error fetching history tasks:', error)
+    Logger.error('Error al consultar el historial de tareas:', error)
 
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }

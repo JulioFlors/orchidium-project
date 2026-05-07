@@ -55,11 +55,7 @@ function formatTimeLabel(raw: unknown): string {
   return `${h12}:${m} ${ampm}`
 }
 
-export async function getSensorHistoryInternal(
-  range: string,
-  zone: string,
-  metric?: string | null,
-) {
+export async function getSensorDataInternal(range: string, zone: ZoneType, metric?: string | null) {
   const availableFields = ZoneMetrics[zone as ZoneType] || ZoneMetrics[ZoneType.ZONA_A] || []
   const fieldsToQuery = metric ? availableFields.filter((f) => f === metric) : availableFields
 
@@ -72,14 +68,16 @@ export async function getSensorHistoryInternal(
   midnightVET.setUTCHours(0, 0, 0, 0)
   const midnightVETInUTC = new Date(midnightVET.getTime() + VET_OFFSET)
 
-  // --- Rangos Cortos / Micro-Visión (1h, 12h, 24h) ---
-  if (range === '1h' || range === '12h' || range === '24h') {
-    let timeFilter = `AND time >= now() - interval '24 hours'`
+  // --- Rangos (12h, 24h) ---
+  if (range === '12h' || range === '24h') {
+    const timeFilter =
+      range === '12h'
+        ? `AND time >= now() - interval '12 hours'`
+        : `AND time >= now() - interval '24 hours'`
 
-    if (range === '1h') timeFilter = `AND time >= now() - interval '1 hours'`
-    if (range === '12h') timeFilter = `AND time >= now() - interval '12 hours'`
+    const zoneFilter = `"zone" = '${zone}'`
 
-    const query = `SELECT * FROM "environment_metrics" WHERE "zone" = '${zone}' ${timeFilter} ORDER BY time ASC`
+    const query = `SELECT * FROM "environment_metrics" WHERE ${zoneFilter} ${timeFilter} ORDER BY time ASC`
 
     try {
       const reader = influxClient.query(query)
@@ -159,11 +157,13 @@ export async function getSensorHistoryInternal(
         isLive: true,
       }
 
-      return { data, liveKPIs }
-    } catch (error) {
-      Logger.error(`Error InfluxDB (${range}):`, error)
+      const lastRainState = range === '12h' || range === '24h' ? await getLastRainState() : null
 
-      return { data: [], liveKPIs: null }
+      return { data, liveKPIs, lastRainState }
+    } catch (error) {
+      Logger.error(`Error en InfluxDB (${range}):`, error)
+
+      return { data: [], liveKPIs: null, lastRainState: null }
     }
   }
 
@@ -237,7 +237,9 @@ export async function getSensorHistoryInternal(
     const todayISO = todayVET.toISOString().split('T')[0]
 
     if (!pgData.some((d) => d.date.toISOString().startsWith(todayISO))) {
-      const todayQuery = `SELECT * FROM "environment_metrics" WHERE "zone" = '${zone}' AND time >= '${midnightVETInUTC.toISOString()}' ORDER BY time ASC`
+      const zoneFilter = `"zone" = '${zone}'`
+
+      const todayQuery = `SELECT * FROM "environment_metrics" WHERE ${zoneFilter} AND time >= '${midnightVETInUTC.toISOString()}' ORDER BY time ASC`
 
       try {
         const reader = influxClient.query(todayQuery)
@@ -295,13 +297,13 @@ export async function getSensorHistoryInternal(
           allData.push(todayEntry)
         }
       } catch (e) {
-        Logger.error('Error Fallback Hoy:', e)
+        Logger.error('Error en el respaldo de hoy:', e)
       }
     }
 
     return { data: allData, liveKPIs: null }
   } catch (error) {
-    Logger.error('Error Query Hibrido:', error)
+    Logger.error('Error en consulta híbrida:', error)
 
     return { data: [], liveKPIs: null }
   }
@@ -311,8 +313,13 @@ export async function getSensorHistoryInternal(
  * Obtiene el último latido (timestamp) registrado para un dispositivo.
  * Se usa para la hidratación SSR del estado de conexión.
  */
-export async function getLastHeartbeat(source: string, zone?: string) {
-  const zoneFilter = zone ? `AND "zone" = '${zone}'` : ''
+export async function getLastHeartbeat(source: string, zone?: ZoneType) {
+  let zoneFilter = ''
+
+  if (zone) {
+    zoneFilter = `AND "zone" = '${zone}'`
+  }
+
   const query = `
     SELECT "value", "time" 
     FROM "system_events" 
@@ -338,8 +345,117 @@ export async function getLastHeartbeat(source: string, zone?: string) {
 
     return null
   } catch (error) {
-    Logger.error(`Error fetching last heartbeat for ${source}:`, error)
+    Logger.error(`Error al obtener el último latido para ${source}:`, error)
 
     return null
+  }
+}
+
+/**
+ * Obtiene el último estado de lluvia (Raining/Dry) registrado.
+ */
+export async function getLastRainState() {
+  const query = `
+    SELECT "value", "time" 
+    FROM "system_events" 
+    WHERE "source" = 'Weather_Station' 
+    AND "zone" = '${ZoneType.EXTERIOR}' 
+    AND "event_type" = 'Rain_State' 
+    AND time >= now() - interval '24 hours'
+    ORDER BY time DESC
+    LIMIT 1
+  `
+
+  try {
+    const reader = influxClient.query(query)
+
+    for await (const row of reader as AsyncIterable<InfluxRow>) {
+      if (row.time) {
+        return {
+          timestamp: new Date(safeTimeToISO(row.time)).getTime(),
+          state: String(row.value || 'Dry'),
+        }
+      }
+    }
+
+    return { state: 'Dry', timestamp: Date.now() }
+  } catch (error) {
+    Logger.error('Error al obtener el último estado de lluvia:', error)
+
+    return null
+  }
+}
+
+/**
+ * Obtiene un resumen de los eventos de lluvia en un rango determinado.
+ */
+export async function getRainSummaryInternal(range: string, zone: ZoneType) {
+  let rangeString = '24h'
+
+  switch (range) {
+    case '7d':
+      rangeString = '7d'
+      break
+    case '30d':
+      rangeString = '30d'
+      break
+    case 'all':
+      rangeString = '365d'
+      break
+    default:
+      rangeString = '24h'
+  }
+
+  const timeFilter = range === 'all' ? '' : `AND time >= now() - interval '${rangeString}'`
+
+  const query = `
+    SELECT 
+      time,
+      duration_seconds,
+      intensity_percent
+    FROM "rain_events"
+    WHERE "zone" = '${zone}'
+    ${timeFilter}
+    ORDER BY time ASC
+  `
+
+  try {
+    const reader = influxClient.query(query)
+    const events = []
+    let totalDuration = 0
+    let totalIntensity = 0
+
+    for await (const row of reader as AsyncIterable<InfluxRow>) {
+      const timeStr = safeTimeToISO(row.time)
+
+      events.push({
+        time: timeStr,
+        duration: Number(row.duration_seconds),
+        intensity: Number(row.intensity_percent),
+      })
+      totalDuration += Number(row.duration_seconds)
+      totalIntensity += Number(row.intensity_percent)
+    }
+
+    return {
+      totalDurationSeconds: totalDuration,
+      averageIntensity: events.length > 0 ? Math.round(totalIntensity / events.length) : 0,
+      eventCount: events.length,
+      events,
+    }
+  } catch (error: unknown) {
+    const err = error as Error
+    const errorMessage = err.message || err.toString()
+
+    if (errorMessage.includes('not found') || errorMessage.includes('table')) {
+      return {
+        totalDurationSeconds: 0,
+        averageIntensity: 0,
+        eventCount: 0,
+        events: [],
+      }
+    }
+
+    throw error
   }
 }

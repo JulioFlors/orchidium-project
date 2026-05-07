@@ -149,7 +149,14 @@ export async function processTaskLog(taskLog: TaskLog) {
     }
 
     // Despacho hacia MQTT con la duración recalibrada (en segundos)
-    executeSequence(taskLog.purpose, durationToExecuteSec, taskLog.id, taskLog.scheduledAt)
+    executeSequence(
+      taskLog.purpose,
+      durationToExecuteSec,
+      taskLog.id,
+      taskLog.scheduledAt,
+      handleAckTimeout,
+      taskLog.duration,
+    )
 
     let durationText = `${durationToExecuteSec}s`
 
@@ -166,10 +173,6 @@ export async function processTaskLog(taskLog: TaskLog) {
     await recordTaskEvent(taskLog.id, TaskStatus.DISPATCHED, notes, {
       executedAt: new Date(),
     })
-
-    Logger.success(
-      `${isResumption ? 'Reanudación' : 'Despacho'} de Tarea Log ${taskLog.id.slice(0, 8)} con ${durationToExecuteSec}s.`,
-    )
   } catch (error) {
     Logger.error('Fallo crítico ejecutando taskLog', error)
     await prisma.taskLog
@@ -284,11 +287,7 @@ export async function processPostponedTasks() {
  * Callback para el RetryManager cuando agota los intentos de ACK o detecta fallo visual.
  */
 export async function handleAckTimeout(taskId: string, notes?: string) {
-  await recordTaskEvent(
-    taskId,
-    TaskStatus.FAILED,
-    notes || 'Sin respuesta del Nodo Actuador (ACK timeout tras agotarse los reintentos).',
-  )
+  await recordTaskEvent(taskId, TaskStatus.FAILED, notes || 'Sin respuesta del Nodo Actuador.')
 }
 
 /**

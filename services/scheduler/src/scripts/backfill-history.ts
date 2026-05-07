@@ -44,7 +44,7 @@ const DRY_RUN = process.env.BACKFILL_DRY_RUN === 'true'
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const allZones: ZoneType[] = ['EXTERIOR', 'ZONA_A']
+  const allZones: ZoneType[] = [ZoneType.EXTERIOR, ZoneType.ZONA_A]
   const zones = BACKFILL_ZONE ? [BACKFILL_ZONE] : allZones
 
   Logger.info('════════════════════════════════════════════════════════')

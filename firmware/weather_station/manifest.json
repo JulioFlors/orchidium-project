@@ -1,0 +1,17 @@
+{
+  "name": "Weather Station",
+  "description": "Environmental Monitoring Firmware",
+  "version": "0.8.0",
+  "date": "07-05-2026",
+  "notes_release": "Sincronización Estándar: Implementación de Auditoría Granular (RAM, RSSI, Streaming) y Resiliencia MQTT mejorada. Compatible con UI Debugger.",
+  "files": [
+    "app.mpy",
+    "boot.py",
+    "main.py"
+  ],
+  "libs": [
+    "umqtt",
+    "secrets",
+    "bh1750"
+  ]
+}

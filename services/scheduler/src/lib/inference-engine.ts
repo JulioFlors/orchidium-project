@@ -1,4 +1,4 @@
-import { prisma, TaskStatus, AutomationSchedule } from '@package/database'
+import { prisma, TaskStatus, AutomationSchedule, ZoneType } from '@package/database'
 
 import { Logger } from './logger'
 import { influxClient } from './influx'
@@ -124,7 +124,7 @@ export class InferenceEngine {
         ? localConditions.exterior.temp + FALLBACK_OFFSETS.TEMP
         : localConditions.interior.temp
 
-      const dataUsed = isFallback ? 'EXTERIOR (Fallback Preliminar)' : 'INTERIOR'
+      const dataUsed = isFallback ? `${ZoneType.EXTERIOR} (Fallback Preliminar)` : 'INTERIOR'
 
       Logger.info(
         `[ INFERENCE ] Evaluando "${schedule.name}" (${purpose}) → HR: ${interiorHum.toFixed(0)}% | Temp: ${interiorTemp.toFixed(1)}°C | Día: ${dayClass.type} | Datos: ${dataUsed}`,
@@ -339,7 +339,7 @@ export class InferenceEngine {
           COUNT(*) as event_count
         FROM "rain_events"
         WHERE time >= now() - interval '${lookbackHours} hours'
-        AND zone = 'EXTERIOR'
+        AND "zone" = '${ZoneType.EXTERIOR}'
       `
       const stream = influxClient.query(query)
 
@@ -380,14 +380,20 @@ export class InferenceEngine {
       let foundInterior = false
 
       for await (const row of stream) {
-        if (!foundExterior && row.source === 'Weather_Station') {
+        // La zona determina el destino. Ambos nodos (Actuador y EMA) usan la fuente Weather_Station.
+        const isExterior = row.zone === ZoneType.EXTERIOR
+        const isInterior =
+          !isExterior &&
+          (row.zone?.toString().startsWith('Zona_') || row.zone?.toString().startsWith('ZONA_'))
+
+        if (!foundExterior && isExterior && row.source === 'Weather_Station') {
           result.exterior.lux = Number(row.illuminance || 0)
           result.exterior.rain_intensity = Number(row.rain_intensity || 0)
           result.exterior.temp = Number(row.temperature || 0)
           result.exterior.hum = Number(row.humidity || 0)
           foundExterior = true
           result.foundExterior = true
-        } else if (!foundInterior && row.source === 'Environmental_Monitoring') {
+        } else if (!foundInterior && isInterior && row.source === 'Weather_Station') {
           result.interior.temp = Number(row.temperature || 0)
           result.interior.hum = Number(row.humidity || 0)
           result.interior.lux = Number(row.illuminance || 0)
@@ -397,7 +403,7 @@ export class InferenceEngine {
       }
 
       if (!foundExterior || !foundInterior) {
-        const missing = [!foundExterior && 'EXTERIOR', !foundInterior && 'INTERIOR']
+        const missing = [!foundExterior && ZoneType.EXTERIOR, !foundInterior && 'INTERIOR']
           .filter(Boolean)
           .join(', ')
 

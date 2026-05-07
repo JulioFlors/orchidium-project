@@ -561,11 +561,11 @@ export function AuditConsoleCard({
               : activeAudit === 'temp' &&
                   typeof incomingPayload === 'object' &&
                   incomingPayload !== null
-                ? (incomingPayload as { t?: number }).t
+                ? (incomingPayload as { temperature?: number }).temperature
                 : activeAudit === 'hum' &&
                     typeof incomingPayload === 'object' &&
                     incomingPayload !== null
-                  ? (incomingPayload as { h?: number }).h
+                  ? (incomingPayload as { humidity?: number }).humidity
                   : incomingPayload
 
             // Solo agregamos si el valor es válido (no nulo/undefined)
@@ -674,13 +674,13 @@ export function AuditConsoleCard({
 
             value = Number(h.rssi ?? 0)
           } else if (activeAudit === 'temp') {
-            const t = data as { t?: number }
+            const t = data as { temperature?: number }
 
-            value = Number(t.t ?? 0)
+            value = Number(t.temperature ?? 0)
           } else if (activeAudit === 'hum') {
-            const h = data as { h?: number }
+            const h = data as { humidity?: number }
 
-            value = Number(h.h ?? 0)
+            value = Number(h.humidity ?? 0)
           } else {
             value = Number(data)
           }

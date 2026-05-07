@@ -64,16 +64,16 @@ export function formatRelativeHeartbeat(dateValue: string | Date | number): stri
   const diffMs = Math.max(0, now.getTime() - date.getTime())
   const diffSec = Math.floor(diffMs / 1000)
   const diffMin = Math.floor(diffSec / 60)
-  const diffHours = Math.floor(diffMin / 60)
+  const diffHoursRaw = diffMin / 60
 
   if (diffSec < 60) return 'Hace unos segundos'
   if (diffMin < 60) return `Hace ${diffMin} min`
 
-  if (diffHours < 24) {
-    return `Hace ${diffHours}h`
+  if (diffHoursRaw < 24) {
+    return `Hace ${Math.round(diffHoursRaw)}h`
   }
 
-  if (diffHours < 48) {
+  if (diffHoursRaw < 48) {
     return `Ayer, ${formatTime12h(date)}`
   }
 

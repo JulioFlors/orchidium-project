@@ -14,7 +14,7 @@ import {
 } from 'recharts'
 import { clsx } from 'clsx'
 
-interface EnvironmentHistoryChartProps {
+interface EnvironmentDataChartProps {
   data: Record<string, number | string | boolean | undefined>[]
   className?: string
   dataKey: string
@@ -207,7 +207,7 @@ function CustomTooltip({
   return null
 }
 
-export function EnvironmentHistoryChart({
+export function EnvironmentDataChart({
   data,
   className,
   dataKey,
@@ -218,7 +218,7 @@ export function EnvironmentHistoryChart({
   range,
   onRangeChange,
   chartType = 'area',
-}: EnvironmentHistoryChartProps) {
+}: EnvironmentDataChartProps) {
   const getTimeFormatter = (r: string) => {
     const opts: Intl.DateTimeFormatOptions = { timeZone: 'America/Caracas' }
 

@@ -65,7 +65,7 @@
 		"relay_modules": "Pipe",
 		"scheduler": "Job",
 		"secrets": "Config",
-		"sensors": "Environment",
+		"weather_station": "Environment",
 		"store": "Store",
 		"umqtt": "Aws",
 		"weather-oracle": "Environment",

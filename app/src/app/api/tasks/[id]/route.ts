@@ -132,7 +132,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
           task_id: id,
         })
       } catch (err) {
-        Logger.error('Fallo enviando comando OFF desde API:', err)
+        Logger.error('Error al enviar comando de parada (OFF) desde la API:', err)
         // Continuamos con el cambio de estado en DB para que la UI refleje la intención
       }
     }
@@ -161,7 +161,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
     return NextResponse.json(updatedTask)
   } catch (error) {
-    Logger.error('Error procesando cancelación de tarea:', error)
+    Logger.error('Error al procesar la cancelación de la tarea:', error)
 
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
   }

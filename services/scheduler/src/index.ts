@@ -173,12 +173,27 @@ function setupMqttHandlers() {
           const taskId = parsed.task_id
 
           if (taskId) {
-            await recordTaskEvent(
+            const task = await recordTaskEvent(
               taskId,
               TaskStatus.ACKNOWLEDGED,
               'Nodo Actuador: Comandos recibidos.',
             )
-            retryManager.confirmByTaskId(taskId)
+
+            const confirmation = retryManager.confirmByTaskId(taskId)
+
+            if (task) {
+              const durationSec = task.duration * 60
+              let attemptInfo = ''
+
+              // Usamos el conteo de intentos relativo a la ventana disponible al momento del despacho
+              if (confirmation && confirmation.attempts > 1) {
+                attemptInfo = `[ Attempt ${confirmation.attempts}/${confirmation.sessionTotalAttempts} ] `
+              }
+
+              Logger.success(
+                `${attemptInfo}[ DONE ] Despacho de Tarea Log ${task.id.slice(0, 8)} con ${durationSec}s.`,
+              )
+            }
           } else {
             retryManager.confirmByTaskId(message)
           }

@@ -17,7 +17,7 @@ Este documento define la estrategia de alto nivel dividida en 4 fases de ingenie
 
 - [x] **Protocolos de Agente:** Implementación de trazabilidad mandatoria y autónoma en bitácoras.
 
-- [ ] **Estandarización MQTT:** Refactorización de tópicos a `weather_station` y uso de capitalización Prisma (`ZONA_A`).
+- [x] **Estandarización MQTT**: Refactorización de tópicos a `weather_station` y uso de capitalización Prisma (`ZONA_A`).
 
 ## 🏗️ FASE 1: Fundamentos de Gestión (La Estructura de Datos)
 
@@ -109,8 +109,7 @@ Interfaz para crear/editar/eliminar rutinas de automatización (`AutomationSched
 
 ### 4.3 Arquitectura Zero-Spinner (Hidratación)
 
-- Implementación sistemática de Hidratación Server-to-Client en todas las vistas de datos.
-- Eliminación de parpadeos y estados de carga iniciales para una experiencia instantánea (Instant Web App).
+- [/] **Arquitectura Zero-Spinner (Hidratación)**: Implementación sistemática de Hidratación Server-to-Client en todas las vistas de datos para evitar parpadeos y estados de carga iniciales.
 
 ### 4.4 Gestión de Cuenta
 
