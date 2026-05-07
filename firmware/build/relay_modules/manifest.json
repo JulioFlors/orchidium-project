@@ -1,9 +1,9 @@
 {
   "name": "Relay Modules",
   "description": "Nodo Actuador + Meteorológica Exterior",
-  "version": "0.11.5",
-  "date": "05-05-2026",
-  "notes_release": "[⚡ DHT22]: Implementado bucle de reintentos (3x) para estabilizar la inicialización del sensor.",
+  "version": "0.12.0",
+  "date": "06-05-2026",
+  "notes_release": "[🚀 RAM Optimization]: Eliminada lógica de mantenimiento automático (OTA/Creds) en favor de una limpieza quirúrgica de la memoria heap pre-boot. Maximizada estabilidad para handshakes SSL/MQTT.",
   "files": [
     "app.mpy",
     "boot.py",
@@ -11,7 +11,6 @@
   ],
   "libs": [
     "bh1750",
-    "ota",
     "secrets",
     "umqtt"
   ]

@@ -6,7 +6,7 @@ def pid_gen(pid=0):
 	A=pid
 	while True:A=A+1 if A<65535 else 1;yield A
 class MQTTClient:
-	def __init__(A,client_id,server,port=0,user=None,password=None,keepalive=0,ssl=False,ssl_params=None,socket_timeout=30,message_timeout=45):
+	def __init__(A,client_id,server,port=0,user=None,password=None,keepalive=0,ssl=False,ssl_params=None,socket_timeout=5,message_timeout=10):
 		C=ssl_params;B=port
 		if B==0:B=8883 if ssl else 1883
 		A.client_id=client_id;A.sock=None;A.poller_r=None;A.poller_w=None;A.server=server;A.port=B;A.ssl=ssl;A.ssl_params=C if C else{};A.newpid=pid_gen()

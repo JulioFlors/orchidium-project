@@ -98,7 +98,7 @@ Si prefieres realizar la instalación paso a paso o no utilizas PowerShell, pued
 | Librería | Propósito | Fuente / Repositorio | Comando de Instalación |
 | :------- | :-------- | :------------------- | :--------------------- |
 | **umqtt** | MQTT asíncrono | [fizista/umqtt.simple2](https://github.com/fizista/micropython-umqtt.simple2) | `mpremote cp -r ../lib/umqtt :lib/` |
-| **ota** | Update remoto | Propia | `mpremote cp -r ../lib/ota :lib/` |
+| **ota** | Update remoto (Opcional) | Propia | `mpremote cp -r ../lib/ota :lib/` |
 | **secrets** | Credenciales | Propia | `mpremote cp -r ../lib/secrets :lib/` |
 | **bh1750** | Sensor de Luz | [PinkInk/bh1750](https://github.com/PinkInk/upylib/tree/master/bh1750/bh1750) | `mpremote cp -r ../lib/bh1750 :lib/` |
 
@@ -487,9 +487,11 @@ Cada proyecto de firmware debe incorporar un archivo `manifest.json`. Este archi
   "date": "23-03-2026",
   "notes_release": "Integración de lluvia",
   "files": ["main.py"],
-  "libs": ["umqtt", "ota", "secrets", "bh1750"]
+  "libs": ["umqtt", "secrets", "bh1750"]
 }
 ```
+
+> **Nota sobre OTA:** La librería `ota` ha sido retirada de los manifiestos de producción para ahorrar RAM. Si decides activarla, recuerda volver a añadirla al array de `"libs"`.
 
 ### Descripción de los Campos
 
@@ -938,131 +940,117 @@ El servicio de ingesta recibe el paquete JSON.
 
 ## 🔄 Mantenimiento y Actualizaciones (OTA)
 
-El firmware del Proyecto Orchidium incluye un módulo de actualización Over-The-Air (OTA) que permite actualizar el código de los dispositivos sin necesidad de conectarlos por USB.
+> [!IMPORTANT]
+> **Estado Actual: Desactivado en Producción**
+> La lógica de actualización remota (OTA) ha sido eliminada del archivo `boot.py` de producción.
+> **Motivo:** El hardware del ESP32 cuenta con RAM limitada (aprox. **141.4 KB** disponibles para el usuario en tiempo de ejecución). Mantener lógicas de actualización activas en el arranque consume recursos críticos (aprox. **20-15 KB de RAM**) que son necesarios para garantizar la estabilidad de los buffers SSL y evitar desconexiones en el protocolo MQTT.
 
-### Requisitos para OTA
+### Cómo Reintegrar el Sistema OTA
 
-1. **Librería `ota`:** Debe estar instalada en el dispositivo (`/lib/ota`).
-2. **Archivo `manifest.json`:** Este archivo local en el ESP32 es crítico; le indica al dispositivo cuál es su versión actual y qué archivos debe gestionar. (Ver sección [Manual del Manifiesto](#-manual-del-manifiesto-manifestjson)).
+Si te encuentras en un entorno de desarrollo o cuentas con hardware con más recursos (ej. ESP32-S3), puedes reintegrar el sistema siguiendo estos pasos:
+
+#### 1. Preparar el Manifiesto
+
+Asegúrate de que la librería `ota` esté incluida en el archivo `manifest.json` de tu proyecto para que `mprun -l` la instale.
+
+```json
+{
+  "libs": ["umqtt", "secrets", "ota", "bh1750"]
+}
+```
+
+#### 2. Modificar `boot.py`
+
+Añade la URL del repositorio y la lógica de verificación dentro del bucle de conexión WiFi en `boot.py`:
+
+```python
+# 1. Definir la URL (al principio del archivo)
+
+# ---- Configuración OTA (Optimizado sin diccionario) ----
+# OTA_URL = const("https://raw.githubusercontent.com/JulioFlors/orchidium-project/main/firmware/build/relay_modules/")
+
+# 2. Insertar lógica tras conectar al WiFi
+while True:
+    if connect_wifi_sync():
+        try:
+            from ota import OTAUpdater
+            ota = OTAUpdater(OTA_URL, debug=DEBUG)
+            if ota.check_for_updates():
+                # El dispositivo se reiniciará solo tras descargar los archivos
+                break 
+        except Exception as e:
+            print(f"Error OTA: {e}")
+        break
+    # ... resto del bucle ...
+```
+
+#### 3. Actualizar la Limpieza de RAM
+
+Para asegurar que el módulo OTA no ocupe espacio una vez terminada su función, añade `'ota'` a las listas de limpieza al final de `boot.py`:
+
+```python
+# (Al final de boot.py)
+
+import sys
+# Añadir 'ota' a la lista de módulos a liberar
+modules_to_free = ['machine', 'ntptime', 'ota']
+for mod in modules_to_free:
+    if mod in sys.modules:
+        del sys.modules[mod]
+
+# Añadir 'ota' y 'OTA_URL' a las variables globales a destruir
+for var in ['WIFI_SSID', 'WIFI_PASS', 'connect_wifi_sync', 'update_creds', 'ota', 'OTA_URL']:
+    if var in globals():
+        del globals()[var]
+```
 
 ### Funcionamiento del Sistema OTA
 
-El sistema OTA funciona comparando la versión del **Manifiesto Local** (dentro del dispositivo) contra el **Manifiesto Remoto** (alojado en GitHub/Servidor).
+Si está activo, el sistema funciona comparando la versión del **Manifiesto Local** contra el **Manifiesto Remoto**:
 
-* **Detección de Versión**: Si la versión remota es mayor (ej. 0.6.1 > 0.6.0), el dispositivo inicia la descarga.
-* **Descarga Selectiva**: Solo descarga los archivos listados en el array `"files"` del manifiesto.
-* **Atomicidad**: Los archivos se descargan primero con prefijo `.new`, se validan y luego se sobrescriben para evitar dejar el dispositivo con código corrupto ante un fallo de red.
-
----
+* **Detección**: Si la versión remota es mayor (ej. 0.6.1 > 0.6.0), inicia la descarga.
+* **Descarga Atómica**: Los archivos se descargan con extensión `.new`. Solo se sobrescriben tras verificar que la descarga fue exitosa, evitando "brickear" el dispositivo por un fallo de red.
 
 ---
 
-### Flujo de Trabajo Seguro para Credenciales `secrets`
+### 🩹 Flujo Seguro para Credenciales (`secrets`) via OTA
 
-Este proyecto implementa una estrategia de "Secretos Ignorados", donde las credenciales WiFi (`lib/secrets/__init__.py`) nunca se suben al repositorio. Para actualizar estas credenciales remotamente sin perder la conexión, se utiliza un **script de migración temporal**.
+Este proceso permite actualizar las claves WiFi (`lib/secrets/__init__.py`) remotamente. Debido a la optimización agresiva de RAM para preservar los **141.4 KB** disponibles, la lógica de ejecución ha sido retirada de `boot.py` por defecto.
 
-> **⚠️ Advertencia de Seguridad:** Este proceso implica subir temporalmente un archivo con tus nuevas claves a un repositorio. **Debes borrar el archivo del repositorio inmediatamente después de que los dispositivos se actualicen.**
+#### Cómo Restaurar la Actualización de Credenciales
 
-#### 1\. Preparar el Script de Migración
-
-Crea un archivo local llamado `update_creds.py` con el siguiente contenido, reemplazando los valores con tu nueva configuración de red.
+Si necesitas realizar una migración de red masiva, debes reintegrar temporalmente este bloque en `boot.py` **después** de la definición de colores y **antes** de la sección de *"Importar configuración WiFi"*:
 
 ```python
-# -----------------------------------------------------------------------------
-# Script de Actualización de Credenciales via OTA
-# -----------------------------------------------------------------------------
-import os
-
-# ---- CONFIGURACIÓN GLOBAL ----
-DEBUG = True
-
-class Colors:
-    RESET = '\x1b[0m'; RED = '\x1b[91m'; GREEN = '\x1b[92m'; YELLOW = '\x1b[93m'; BLUE = '\x1b[94m'; CYAN = '\x1b[96m'; WHITE = '\x1b[97m'
-
-def log(*args, **kwargs):
-    if DEBUG: print(*args, **kwargs)
-
-# ---- Nuevas Credenciales ----
-NEW_SSID = "Nueva_Red"
-NEW_PASS = "Nueva_Contraseña"
-TARGET_PATH = "lib/secrets/__init__.py"
-
-def apply_update():
-    """
-    Esta función es llamada por main.py.
-    Sobrescribe lib/secrets/__init__.py con la nueva configuración.
-    """
-    log(f"\n{Colors.BLUE}> [UPDATE] {Colors.RESET}{Colors.WHITE}Iniciando migración de credenciales WiFi...{Colors.RESET}")
-    
-    new_secrets_content = f"""# Credenciales actualizadas via OTA
-# NO SUBIR ESTE ARCHIVO A GITHUB
-WIFI_CONFIG = {{
-    "SSID": "{NEW_SSID}",
-    "PASSWORD": "{NEW_PASS}"
-}}
-"""
-    try:
- # Asegurar directorio
- try: os.stat("lib/secrets")
- except OSError: 
-     try: os.mkdir("lib/secrets")
-     except: pass
-
- with open(TARGET_PATH, 'w') as f:
-     f.write(new_secrets_content)
- 
- log(f"{Colors.GREEN}> [UPDATE] {Colors.CYAN}{TARGET_PATH}{Colors.GREEN} actualizado correctamente.{Colors.RESET}")
- return True
-    except Exception as e:
- log(f"\n{Colors.RED}> [UPDATE] ERROR CRÍTICO: {e}{Colors.RESET}")
- return False
+# ---- Actualización de Credenciales ----
+try:
+    from os import remove
+    import update_creds #type: ignore
+    update_creds.apply_update()
+    # Borramos el archivo del ESP32
+    remove('update_creds.py')
+    if DEBUG: print(f"📡  Credenciales {Colors.GREEN}Actualizadas{Colors.RESET}")
+    sleep(1)
+    reset()
+except ImportError:
+    pass
 ```
 
-#### 2\. Desplegar el Script (GitHub)
+#### Pasos para la Migración
 
-1. Sube el archivo `update_creds.py` a la carpeta `firmware/shared/` de tu repositorio.
-2. Obtén la URL "Raw" del archivo (ej. `https://raw.githubusercontent.com/.../firmware/shared/update_creds.py`).
+1. **Crear `update_creds.py`**: Un script que sobrescriba el archivo de secretos local con los nuevos valores.
+2. **Subir a GitHub**: Colocarlo en una carpeta compartida y obtener su URL Raw.
+3. **Actualizar Manifiesto**: Incrementar la versión en `manifest.json` y añadir la URL del script al array de `"files"`.
+4. **Ejecución**: El ESP32 descargará el script y se reiniciará. En el siguiente arranque:
+    1. Detectará la presencia de `update_creds.py`.
+    2. Ejecutará la función `apply_update()`, sobrescribiendo su `lib/secrets/__init__.py` local.
+    3. Borrará automáticamente `update_creds.py` de su memoria.
+    4. Se reiniciará nuevamente para conectar a la **NUEVA** red WiFi.
 
-#### 3\. Actualizar el Manifiesto de los Dispositivos
+#### 5. Limpieza Obligatoria
 
-Edita el archivo `manifest.json` del dispositivo que deseas migrar (ej. `firmware/sensors/manifest.json`).
-
-1. Incrementa la versión (ej. de `1.1.0` a `1.1.1`).
-2. Añade la URL del script compartido a la lista de `files`.
-
-    ```json
-    {
-      "name": "Sensors",
-      "description": "Environmental Monitoring Firmware",
-      "notes_release": "Detección Zombie, Publicación JSON Atómica y Actualización de Firmware con OTA",
-      "version": "0.10.1",
-      "date": "24-11-2025",
-      "files": [
-        "main.py",
-        "<https://raw.githubusercontent.com/TU_USUARIO/ORCHIDIUM/main/firmware/shared/update_creds.py>"
-      ]
-    }
-    ```
-
-3. Haz `git push` de los cambios.
-
-#### 4\. Ejecución Automática en el Dispositivo
-
-El ESP32 detectará la nueva versión en su próximo ciclo de chequeo (o al reiniciar):
-
-1. Descargará `main.py` y `update_creds.py`.
-2. Se reiniciará.
-3. Al inicio (`boot`), detectará la presencia de `update_creds.py`.
-4. Ejecutará la función `apply_update()`, sobrescribiendo su `lib/secrets/__init__.py` local.
-5. Borrará automáticamente `update_creds.py` de su memoria.
-6. Se reiniciará nuevamente para conectar a la **NUEVA** red WiFi.
-
-#### 5\. Limpieza Obligatoria
-
-Una vez confirmada la migración:
+Una vez confirmada la migración de todos los nodos:
 
 1. **Elimina** `update_creds.py` de tu repositorio GitHub.
-2. Actualiza el `manifest.json` para eliminar la referencia al archivo y sube una nueva versión menor para "limpiar" el estado del manifiesto.
-
-* [x] RingBuffer para Lluvia.
-* [x] RingBuffer para Iluminancia.
+2. **Retira** el código de restauración de `boot.py` para recuperar la RAM.
+3. Actualiza el `manifest.json` para limpiar el estado de versión.

@@ -12,7 +12,6 @@ import {
 } from './lib/mqtt-handler'
 import {
   cleanupExpiredTasks,
-  handleAckTimeout,
   preScheduleAgrochemicals,
   processAuthorizedTasks,
   processPostponedTasks,
@@ -145,11 +144,7 @@ function setupMqttHandlers() {
 
           await handleNodeSync(false)
         } else if (message === 'offline' && retryManager.lastActuatorState !== 'offline') {
-          const previousState = retryManager.lastActuatorState
-          const reason =
-            previousState === 'unknown'
-              ? 'Estado inicial detectado como Offline.'
-              : 'El dispositivo se desconectó inesperadamente (Fallo de red/energía).'
+          const reason = 'El dispositivo se desconectó inesperadamente (Fallo de red/energía).'
 
           await handleNodeOffline(reason, 'BROKER')
         } else if (message === 'rebooting') {
@@ -161,6 +156,7 @@ function setupMqttHandlers() {
 
       // 1.5 Detección de Reinicio Rápido (Boot Explícito)
       if (topic === 'PristinoPlant/Actuator_Controller/status/boot') {
+        retryManager.setStabilizing()
         lastActuatorHeartbeat = Date.now()
 
         // No forzamos un offline previo, saltamos directamente al sync
@@ -182,8 +178,10 @@ function setupMqttHandlers() {
               TaskStatus.ACKNOWLEDGED,
               'Nodo Actuador: Comandos recibidos.',
             )
+            retryManager.confirmByTaskId(taskId)
+          } else {
+            retryManager.confirmByTaskId(message)
           }
-          retryManager.confirmByTaskId(taskId || message)
         } catch {
           retryManager.confirmByTaskId(message)
         }
@@ -305,7 +303,7 @@ function checkActuatorTimeout() {
 async function handleNodeOffline(reason: string, origin: 'BROKER' | 'NODE' | 'SCHEDULER') {
   if (retryManager.lastActuatorState === 'offline') return
 
-  retryManager.lastActuatorState = 'offline'
+  retryManager.setOffline()
   Logger.node('OFFLINE', origin)
   resetSamplingState()
 
@@ -444,6 +442,11 @@ async function handleNodeSync(isBoot: boolean = false) {
         const elapsedMs = Date.now() - new Date(task.actualStartAt).getTime()
 
         addedMinutes = Math.floor(elapsedMs / 60000)
+      }
+
+      if (task.status === TaskStatus.ACKNOWLEDGED || task.status === TaskStatus.IN_PROGRESS) {
+        extraNotes = 'Interrumpida: Nodo Actuador se reinició. Esperando recuperación automática.'
+      } else {
         extraNotes = `Interrumpida tras ${addedMinutes} min de riego efectivo por reinicio.`
       }
 
@@ -461,20 +464,18 @@ async function handleNodeSync(isBoot: boolean = false) {
     }
   }
 
-  retryManager.lastActuatorState = 'online'
+  // El secuenciador ya está en modo STABILIZING (60s) gracias al caller de boot
   resetSamplingState()
   syncNodeSampling(undefined, true)
-  retryManager.retryAllPending()
   await processPostponedTasks()
-  await resumeInterruptedTasks()
 }
 
 // ---- Lógica de Rutinas (Crons) ----
 async function initScheduler() {
   await waitForPostgres()
 
-  // Registrar callback para fallos de ACK y expiración rápida
-  retryManager.setOnFailure(handleAckTimeout)
+  // 0. Limpieza de tareas interrumpidas (Solo al arrancar el scheduler)
+  await resumeInterruptedTasks()
 
   // Verificación periódica de inactividad de nodos y eventos (cada 15s)
   setInterval(checkRainOrphanTimeout, 60_000)
@@ -493,6 +494,12 @@ async function initScheduler() {
   // Poller de Tareas Autorizadas (cada 1 min)
   new Cron('* * * * *', { timezone: 'America/Caracas' }, async () => {
     await processAuthorizedTasks()
+  })
+
+  // Poller de Tareas Pendientes Diferidas (cada 1 min)
+  // Asegura que las tareas manuales programadas para el futuro se ejecuten puntualmente.
+  new Cron('* * * * *', { timezone: 'America/Caracas' }, async () => {
+    await processPostponedTasks()
   })
 
   // Cron para sincronizar muestreo de iluminancia (Amanecer 4:59am / Anochecer 7:01pm)
@@ -596,6 +603,35 @@ async function runTask(scheduleId: string) {
 
     // 1. Evaluar si la rutina debe proceder mediante el Motor de Inferencia
     const inference = await InferenceEngine.evaluate(schedule)
+
+    // [🛡️ IDEMPOTENCIA]: Verificar si ya existe una ejecución (real o cancelada) para esta ventana horaria
+    // Evita que tareas canceladas manualmente "resuciten" o que se dupliquen ejecuciones por lag del cron.
+    const existingTask = await prisma.taskLog.findFirst({
+      where: {
+        scheduleId: schedule.id,
+        scheduledAt: {
+          gte: new Date(Date.now() - 10 * 60000), // Ventana de 10 min
+          lte: new Date(Date.now() + 10 * 60000),
+        },
+      },
+    })
+
+    if (existingTask) {
+      if (existingTask.status === TaskStatus.CANCELLED) {
+        Logger.info(
+          `[ IDEMPOTENCIA ] La ejecución de "${schedule.name}" fue cancelada previamente. Respetando decisión del usuario.`,
+        )
+
+        return
+      }
+
+      if (schedule.purpose !== 'FERTIGATION' && schedule.purpose !== 'FUMIGATION') {
+        Logger.info(`[ IDEMPOTENCIA ] Ya existe una ejecución para "${schedule.name}". Saltando.`)
+
+        return
+      }
+      // Para agroquímicos, el código de abajo ya maneja el taskLog existente.
+    }
 
     // Lógica especial para Agroquímicos
     if (schedule.purpose === 'FERTIGATION' || schedule.purpose === 'FUMIGATION') {

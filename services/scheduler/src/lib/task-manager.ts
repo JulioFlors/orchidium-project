@@ -116,12 +116,11 @@ export async function recordTaskEvent(
  */
 export async function processTaskLog(taskLog: TaskLog) {
   try {
-    let durationToExecute = taskLog.duration
-    let isResumption = false
-
     // [Smart Recalibration]: Usamos los minutos ya completados registrados en la DB
     // y el tiempo transcurrido si la tarea quedó en un limbo IN_PROGRESS.
     const alreadyCompletedSec = (taskLog.completedMinutes || 0) * 60
+    let durationToExecuteSec = taskLog.duration * 60
+    let isResumption = false
 
     if (alreadyCompletedSec > 0 || taskLog.actualStartAt) {
       isResumption = true
@@ -133,32 +132,31 @@ export async function processTaskLog(taskLog: TaskLog) {
         )
       }
 
-      durationToExecute = taskLog.duration - (alreadyCompletedSec + elapsedInCurrentRun)
+      durationToExecuteSec = taskLog.duration * 60 - (alreadyCompletedSec + elapsedInCurrentRun)
 
-      if (durationToExecute <= 0) {
+      if (durationToExecuteSec <= 0) {
         Logger.warn(
           `Tarea ${taskLog.id.slice(0, 8)} ya alcanzó su meta de riego. Marcando como completada.`,
         )
         await recordTaskEvent(
           taskLog.id,
           TaskStatus.COMPLETED,
-          `Riego finalizado tras recuperaciones (Total: ${taskLog.duration}s).`,
+          `Riego finalizado tras recuperaciones (Total: ${taskLog.duration} min).`,
         )
 
         return
       }
     }
 
-    // Despacho hacia MQTT con la duración (original o recalibrada)
-    executeSequence(taskLog.purpose, durationToExecute, taskLog.id, taskLog.scheduledAt)
+    // Despacho hacia MQTT con la duración recalibrada (en segundos)
+    executeSequence(taskLog.purpose, durationToExecuteSec, taskLog.id, taskLog.scheduledAt)
 
-    let durationText = `${durationToExecute} s`
+    let durationText = `${durationToExecuteSec}s`
 
-    if (durationToExecute >= 60) {
-      const mins = Math.floor(durationToExecute / 60)
-      const secs = durationToExecute % 60
+    if (durationToExecuteSec >= 60) {
+      const mins = Math.round((durationToExecuteSec / 60) * 10) / 10
 
-      durationText = `${mins} min${secs > 0 ? ` y ${secs} s` : ''}`
+      durationText = `${mins} min`
     }
 
     const notes = isResumption
@@ -170,7 +168,7 @@ export async function processTaskLog(taskLog: TaskLog) {
     })
 
     Logger.success(
-      `${isResumption ? 'Reanudación' : 'Despacho'} de Tarea Log ${taskLog.id.slice(0, 8)} con ${durationToExecute}s.`,
+      `${isResumption ? 'Reanudación' : 'Despacho'} de Tarea Log ${taskLog.id.slice(0, 8)} con ${durationToExecuteSec}s.`,
     )
   } catch (error) {
     Logger.error('Fallo crítico ejecutando taskLog', error)
@@ -210,7 +208,11 @@ export async function resumeInterruptedTasks() {
 
     Logger.warn(`${introText} por reinicio. ${markText}.`)
     for (const task of interrupted) {
-      await recordTaskEvent(task.id, TaskStatus.FAILED, 'Scheduler restart during execution')
+      await recordTaskEvent(
+        task.id,
+        TaskStatus.FAILED,
+        'Reinicio del servicio Scheduler durante la ejecución',
+      )
     }
   }
 }
@@ -222,12 +224,14 @@ export async function resumeInterruptedTasks() {
 export async function processPostponedTasks() {
   const now = Date.now()
 
-  // Buscamos tareas candidatas a reintento
+  // Buscamos tareas candidatas a reintento que ya deberían haber iniciado
   const candidates = await prisma.taskLog.findMany({
     where: {
-      status: { in: [TaskStatus.PENDING, TaskStatus.FAILED, TaskStatus.IN_PROGRESS] },
-      // Para PENDING/FAILED filtramos por notas, pero para IN_PROGRESS
-      // siempre queremos intentar re-sincronizar tras una reconexión.
+      status: { in: [TaskStatus.PENDING, TaskStatus.FAILED] },
+      scheduledAt: { lte: new Date() },
+    },
+    include: {
+      schedule: true,
     },
     orderBy: { scheduledAt: 'asc' },
   })
@@ -239,7 +243,25 @@ export async function processPostponedTasks() {
     const dynamicWindowMs = (20 * 60 + task.duration) * 1000
     const expirationTime = task.scheduledAt.getTime() + dynamicWindowMs
 
-    if (now <= expirationTime) {
+    // [🛡️ SEGURIDAD]: Si la rutina fue desactivada, cancelamos la tarea pendiente
+    if (task.schedule && !task.schedule.isEnabled && task.status === TaskStatus.PENDING) {
+      await recordTaskEvent(
+        task.id,
+        TaskStatus.CANCELLED,
+        'Tarea descartada: La rutina asociada fue desactivada por el usuario.',
+      )
+      continue
+    }
+
+    // [🔄 RECUPERACIÓN]: Si la tarea está esperando al nodo (NVS), no la re-despachamos
+    if (
+      task.status === TaskStatus.FAILED &&
+      task.notes?.includes('Esperando recuperación automática')
+    ) {
+      continue
+    }
+
+    if (now >= task.scheduledAt.getTime() && now <= expirationTime) {
       postponed.push(task)
     }
   }
@@ -247,10 +269,10 @@ export async function processPostponedTasks() {
   if (postponed.length > 0) {
     const isSingle = postponed.length === 1
     const introText = isSingle
-      ? 'Reactivando 1 tarea postergada'
-      : `Reactivando ${postponed.length} tareas postergadas`
+      ? 'Reactivando 1 tarea pendiente/postergada'
+      : `Reactivando ${postponed.length} tareas pendientes/postergadas`
 
-    Logger.info(`${introText} tras reconexión del nodo.`)
+    Logger.info(`${introText}.`)
 
     for (const task of postponed) {
       await processTaskLog(task)

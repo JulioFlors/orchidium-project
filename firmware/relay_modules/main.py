@@ -1,10 +1,10 @@
 # -----------------------------------------------------------------------------
 # Relay Modules: Actuator Controller Firmware.
-# Descripción: Firmware dedicado para el control de las electroválvulas, la bomba
-#              y la estación meteorológica exterior (lluvia e iluminancia).
-# Fecha: 05-05-2026
-# Versión: v0.11.5
-# notes_release: [⚡ DHT22]: Implementado bucle de reintentos (3x) para estabilizar la inicialización del sensor.
+# Descripcion: Firmware dedicado para el control de las electrovalvulas, la bomba
+#              y la estacion meteorologica exterior (lluvia e iluminancia).
+# Fecha: 06-05-2026
+# Version: v0.12.0
+# notes_release: [🚀 RAM Optimization]: Eliminada lógica de mantenimiento automático (OTA/Creds) en favor de una limpieza quirúrgica de la memoria heap pre-boot. Maximizada estabilidad para handshakes SSL/MQTT.
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib.
@@ -30,10 +30,10 @@ MQTT_CHECK_INTERVAL  = const(1)  # seg
 # tiempo máximo que (connect, check_msg, ping) esperará antes de fallar y lanzar una excepción.
 # Optimizado para fallar rápido y reintentar.
 # En redes lentas con latencia de subida >500ms
-MQTT_SOCKET_TIMEOUT  = const(15) # seg
+MQTT_SOCKET_TIMEOUT  = const(30) # seg
 # tiempo máximo que el cliente esperará para que se complete un intercambio completo de mensajes MQTT(QoS) 1
 # [WDT Safety]: Debe ser MENOR que el Watchdog de Hardware (120s)
-MQTT_MESSAGE_TIMEOUT = const(30) # seg
+MQTT_MESSAGE_TIMEOUT = const(45) # seg
 
 # ---- Configuración Resiliencia / Watchdog ----
 # Tiempo máximo sin conexión MQTT/WiFi antes de forzar un Hard Reset (10 minutos)
@@ -571,6 +571,9 @@ def log_ram_usage():
 # ---- Función Auxiliar: Safe Reset (Reinicio Seguro) ----
 def safe_reset():
     """Cierra conexiones de red, Guarda el estado de las tareas activas en NVS y reinicia el dispositivo."""
+    from machine import reset # type: ignore
+    from utime   import sleep_ms
+
     try:
         # 1. Guardamos el estado de las válvulas para que sobrevivan al reinicio
         NVSManager.prepare_reset_backup()
@@ -578,7 +581,7 @@ def safe_reset():
         shutdown()
     except: pass
 
-    from machine import reset # type: ignore
+    sleep_ms(1000) # Pausa de estabilización pre-reset
     reset()
 
 # ---- Función Auxiliar: Boot Recovery (Recuperación Inteligente) ----
@@ -740,11 +743,35 @@ async def boot_recovery_check():
 
         # [Smart Recovery] Casos de Riego (A y B)
         elif task_data.get("type") in ["irrigation_run", "delayed_start"]:
-            # Caso A: A tiempo (Aún debería estar regando)
-            if remaining_time > 0:
+            # 1. Definimos el Fin Teórico y el Fin de la Ventana de Gracia
+            if start_epoch == 0:
+                # Caso Software Reset: El nodo guardó el backup calculando el remanente
+                saved_at = task_data.get('saved_at_epoch', 0)
+                theoretical_end = saved_at + duration
+                grace_end = theoretical_end + IRRIGATION_RECOVERY_WINDOW
+                remanente_real = duration # Lo que el NVS dice que faltaba físicamente
+            else:
+                # Caso Hard Reset: Solo tenemos el plan original (inicio + duración)
+                theoretical_end = start_epoch + duration
+                grace_end = theoretical_end + IRRIGATION_RECOVERY_WINDOW
+                remanente_real = theoretical_end - current_time # Lo que falta del reloj
+
+            # 2. Decisión de Recuperación Elástica
+            if current_time < grace_end:
+                # [🛡️ Protección de Stress]: Si el remanente es negativo o muy corto, descartar
+                if remanente_real < 60:
+                    if DEBUG:
+                        msg = "Expirada" if remanente_real <= 0 else "Insignificante"
+                        print(f"    └─ 🗑️  {Colors.YELLOW}Tarea {msg}{Colors.RESET} ID:{actuator_id} ({remanente_real}s)")
+                    if actuator_id in relays:
+                        relays[actuator_id]['task_id'] = ""
+                    NVSManager.clear_task(actuator_id)
+                    continue
+
                 if DEBUG:
-                    print(f"    ├─ {Colors.GREEN}RECUPERANDO{Colors.RESET} ID:{actuator_id}")
-                    print(f"    │   └─ Faltan: {remaining_time}s")
+                    status_text = "RECUPERANDO" if (start_epoch == 0 or current_time < theoretical_end) else "RECUPERACIÓN ELÁSTICA (ATRASADA)"
+                    print(f"    ├─ {Colors.GREEN}{status_text}{Colors.RESET} ID:{actuator_id}")
+                    print(f"    │   └─ Reanudando físicamente por: {remanente_real}s")
                 
                 # Restaurar Relé
                 if actuator_id in relays:
@@ -755,18 +782,18 @@ async def boot_recovery_check():
                     state_changed.set()
                     
                     # Reprogramar Timer
-                    active_irrigation_timers.append((actuator_id, current_time + remaining_time))
+                    active_irrigation_timers.append((actuator_id, current_time + remanente_real))
                     if DEBUG:
                         print(f"    └─ Actuador: {target_relay['name']} -> ON")
                 else:
                     if DEBUG:
                         print(f"    └─ ⚠️  Error: Actuador {actuator_id} no encontrado.")
-                    NVSManager.clear_task(actuator_id) # Borramos solo esta mala
+                    NVSManager.clear_task(actuator_id)
 
-            # Caso B: Tarea Expirada
+            # Caso C: Tarea Expirada (Fuera de los 20 min de gracia)
             else:
                 if DEBUG:
-                    print(f"    └─ 🗑️  {Colors.YELLOW}Tarea Vencida{Colors.RESET} ID:{actuator_id} (No reanudar)")
+                    print(f"    └─ 🗑️  {Colors.YELLOW}Tarea Expirada{Colors.RESET} ID:{actuator_id} (Fuera de ventana de gracia)")
                 if actuator_id in relays:
                     relays[actuator_id]['task_id'] = ""
                 NVSManager.clear_task(actuator_id)
@@ -950,7 +977,7 @@ def setup_sensors():
         for attempt in range(1, 4):
             try:
                 if attempt > 1:
-                    if DEBUG: print(f"    ├─ 🔄 Reintentando ({attempt}/3)...")
+                    if DEBUG: print(f"    ├─ 🔄 Reintentando ({attempt}/3)")
                 
                 sleep_ms(2000) # Estabilización del sensor
                 dht_test.measure()
@@ -1044,22 +1071,22 @@ def setup_sensors():
                 sensor_connected = True
 
             except OSError:
-                if DEBUG:
-                    print(f"{prefix} {Colors.YELLOW}No detectado{Colors.RESET} en [{label}]")
+                if DEBUG: print(f"{prefix} ❌ {Colors.RED}No detectado{Colors.RESET} en [{label}]")
                 continue
 
         if not sensor_connected:
-            if DEBUG:
-                print(f"❌  Sensor BH1750: {Colors.RED}Desconectado{Colors.RESET}")
+            if DEBUG: print(f"    └─ ❌ {Colors.RED}Desconectado{Colors.RESET}")
             illuminance_sensor = None
             i2c_bus = None
 
     except Exception as e:
-        if DEBUG: print(f"❌  Sensor BH1750: {Colors.RED}[{e}]{Colors.RESET}")
+        if DEBUG: print(f"    └─ ❌ Exception: {Colors.RED}[{e}]{Colors.RESET}")
         illuminance_sensor = None
 
     # 2. Sensor de Lluvia (Salida Analógica)
     try:
+        if DEBUG: print(f"\n💧  Conectando {Colors.BLUE}Sensor de Lluvia{Colors.RESET}")
+
         adc_rain = ADC(Pin(35))
         adc_rain.atten(ADC.ATTN_11DB) # Rango 0-3.3V
         
@@ -1075,7 +1102,7 @@ def setup_sensors():
             sleep_ms(50)
 
         if valid_samples == 0:
-            if DEBUG: print(f"\n❌  Sensor Lluvia: {Colors.RED}Desconectado{Colors.RESET} (Fallo lectura ADC)")
+            if DEBUG: print(f"    └─ ❌ {Colors.RED}Desconectado{Colors.RESET} (Fallo lectura ADC)")
             rain_sensor_analog = None
         else:
             r_avg = raw_sum // valid_samples
@@ -1086,18 +1113,16 @@ def setup_sensors():
             if r_avg > 1400:
                 rain_sensor_analog = adc_rain
                 if DEBUG:
-                    print(f"\n💧  Conectando {Colors.YELLOW}Sensor de Lluvia{Colors.RESET}")
                     print(f"    ├─ ✅ {Colors.GREEN}Conectado{Colors.RESET}")
                     print(f"    └─ 📊 Valor: {Colors.BLUE}{r_avg}{Colors.RESET}")
             else:
                 if DEBUG:
-                    print(f"\n💧  Conectando {Colors.YELLOW}Sensor de Lluvia{Colors.RESET}")
                     print(f"    ├─ ❌ {Colors.RED}Desconectado{Colors.RESET}")
                     print(f"    └─ 📊 Valor: {Colors.BLUE}{r_avg}{Colors.RESET}")
                 rain_sensor_analog = None
 
     except Exception as e:
-        if DEBUG: print(f"\n❌  Sensor Lluvia: {Colors.RED}{e}{Colors.RESET}")
+        if DEBUG: print(f"    └─ ❌ Exception: {Colors.RED}{e}{Colors.RESET}")
         rain_sensor_analog = None
 
 # ---- Función Auxiliar: Callback de estado ----
@@ -1510,6 +1535,7 @@ def shutdown():
     * Flush de batches de telemetría acumulados.
     * Desconecta MQTT y WiFi.
     """
+    from utime import sleep_ms
 
     # Apagamos todos los actuadores
     for relay_info in relays.values():
@@ -1524,17 +1550,20 @@ def shutdown():
         try:
             # Flush de batches acumulados antes de desconectar
             flush_telemetry_batches()
+            sleep_ms(300)
 
             # Publicamos el LWT explícitamente para que el broker lo retenga.
             # El LWT para el cliente MQTT solo se envía si el cliente se desconecta inesperadamente. 
             # Si nos desconectamos limpiamente,
             # el broker no lo envía automáticamente.
             client.publish(MQTT_TOPIC_STATUS, b"offline", retain=True, qos=1)
+            sleep_ms(300)
 
             # Publicamos 'OFF' para cada relé que haya cambiado de estado.
             for relay_info in relays.values():
                 if relay_info['last_published_state'] != 'OFF':
                     client.publish(relay_info['topic'], b"OFF", retain=True, qos=1)
+                    sleep_ms(300)
         except: pass
 
     # Invalidamos el cliente MQTT forzando una reconexión completa.
@@ -1549,6 +1578,7 @@ def shutdown():
             # Reset de Hardware Limpio: Apaga físicamente la radio del ESP32.
             # Esto limpia el stack TCP/IP y evita errores EBUSY tras el reinicio.
             wlan.active(False)
+            sleep_ms(2000) # Tiempo para que la radio del ESP32 se asiente
 
             if DEBUG:
                 print(f"📡  WiFi     {Colors.GREEN}Desconectado{Colors.RESET}\n")
@@ -1914,10 +1944,6 @@ async def mqtt_connector_task(client_id):
                 client.publish(MQTT_TOPIC_STATUS + "/boot", b"reboot", retain=False, qos=1)
                 await asyncio.sleep_ms(300)
 
-                # Publicamos que estamos ONLINE (Retain=True para limpiar LWT y actualizar UI)
-                client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=1)
-                await asyncio.sleep_ms(300)
-
                 if DEBUG:
                     print(f"\n📡  Controlador {Colors.GREEN}online{Colors.RESET}", end="\n")
 
@@ -1980,9 +2006,9 @@ async def mqtt_connector_task(client_id):
                 if lock_acquired:
                     try:
                         # Revisamos si hay mensajes entrantes
-                        # Drenamos la cola MQTT (ráfaga de hasta 15 mensajes)
+                        # Drenamos la cola MQTT (ráfaga de hasta 10 mensajes)
                         # umqtt procesa 1 solo msj por llamada. Si se acumulan, PINGRESP se retrasa.
-                        for _ in range(15):
+                        for _ in range(10):
                             client.check_msg()
                     finally:
                         mqtt_lock.release()
@@ -2023,8 +2049,6 @@ async def mqtt_connector_task(client_id):
 
                 # Invalidamos el cliente MQTT forzando una reconexión completa.
                 force_disconnect_mqtt()
-                # Reset del cronómetro de ping para la próxima conexión
-                last_manual_ping = ticks_ms()
                 # Backoff mayor (10s) para dar respiro a la red
                 await asyncio.sleep(10)
                 continue

@@ -38,137 +38,164 @@ export const mqttClient = mqtt.connect(MQTT_BROKER_URL, {
 interface PendingCommand {
   topic: string
   payload: string
+  taskId: string
   attempts: number
-  lastSent: number
   scheduledAt: number
-  timer: NodeJS.Timeout | null
-  isPersistent?: boolean
+  isPersistent: boolean
 }
 
-class CommandRetryManager {
-  private pending = new Map<string, PendingCommand>()
-  private onFailure?: (taskId: string, notes?: string) => Promise<void>
-  public lastActuatorState = 'unknown'
-  setOnFailure(callback: (taskId: string, notes?: string) => Promise<void>) {
-    this.onFailure = callback
+/**
+ * SECUENCIADOR DE COMANDOS (CommandSequencer)
+ * Gestiona la entrega ordenada y robusta de comandos al Nodo Actuador.
+ * - Bloqueo estricto: Espera confirmación antes de enviar el siguiente.
+ * - Reintento infinito: Re-envía cada 30s si no hay ACK.
+ * - Throttling: 5s de separación mínima entre comandos exitosos.
+ * - Estabilización: 60s de silencio tras boot/reconexión.
+ * - Aborto de sesión: Limpia cola en cada reinicio para asegurar consistencia total.
+ */
+class CommandSequencer {
+  private queue: PendingCommand[] = []
+  private currentCommand: PendingCommand | null = null
+  private state: 'OFFLINE' | 'STABILIZING' | 'READY' = 'OFFLINE'
+  private stabilizationTimer: NodeJS.Timeout | null = null
+  private retryTimer: NodeJS.Timeout | null = null
+  private throttleTimer: NodeJS.Timeout | null = null
+
+  public get lastActuatorState() {
+    return this.state === 'OFFLINE' ? 'offline' : 'online'
   }
 
+  /**
+   * Pone al secuenciador en modo Estabilización (60s de silencio).
+   * Limpia cualquier cola previa para iniciar desde cero.
+   */
+  setStabilizing() {
+    this.clearAll()
+    this.state = 'STABILIZING'
+
+    if (this.stabilizationTimer) clearTimeout(this.stabilizationTimer)
+
+    this.stabilizationTimer = setTimeout(() => {
+      this.state = 'READY'
+      this.processNext()
+    }, 60000)
+  }
+
+  /**
+   * Pone al secuenciador en modo Offline. Limpia cola.
+   */
+  setOffline() {
+    this.clearAll()
+    this.state = 'OFFLINE'
+  }
+
+  /**
+   * Añade un comando a la cola de despacho.
+   */
   track(
     topic: string,
     payload: string,
     scheduledAt: Date = new Date(),
     isPersistent: boolean = false,
   ) {
-    const key = `${topic}:${payload}`
-    const existing = this.pending.get(key)
+    const taskId = this.extractTaskId(payload) || `sys-${Date.now()}`
 
-    if (existing) {
-      // Si ya existe, no reiniciamos el contador de intentos ni el timer,
-      // simplemente dejamos que siga su curso. Esto evita spam al reconectar.
+    // Evitar duplicados exactos en la cola
+    if (this.queue.some((c) => c.taskId === taskId)) return
+
+    this.queue.push({
+      topic,
+      payload,
+      taskId,
+      attempts: 0,
+      scheduledAt: scheduledAt.getTime(),
+      isPersistent,
+    })
+
+    if (this.state === 'READY') {
+      this.processNext()
+    }
+  }
+
+  /**
+   * Procesa el siguiente comando en la cola.
+   */
+  private processNext() {
+    if (this.state !== 'READY' || this.queue.length === 0 || this.currentCommand) {
       return
     }
 
-    const command: PendingCommand = {
-      topic,
-      payload,
-      attempts: 1,
-      lastSent: Date.now(),
-      scheduledAt: scheduledAt.getTime(),
-      timer: setInterval(() => this.retry(key), 60000),
-      isPersistent,
-    }
-
-    this.pending.set(key, command)
+    this.currentCommand = this.queue[0]
+    this.dispatch()
   }
 
-  confirm(topic: string, payload: string) {
-    const key = `${topic}:${payload}`
-    const command = this.pending.get(key)
+  /**
+   * Realiza la publicación física del comando actual.
+   */
+  private dispatch() {
+    if (!this.currentCommand || this.state !== 'READY') return
 
-    if (command) {
-      if (command.timer) clearInterval(command.timer)
-      this.pending.delete(key)
-      const attempts = command.attempts > 1 ? ` (en ${command.attempts} intentos)` : ''
+    const { topic, payload } = this.currentCommand
 
-      Logger.success(
-        `Comando confirmado por el nodo${attempts}: ${colors.magenta}${payload}${colors.reset}`,
-      )
-    }
+    // Publicamos con QoS 0 por requerimiento de diseño robusto
+    mqttClient.publish(topic, payload, { qos: 0 })
+
+    this.currentCommand.attempts++
+
+    // Programar reintento por falta de ACK (30s)
+    if (this.retryTimer) clearTimeout(this.retryTimer)
+    this.retryTimer = setTimeout(() => {
+      // Re-intentamos el mismo comando (no avanzamos en la cola)
+      this.dispatch()
+    }, 30000)
   }
 
+  /**
+   * Confirma la recepción de un comando y avanza la cola tras 5s.
+   */
   confirmByTaskId(taskId: string) {
-    for (const [key, command] of this.pending) {
-      if (command.payload.includes(taskId)) {
-        if (command.timer) clearInterval(command.timer)
-        this.pending.delete(key)
-        const attempts = command.attempts > 1 ? ` (en ${command.attempts} intentos)` : ''
+    if (
+      this.currentCommand &&
+      (this.currentCommand.taskId === taskId || taskId.includes(this.currentCommand.taskId))
+    ) {
+      // Limpiar timers de reintento del comando actual
+      if (this.retryTimer) clearTimeout(this.retryTimer)
 
-        Logger.debug(`El nodo confirmó ACK para la tarea${attempts} (ID: ${taskId.slice(0, 8)})`)
-      }
+      const attempts =
+        this.currentCommand.attempts > 1 ? ` (en ${this.currentCommand.attempts} intentos)` : ''
+
+      Logger.debug(`El nodo confirmó ACK para la tarea${attempts} (ID: ${taskId.slice(0, 8)})`)
+
+      // Eliminar de la cola
+      this.queue.shift()
+      this.currentCommand = null
+
+      // Esperar 5s de estabilización antes del siguiente mensaje (Throttling)
+      if (this.throttleTimer) clearTimeout(this.throttleTimer)
+      this.throttleTimer = setTimeout(() => {
+        this.processNext()
+      }, 5000)
     }
+  }
+
+  /**
+   * Limpia absolutamente todo el estado del secuenciador.
+   */
+  private clearAll() {
+    this.queue = []
+    this.currentCommand = null
+    if (this.stabilizationTimer) clearTimeout(this.stabilizationTimer)
+    if (this.retryTimer) clearTimeout(this.retryTimer)
+    if (this.throttleTimer) clearTimeout(this.throttleTimer)
+  }
+
+  // Compatibilidad con código legado
+  clear() {
+    this.setOffline()
   }
 
   retryAllPending() {
-    if (this.pending.size === 0) return
-    Logger.debug(`Reintentando ${this.pending.size} comandos pendientes tras reconexión...`)
-    for (const key of this.pending.keys()) {
-      this.retry(key)
-    }
-  }
-
-  clear() {
-    if (this.pending.size === 0) return
-    const isSingle = this.pending.size === 1
-    const retryText = isSingle ? 'reintento' : 'reintentos'
-
-    Logger.debug(
-      `El nodo está offline, pero mantenemos ${this.pending.size} ${retryText} en cola para cuando regrese.`,
-    )
-  }
-
-  private retry(key: string) {
-    const command = this.pending.get(key)
-
-    if (!command) return
-
-    if (this.lastActuatorState === 'offline') return
-
-    const now = Date.now()
-    const ageMs = now - command.scheduledAt
-
-    // 1. Expiración de Ventana (20 min) - Ignorada si es persistente
-    if (!command.isPersistent && ageMs > 20 * 60 * 1000) {
-      Logger.error(`Ventana de oportunidad cerrada para: ${command.payload}`)
-      this.handleTimeout(command.payload, 'Ventana de oportunidad cerrada (20 min expirados).')
-      if (command.timer) clearInterval(command.timer)
-      this.pending.delete(key)
-
-      return
-    }
-
-    command.attempts++
-    command.lastSent = now
-    // Log de reintento SILENCIADO por petición (solo visible en depuración extrema)
-    // Logger.warn(`Reintentando entrega al nodo...`)
-
-    // 2. Gestión de Persistencia (registro en DB al intento 3)
-    if (command.attempts === 3) {
-      this.handleTimeout(
-        command.payload,
-        'Sin respuesta del Nodo Actuador (Sordo). Reintentando cada 60s',
-      )
-    }
-
-    // El re-despacho es silencioso en consola para evitar la percepción de fallo.
-    // El usuario verá el conteo de intentos solo en el mensaje de éxito final.
-    mqttClient.publish(command.topic, command.payload, { qos: 1 })
-  }
-
-  private handleTimeout(payload: string, notes?: string) {
-    if (!this.onFailure) return
-    const taskId = this.extractTaskId(payload)
-
-    if (taskId) this.onFailure(taskId, notes)
+    if (this.state === 'READY') this.processNext()
   }
 
   private extractTaskId(payload: string): string | null {
@@ -176,7 +203,7 @@ class CommandRetryManager {
       if (payload.startsWith('{')) {
         const parsed = JSON.parse(payload)
 
-        return parsed.task_id || null
+        return parsed.task_id || parsed.id || null
       }
 
       return null
@@ -186,18 +213,18 @@ class CommandRetryManager {
   }
 }
 
-export const retryManager = new CommandRetryManager()
+export const retryManager = new CommandSequencer()
 
 /**
  * Envía un comando de circuito al Nodo Actuador.
  */
 export function executeSequence(
   purpose: TaskPurpose,
-  durationMinutes: number,
+  durationSeconds: number,
   taskId: string,
   scheduledAt: Date = new Date(),
 ) {
-  const durationSec = durationMinutes * 60
+  const durationSec = Math.floor(durationSeconds)
 
   const payload = {
     circuit: purpose,
@@ -208,18 +235,12 @@ export function executeSequence(
 
   const message = JSON.stringify(payload)
 
-  mqttClient.publish(ACTUATOR_TOPIC, message, {
-    qos: 1,
-    retain: false,
-    properties: {
-      messageExpiryInterval: 300,
-    },
-  })
-
   retryManager.track(ACTUATOR_TOPIC, message, scheduledAt)
 
+  const durationMinutes = Math.round((durationSeconds / 60) * 10) / 10
+
   Logger.info(
-    `Despachando Circuito: ${purpose} (${durationMinutes} min) [Task: ${taskId.slice(0, 8)}]`,
+    `Despachando Circuito: ${purpose} (${durationMinutes} min / ${durationSec}s) [Task: ${taskId.slice(0, 8)}]`,
   )
 }
 
@@ -235,10 +256,7 @@ export function stopSequence(purpose: TaskPurpose, taskId: string) {
 
   const message = JSON.stringify(payload)
 
-  mqttClient.publish(ACTUATOR_TOPIC, message, {
-    qos: 1,
-    retain: false,
-  })
+  retryManager.track(ACTUATOR_TOPIC, message, new Date())
 
   // Limpiamos reintentos de ON si existían para esta tarea
   retryManager.confirmByTaskId(taskId)

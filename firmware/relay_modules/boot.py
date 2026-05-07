@@ -1,16 +1,11 @@
-from gc import collect
 from machine import reset #type: ignore
 from micropython import const
 from network import STA_IF, WLAN #type: ignore
-from os import remove
 from utime import sleep #type: ignore
 
 # ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
 DEBUG = False
-
-# ---- Configuración OTA (Optimizado sin diccionario) ----
-OTA_URL = const("https://raw.githubusercontent.com/JulioFlors/orchidium-project/main/firmware/build/relay_modules/")
 
 # ---- Colors for logs ----
 # Solo se crea si estamos en modo desarrollo
@@ -25,19 +20,6 @@ if DEBUG:
         CYAN    = '\x1b[96m'
         WHITE   = '\x1b[97m'
 
-# ---- Actualización de Credenciales ----
-try:
-    import update_creds #type: ignore
-    update_creds.apply_update()
-    # Borramos el archivo del ESP32
-    remove('update_creds.py')
-    if DEBUG:
-        print(f"📡  Credenciales {Colors.GREEN}Actualizadas{Colors.RESET}")
-    sleep(1)
-    reset()
-except ImportError:
-    pass
-
 # ---- Importar configuración WiFi de forma segura ---- #
 try:
     from secrets import WIFI_SSID, WIFI_PASS
@@ -49,7 +31,7 @@ except ImportError:
 
 # ---- Función Auxiliar: Conexión WiFi Síncrona ----
 def connect_wifi_sync():
-    """**Conexión wifi síncrona** `Boot.py` `OTA` `Mantenimiento` `timeout = 60`"""
+    """**Conexión wifi síncrona** `Boot.py` `OTA` (opcional) `Mantenimiento` `timeout = 60`"""
     wlan = WLAN(STA_IF)
     wlan.active(False)
     wlan.active(True)
@@ -83,38 +65,19 @@ def connect_wifi_sync():
     return False
 
 # ---- Bucle de Persistencia de Red con Límite de Seguridad ----
-# El dispositivo intentará conectar pacientemente. Si tras 10 intentos (aprox 10 min) 
+# El dispositivo intentará conectar pacientemente. Si tras 3 intentos (aprox 3 min) 
 # no hay éxito, reiniciará físicamente para limpiar la tabla de memoria (heap).
 fail_count = 0
-MAX_BOOT_FAILURES = const(10)
+MAX_BOOT_FAILURES = const(3)
 
 while True:
     if connect_wifi_sync():
-        try:
-            from ota import OTAUpdater #type: ignore
-            collect()
-            
-            # ---- Comprobar/Actualizar Firmrware via OTA ----
-            # Ejecutar OTA (Usando la constante directa OTA_URL)
-            ota = OTAUpdater(OTA_URL, debug=DEBUG)
-            
-            # Si falla la verificación por (DNS/Red), Aumentamos el contador de errores.
-            if ota.check_for_updates():
-                break  # OTA OK → salir del bucle y continuar a main.py
-            else:
-                fail_count += 1
-                if DEBUG: print(f"\n⚠️  {Colors.YELLOW}Fallo de Red en proceso OTA.{Colors.RESET} ({fail_count}/{MAX_BOOT_FAILURES})")
-                sleep(10)
-
-        except Exception as e:
-            fail_count += 1
-            if DEBUG: print(f"\n🔥  Error en proceso OTA: {Colors.RED}{e}{Colors.RESET} ({fail_count}/{MAX_BOOT_FAILURES})")
-            sleep(10)
+        break # Salto directo a main.py
     else:
         # Falló el WiFi
         fail_count += 1
-        if DEBUG: print(f"    └─ Reintento en 10 segundos. ({fail_count}/{MAX_BOOT_FAILURES})")
-        sleep(10)
+        if DEBUG: print(f"    └─ Reintento en 60 segundos. ({fail_count}/{MAX_BOOT_FAILURES})")
+        sleep(60)
     
     # [ÚLTIMO RECURSO]: Si la RAM está muy fragmentada o el driver de red colapsó
     if fail_count >= MAX_BOOT_FAILURES:
@@ -126,17 +89,23 @@ while True:
 
 # (Limpieza Final de RAM antes de main.py)
 import sys
-modules_to_free = ['machine', 'ntptime', 'ota']
-for mod in modules_to_free:
+import gc
+
+# Limpiamos módulos del cache (forzamos re-importación limpia en main.py)
+for mod in ['machine', 'network', 'utime']:
     if mod in sys.modules:
         del sys.modules[mod]
 
-# Destruir Variables Globales Innecesarias
-for var in ['ota', 'WIFI_SSID', 'WIFI_PASS', 'OTA_URL', 'connect_wifi_sync', 'update_creds']:
+# Destruimos Variables Globales del Boot (Mantenemos const y sys para main.py)
+for var in [
+    'WIFI_SSID', 'WIFI_PASS', 'connect_wifi_sync', 'Colors', 'DEBUG', 
+    'fail_count', 'MAX_BOOT_FAILURES', 'reset', 'STA_IF', 
+    'WLAN', 'sleep'
+]:
     if var in globals():
         del globals()[var]
 
-collect()
+gc.collect()
 
 # Al terminar boot.py, MicroPython ejecuta automáticamente main.py
 # El WiFi queda conectado.
