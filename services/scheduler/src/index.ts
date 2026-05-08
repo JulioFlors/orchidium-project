@@ -5,7 +5,8 @@ import { Logger } from './lib/logger'
 import { InferenceEngine } from './lib/inference-engine'
 import {
   mqttClient,
-  retryManager,
+  irrigationRetryManager,
+  systemRetryManager,
   syncNodeSampling,
   resetSamplingState,
   MQTT_BROKER_URL,
@@ -137,13 +138,16 @@ function setupMqttHandlers() {
         if (message === 'online') {
           lastActuatorHeartbeat = Date.now()
 
-          if (retryManager.lastActuatorState === 'online') {
+          if (irrigationRetryManager.lastActuatorState === 'online') {
             // Ignorar heartbeats periódicos para no generar spam de registros
             return
           }
 
           await handleNodeSync(false)
-        } else if (message === 'offline' && retryManager.lastActuatorState !== 'offline') {
+        } else if (
+          message === 'offline' &&
+          irrigationRetryManager.lastActuatorState !== 'offline'
+        ) {
           const reason = 'El dispositivo se desconectó inesperadamente (Fallo de red/energía).'
 
           await handleNodeOffline(reason, 'BROKER')
@@ -156,7 +160,7 @@ function setupMqttHandlers() {
 
       // 1.5 Detección de Reinicio Rápido (Boot Explícito)
       if (topic === 'PristinoPlant/Actuator_Controller/status/boot') {
-        retryManager.setStabilizing()
+        irrigationRetryManager.setStabilizing()
         lastActuatorHeartbeat = Date.now()
 
         // No forzamos un offline previo, saltamos directamente al sync
@@ -179,7 +183,9 @@ function setupMqttHandlers() {
               'Nodo Actuador: Comandos recibidos.',
             )
 
-            const confirmation = retryManager.confirmByTaskId(taskId)
+            const confirmation = irrigationRetryManager.confirmByTaskId(taskId)
+
+            systemRetryManager.confirm(taskId)
 
             if (task) {
               const durationSec = task.duration * 60
@@ -195,10 +201,12 @@ function setupMqttHandlers() {
               )
             }
           } else {
-            retryManager.confirmByTaskId(message)
+            irrigationRetryManager.confirmByTaskId(message)
+            systemRetryManager.confirm(message)
           }
         } catch {
-          retryManager.confirmByTaskId(message)
+          irrigationRetryManager.confirmByTaskId(message)
+          systemRetryManager.confirm(message)
         }
 
         return
@@ -218,7 +226,8 @@ function setupMqttHandlers() {
           const { state, task_id: taskId } = info
 
           if (state === 'ON' && taskId) {
-            retryManager.confirmByTaskId(taskId)
+            irrigationRetryManager.confirmByTaskId(taskId)
+            systemRetryManager.confirm(taskId)
             await recordTaskEvent(taskId, TaskStatus.IN_PROGRESS, 'Circuito de Riego abierto.', {
               actualStartAt: new Date(),
             })
@@ -303,7 +312,7 @@ function checkRainOrphanTimeout() {
  * Timeout: 90 segundos.
  */
 function checkActuatorTimeout() {
-  if (retryManager.lastActuatorState === 'offline') return
+  if (irrigationRetryManager.lastActuatorState === 'offline') return
 
   const elapsed = Date.now() - lastActuatorHeartbeat
 
@@ -316,9 +325,9 @@ function checkActuatorTimeout() {
  * Gestiona la desconexión del nodo y la limpieza de tareas interrumpidas.
  */
 async function handleNodeOffline(reason: string, origin: 'BROKER' | 'NODE' | 'SCHEDULER') {
-  if (retryManager.lastActuatorState === 'offline') return
+  if (irrigationRetryManager.lastActuatorState === 'offline') return
 
-  retryManager.setOffline()
+  irrigationRetryManager.setOffline()
   Logger.node('OFFLINE', origin)
   resetSamplingState()
 
@@ -343,7 +352,8 @@ async function handleNodeOffline(reason: string, origin: 'BROKER' | 'NODE' | 'SC
   })
 
   for (const task of interruptedTasks) {
-    retryManager.confirmByTaskId(task.id)
+    irrigationRetryManager.confirmByTaskId(task.id)
+    systemRetryManager.confirm(task.id)
 
     // Todas las tareas interrumpidas (DISPATCHED, ACKNOWLEDGED, IN_PROGRESS)
     // vuelven a FAILED para ser reanudadas automáticamente tras la reconexión.
@@ -374,7 +384,7 @@ async function handleNodeOffline(reason: string, origin: 'BROKER' | 'NODE' | 'SC
     )
   }
 
-  retryManager.clear()
+  irrigationRetryManager.clear()
 }
 
 /**
@@ -424,7 +434,7 @@ async function handleNodeSync(isBoot: boolean = false) {
 
   // Registro en la base de datos para el Timeline/Widget
   // Solo registramos si realmente el estado cambió o es un REBOOT explícito
-  if (retryManager.lastActuatorState !== 'online' || statusToSave === 'REBOOT') {
+  if (irrigationRetryManager.lastActuatorState !== 'online' || statusToSave === 'REBOOT') {
     await prisma.deviceLog
       .create({
         data: {
@@ -448,7 +458,8 @@ async function handleNodeSync(isBoot: boolean = false) {
     })
 
     for (const task of interruptedTasks) {
-      retryManager.confirmByTaskId(task.id)
+      irrigationRetryManager.confirmByTaskId(task.id)
+      systemRetryManager.confirm(task.id)
 
       let extraNotes = 'Interrumpida: El Nodo Actuador se reinició inesperadamente.'
       let addedMinutes = 0
@@ -519,14 +530,14 @@ async function initScheduler() {
 
   // Cron para sincronizar muestreo de iluminancia (Amanecer 4:59am / Anochecer 7:01pm)
   new Cron('59 4 * * *', { timezone: 'America/Caracas' }, () => {
-    if (retryManager.lastActuatorState === 'online') {
+    if (irrigationRetryManager.lastActuatorState === 'online') {
       syncNodeSampling('on')
     } else {
       Logger.warn('Sampling sync postponed: Actuator Node is OFFLINE.')
     }
   })
   new Cron('1 19 * * *', { timezone: 'America/Caracas' }, () => {
-    if (retryManager.lastActuatorState === 'online') {
+    if (irrigationRetryManager.lastActuatorState === 'online') {
       syncNodeSampling('off')
     } else {
       Logger.warn('Sampling sync postponed: Actuator Node is OFFLINE.')
@@ -591,7 +602,7 @@ async function runTask(scheduleId: string) {
 
     if (!schedule || !schedule.isEnabled) return
 
-    if (retryManager.lastActuatorState !== 'online') {
+    if (irrigationRetryManager.lastActuatorState !== 'online') {
       Logger.warn(`⏭️ Rutina POSTERGADA: ${schedule.name}. Motivo: Nodo Actuador OFFLINE.`)
 
       await prisma.taskLog.create({

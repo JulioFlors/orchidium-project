@@ -31,7 +31,7 @@ export default async function Page() {
   const fallback: Record<string, unknown> = {}
 
   if (historyRes.success) {
-    fallback[`/api/environment/data?range=12h&zone=${ZoneType.EXTERIOR}`] = {
+    fallback[`/api/environment/history?range=12h&zone=${ZoneType.EXTERIOR}`] = {
       data: historyRes.data,
       liveKPIs: historyRes.liveKPIs,
       lastRainState: historyRes.lastRainState,

@@ -132,7 +132,7 @@ function formatPointSummary(point: Point): string {
     const source = tags.source || 'Unknown'
     const zoneStr = tags.zone ? ` [ ${tags.zone} ]` : ''
 
-    return `[ ${event} ] [ ${source} ]${zoneStr} -> ${val}`
+    return `[ ${event} ] [ ${source} ] ${zoneStr} -> ${val}`
   }
 
   // Formato: [ Metrics ] Origen/Zona -> temp:25, hum:60...
@@ -144,7 +144,7 @@ function formatPointSummary(point: Point): string {
     const source = tags.source || 'Unknown'
     const zoneStr = tags.zone ? ` [ ${tags.zone} ]` : ''
 
-    return `[ Metrics ] [ ${source} ]${zoneStr} -> ${metrics}`
+    return `[ Metrics ] [ ${source} ] ${zoneStr} -> ${metrics}`
   }
 
   // Formato: [ Rain_Event ] Origen -> 300s | 85%
@@ -185,6 +185,32 @@ async function processEnvironmentPacket(
     const batch = data.data
 
     if (batch && Array.isArray(batch)) {
+      // 🕵️ Lógica de Backtracking (Reconstrucción Temporal)
+      // Si el nodo no tiene sincronización NTP, usamos sus timestamps como referencia relativa.
+      // Asumimos que el último elemento del batch es el más reciente y se acaba de enviar.
+      const lastEntry = batch[batch.length - 1]
+      let lastNodeUnix = 0
+
+      if (Array.isArray(lastEntry) && lastEntry.length === 2) {
+        lastNodeUnix = Number(lastEntry[0])
+      } else if (typeof lastEntry === 'object' && lastEntry !== null) {
+        lastNodeUnix = Math.floor(Date.now() / 1000)
+      }
+
+      // Normalización de Época inicial para el cálculo del offset
+      if (lastNodeUnix < 1000000000) lastNodeUnix += 946684800
+
+      // Si el tiempo del nodo es basura (< 2025), calculamos el desplazamiento (offset)
+      const isBasura = lastNodeUnix < 1735689600
+      const serverNow = Math.floor(Date.now() / 1000)
+      const backtrackingOffset = isBasura ? serverNow - lastNodeUnix : 0
+
+      if (isBasura && batch.length > 0) {
+        Logger.warn(
+          `[ INFL ] [ ${source} ] Hora desincronizada detectada. Aplicando Backtracking (+${backtrackingOffset}s) a ${batch.length} muestras.`,
+        )
+      }
+
       for (const entry of batch) {
         // Soporta formatos: [timestamp, metrics] o { ...metrics }
         let unixTimestamp: number
@@ -206,6 +232,11 @@ async function processEnvironmentPacket(
         if (unixTimestamp < 1000000000) {
           unixTimestamp += 946684800
         }
+
+        // 🛡️ Aplicación de Backtracking
+        // Si el tiempo era basura, le sumamos el offset para traerlo al "presente"
+        // manteniendo la distancia relativa entre las muestras del batch.
+        unixTimestamp += backtrackingOffset
 
         const point = Point.measurement('environment_metrics')
           .setTag('source', source)
@@ -236,6 +267,7 @@ async function processEnvironmentPacket(
       .setTag('source', source)
       .setTag('zone', zone)
       .setTag('context', context)
+      .setTimestamp(new Date())
 
     const t = data.temperature
     const h = data.humidity
@@ -273,12 +305,14 @@ async function processRainEventPacket(
     if (data.timestamp) {
       const rawTimestamp = Number(data.timestamp)
       // Corrección de Época: MicroPython (2000) vs Unix (1970)
-      const unixTimestamp = rawTimestamp < 1000000000 ? rawTimestamp + 946684800 : rawTimestamp
+      let unixTimestamp = rawTimestamp < 1000000000 ? rawTimestamp + 946684800 : rawTimestamp
 
-      // 1735689600 = 1 de enero de 2025
-      if (unixTimestamp > 1735689600) {
-        point.setTimestamp(new Date(unixTimestamp * 1000))
+      // 🛡️ Sanity Check: Si es basura (< 2025), usar ahora.
+      if (unixTimestamp < 1735689600) {
+        unixTimestamp = Math.floor(Date.now() / 1000)
       }
+
+      point.setTimestamp(new Date(unixTimestamp * 1000))
     }
 
     await writeToInflux(point)
@@ -348,11 +382,14 @@ async function processZoneStateEvent(
     // Aplicar timestamp si viene en el JSON (con normalización de época)
     if (timestamp) {
       const rawTimestamp = Number(timestamp)
-      const unixTimestamp = rawTimestamp < 1000000000 ? rawTimestamp + 946684800 : rawTimestamp
+      let unixTimestamp = rawTimestamp < 1000000000 ? rawTimestamp + 946684800 : rawTimestamp
 
-      if (unixTimestamp > 1735689600) {
-        point.setTimestamp(new Date(unixTimestamp * 1000))
+      // 🛡️ Sanity Check: Si es basura (< 2025), usar ahora.
+      if (unixTimestamp < 1735689600) {
+        unixTimestamp = Math.floor(Date.now() / 1000)
       }
+
+      point.setTimestamp(new Date(unixTimestamp * 1000))
     }
 
     await writeToInflux(point)

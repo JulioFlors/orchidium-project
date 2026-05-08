@@ -492,6 +492,8 @@ Cada proyecto de firmware debe incorporar un archivo `manifest.json`. Este archi
 ```
 
 > **Nota sobre OTA:** La librería `ota` ha sido retirada de los manifiestos de producción para ahorrar RAM. Si decides activarla, recuerda volver a añadirla al array de `"libs"`.
+>
+> **Nota sobre el Reloj (NTP):** La sincronización de tiempo se ha movido directamente a `boot.py` para garantizar que los sensores tengan la hora correcta (UTC) sin depender de la librería OTA.
 
 ### Descripción de los Campos
 

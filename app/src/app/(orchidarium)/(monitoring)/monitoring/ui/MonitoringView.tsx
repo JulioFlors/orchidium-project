@@ -137,7 +137,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     data: cardStatusResponse,
     error: cardStatusError,
     isLoading: isCardStatusLoading,
-  } = useSWR<SensorDataResponse>(`/api/environment/data?range=12h&zone=${zone}`, fetcher, {
+  } = useSWR<SensorDataResponse>(`/api/environment/history?range=12h&zone=${zone}`, fetcher, {
     refreshInterval: 30000,
     revalidateOnFocus: false,
     errorRetryCount: 3,
@@ -155,9 +155,9 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
   } = useSWR<SensorDataResponse | SensorData[]>(
     selectedMetric &&
       !['rain_events', 'dli', 'vpd_avg', 'dif', 'high_humidity_hours'].includes(selectedMetric)
-      ? `/api/environment/data?range=${currentRange}&zone=${zone}&metric=${selectedMetric}`
+      ? `/api/environment/history?range=${currentRange}&zone=${zone}&metric=${selectedMetric}`
       : selectedMetric && ['dli', 'vpd_avg', 'dif', 'high_humidity_hours'].includes(selectedMetric)
-        ? `/api/environment/data?range=${currentRange}&zone=${zone}`
+        ? `/api/environment/history?range=${currentRange}&zone=${zone}`
         : null,
     fetcher,
     {

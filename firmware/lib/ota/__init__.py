@@ -49,27 +49,6 @@ class OTAUpdater:
             with open(self.local_manifest_path, 'w') as f:
                 ujson.dump(default_manifest, f)
 
-    def _sync_time(self):
-        """Intenta sincronizar el reloj con NTP con reintentos."""
-        import ntptime #type: ignore
-        import utime #type: ignore
-        
-        if self.debug: print(f"\n🕒  Sincronizando ", end="")
-
-        max_retries = 10
-        for attempt in range(1, max_retries + 1):
-            # Sincronizar hora (Crítico para SSL)
-            try: 
-                ntptime.settime()
-                if self.debug: print(f"\n🕒  Hora del sistema {self.Colors.GREEN}sincronizada{self.Colors.RESET}")
-                return True
-            except: 
-                if self.debug: print(f"{self.Colors.BLUE}.{self.Colors.RESET}", end="")
-                utime.sleep(1)
-
-        if self.debug: print(f"\n\n⚠️  No se pudo sincronizar la Hora del sistema {self.Colors.YELLOW}(Riesgo SSL){self.Colors.RESET}") 
-        return False
-
     def _get_version_tuple(self, version_str):
         try:
             clean_ver = version_str.replace('v', '')
@@ -205,8 +184,9 @@ class OTAUpdater:
         import utime #type: ignore
         import ujson #type: ignore
 
-        # Sincronizar hora para evitar error -15104
-        self._sync_time()
+        # ------------------ IMPORTANTE ------------------
+        # Asegurar se de haber Sincronizado la hora del sistema en el boot.py antes de intanciar OTA para evitar error -15104
+        # ------------------------------------------------
         
         current_version_str = "0.0.0"
         try:

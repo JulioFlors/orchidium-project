@@ -68,16 +68,26 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
   midnightVET.setUTCHours(0, 0, 0, 0)
   const midnightVETInUTC = new Date(midnightVET.getTime() + VET_OFFSET)
 
-  // --- Rangos (12h, 24h) ---
-  if (range === '12h' || range === '24h') {
-    const timeFilter =
-      range === '12h'
-        ? `AND time >= now() - interval '12 hours'`
-        : `AND time >= now() - interval '24 hours'`
+  if (range === '1h' || range === '12h' || range === '24h') {
+    let timeFilter = `AND time >= now() - interval '24 hours'`
 
-    const zoneFilter = `"zone" = '${zone}'`
+    if (range === '1h') timeFilter = `AND time >= now() - interval '1 hours'`
+    if (range === '12h') {
+      // 5:00 AM VET (Medianoche + 5h) hasta 7:00 PM VET (Medianoche + 19h)
+      // Estas son las 14h de "Día Botánico" solicitadas.
+      const start = new Date(midnightVETInUTC.getTime() + 5 * 3600000)
+      const end = new Date(midnightVETInUTC.getTime() + 19 * 3600000)
 
-    const query = `SELECT * FROM "environment_metrics" WHERE ${zoneFilter} ${timeFilter} ORDER BY time ASC`
+      timeFilter = `AND time >= '${start.toISOString()}' AND time <= '${end.toISOString()}'`
+    }
+
+    const query = `
+      SELECT *
+      FROM environment_metrics 
+      WHERE zone = '${zone}' 
+      ${timeFilter}
+      ORDER BY time ASC
+    `
 
     try {
       const reader = influxClient.query(query)
@@ -98,8 +108,10 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
         const entry: Record<string, unknown> = { time: tDate.toISOString() }
 
         fieldsToQuery.forEach((f) => {
-          if (row[f] != null) {
-            entry[f] = Number(row[f])
+          const val = row[f]
+
+          if (val != null) {
+            entry[f] = Number(val)
           }
         })
         if (row.phase) entry.phase = String(row.phase)
@@ -237,9 +249,9 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
     const todayISO = todayVET.toISOString().split('T')[0]
 
     if (!pgData.some((d) => d.date.toISOString().startsWith(todayISO))) {
-      const zoneFilter = `"zone" = '${zone}'`
+      const zoneFilter = `zone = '${zone}'`
 
-      const todayQuery = `SELECT * FROM "environment_metrics" WHERE ${zoneFilter} AND time >= '${midnightVETInUTC.toISOString()}' ORDER BY time ASC`
+      const todayQuery = `SELECT * FROM environment_metrics WHERE ${zoneFilter} AND time >= '${midnightVETInUTC.toISOString()}' ORDER BY time ASC`
 
       try {
         const reader = influxClient.query(todayQuery)
@@ -317,14 +329,14 @@ export async function getLastHeartbeat(source: string, zone?: ZoneType) {
   let zoneFilter = ''
 
   if (zone) {
-    zoneFilter = `AND "zone" = '${zone}'`
+    zoneFilter = `AND zone = '${zone}'`
   }
 
   const query = `
-    SELECT "value", "time" 
-    FROM "system_events" 
-    WHERE "source" = '${source}' 
-    AND "event_type" = 'Device_Status' 
+    SELECT value, time 
+    FROM system_events 
+    WHERE source = '${source}' 
+    AND event_type = 'Device_Status' 
     ${zoneFilter}
     AND time >= now() - interval '24 hours'
     ORDER BY time DESC
@@ -356,11 +368,11 @@ export async function getLastHeartbeat(source: string, zone?: ZoneType) {
  */
 export async function getLastRainState() {
   const query = `
-    SELECT "value", "time" 
-    FROM "system_events" 
-    WHERE "source" = 'Weather_Station' 
-    AND "zone" = '${ZoneType.EXTERIOR}' 
-    AND "event_type" = 'Rain_State' 
+    SELECT value, time 
+    FROM system_events 
+    WHERE source = 'Weather_Station' 
+    AND zone = '${ZoneType.EXTERIOR}' 
+    AND event_type = 'Rain_State' 
     AND time >= now() - interval '24 hours'
     ORDER BY time DESC
     LIMIT 1
@@ -409,12 +421,9 @@ export async function getRainSummaryInternal(range: string, zone: ZoneType) {
   const timeFilter = range === 'all' ? '' : `AND time >= now() - interval '${rangeString}'`
 
   const query = `
-    SELECT 
-      time,
-      duration_seconds,
-      intensity_percent
-    FROM "rain_events"
-    WHERE "zone" = '${zone}'
+    SELECT *
+    FROM rain_events
+    WHERE zone = '${zone}'
     ${timeFilter}
     ORDER BY time ASC
   `
