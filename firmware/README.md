@@ -95,12 +95,85 @@ Si prefieres realizar la instalación paso a paso o no utilizas PowerShell, pued
 > [!WARNING]
 > Debes crear la carpeta `/lib` antes de copiar: `mpremote mkdir :lib`
 
-| Librería | Propósito | Fuente / Repositorio | Comando de Instalación |
-| :------- | :-------- | :------------------- | :--------------------- |
-| **umqtt** | MQTT asíncrono | [fizista/umqtt.simple2](https://github.com/fizista/micropython-umqtt.simple2) | `mpremote cp -r ../lib/umqtt :lib/` |
-| **ota** | Update remoto (Opcional) | Propia | `mpremote cp -r ../lib/ota :lib/` |
-| **secrets** | Credenciales | Propia | `mpremote cp -r ../lib/secrets :lib/` |
-| **bh1750** | Sensor de Luz | [PinkInk/bh1750](https://github.com/PinkInk/upylib/tree/master/bh1750/bh1750) | `mpremote cp -r ../lib/bh1750 :lib/` |
+| Librería | Propósito | Fuente / Repositorio | Estado |
+| :------- | :-------- | :------------------- | :----- |
+| **umqtt** | MQTT asíncrono | [Ver Sección Parches](#️-librerias-parchadas-y-resiliencia) | ⚠️ **PARCHADA** |
+| **bh1750** | Sensor de Luz | [Ver Sección Parches](#️-librerias-parchadas-y-resiliencia) | ⚠️ **PARCHADA** |
+| **ota** | Update remoto | Propia | ✅ OK |
+| **secrets** | Credenciales | Propia | ✅ OK |
+
+---
+
+### 🛡️ Librerias Parchadas y Resiliencia
+
+Las librerías originales de la comunidad han sido modificadas profundamente para garantizar la estabilidad de **PristinoPlant**. **No utilices las versiones de `upip` o repositorios originales**, ya que el sistema fallará por fugas de memoria o bloqueos de red.
+
+---
+
+#### 1. Protocolo de Resiliencia: Hardened MQTT Driver (`simple2.py`)
+
+Debido a las limitaciones de memoria y la inestabilidad inherente de las redes WiFi en entornos de cultivo, la librería estándar `umqtt.simple` fue sustituida por una versión **Hardened** (`simple2.py`). Esta versión incluye una serie de parches críticos acumulados para prevenir el agotamiento de recursos y bloqueos infinitos:
+
+##### A. Gestión Robusta de Sockets y SSL
+
+* **Limpieza Atómica de Descriptores**: En el método `connect()`, si el handshake SSL falla (común cuando la RAM es < 45KB), el driver ahora cierra forzosamente el socket TCP subyacente. Esto evita la acumulación de "sockets zombies" que derivan en el error fatal `OSError: [Errno 16] EBUSY`.
+* **Timeout de Negociación TLS**: Se aplica un `settimeout` estricto al socket crudo antes de realizar el `wrap_socket`. Esto impide que el dispositivo quede bloqueado permanentemente si el broker deja de responder durante el intercambio de certificados.
+* **Protección de Resolución DNS**: Se encapsuló `getaddrinfo` para capturar errores de resolución. Si el servidor DNS de la red falla, el driver propaga un `MQTTException(30)` permitiendo al sistema aplicar un backoff progresivo en lugar de colapsar.
+
+##### B. Control de Flujo y Timeouts Asíncronos
+
+* **Escritura No Bloqueante Inteligente**: El método `_send_with_timeout` utiliza `uselect.poll` para verificar la disponibilidad del buffer de salida. Esto elimina las excepciones `EAGAIN` y asegura que los mensajes de telemetría se envíen completos incluso bajo congestión de red.
+* **Lectura con Timeout Garantizado**: `wait_msg` ha sido modificado para respetar siempre el `socket_timeout`. Esto permite que las corrutinas de `asyncio` recuperen el control si la conexión se vuelve unidireccional (Silent Disconnect).
+
+##### C. Diagnóstico de Errores Semánticos
+
+El driver traduce los códigos de error crudos del stack TCP/IP a constantes legibles dentro de `MQTTException`:
+
+* **30**: Timeout de Red / Falla DNS.
+* **28**: Sin conexión física (Radio WiFi desconectada).
+* **1**: Fallo de conexión TCP (Host unreachable).
+* **-202**: Fallo de negociación SSL (Posible falta de RAM).
+
+##### D. Escudo de Concurrencia (Integración con `main.py`)
+
+Aunque el driver es síncrono por diseño, está orquestado mediante un `asyncio.Lock` global. Ninguna operación de lectura/escritura ocurre simultáneamente, eliminando la corrupción de tramas MQTT cuando se reciben comandos mientras se envía telemetría.
+
+---
+
+#### 2. Sistema Legacy NVS (Eliminado en v0.14.x)
+
+Para optimizar y liberar más de ~10-15KB de memoria RAM (crítico para la estabilidad de `wrap_socket` y SSL), el sistema de recuperación local `NVSManager` basado en Flash (`recovery.json`) fue **completamente eliminado**. La responsabilidad de seguimiento de eventos y persistencia ha sido delegada al backend (Scheduler / Ingest).
+
+Si en el futuro se desea restaurar el sistema `NVSManager`, se debe utilizar como referencia el archivo de respaldo: [main_nvs_backup.py](file:///c:/Dev/pristinoplant/firmware/main_nvs_backup.py).
+
+##### Resumen Técnico de Extracción (v0.14.x)
+
+Para restaurar el sistema, se deben reinsertar los bloques de `NVSManager` detallados en los comentarios de `main_nvs_backup.py`. Esta extracción impactó principalmente en:
+
+1. **Riego Diferido**: Ahora gestionado exclusivamente por el Scheduler.
+2. **Temporizadores**: La persistencia de estados de relés ahora es responsabilidad del servidor tras reconexiones.
+3. **Lluvia**: El nodo ya no calcula duración ni intensidad general; solo reporta estados `Raining`/`Dry` y ráfagas de datos crudos.
+
+---
+
+#### 1. `umqtt.simple2` (Estabilización de Red)
+
+Se ha reescrito el núcleo de comunicaciones para evitar que el ESP32 se convierta en un "Zombie" o se reinicie constantemente.
+
+* **Handshake No-Bloqueante:** `connect()` ahora utiliza `poll()` y `settimeout()` para evitar colgar el CPU si el broker no responde.
+* **Cierre de Sockets (Anti-Leak):** Se corrigió una fuga de memoria donde los fallos de SSL dejaban sockets TCP abiertos (zombies).
+* **Escritura Robusta:** Protección contra saturación de buffer en redes de alta latencia (>500ms).
+* **RAM-Safe:** Eliminación de duplicaciones de memoria (`.items()`) en el gestor de mensajes.
+
+#### 2. `bh1750` (Gestión Lumínica Pro)
+
+El driver estándar se saturaba a pleno sol (~54k lux).
+
+* **Auto-Escala Dinámica:** Ajusta el `MTreg` (Measurement Time Register) en tiempo real para medir hasta **121,000 Lux**.
+* **Alta Sensibilidad:** Modo `HIRES_2` automático para lecturas precisas en penumbra extrema.
+* **Eficiencia:** Implementación de modos `ONCE` para reducir el consumo energético.
+
+---
 
 > **Limpieza:** El archivo template no es necesario en el dispositivo.
 >
@@ -737,9 +810,7 @@ Este sensor digital mide la intensidad lumínica en Lux utilizando el protocolo 
 
 #### 📚 Librería (BH1750)
 
-MicroPython no tiene un driver nativo para el BH1750, así que se requiere descargar una librería externa.
-
-1. **Descarga el archivo:** [`bh1750.py`](https://github.com/PinkInk/upylib/blob/master/bh1750/bh1750/__init__.py)
+1. **Utiliza la versión local:** Se encuentra en `firmware/lib/bh1750/`. No descargues la versión de internet, ya que carece de la lógica de auto-escala necesaria para este proyecto.
 
 2. **Sube la librería al ESP32** a la carpeta `/lib`.
 
@@ -1014,45 +1085,3 @@ Si está activo, el sistema funciona comparando la versión del **Manifiesto Loc
 * **Descarga Atómica**: Los archivos se descargan con extensión `.new`. Solo se sobrescriben tras verificar que la descarga fue exitosa, evitando "brickear" el dispositivo por un fallo de red.
 
 ---
-
-### 🩹 Flujo Seguro para Credenciales (`secrets`) via OTA
-
-Este proceso permite actualizar las claves WiFi (`lib/secrets/__init__.py`) remotamente. Debido a la optimización agresiva de RAM para preservar los **141.4 KB** disponibles, la lógica de ejecución ha sido retirada de `boot.py` por defecto.
-
-#### Cómo Restaurar la Actualización de Credenciales
-
-Si necesitas realizar una migración de red masiva, debes reintegrar temporalmente este bloque en `boot.py` **después** de la definición de colores y **antes** de la sección de *"Importar configuración WiFi"*:
-
-```python
-# ---- Actualización de Credenciales ----
-try:
-    from os import remove
-    import update_creds #type: ignore
-    update_creds.apply_update()
-    # Borramos el archivo del ESP32
-    remove('update_creds.py')
-    if DEBUG: print(f"📡  Credenciales {Colors.GREEN}Actualizadas{Colors.RESET}")
-    sleep(1)
-    reset()
-except ImportError:
-    pass
-```
-
-#### Pasos para la Migración
-
-1. **Crear `update_creds.py`**: Un script que sobrescriba el archivo de secretos local con los nuevos valores.
-2. **Subir a GitHub**: Colocarlo en una carpeta compartida y obtener su URL Raw.
-3. **Actualizar Manifiesto**: Incrementar la versión en `manifest.json` y añadir la URL del script al array de `"files"`.
-4. **Ejecución**: El ESP32 descargará el script y se reiniciará. En el siguiente arranque:
-    1. Detectará la presencia de `update_creds.py`.
-    2. Ejecutará la función `apply_update()`, sobrescribiendo su `lib/secrets/__init__.py` local.
-    3. Borrará automáticamente `update_creds.py` de su memoria.
-    4. Se reiniciará nuevamente para conectar a la **NUEVA** red WiFi.
-
-#### 5. Limpieza Obligatoria
-
-Una vez confirmada la migración de todos los nodos:
-
-1. **Elimina** `update_creds.py` de tu repositorio GitHub.
-2. **Retira** el código de restauración de `boot.py` para recuperar la RAM.
-3. Actualiza el `manifest.json` para limpiar el estado de versión.

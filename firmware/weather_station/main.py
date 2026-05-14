@@ -23,7 +23,7 @@ DEBUG = True
 # El broker esperará ~1.5x este valor antes de desconectar al cliente.
 MQTT_KEEPALIVE       = const(60) # ~1.5x = 90 seg
 # Intervalo para enviar pings de 'keepalive' al broker MQTT.
-MQTT_PING_INTERVAL   = const(30) # keepalive//2
+MQTT_PING_INTERVAL   = const(29) # ~keepalive/2
 # Intervalo para revisar mensajes MQTT entrantes.
 MQTT_CHECK_INTERVAL  = const(1)  # seg
 # tiempo máximo que (connect, check_msg, ping) esperará antes de fallar y lanzar una excepción.
@@ -68,7 +68,7 @@ MQTT_TOPIC_CMD_RECEIVED   = const(BASE_TOPIC + b"/cmd/received")
 
 # ---- Parámetros LWT (Last Will and Testament) ----
 LWT_TOPIC = MQTT_TOPIC_STATUS
-LWT_MESSAGE = const(b"offline")
+LWT_MESSAGE = const(b"lwt_disconnect")
 
 # ---- Colors for logs ----
 if DEBUG:
@@ -136,6 +136,14 @@ illuminance_sensor = None
 wlan    = None # Conexión WiFi
 client  = None # Cliente  MQTT
 CONNECTED_ALLOWED = False # Control de ahorro de energía (True = Radio encendida)
+
+# Flag de control para la sincronización del monitoreo de iluminancia (Día/Noche)
+# Si es False, se suspende el muestreo del sensor BH1750 para evitar registros de 0 lux.
+# (Se inicializa en ON por defecto; el Scheduler sincronizará el estado real tras conectar)
+IS_SAMPLING_LUX = True
+
+# Candado asíncrono para evitar colisiones en el socket MQTT
+mqtt_lock = asyncio.Lock()
 
 # ---- Función Auxiliar: Uso del disco ----
 def log_disk_usage():
@@ -350,6 +358,15 @@ def sub_callback(topic, msg, retained, dup):
         log(f"    ├─ Tópico: {Colors.GREEN}{topic_str}{Colors.RESET}")
         log(f"    ├─ {type_label}:   {Colors.BLUE}{clean_payload}{Colors.RESET}")
 
+        # ---- ACUSE DE RECIBO (ACK) ----
+        # Hacemos eco del comando crudo (raw) para el Scheduler y el Frontend
+        try:
+            if client and wlan and wlan.isconnected():
+                async with mqtt_lock:
+                    if client and getattr(client, 'sock', None):
+                        client.publish(MQTT_TOPIC_CMD_RECEIVED, msg, qos=1)
+        except: pass
+
         # ---- 🛡️ Lógica para los Comandos del Sistema (/cmd) ----
         if topic == MQTT_TOPIC_CMD:
             if msg_str.lower() == "reset":
@@ -366,6 +383,16 @@ def sub_callback(topic, msg, retained, dup):
                 from utime   import sleep #type: ignore
                 sleep(5)
                 reset()
+
+            elif msg_str.lower().startswith("lux_sampling:"):
+                action = msg_str.lower().split(":")[1]
+                global IS_SAMPLING_LUX
+                if action == "on":
+                    log(f"    └─ Bh1750: {Colors.GREEN}ON{Colors.RESET}")
+                    IS_SAMPLING_LUX = True
+                elif action == "off":
+                    log(f"    └─ Bh1750: {Colors.RED}OFF{Colors.RESET}")
+                    IS_SAMPLING_LUX = False
 
     except Exception as e:
         log(f"\n❌  Error en sub_callback(): {Colors.RED}{e}{Colors.RESET}")
@@ -710,8 +737,11 @@ async def sensor_publish_task():
         except: pass
 
         try:
-            lux_sensor = illuminance_sensor.luminance(BH1750.CONT_HIRES_1)
-            lux = round(lux_sensor, 1)
+            if IS_SAMPLING_LUX and illuminance_sensor:
+                lux_sensor = illuminance_sensor.luminance(BH1750.CONT_HIRES_1)
+                lux = round(lux_sensor, 1)
+            else:
+                lux = None # Omitir lectura
         except: pass
 
         data_payload = {"t": temp, "h": hum, "l": lux}

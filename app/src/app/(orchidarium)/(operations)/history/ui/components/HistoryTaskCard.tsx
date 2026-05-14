@@ -85,7 +85,7 @@ export function HistoryTaskCard({
             className="tds-xs:flex hidden"
             colorClassName={statusStyle}
             icon={STATUS_ICONS[task.status]}
-            variant="vibrant"
+            variant="overlay"
           />
 
           <div className="flex flex-1 flex-col gap-y-1 overflow-hidden text-left">

@@ -128,36 +128,39 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
     `
     const overcastStream = influxClient.query(overcastQuery)
     let overcastMinutes = 0
-    let lastTime: Date = now // Empezamos desde "ahora" para incluir el intervalo actual
-    let stillOvercast = true
+    let lastTime: Date | null = null
 
     for await (const row of overcastStream) {
       const lux = Number(row.illuminance || 0)
       const rowTime = new Date(String(row.time))
 
-      // Protección contra vacíos de datos: si el salto entre registros es > 20 min,
-      // no podemos asegurar que el estado fue consecutivo.
-      const jumpMs = lastTime.getTime() - rowTime.getTime()
+      if (!lastTime) {
+        // Primera iteración (el dato más reciente)
+        const ageMs = now.getTime() - rowTime.getTime()
 
-      if (jumpMs > 20 * 60000) {
-        stillOvercast = false
-        break
-      }
-
-      if (lux < OVERCAST_LUX_THRESHOLD) {
-        overcastMinutes += jumpMs / 60000
-        lastTime = rowTime
+        if (lux < OVERCAST_LUX_THRESHOLD) {
+          // Sumamos el tiempo desde el dato hasta "ahora", con tope de 30 min por si el nodo se desconectó
+          overcastMinutes += Math.min(ageMs, 30 * 60000) / 60000
+          lastTime = rowTime
+        } else {
+          break
+        }
       } else {
-        // Si encontramos un punto que NO está nublado, rompemos la cadena consecutiva
-        stillOvercast = false
-        break
-      }
-    }
+        // Siguientes iteraciones (hacia atrás en el tiempo)
+        const jumpMs = lastTime.getTime() - rowTime.getTime()
 
-    // Si el dato más reciente no es nublado, el contador debe ser 0 obligatoriamente
-    if (!stillOvercast && overcastMinutes > 0) {
-      // Re-verificación: si el primer registro (el más reciente) no era nublado, stillOvercast cambió a false inmediatamente
-      // La lógica anterior es correcta: si el primer registro es > threshold, overcastMinutes queda en 0.
+        // Protección contra vacíos de datos: si el salto es > 30 min (3 batches perdidos)
+        if (jumpMs > 30 * 60000) {
+          break
+        }
+
+        if (lux < OVERCAST_LUX_THRESHOLD) {
+          overcastMinutes += jumpMs / 60000
+          lastTime = rowTime
+        } else {
+          break
+        }
+      }
     }
 
     overcastMinutes = Math.round(overcastMinutes)
@@ -177,8 +180,8 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
       type = 'LLUVIOSO'
     }
 
-    Logger.info(
-      `[ DAY CLASSIFIER ] Tipo: ${type} | Lux promedio (8am-ahora): ${avgLux.toFixed(0)} | Lux actual: ${currentLux.toFixed(0)} | Nublado consecutivo: ${overcastMinutes} min`,
+    Logger.dayClass(
+      `Tipo: ${type} | Lux promedio (8am-ahora): ${avgLux.toFixed(0)} | Lux actual: ${currentLux.toFixed(0)} | Nublado consecutivo: ${overcastMinutes} min`,
     )
 
     return {
@@ -188,8 +191,8 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
       overcastMinutes,
       evaluatedAt: now,
     }
-  } catch (error) {
-    Logger.warn('[ DAY CLASSIFIER ] Error al clasificar el día:', error)
+  } catch {
+    Logger.dayClass('Error al clasificar el día.')
 
     return {
       type: 'DESCONOCIDO',

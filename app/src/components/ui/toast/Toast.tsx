@@ -123,13 +123,12 @@ export function Toast({ id, message, type }: ToastProps) {
         />
 
         <StatusCircleIcon
-          glow
           className="relative z-10 shrink-0"
           colorClassName={config.iconColor}
           glowVariant={config.glowVariant}
           icon={config.icon}
           size="sm"
-          variant="vibrant"
+          variant="glow"
         />
 
         <p className="text-primary relative z-10 flex-1 text-sm leading-tight font-medium">

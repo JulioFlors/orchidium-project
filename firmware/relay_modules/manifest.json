@@ -1,9 +1,9 @@
 {
   "name": "Relay Modules",
   "description": "Nodo Actuador + Meteorológica Exterior",
-  "version": "0.12.1",
-  "date": "07-05-2026",
-  "notes_release": "[♻️ Data Refactor]: Finalizada la migración total de terminología 'history' a 'data' en el pipeline de telemetría. Estandarización de variables internas y claves JSON para compatibilidad total con el Ingest.",
+  "version": "0.14.0",
+  "date": "13-05-2026",
+  "notes_release": "[🚀 RAM Optimization & Resilience]: Extracción de NVS legacy para liberar RAM. La Recuperación Elástica del Circuito de Riego (reinicio de tareas interrumpidas) y el cálculo de eventos de lluvia se delegan íntegramente al Scheduler backend. Hardening del driver MQTT con limpieza atómica de sockets y protección DNS.",
   "files": [
     "app.mpy",
     "boot.py",

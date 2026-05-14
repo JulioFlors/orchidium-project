@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server'
 import { prisma, TaskStatus, TaskPurpose, ZoneType } from '@package/database'
+import { headers } from 'next/headers'
 
 import { Logger } from '@/lib'
+import { auth } from '@/lib/server'
 
 export async function GET() {
   try {
@@ -41,6 +43,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
+    const session = await auth.api.getSession({ headers: await headers() })
+    const userName = session?.user?.name || 'el usuario'
+    const userId = session?.user?.id
+
     const taskLog = await prisma.$transaction(async (tx) => {
       const newLog = await tx.taskLog.create({
         data: {
@@ -59,7 +65,8 @@ export async function POST(request: Request) {
         data: {
           taskId: newLog.id,
           status: TaskStatus.PENDING,
-          notes: 'Tarea agendada por el usuario desde el planificador.',
+          notes: `Tarea agendada por ${userName} desde la cola de ejecución.`,
+          userId,
         },
       })
 

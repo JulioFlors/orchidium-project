@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 
+export const dynamic = 'force-dynamic'
+
 import { getSensorDataInternal } from '@/lib/server'
 import { Logger } from '@/lib'
 import { ZoneType } from '@/config/mappings'

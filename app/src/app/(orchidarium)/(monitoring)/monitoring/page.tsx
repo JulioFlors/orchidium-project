@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 
 import { SWRConfig } from 'swr'
 
+export const dynamic = 'force-dynamic'
+
 import { MonitoringView } from './ui'
 
 import { getSensorData, getRainData } from '@/actions'

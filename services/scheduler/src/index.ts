@@ -7,6 +7,7 @@ import {
   mqttClient,
   irrigationRetryManager,
   systemRetryManager,
+  emaManager,
   syncNodeSampling,
   resetSamplingState,
   MQTT_BROKER_URL,
@@ -88,8 +89,8 @@ async function waitForMosquitto(retries = 15) {
 // ---- Gestión de Estado Local ----
 let lastRainState: string | null = null
 let lastFirmwareHeartbeat: number = Date.now()
-let lastActuatorHeartbeat: number = Date.now()
 let lastSyncTimestamp: number = 0
+let openRainEventId: string | null = null // ID del RainEvent abierto en Postgres
 
 // Timeout para eventos de lluvia huérfanos (10 minutos sin señales de vida)
 const RAIN_ORPHAN_TIMEOUT_MS = 10 * 60 * 1000
@@ -104,7 +105,9 @@ function setupMqttHandlers() {
         'PristinoPlant/Actuator_Controller/status/boot',
         'PristinoPlant/Weather_Station/Exterior/readings',
         'PristinoPlant/Weather_Station/Exterior/rain/state',
-        'PristinoPlant/Weather_Station/Exterior/rain/event',
+        'PristinoPlant/Weather_Station/ZONA_A/status',
+        'PristinoPlant/Weather_Station/ZONA_A/readings',
+        'PristinoPlant/Weather_Station/ZONA_A/cmd/received',
       ],
       { qos: 1 },
     )
@@ -135,22 +138,30 @@ function setupMqttHandlers() {
 
       // 1. Monitoreo de Conexión del Nodo Actuador
       if (topic === 'PristinoPlant/Actuator_Controller/status') {
-        if (message === 'online') {
-          lastActuatorHeartbeat = Date.now()
+        // Nota: lastFirmwareHeartbeat (línea 139) ya cubre el heartbeat universal del actuador.
 
-          if (irrigationRetryManager.lastActuatorState === 'online') {
-            // Ignorar heartbeats periódicos para no generar spam de registros
+        if (message === 'online') {
+          if (irrigationRetryManager.connectionState === 'online') {
+            // Heartbeat periódico: solo actualizar timestamp, no registrar en DB
             return
           }
 
           await handleNodeSync(false)
         } else if (
-          message === 'offline' &&
-          irrigationRetryManager.lastActuatorState !== 'offline'
+          message === 'lwt_disconnect' &&
+          irrigationRetryManager.connectionState !== 'offline'
         ) {
-          const reason = 'El dispositivo se desconectó inesperadamente (Fallo de red/energía).'
-
-          await handleNodeOffline(reason, 'BROKER')
+          // LWT automático del broker: el nodo desapareció sin avisar
+          await handleNodeOffline(
+            'El dispositivo se desconectó inesperadamente (Fallo de red o energía).',
+            'BROKER',
+          )
+        } else if (message === 'offline' && irrigationRetryManager.connectionState !== 'offline') {
+          // Desconexión limpia publicada por shutdown() en el firmware
+          await handleNodeOffline(
+            'Dispositivo desconectado limpiamente (Reinicio seguro solicitado).',
+            'NODE',
+          )
         } else if (message === 'rebooting') {
           await handleNodeOffline('Reinicio seguro solicitado por el sistema o el usuario.', 'NODE')
         }
@@ -161,7 +172,8 @@ function setupMqttHandlers() {
       // 1.5 Detección de Reinicio Rápido (Boot Explícito)
       if (topic === 'PristinoPlant/Actuator_Controller/status/boot') {
         irrigationRetryManager.setStabilizing()
-        lastActuatorHeartbeat = Date.now()
+        systemRetryManager.setStabilizing()
+        // Nota: lastFirmwareHeartbeat (línea 139) ya actualizó el timestamp de este mensaje.
 
         // No forzamos un offline previo, saltamos directamente al sync
         // para que evalúe si es un REBOOT o una sesión nueva.
@@ -170,22 +182,63 @@ function setupMqttHandlers() {
         return
       }
 
+      // 1.9 Nodo EMA (Weather Station ZONA_A) — Heartbeat de conectividad
+      if (topic === 'PristinoPlant/Weather_Station/ZONA_A/status') {
+        if (message === 'online') {
+          emaManager.setStabilizing()
+          // Registrar conexión en logs de dispositivo
+          await prisma.deviceLog.create({
+            data: {
+              device: 'Weather_Station_ZONA_A',
+              status: 'ONLINE',
+              notes: 'Estación EMA: Conexión establecida.',
+            },
+          })
+          // Sincronizar muestreo (Amanecer/Anochecer)
+          syncNodeSampling()
+        } else if (message === 'lwt_disconnect' || message === 'offline') {
+          emaManager.setOffline()
+          await prisma.deviceLog.create({
+            data: {
+              device: 'Weather_Station_ZONA_A',
+              status: 'OFFLINE',
+              notes:
+                message === 'lwt_disconnect'
+                  ? 'Estación EMA: Desconexión inesperada.'
+                  : 'Estación EMA: Desconexión limpia.',
+            },
+          })
+        }
+
+        return
+      }
+
       // 2. Acuse de Recibo (ACK)
-      if (topic === 'PristinoPlant/Actuator_Controller/cmd/received') {
+      if (
+        topic === 'PristinoPlant/Actuator_Controller/cmd/received' ||
+        topic === 'PristinoPlant/Weather_Station/ZONA_A/cmd/received'
+      ) {
         try {
           const parsed = JSON.parse(message)
           const taskId = parsed.task_id
+          const isActuator = topic.includes('Actuator')
+          const nodeName = isActuator ? 'Nodo Actuador' : 'Estación EMA'
 
           if (taskId) {
             const task = await recordTaskEvent(
               taskId,
               TaskStatus.ACKNOWLEDGED,
-              'Nodo Actuador: Comandos recibidos.',
+              `${nodeName}: Comandos recibidos.`,
             )
 
-            const confirmation = irrigationRetryManager.confirmByTaskId(taskId)
+            let confirmation = null
 
-            systemRetryManager.confirm(taskId)
+            if (isActuator) {
+              confirmation = irrigationRetryManager.confirmByTaskId(taskId)
+              systemRetryManager.confirm(taskId)
+            } else {
+              confirmation = emaManager.confirm(taskId)
+            }
 
             if (task) {
               const durationSec = task.duration * 60
@@ -196,17 +249,25 @@ function setupMqttHandlers() {
                 attemptInfo = `[ Attempt ${confirmation.attempts}/${confirmation.sessionTotalAttempts} ] `
               }
 
-              Logger.success(
-                `${attemptInfo}[ DONE ] Despacho de Tarea Log ${task.id.slice(0, 8)} con ${durationSec}s.`,
+              Logger.task(
+                `${attemptInfo}Despacho confirmado — Task ${task.id.slice(0, 8)} | ${durationSec}s.`,
               )
             }
           } else {
-            irrigationRetryManager.confirmByTaskId(message)
-            systemRetryManager.confirm(message)
+            if (isActuator) {
+              irrigationRetryManager.confirmByTaskId(message)
+              systemRetryManager.confirm(message)
+            } else {
+              emaManager.confirm(message)
+            }
           }
         } catch {
-          irrigationRetryManager.confirmByTaskId(message)
-          systemRetryManager.confirm(message)
+          if (topic.includes('Actuator')) {
+            irrigationRetryManager.confirmByTaskId(message)
+            systemRetryManager.confirm(message)
+          } else {
+            emaManager.confirm(message)
+          }
         }
 
         return
@@ -234,7 +295,13 @@ function setupMqttHandlers() {
           } else if (state === 'OFF' && taskId) {
             const currentTask = await prisma.taskLog.findUnique({
               where: { id: taskId },
-              select: { status: true, actualStartAt: true, duration: true, purpose: true },
+              select: {
+                status: true,
+                actualStartAt: true,
+                duration: true,
+                purpose: true,
+                notes: true,
+              },
             })
 
             let completedMinutes = currentTask?.duration || 0
@@ -245,15 +312,19 @@ function setupMqttHandlers() {
               completedMinutes = Math.floor(elapsedMs / 60000)
             }
 
-            const finished = await recordTaskEvent(
-              taskId,
-              TaskStatus.COMPLETED,
-              'Circuito de Riego cerrado correctamente.',
-              { completedMinutes: { set: completedMinutes } },
-            )
+            const isAtomicCancel = currentTask?.notes?.includes('[ATOMIC_CANCEL]')
+            const nextStatus = isAtomicCancel ? TaskStatus.CANCELLED : TaskStatus.COMPLETED
+            const finalNotes = isAtomicCancel
+              ? currentTask?.notes?.replace('[ATOMIC_CANCEL] ', '') ||
+                'Cancelación confirmada por el nodo.'
+              : 'Circuito de Riego cerrado correctamente.'
+
+            const finished = await recordTaskEvent(taskId, nextStatus, finalNotes, {
+              completedMinutes: { set: completedMinutes },
+            })
 
             if (finished) {
-              Logger.success(
+              Logger.task(
                 `${currentTask?.purpose || 'Tarea'} ${taskId.slice(0, 8)} FINALIZADA (${completedMinutes} min)`,
               )
             }
@@ -263,23 +334,58 @@ function setupMqttHandlers() {
         return
       }
 
-      // 4. Detección de Lluvia
+      // 4. Detección y Persistencia de Lluvia
       if (topic === 'PristinoPlant/Weather_Station/Exterior/rain/state') {
         let state = message
+        let rainTimestamp: Date = new Date()
 
         if (message.startsWith('{')) {
           try {
-            state = JSON.parse(message).state || message
+            const parsed = JSON.parse(message)
+
+            state = parsed.state || message
+            if (parsed.timestamp) rainTimestamp = new Date(parsed.timestamp * 1000)
           } catch {
             /* ignore */
           }
         }
 
-        if (state === 'Raining' && lastRainState !== 'Raining') {
-          Logger.warn('🌧️ [WeatherGuard] Lluvia detectada por sensores en tiempo real.')
-        }
-        lastRainState = state
         lastFirmwareHeartbeat = Date.now()
+
+        if (state === 'Raining') {
+          if (lastRainState !== 'Raining') {
+            Logger.rain('Lluvia detectada por sensores en tiempo real.')
+          }
+          lastRainState = 'Raining'
+
+          // Abrir o reutilizar evento de lluvia en Postgres
+          if (!openRainEventId) {
+            try {
+              // Verificar si ya existe un evento abierto (por reinicio del Scheduler)
+              const existing = await prisma.rainEvent.findFirst({
+                where: { zone: 'EXTERIOR', endedAt: null },
+                orderBy: { startedAt: 'desc' },
+              })
+
+              if (existing) {
+                openRainEventId = existing.id
+                Logger.rain(`Evento de lluvia reanudado (ID: ${existing.id.slice(0, 8)})`)
+              } else {
+                const newEvent = await prisma.rainEvent.create({
+                  data: { startedAt: rainTimestamp, zone: 'EXTERIOR' },
+                })
+
+                openRainEventId = newEvent.id
+                Logger.rain(`Evento de lluvia abierto (ID: ${newEvent.id.slice(0, 8)})`)
+              }
+            } catch (err) {
+              Logger.error('Error abriendo RainEvent en Postgres:', err)
+            }
+          }
+        } else if (state === 'Dry') {
+          lastRainState = 'Dry'
+          await closeRainEvent('Dry', rainTimestamp)
+        }
 
         return
       }
@@ -290,34 +396,69 @@ function setupMqttHandlers() {
 }
 
 /**
+ * Cierra el evento de lluvia abierto en Postgres y calcula la duración.
+ * @param reason Motivo de cierre: "Dry", "ORPHAN_TIMEOUT", "REBOOT"
+ * @param endTime Timestamp de cierre (por defecto: ahora)
+ */
+async function closeRainEvent(reason: string, endTime: Date = new Date()) {
+  if (!openRainEventId) {
+    // Buscar en DB por si el Scheduler se reinició con un evento huérfano
+    const existing = await prisma.rainEvent
+      .findFirst({
+        where: { zone: 'EXTERIOR', endedAt: null },
+        orderBy: { startedAt: 'desc' },
+      })
+      .catch(() => null)
+
+    if (!existing) return
+    openRainEventId = existing.id
+  }
+
+  try {
+    const event = await prisma.rainEvent.findUnique({ where: { id: openRainEventId } })
+
+    if (!event || event.endedAt) {
+      openRainEventId = null
+
+      return
+    }
+
+    const durationSeconds = Math.round((endTime.getTime() - event.startedAt.getTime()) / 1000)
+
+    if (!openRainEventId) return
+
+    await prisma.rainEvent.update({
+      where: { id: openRainEventId },
+      data: { endedAt: endTime, durationSeconds, closedBy: reason },
+    })
+
+    Logger.rain(
+      `Evento de lluvia cerrado (${reason}) — Duración: ${Math.round(durationSeconds / 60)} min (ID: ${openRainEventId.slice(0, 8)})`,
+    )
+  } catch (err) {
+    Logger.error('Error cerrando RainEvent en Postgres:', err)
+  } finally {
+    openRainEventId = null
+  }
+}
+
+/**
  * Verifica si un evento de lluvia ha quedado huérfano (firmware desconectado).
  * Si han pasado más de 10 minutos sin señales del firmware durante un evento Raining,
  * se da el evento por terminado.
  */
-function checkRainOrphanTimeout() {
+async function checkRainOrphanTimeout() {
   if (lastRainState !== 'Raining') return
 
   const elapsed = Date.now() - lastFirmwareHeartbeat
 
   if (elapsed > RAIN_ORPHAN_TIMEOUT_MS) {
-    Logger.warn(
-      `🌧️ [WeatherGuard] Evento de lluvia huérfano detectado. Sin señales del firmware en ${Math.round(elapsed / 60000)}min. Dando por terminado.`,
+    Logger.rain(
+      `Evento huérfano detectado. Sin señales del firmware en ${Math.round(elapsed / 60000)}min. Dando por terminado.`,
     )
     lastRainState = 'Dry'
-  }
-}
-
-/**
- * Verifica si el nodo actuador ha dejado de enviar señales de vida (online).
- * Timeout: 90 segundos.
- */
-function checkActuatorTimeout() {
-  if (irrigationRetryManager.lastActuatorState === 'offline') return
-
-  const elapsed = Date.now() - lastActuatorHeartbeat
-
-  if (elapsed > 90_000) {
-    handleNodeOffline(`Inactividad detectada (Timeout 90s sin mensajes 'online').`, 'SCHEDULER')
+    // Cerrar el evento en Postgres con el motivo ORPHAN_TIMEOUT
+    await closeRainEvent('ORPHAN_TIMEOUT')
   }
 }
 
@@ -325,9 +466,10 @@ function checkActuatorTimeout() {
  * Gestiona la desconexión del nodo y la limpieza de tareas interrumpidas.
  */
 async function handleNodeOffline(reason: string, origin: 'BROKER' | 'NODE' | 'SCHEDULER') {
-  if (irrigationRetryManager.lastActuatorState === 'offline') return
+  if (irrigationRetryManager.connectionState === 'offline') return
 
   irrigationRetryManager.setOffline()
+  systemRetryManager.setOffline()
   Logger.node('OFFLINE', origin)
   resetSamplingState()
 
@@ -355,17 +497,18 @@ async function handleNodeOffline(reason: string, origin: 'BROKER' | 'NODE' | 'SC
     irrigationRetryManager.confirmByTaskId(task.id)
     systemRetryManager.confirm(task.id)
 
-    // Todas las tareas interrumpidas (DISPATCHED, ACKNOWLEDGED, IN_PROGRESS)
-    // vuelven a FAILED para ser reanudadas automáticamente tras la reconexión.
-    let extraNotes = 'Interrumpida: El Nodo Actuador perdió conexión inesperadamente.'
+    let extraNotes: string
     let addedMinutes = 0
 
-    // Si ya estaba en progreso, calculamos cuánto tiempo se ejecutó para registro
     if (task.actualStartAt && task.status === TaskStatus.IN_PROGRESS) {
+      // Tarea que ya inició: calculamos tiempo ejecutado
       const elapsedMs = Date.now() - new Date(task.actualStartAt).getTime()
 
       addedMinutes = Math.floor(elapsedMs / 60000)
       extraNotes = `Interrumpida tras ${addedMinutes} min de riego efectivo.`
+    } else {
+      // Tarea que nunca llegó a ejecutarse (DISPATCHED o ACKNOWLEDGED sin inicio)
+      extraNotes = 'El Nodo Actuador No Responde.'
     }
 
     await recordTaskEvent(task.id, TaskStatus.FAILED, extraNotes, {
@@ -412,9 +555,10 @@ async function handleNodeSync(isBoot: boolean = false) {
     // Calculamos el tiempo desde el último latido físico en vez del lastSync
     const timeSinceLastHeartbeat = now - lastFirmwareHeartbeat
 
-    // Si ha pasado más de 30 minutos desde el último heartbeat exitoso,
-    // asumimos que el dispositivo estuvo apagado intencionalmente y es una nueva sesión.
-    if (timeSinceLastHeartbeat > 30 * 60 * 1000) {
+    // Si ha pasado más de 15 minutos desde el último heartbeat exitoso,
+    // asumimos que el dispositivo estuvo apagado (o en ciclo de reconexión fallida)
+    // y es una sesión nueva — se registra como ONLINE, no como REBOOT.
+    if (timeSinceLastHeartbeat > 15 * 60 * 1000) {
       notes = 'Controlador Conectado (Sesión nueva tras inactividad prolongada).'
       statusToSave = 'ONLINE'
     } else {
@@ -434,7 +578,7 @@ async function handleNodeSync(isBoot: boolean = false) {
 
   // Registro en la base de datos para el Timeline/Widget
   // Solo registramos si realmente el estado cambió o es un REBOOT explícito
-  if (irrigationRetryManager.lastActuatorState !== 'online' || statusToSave === 'REBOOT') {
+  if (irrigationRetryManager.connectionState !== 'online' || statusToSave === 'REBOOT') {
     await prisma.deviceLog
       .create({
         data: {
@@ -461,19 +605,17 @@ async function handleNodeSync(isBoot: boolean = false) {
       irrigationRetryManager.confirmByTaskId(task.id)
       systemRetryManager.confirm(task.id)
 
-      let extraNotes = 'Interrumpida: El Nodo Actuador se reinició inesperadamente.'
+      let extraNotes: string
       let addedMinutes = 0
 
       if (task.actualStartAt && task.status === TaskStatus.IN_PROGRESS) {
         const elapsedMs = Date.now() - new Date(task.actualStartAt).getTime()
 
         addedMinutes = Math.floor(elapsedMs / 60000)
-      }
-
-      if (task.status === TaskStatus.ACKNOWLEDGED || task.status === TaskStatus.IN_PROGRESS) {
-        extraNotes = 'Interrumpida: Nodo Actuador se reinició. Esperando recuperación automática.'
+        extraNotes = `Interrumpida tras ${addedMinutes} min de riego efectivo.`
       } else {
-        extraNotes = `Interrumpida tras ${addedMinutes} min de riego efectivo por reinicio.`
+        // Tarea que nunca llegó a ejecutarse (DISPATCHED o ACKNOWLEDGED sin inicio)
+        extraNotes = 'El Nodo Actuador No Responde.'
       }
 
       await recordTaskEvent(task.id, TaskStatus.FAILED, extraNotes, {
@@ -505,7 +647,6 @@ async function initScheduler() {
 
   // Verificación periódica de inactividad de nodos y eventos (cada 15s)
   setInterval(checkRainOrphanTimeout, 60_000)
-  setInterval(checkActuatorTimeout, 15_000)
 
   // Cron de limpieza de tareas expiradas (Ventana de 20 min / 24h agroquímicos)
   new Cron('*/5 * * * *', { timezone: 'America/Caracas' }, async () => {
@@ -530,18 +671,10 @@ async function initScheduler() {
 
   // Cron para sincronizar muestreo de iluminancia (Amanecer 4:59am / Anochecer 7:01pm)
   new Cron('59 4 * * *', { timezone: 'America/Caracas' }, () => {
-    if (irrigationRetryManager.lastActuatorState === 'online') {
-      syncNodeSampling('on')
-    } else {
-      Logger.warn('Sampling sync postponed: Actuator Node is OFFLINE.')
-    }
+    syncNodeSampling('on')
   })
   new Cron('1 19 * * *', { timezone: 'America/Caracas' }, () => {
-    if (irrigationRetryManager.lastActuatorState === 'online') {
-      syncNodeSampling('off')
-    } else {
-      Logger.warn('Sampling sync postponed: Actuator Node is OFFLINE.')
-    }
+    syncNodeSampling('off')
   })
 
   // Cron de Mantenimiento de Filtros (Lunes y Jueves 8:00 AM)
@@ -555,7 +688,7 @@ async function initScheduler() {
           priority: 'NORMAL',
         },
       })
-      Logger.info('🔔 Notificación de mantenimiento de filtros generada.')
+      Logger.cron('Notificación de mantenimiento de filtros generada.')
     } catch (error) {
       Logger.error('Error generando notificación de mantenimiento:', error)
     }
@@ -564,7 +697,7 @@ async function initScheduler() {
   // Cron de cierre oficial diario (Media noche 12:01 AM)
   new Cron('1 0 * * *', { timezone: 'America/Caracas' }, async () => {
     try {
-      Logger.info('Procesando Telemetría de las Estaciones Meteorológicas.')
+      Logger.telemetry('Procesando Telemetría de las Estaciones Meteorológicas.')
       const yesterday = new Date()
 
       yesterday.setDate(yesterday.getDate() - 1)
@@ -572,20 +705,20 @@ async function initScheduler() {
 
       await processDay(ZoneType.EXTERIOR, yesterday)
       await processDay(ZoneType.ZONA_A, yesterday)
-      Logger.success('Cierre diario de ayer completado.')
+      Logger.telemetry('Cierre diario completado.')
     } catch (error) {
       Logger.error('Error en cierre diario:', error)
     }
   })
 
-  Logger.info('Cargando Rutinas desde la base de datos')
+  Logger.cron('Cargando Rutinas desde la base de datos.')
 
   const schedules = await prisma.automationSchedule.findMany({
     where: { isEnabled: true },
   })
 
   schedules.forEach((schedule) => {
-    Logger.info(`Programando: "${schedule.name}" ➜ [${schedule.cronTrigger}]`)
+    Logger.cron(`Programando: "${schedule.name}" ➜ [${schedule.cronTrigger}]`)
     new Cron(schedule.cronTrigger, { timezone: 'America/Caracas' }, () => {
       runTask(schedule.id)
     })
@@ -593,7 +726,7 @@ async function initScheduler() {
 }
 
 async function runTask(scheduleId: string) {
-  Logger.info(`⏰ Ejecutando Rutina Programada (ID: ${scheduleId.slice(0, 8)})`)
+  Logger.cron(`Ejecutando Rutina Programada (ID: ${scheduleId.slice(0, 8)})`)
 
   try {
     const schedule = await prisma.automationSchedule.findUnique({
@@ -602,8 +735,8 @@ async function runTask(scheduleId: string) {
 
     if (!schedule || !schedule.isEnabled) return
 
-    if (irrigationRetryManager.lastActuatorState !== 'online') {
-      Logger.warn(`⏭️ Rutina POSTERGADA: ${schedule.name}. Motivo: Nodo Actuador OFFLINE.`)
+    if (irrigationRetryManager.connectionState !== 'online') {
+      Logger.cron(`Rutina POSTERGADA: ${schedule.name}. Motivo: Nodo Actuador OFFLINE.`)
 
       await prisma.taskLog.create({
         data: {
@@ -644,15 +777,15 @@ async function runTask(scheduleId: string) {
 
     if (existingTask) {
       if (existingTask.status === TaskStatus.CANCELLED) {
-        Logger.info(
-          `[ IDEMPOTENCIA ] La ejecución de "${schedule.name}" fue cancelada previamente. Respetando decisión del usuario.`,
+        Logger.cron(
+          `"${schedule.name}" fue cancelada previamente por el usuario. Respetando decisión.`,
         )
 
         return
       }
 
       if (schedule.purpose !== 'FERTIGATION' && schedule.purpose !== 'FUMIGATION') {
-        Logger.info(`[ IDEMPOTENCIA ] Ya existe una ejecución para "${schedule.name}". Saltando.`)
+        Logger.cron(`Ya existe una ejecución para "${schedule.name}". Saltando.`)
 
         return
       }
@@ -699,16 +832,14 @@ async function runTask(scheduleId: string) {
           },
         })
 
-        Logger.info(
-          `[ AGRO ] Pre-agendada rutina "${schedule.name}" para el ${nextOccurrence.toLocaleString('es-VE')}`,
+        Logger.agro(
+          `Pre-agendada rutina "${schedule.name}" para el ${nextOccurrence.toLocaleString('es-VE')}`,
         )
       }
 
       // Si está en WAITING_CONFIRMATION, NO se ejecuta. Se queda esperando 24h.
       if (taskLog && taskLog.status === TaskStatus.WAITING_CONFIRMATION) {
-        Logger.info(
-          `[ AGRO ] Tarea ${taskLog.id.slice(0, 8)} (${schedule.name}) en espera de confirmación.`,
-        )
+        Logger.agro(`Tarea ${taskLog.id.slice(0, 8)} (${schedule.name}) en espera de confirmación.`)
 
         return
       }
@@ -716,7 +847,7 @@ async function runTask(scheduleId: string) {
       // Si ya está AUTHORIZED (por confirmación manual anticipada), procesar con Veto ambiental
       if (taskLog && taskLog.status === TaskStatus.AUTHORIZED) {
         if (inference.shouldCancel) {
-          Logger.warn(`[ AGRO ] VETO AMBIENTAL aplicado a tarea autorizada: ${inference.reason}`)
+          Logger.agro(`VETO AMBIENTAL aplicado a tarea autorizada: ${inference.reason}`)
           await recordTaskEvent(taskLog.id, TaskStatus.CANCELLED, inference.reason)
 
           return
@@ -731,7 +862,7 @@ async function runTask(scheduleId: string) {
 
     // Lógica estándar para otras tareas (IRRIGATION, etc.)
     if (inference.shouldCancel) {
-      Logger.warn(`❌ Rutina CANCELADA: ${schedule.name}. Motivo: ${inference.reason}`)
+      Logger.inference(`Rutina CANCELADA: ${schedule.name}. Motivo: ${inference.reason}`)
 
       if (inference.reason && !inference.reason.includes('Cancelación manual')) {
         await prisma.taskLog.create({
@@ -744,6 +875,12 @@ async function runTask(scheduleId: string) {
             scheduledAt: new Date(),
             duration: schedule.durationMinutes,
             notes: inference.reason,
+            events: {
+              create: {
+                status: TaskStatus.CANCELLED,
+                notes: `Cancelado por el motor de inferencia: ${inference.reason}`,
+              },
+            },
           },
         })
       }

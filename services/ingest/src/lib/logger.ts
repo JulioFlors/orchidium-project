@@ -26,7 +26,7 @@ const getLogTime = () => {
 
 const formatLog = (icon: string, tag: string, color: string, msg: string) => {
   const time = getLogTime()
-  const paddedTag = tag.padEnd(4).substring(0, 4).toUpperCase()
+  const paddedTag = tag.padEnd(6).substring(0, 6).toUpperCase()
 
   return `${colors.white}[ ${time} ]${colors.reset} ${color}${icon} [ ${paddedTag} ]${colors.reset} ${colors.white}${msg}${colors.reset}`
 }
@@ -42,7 +42,7 @@ export const Logger = {
     console.warn(formatLog('⚠️', 'WARN', colors.yellow, msg))
   },
   error: (msg: string, err?: unknown) => {
-    console.error(formatLog('❌', 'ERRO', colors.red, msg))
+    console.error(formatLog('❌', 'ERROR', colors.red, msg))
     if (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError) {
         console.error(`${colors.red}      ╰─> [PRISMA ${err.code}] ${err.message}${colors.reset}`)
@@ -55,15 +55,32 @@ export const Logger = {
   },
   debug: (msg: string) => {
     if (process.env.NODE_ENV !== 'production') {
-      console.log(formatLog('🔎', 'DBUG', colors.cyan, msg))
+      console.log(formatLog('🔎', 'DEBUG', colors.cyan, msg))
     }
   },
   mqtt: (msg: string) => {
     console.log(formatLog('📡', 'MQTT', colors.blue, msg))
   },
+  /**
+   * Métrica ambiental (temp, hum, lux, rain_intensity)
+   */
+  metric: (msg: string) => {
+    console.log(formatLog('📈', 'METRIC', colors.cyan, msg))
+  },
+  /**
+   * Evento de lluvia (finalización del evento: duración + intensidad)
+   */
+  rain: (msg: string) => {
+    console.log(formatLog('🌧️', 'RAIN', colors.blue, msg))
+  },
+  /**
+   * Cambio de estado: Device_Status, Rain_State
+   */
+  state: (msg: string) => {
+    console.log(formatLog('⚙️', 'STATUS', colors.magenta, msg))
+  },
+  /** @deprecated Usar metric / rain / state según el tipo de dato. */
   influx: (msg: string) => {
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(formatLog('💾', 'INFL', colors.green, msg))
-    }
+    console.log(formatLog('💾', 'INFLUX', colors.green, msg))
   },
 }

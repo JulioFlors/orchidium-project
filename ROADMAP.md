@@ -137,3 +137,6 @@ Interfaz para crear/editar/eliminar rutinas de automatización (`AutomationSched
 - **Resiliencia de Hardware:** ESP32 capaz de reconciliar estado al arrancar y Scheduler con lógica de cierre por timeout (Orfandad).
 - **Ciclo de Vida de Tareas:** Protocolo de seguridad v5 para agroquímicos con persistencia en cola y confirmación manual. Eliminación del estado SKIPPED para simplificar trazabilidad.
 - **Auditoría de Usuario:** Trazabilidad de firmas de administradores en todas las operaciones manuales.
+- **Estabilización UI/UX (Mayo 2026):** Resolución de discrepancias en auditorías de sensores, sincronización de estados de circuitos de riego y flujo de cancelación atómico (ACK físico).
+
+---

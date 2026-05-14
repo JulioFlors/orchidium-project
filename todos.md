@@ -191,6 +191,21 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
   * [ ] Implementar **Sombreado Contextual** (Fondo gris/azulado) durante las horas del Valle Nocturno y Transición Vespertina.
 * [ ] **Macro-Visión (Vista 7-30 días):** Desarrollar Gráficos de Bandas de Rango (Range Area) o Velas (Candlestick) mostrando Máximos, Mínimos y Promedios diarios.
 
+### 🐞 Bugs Críticos & Refinamiento UI (Mayo 2026)
+
+* [ ] **Fallo en Auditorías Temp/Hum (Frontend):** Las auditorías se envían correctamente desde el ESP32 pero no se visualizan o procesan en el frontend.
+* [ ] **Sincronización de Estados en Widgets:**
+  * [ ] Corregir publicación de estados vencidos (ej. cancelar iluminancia) al abrir/cerrar widgets desde las CARDS.
+  * [ ] Eliminar estado "fantasma" de `esperando datos` en widgets de Temp/Hum si no han sido inicializados.
+* [ ] **Persistencia de Muestras en Widgets:** Asegurar que las auditorías (Iluminancia, Lluvia, RAM) persistan todas las muestras con su marca de tiempo para graficar el historial completo al cerrar/abrir el widget, no solo la última lectura.
+* [ ] **Sincronización de Ruta `/control`:**
+  * [ ] Sincronizar Cards con el estado real de los circuitos de riego (actualmente desfasados).
+  * [ ] Resolver colisión hidráulica: Las cards deben reflejar si una tarea ya se está ejecutando para permitir su cancelación manual.
+* [ ] **Flujo de Cancelación Físico/Lógico:**
+  * [ ] Garantizar que el evento de cancelación espere el ACK del nodo sobre el cierre del circuito antes de marcar la tarea como `Cancelada`.
+  * [ ] Asegurar despacho del comando de cierre físico al cancelar desde la cola.
+* [ ] **Fix Estético Z-Index:** Ajustar `StatusCircleIcon.tsx` para que el icono no levite por encima del header (z-index issue).
+
 ---
 
 ## 📲 SISTEMA DE NOTIFICACIONES E INTERACCIONES (Transversal)

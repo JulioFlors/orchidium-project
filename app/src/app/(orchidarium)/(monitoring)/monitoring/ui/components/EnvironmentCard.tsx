@@ -22,6 +22,7 @@ export interface EnvironmentCardProps {
   isLoading?: boolean
   hasData?: boolean
   statusLabel?: string
+  timestamp?: string
 }
 
 export function EnvironmentCard({
@@ -38,6 +39,7 @@ export function EnvironmentCard({
   isLoading = false,
   hasData = true,
   statusLabel,
+  timestamp,
   onClick,
   trend: _trend,
 }: EnvironmentCardProps) {
@@ -169,13 +171,12 @@ export function EnvironmentCard({
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3.5">
             <StatusCircleIcon
-              glow
               active={isActive}
               className={clsx(selectedColor.text)}
               glowVariant={selectedColor.glowVariant}
               icon={icon}
               size="md"
-              variant="surface"
+              variant="glow"
             />
             <div className="flex min-w-0 flex-col gap-0.5">
               <h3
@@ -196,23 +197,32 @@ export function EnvironmentCard({
             {isLoading ? (
               <div className="bg-primary/10 h-5 w-16 animate-pulse rounded-full" />
             ) : (
-              <>
-                {(statusLabel || status !== 'optimal') && !isOffline && hasData && (
-                  <div
-                    className={clsx(
-                      'border-input-outline bg-surface rounded-full border px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase shadow-sm',
-                      statusColors[status],
-                    )}
-                  >
-                    {statusLabel || (status === 'warning' ? 'Revisar' : 'Crítico')}
-                  </div>
-                )}
-                {isOffline && (
+              <div className="flex items-center gap-2">
+                {isOffline ? (
                   <div className="border-input-outline bg-surface text-secondary rounded-full border px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase shadow-sm">
                     Offline
                   </div>
+                ) : !hasData ? (
+                  <div className="border-input-outline bg-surface text-secondary rounded-full border px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase shadow-sm">
+                    Sin Datos
+                  </div>
+                ) : description === 'Muestreo suspendido' || description === 'Muestreo detenido' ? (
+                  <div className="border-input-outline bg-surface text-secondary rounded-full border px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase shadow-sm">
+                    Suspendido
+                  </div>
+                ) : (
+                  (timestamp || statusLabel) && (
+                    <div
+                      className={clsx(
+                        'border-input-outline bg-surface rounded-full border px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase shadow-sm',
+                        statusLabel ? statusColors[status] : 'text-primary',
+                      )}
+                    >
+                      {statusLabel || timestamp}
+                    </div>
+                  )
                 )}
-              </>
+              </div>
             )}
           </div>
         </div>

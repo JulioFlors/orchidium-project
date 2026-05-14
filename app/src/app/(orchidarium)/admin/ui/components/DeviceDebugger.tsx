@@ -21,7 +21,6 @@ interface DeviceConfig {
   name: string
   description: string
   baseTopic: string
-  hasMaskNvs?: boolean
   isService?: boolean
   heartbeatTimeoutMs?: number
   hasDiagnostics?: boolean
@@ -37,11 +36,10 @@ const DEVICES: DeviceConfig[] = [
     hasDiagnostics: true,
   },
   {
-    id: 'Weather_Station',
+    id: 'Weather_Station_ZONA_A',
     name: 'Estación Meteorológica',
     description: `Estación Meteorológica ${ZoneTypeLabels[ZoneType.ZONA_A]}`,
-    baseTopic: `PristinoPlant/Weather_Station/Zona_A`,
-    hasMaskNvs: false,
+    baseTopic: `PristinoPlant/Weather_Station/ZONA_A`,
     heartbeatTimeoutMs: 60000,
     hasDiagnostics: true,
   },
@@ -92,7 +90,7 @@ export function DeviceDebugger() {
 
   useEffect(() => {
     const fetchLogs = async () => {
-      const res = await getConnectivityLogs(15)
+      const res = await getConnectivityLogs(15, selectedDeviceId)
 
       if (res.ok && res.logs) setConnectivityLogs(res.logs)
     }
@@ -101,7 +99,7 @@ export function DeviceDebugger() {
     const interval = setInterval(fetchLogs, 45000)
 
     return () => clearInterval(interval)
-  }, [])
+  }, [selectedDeviceId])
 
   const hardwarePresence = useMemo(() => {
     const msg = messages[auditStateTopic]
@@ -180,18 +178,6 @@ export function DeviceDebugger() {
         return
       }
 
-      if (auditKey === 'nvs') {
-        const isCurrentlyActive = widgetOrder.includes('nvs')
-
-        if (!isCurrentlyActive) {
-          setWidgetOrder((prev) => [...prev, 'nvs'])
-        } else {
-          setWidgetOrder((prev) => prev.filter((k) => k !== 'nvs'))
-        }
-
-        return
-      }
-
       if (auditKey) {
         const isCurrentlyVisible = widgetOrder.includes(auditKey)
 
@@ -255,6 +241,7 @@ export function DeviceDebugger() {
             onZoneChanged={(id) => {
               setSelectedDeviceId(id)
               setWidgetOrder([])
+              setConnectivityLogs([])
             }}
           />
         }
@@ -336,7 +323,6 @@ export function DeviceDebugger() {
                           >
                             <div className="flex items-center gap-4">
                               <StatusCircleIcon
-                                glow
                                 glowVariant={
                                   item.status === 'ONLINE'
                                     ? 'green'
@@ -354,7 +340,7 @@ export function DeviceDebugger() {
                                   )
                                 }
                                 size="sm"
-                                variant="vibrant"
+                                variant="glow"
                               />
 
                               <div className="flex flex-col gap-0">
@@ -385,8 +371,16 @@ export function DeviceDebugger() {
 
               const unifiedPacket = messages[unifiedAuditTopic]?.payload as Record<string, unknown>
 
-              // Los datos provienen directamente del stream MQTT (Audit Unified Ticker)
-              const payload = unifiedPacket ? unifiedPacket[auditId] : null
+              // Mapeo de nombres cortos a largos para extraer datos del paquete unificado
+              const auditMapping: Record<string, string> = {
+                temp: 'temperature',
+                hum: 'humidity',
+                lux: 'illuminance',
+                rain: 'rain_intensity',
+              }
+
+              const targetKey = auditMapping[auditId] || auditId
+              const payload = unifiedPacket ? (unifiedPacket[targetKey] ?? null) : null
 
               return (
                 <div

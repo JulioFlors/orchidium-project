@@ -66,7 +66,7 @@ export function AgrochemicalCard({ agrochemical, onEdit, onDelete }: Agrochemica
             className="tds-xs:flex hidden shrink-0"
             colorClassName={purposeStyle}
             icon={PURPOSE_ICONS[agrochemical.purpose]}
-            variant="vibrant"
+            variant="overlay"
           />
 
           <div className="flex flex-1 flex-col overflow-hidden text-left">

@@ -1,9 +1,9 @@
 {
   "name": "Relay Modules",
   "description": "Nodo Actuador + Meteorológica Exterior",
-  "version": "0.12.1",
-  "date": "07-05-2026",
-  "notes_release": "[♻️ Data Refactor]: Finalizada la migración total de terminología 'history' a 'data' en el pipeline de telemetría. Estandarización de variables internas y claves JSON para compatibilidad total con el Ingest.",
+  "version": "0.12.2",
+  "date": "08-05-2026",
+  "notes_release": "[✨ NTP Sync]: Restaurada sincronización NTP en boot.py para asegurar timestamps correctos sin depender de la librería OTA.",
   "files": [
     "app.mpy",
     "boot.py",

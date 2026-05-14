@@ -79,7 +79,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
             scheduledAt: nextScheduledAt,
             executedAt: nextScheduledAt,
             scheduleId: schedule.id,
-            notes: `Rutina cancelada manualmente. Motivo: ${reason}`,
+            notes: `Rutina cancelada por ${userName}.\nMotivo: ${reason}`,
           },
         })
 
@@ -88,7 +88,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
           data: {
             taskId: task.id,
             status: TaskStatus.CANCELLED,
-            notes: `Rutina cancelada por ${userName}. Motivo: ${reason}`,
+            notes: `Rutina cancelada por ${userName}.\nMotivo: ${reason}`,
             userId,
           },
         })
@@ -117,11 +117,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     const isActivelyRunning = activeStatuses.includes(task.status)
 
     const finalStatus = TaskStatus.CANCELLED
-    const finalReason =
-      reason ||
-      (isActivelyRunning
-        ? 'Tarea Cancelada durante su ejecución.'
-        : 'Tarea Cancelada antes de su ejecución.')
+    const finalReason = reason
+      ? `Tarea cancelada por ${userName}.\nMotivo: ${reason}`
+      : isActivelyRunning
+        ? `Tarea cancelada por ${userName} durante su ejecución.`
+        : `Tarea cancelada por ${userName} antes de su ejecución.`
 
     // 1. Si está activa, enviar OFF al hardware
     if (isActivelyRunning) {

@@ -10,6 +10,7 @@ const colors = {
   magenta: '\x1b[95m',
   cyan: '\x1b[96m',
   white: '\x1b[97m',
+  dim: '\x1b[90m',
 }
 
 const getLogTime = () => {
@@ -24,63 +25,124 @@ const getLogTime = () => {
   }).format(new Date())
 }
 
+/**
+ * Formatea una línea de log con icono, tag y mensaje coloreado.
+ * El tag se justifica a la derecha dentro de un ancho fijo para alinear
+ * el cuerpo del mensaje independientemente de la longitud del tag.
+ */
 const formatLog = (icon: string, tag: string, color: string, msg: string) => {
   const time = getLogTime()
-  const paddedTag = tag.padEnd(4).substring(0, 4).toUpperCase()
+  // Alineación: padding mínimo de 8 caracteres para el tag, sin truncar.
+  const paddedTag = tag.toUpperCase().padEnd(8)
 
-  return `${colors.white}[ ${time} ]${colors.reset} ${color}${icon} [ ${paddedTag} ]${colors.reset} ${colors.white}${msg}${colors.reset}`
+  return `${colors.white}[ ${time} ]${colors.reset} ${color}${icon} [ ${paddedTag}]${colors.reset} ${msg}`
 }
 
 export const Logger = {
+  // ---- Generales ----
+
+  /** Información general del sistema. */
   info: (msg: string) => console.log(formatLog('📡', 'INFO', colors.blue, msg)),
+
+  /** Operación completada exitosamente. */
   success: (msg: string) => console.log(formatLog('✅', 'DONE', colors.green, msg)),
+
+  /** Advertencia no crítica. */
   warn: (msg: string, err?: unknown) => {
     console.warn(formatLog('⚠️', 'WARN', colors.yellow, msg))
     if (err) {
-      console.error(
+      console.warn(
         `${colors.yellow}      ╰─> ${err instanceof Error ? err.message : String(err)}${colors.reset}`,
       )
     }
   },
+
+  /** Error con detalle opcional de excepción. */
   error: (msg: string, err?: unknown) => {
-    console.error(formatLog('❌', 'ERRO', colors.red, msg))
+    console.error(formatLog('❌', 'ERROR', colors.red, msg))
     if (err) {
-      let tag = 'ERRO'
-      let message = String(err)
+      let prefix = 'ERR'
+      let detail = String(err)
 
       if (err instanceof Prisma.PrismaClientKnownRequestError) {
-        tag = 'DBAS'
-        message = `[${err.code}] ${err.message}`
+        prefix = `PRISMA ${err.code}`
+        detail = err.message
       } else if (err instanceof Prisma.PrismaClientValidationError) {
-        tag = 'DBAS'
-        message = '[VAL] ' + err.message
+        prefix = 'PRISMA VAL'
+        detail = err.message
       } else if (err instanceof Error) {
-        message = err.message
-        if (message.includes('InfluxDB') || message.includes('influxdb')) {
-          tag = 'INFX'
-        } else if (message.includes('MQTT') || message.includes('broker')) {
-          tag = 'MQTT'
-        }
+        detail = err.message
+        if (detail.includes('InfluxDB') || detail.includes('influxdb')) prefix = 'INFLUXDB'
+        else if (detail.includes('MQTT') || detail.includes('broker')) prefix = 'MQTT'
       }
 
-      console.error(`${colors.red}      ╰─> [ ${tag} ] ${message}${colors.reset}`)
+      console.error(`${colors.red}      ╰─> [ ${prefix} ] ${detail}${colors.reset}`)
     }
   },
+
+  /** Debug (solo en desarrollo). */
   debug: (msg: string) => {
     if (process.env.NODE_ENV !== 'production') {
-      console.log(formatLog('🔎', 'DBUG', colors.cyan, msg))
+      console.log(formatLog('🔎', 'DEBUG', colors.dim, msg))
     }
   },
-  mqtt: (msg: string) => console.log(formatLog('📡', 'MQTT', colors.magenta, msg)),
-  cron: (msg: string) => console.log(formatLog('⏰', 'CRON', colors.cyan, msg)),
-  node: (status: 'ONLINE' | 'OFFLINE' | 'REBOOT', origin?: string) => {
-    const isOnline = status === 'ONLINE'
-    const isReboot = status === 'REBOOT'
-    const color = isOnline ? colors.green : isReboot ? colors.blue : colors.red
-    const icon = isOnline ? '✅' : isReboot ? '🔄' : '❌'
-    const displayStatus = origin ? `${status} [${origin}]` : status
 
-    console.log(formatLog(icon, 'NODE', color, displayStatus))
+  // ---- Dominio: Conectividad del Nodo ----
+
+  /**
+   * Estado de conectividad del nodo actuador.
+   * @param status ONLINE | OFFLINE | REBOOT
+   * @param origin Fuente del cambio de estado (BROKER, NODE, SCHEDULER)
+   */
+  node: (status: 'ONLINE' | 'OFFLINE' | 'REBOOT', origin?: string) => {
+    const icon = status === 'ONLINE' ? '🟢' : status === 'REBOOT' ? '🔄' : '🔴'
+    const color =
+      status === 'ONLINE' ? colors.green : status === 'REBOOT' ? colors.blue : colors.red
+    const originStr = origin ? ` ${colors.dim}[${origin}]${colors.reset}` : ''
+
+    console.log(formatLog(icon, 'NODE', color, `${status}${originStr}`))
   },
-  oracle: (msg: string) => console.log(formatLog('🔮', 'ORCL', colors.blue, msg)),
+
+  // ---- Dominio: MQTT ----
+
+  /** Comando MQTT enviado o recibido. */
+  mqtt: (msg: string) => console.log(formatLog('📡', 'MQTT', colors.magenta, msg)),
+
+  /** ACK recibido del nodo. */
+  ack: (msg: string) => console.log(formatLog('📬', 'ACK', colors.green, msg)),
+
+  // ---- Dominio: Tareas y Circuitos ----
+
+  /** Ciclo de vida de una tarea (despacho, completado, falla). */
+  task: (msg: string) => console.log(formatLog('💧', 'TASK', colors.cyan, msg)),
+
+  // ---- Dominio: Rutinas y Crons ----
+
+  /** Ejecución y estado de crons programados. */
+  cron: (msg: string) => console.log(formatLog('⏰', 'SCHEDULE', colors.cyan, msg)),
+
+  // ---- Dominio: Motor de Inferencia ----
+
+  /** Decisiones del Motor de Inferencia Ambiental. */
+  inference: (msg: string) => console.log(formatLog('🔮', 'INFERENCE', colors.blue, msg)),
+
+  // ---- Dominio: Agroquímicos ----
+
+  /** Gestión del ciclo de vida de tareas de agroquímicos. */
+  agro: (msg: string) => console.log(formatLog('🧪', 'AGRO', colors.magenta, msg)),
+
+  // ---- Dominio: Lluvia / Clima ----
+
+  /** Eventos y guardias de lluvia. */
+  rain: (msg: string) => console.log(formatLog('🌧️', 'RAIN', colors.blue, msg)),
+
+  // ---- Dominio: Clasificador de Día ----
+
+  /** Clasificación del día (DIF, DLI, temporal de lluvia). */
+  dayClass: (msg: string) => console.log(formatLog('☀️', 'DAYCLASS', colors.yellow, msg)),
+
+  // ---- Dominio: Telemetría / Cierre Diario ----
+
+  /** Procesamiento de telemetría histórica (cierre diario). */
+  telemetry: (msg: string) => console.log(formatLog('📊', 'TELEMETRY', colors.cyan, msg)),
 }

@@ -256,13 +256,19 @@ export function EnvironmentDataChart({
 
   const gradientId = `color-${dataKey}`
 
+  const chartDataFiltered = useMemo(() => {
+    return data.filter((d) => d[dataKey] != null)
+  }, [data, dataKey])
+
   // Optimizamos el procesamiento de datos con useMemo para evitar lags en el renderizado
   const stats = useMemo(() => {
     // Detectar si tenemos datos estadísticos (Macro-Visión) en cualquier punto del dataset
-    const isMacroDetected = data.length > 0 && data.some((d) => d[`min_${dataKey}`] !== undefined)
+    const isMacroDetected =
+      chartDataFiltered.length > 0 &&
+      chartDataFiltered.some((d) => d[`min_${dataKey}`] !== undefined)
 
     // Filtrar datos nulos para la métrica activa antes de calcular estadísticas
-    const validPoints = data.filter((d) => d[dataKey] != null)
+    const validPoints = chartDataFiltered
     const count = validPoints.length
     let min = 0
     let max = 0
@@ -298,7 +304,7 @@ export function EnvironmentDataChart({
     }
 
     return { isMacro: isMacroDetected, count, min, max, avg }
-  }, [data, dataKey])
+  }, [dataKey, chartDataFiltered])
 
   const { isMacro, count, min, max, avg } = stats
 
@@ -365,7 +371,7 @@ export function EnvironmentDataChart({
       <div className="w-full">
         <ResponsiveContainer height={280} minHeight={0} minWidth={0} width="100%">
           {chartType === 'area' ? (
-            <AreaChart accessibilityLayer={false} data={data}>
+            <AreaChart accessibilityLayer={false} data={chartDataFiltered}>
               <defs>
                 <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
                   <stop offset="5%" stopColor={color} stopOpacity={0.25} />
@@ -438,7 +444,7 @@ export function EnvironmentDataChart({
               />
             </AreaChart>
           ) : (
-            <BarChart accessibilityLayer={false} data={data}>
+            <BarChart accessibilityLayer={false} data={chartDataFiltered}>
               <CartesianGrid
                 stroke="var(--color-input-outline)"
                 strokeDasharray="3 3"

@@ -105,12 +105,10 @@ const GLOW_MAP: Record<GlowVariant, GlowColors> = {
 
 interface StatusCircleIconProps {
   icon: React.ReactNode
-  variant?: 'canvas' | 'surface' | 'vibrant'
+  variant?: 'canvas' | 'surface' | 'overlay' | 'glow'
   colorClassName?: string
   className?: string
   size?: 'sm' | 'md' | 'lg'
-  /** Activa el fondo de color DENTRO del círculo, que se intensifica en group-hover */
-  glow?: boolean
   /** Variante de color para el glow basada en el mapeo estático */
   glowVariant?: GlowVariant
   /** Color hexadecimal arbitrario para el glow. Será normalizado si no es vibrante. */
@@ -133,7 +131,6 @@ export function StatusCircleIcon({
   colorClassName,
   className,
   size = 'md',
-  glow = false,
   glowVariant,
   glowColor,
   active = false,
@@ -142,17 +139,21 @@ export function StatusCircleIcon({
   // Determinar colores base: prioridad Variant > Hex
   let colors: GlowColors | null = null
 
-  if (glowVariant) {
-    colors = GLOW_MAP[glowVariant]
-  } else if (glowColor && glowColor.startsWith('#')) {
-    const { h, s, l } = hexToHsl(glowColor)
-    const normalized = normalizeHsl(h, s, l)
+  const isGlow = variant === 'glow'
 
-    colors = deriveGlowColors(normalized.h, normalized.s, normalized.l)
+  if (isGlow) {
+    if (glowVariant) {
+      colors = GLOW_MAP[glowVariant]
+    } else if (glowColor && glowColor.startsWith('#')) {
+      const { h, s, l } = hexToHsl(glowColor)
+      const normalized = normalizeHsl(h, s, l)
+
+      colors = deriveGlowColors(normalized.h, normalized.s, normalized.l)
+    }
   }
 
   const glowStyles: React.CSSProperties =
-    glow && colors
+    isGlow && colors
       ? ({
           '--_glow-rest': colors.bgRest,
           '--_glow-hover': colors.bgHover,
@@ -169,13 +170,17 @@ export function StatusCircleIcon({
         // Bases por variante
         variant === 'canvas' && 'bg-canvas border-input-outline',
         variant === 'surface' && 'bg-surface border-input-outline',
+        variant === 'overlay' && 'bg-hover-overlay border-transparent',
 
-        // Lógica para Vibrant/Glow (Acrílico)
-        (glow || variant === 'vibrant') && 'bg-surface border-(--_glow-border-rest)',
-        (glow || variant === 'vibrant') && 'bg-linear-to-br from-(--_glow-rest) to-transparent',
+        // Lógica para Glow (Acrílico)
+        isGlow &&
+          'bg-surface border-(--_glow-border-rest) bg-linear-to-br from-(--_glow-rest) to-transparent',
+
+        // Aplicar estado "encendido" (hover appearance) si active es true
+        isGlow && active && 'border-(--_glow-border-hover) from-(--_glow-hover) to-(--_glow-rest)',
 
         // Hover adaptativo (Intensificación)
-        (glow || variant === 'vibrant') &&
+        isGlow &&
           'group-hover:border-(--_glow-border-hover) group-hover:from-(--_glow-hover) group-hover:to-(--_glow-rest)',
 
         colorClassName,
@@ -185,9 +190,10 @@ export function StatusCircleIcon({
     >
       <div
         className={cn(
-          'relative z-10 transition-colors duration-300',
-          (glow || variant === 'vibrant') &&
-            'group-hover:text-black-and-white text-(--_glow-border-hover)',
+          'relative z-9 transition-colors duration-300',
+          isGlow && (active || 'group-hover:text-black-and-white'),
+          isGlow && !active && 'text-(--_glow-border-hover)',
+          isGlow && active && 'text-black-and-white',
         )}
       >
         {icon}

@@ -114,7 +114,7 @@ export function TaskTimelineModal({
                     {formatTime12h(event.timestamp, true)}
                   </span>
                 </div>
-                <p className="text-secondary text-xs leading-relaxed">
+                <p className="text-secondary text-xs leading-relaxed whitespace-pre-wrap">
                   {event.notes || 'Cambio de estado automático.'}
                 </p>
               </div>

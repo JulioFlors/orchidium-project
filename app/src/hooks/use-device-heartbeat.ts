@@ -41,13 +41,21 @@ export const useDeviceHeartbeat = (
   const currentHeartbeat = statusData?.receivedAt || initialHeartbeat
   const rawStatus = statusData ? String(statusData.payload).trim() : initialStatus.trim()
 
+  // Normalizar los posibles payloads de desconexión a un estado unificado
+  // 'lwt_disconnect' = broker detectó fallo de red (LWT automático)
+  // 'offline'        = firmware publicó antes de desconectarse limpiamente
+  // Ambos son semánticamente equivalentes para el frontend
+  const normalizedStatus =
+    rawStatus === 'lwt_disconnect' || rawStatus === 'offline' ? 'offline' : rawStatus
+
   // Lógica de Estado Efectivo:
   // Si el mensaje es 'online' (o viene del servidor), verificamos su frescura
   const lastKnownHeartbeat = currentHeartbeat
   const isCacheFresh =
     lastKnownHeartbeat && now > 0 ? now - lastKnownHeartbeat < OFFLINE_THRESHOLD_MS : true
 
-  const effectiveStatus = rawStatus === 'online' && !isCacheFresh ? 'unknown' : rawStatus
+  const effectiveStatus =
+    normalizedStatus === 'online' && !isCacheFresh ? 'unknown' : normalizedStatus
 
   // Cálculo de Zombie y Dead
   const lastHeartbeat = lastKnownHeartbeat

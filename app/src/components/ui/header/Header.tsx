@@ -168,7 +168,7 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
 
               <Link
                 className={clsx(
-                  'focus-link tds-xs:text-sm tds-xs:left-5 sr-only top-2 left-2 text-center text-[9px] focus:not-sr-only focus:absolute focus:z-20 focus:p-2',
+                  'focus-link tds-xs:text-sm tds-xs:left-5 sr-only top-2 left-2 text-center text-[9px] focus:not-sr-only focus:absolute focus:z-50 focus:p-2',
                   // Centrado respecto al logo | label
                   'tds-xs:focus:h-8 focus:h-6',
                   'tds-xs:focus:top-3 focus:top-1.5',

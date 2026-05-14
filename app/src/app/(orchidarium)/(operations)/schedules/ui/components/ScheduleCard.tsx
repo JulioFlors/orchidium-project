@@ -76,7 +76,7 @@ export function ScheduleCard({
     >
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4 overflow-hidden">
-          <StatusCircleIcon colorClassName={colorClassName} icon={icon} variant="vibrant" />
+          <StatusCircleIcon colorClassName={colorClassName} icon={icon} variant="overlay" />
           <div className="flex flex-col overflow-hidden text-left">
             <h3
               className="text-primary text-[15px] leading-tight font-bold whitespace-normal"

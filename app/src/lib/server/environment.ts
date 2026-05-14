@@ -73,12 +73,18 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
 
     if (range === '1h') timeFilter = `AND time >= now() - interval '1 hours'`
     if (range === '12h') {
-      // 5:00 AM VET (Medianoche + 5h) hasta 7:00 PM VET (Medianoche + 19h)
-      // Estas son las 14h de "Día Botánico" solicitadas.
-      const start = new Date(midnightVETInUTC.getTime() + 5 * 3600000)
-      const end = new Date(midnightVETInUTC.getTime() + 19 * 3600000)
+      // "Día Botánico": 5:00 AM VET → 7:00 PM VET (14h operativas).
+      // Si estamos en madrugada (antes de 5 AM VET), retrocedemos al día anterior
+      // para no mostrar una ventana vacía.
+      const currentVETHour = (now.getUTCHours() - 4 + 24) % 24
+      const baseDay =
+        currentVETHour < 5
+          ? new Date(midnightVETInUTC.getTime() - 24 * 3600000) // Ayer
+          : midnightVETInUTC // Hoy
+      const start = new Date(baseDay.getTime() + 5 * 3600000)
+      const end = new Date(baseDay.getTime() + 19 * 3600000)
 
-      timeFilter = `AND time >= '${start.toISOString()}' AND time <= '${end.toISOString()}'`
+      timeFilter = `AND time >= TIMESTAMP '${start.toISOString()}' AND time <= TIMESTAMP '${end.toISOString()}'`
     }
 
     const query = `
@@ -251,7 +257,7 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
     if (!pgData.some((d) => d.date.toISOString().startsWith(todayISO))) {
       const zoneFilter = `zone = '${zone}'`
 
-      const todayQuery = `SELECT * FROM environment_metrics WHERE ${zoneFilter} AND time >= '${midnightVETInUTC.toISOString()}' ORDER BY time ASC`
+      const todayQuery = `SELECT * FROM environment_metrics WHERE ${zoneFilter} AND time >= TIMESTAMP '${midnightVETInUTC.toISOString()}' ORDER BY time ASC`
 
       try {
         const reader = influxClient.query(todayQuery)

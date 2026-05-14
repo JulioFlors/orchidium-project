@@ -161,10 +161,28 @@ function formatPointSummary(point: Point): string {
   return `[ ${measurement} ] ${fieldsRaw}`
 }
 
+/**
+ * Selecciona el logger semántico correcto según el tipo de medición del Point.
+ * - system_events (Device_Status, Rain_State) → Logger.state
+ * - rain_events (finalización de evento) → Logger.rain
+ * - environment_metrics (temp, hum, lux, rain_intensity) → Logger.metric
+ */
+function selectLogger(point: Point): (msg: string) => void {
+  const line = point.toLineProtocol() ?? ''
+
+  if (line.startsWith('system_events')) return Logger.state
+  if (line.startsWith('rain_events')) return Logger.rain
+  if (line.startsWith('environment_metrics')) return Logger.metric
+
+  return Logger.influx
+}
+
 async function writeToInflux(point: Point) {
   try {
     await influxClient.write(point)
-    Logger.influx(formatPointSummary(point))
+    const log = selectLogger(point)
+
+    log(formatPointSummary(point))
   } catch (e) {
     Logger.error('Error al guardar en InfluxDB', e)
   }

@@ -1,8 +1,8 @@
 import { prisma, TaskStatus, AutomationSchedule, ZoneType } from '@package/database'
 
 import { Logger } from './logger'
-import { influxClient } from './influx'
 import { classifyCurrentDay } from './day-classifier'
+import { influxClient } from './influx'
 
 /**
  * Umbrales Botánicos (Orquídeas Epífitas Tropicales - Cattleya).
@@ -56,10 +56,6 @@ export interface InferenceResult {
  *
  * // TODO: Implementar un modelo de regresión o tabla de consulta por temporada (Mes/Día).
  */
-const FALLBACK_OFFSETS = {
-  TEMP: -2.0, // Estimación inicial: El orquideario suele estar más fresco
-  HUM: 8.0, // Estimación inicial: Mayor retención por riego y masa foliar
-}
 
 /**
  * Motor de Inferencia v4 — Gestión Ambiental Inteligente.
@@ -110,24 +106,28 @@ export class InferenceEngine {
 
       const purpose = schedule.purpose
 
-      // Lógica de Fallback de Emergencia:
-      // // TODO: En ausencia de datos de INTERIOR, se utilizan datos de EXTERIOR
-      // aplicando una compensación estática PRELIMINAR. Este método es un marcador
-      // de posición hasta que se implemente una inferencia basada en correlación histórica.
-      const isFallback = !localConditions.foundInterior
+      // ── Lógica de Fallback (Exterior si Interior falla) ──
+      const isFallback = !localConditions.foundInterior && localConditions.foundExterior
+      const noData = !localConditions.foundInterior && !localConditions.foundExterior
 
-      const interiorHum = isFallback
-        ? Math.min(99, localConditions.exterior.hum + FALLBACK_OFFSETS.HUM)
-        : localConditions.interior.hum
+      if (noData) {
+        Logger.inference(
+          'Telemetría ausente. Omitiendo evaluación de veto ambiental para asegurar ejecución.',
+        )
+
+        return { shouldCancel: false, action: 'EXECUTE' }
+      }
+
+      const interiorHum = isFallback ? localConditions.exterior.hum : localConditions.interior.hum
 
       const interiorTemp = isFallback
-        ? localConditions.exterior.temp + FALLBACK_OFFSETS.TEMP
+        ? localConditions.exterior.temp
         : localConditions.interior.temp
 
-      const dataUsed = isFallback ? `${ZoneType.EXTERIOR} (Fallback Preliminar)` : 'INTERIOR'
+      const dataUsed = isFallback ? 'EXT' : 'INT'
 
-      Logger.info(
-        `[ INFERENCE ] Evaluando "${schedule.name}" (${purpose}) → HR: ${interiorHum.toFixed(0)}% | Temp: ${interiorTemp.toFixed(1)}°C | Día: ${dayClass.type} | Datos: ${dataUsed}`,
+      Logger.inference(
+        `Evaluando "${schedule.name}" (${purpose}) → HR: ${interiorHum.toFixed(0)}% | Temp: ${interiorTemp.toFixed(1)}°C | Día: ${dayClass.type} | Datos: ${dataUsed}`,
       )
 
       // ── 3. HARD BLOCK: Lluvia Real en Curso ──
@@ -188,7 +188,7 @@ export class InferenceEngine {
         ) {
           return {
             shouldCancel: true,
-            reason: `HR ${dataUsed.toLowerCase()} ${interiorHum.toFixed(0)}% (crítica) + ${cloudyDay ? `día ${dayClass.type}` : `lluvia reciente (${Math.round(recentRainCheck.durationSeconds / 60)}min)`}. Omitiendo ${purpose}.`,
+            reason: `HR ${dataUsed} ${interiorHum.toFixed(0)}% (crítica) + ${cloudyDay ? `día ${dayClass.type}` : `lluvia reciente (${Math.round(recentRainCheck.durationSeconds / 60)}min)`}. Omitiendo ${purpose}.`,
             action: 'SKIP',
             metadata: { localConditions, dayClass },
           }
@@ -239,7 +239,9 @@ export class InferenceEngine {
 
         // TODO: Calibrar HR cuando DHT22 esté activo. 95% es el umbral solicitado.
         const conditionB =
-          dayClass.avgLuxSince8am < 20000 && dayClass.type !== 'DESCONOCIDO' && interiorHum > 95
+          dayClass.avgLuxSince8am < THRESHOLDS.OVERCAST_LUX_THRESHOLD &&
+          dayClass.type !== 'DESCONOCIDO' &&
+          interiorHum > 95
 
         const conditionC = forecast.consensusPrecipProb > 0.95
 
@@ -255,8 +257,8 @@ export class InferenceEngine {
 
       // ── DECISIÓN FINAL: EJECUTAR ──
       return { shouldCancel: false, action: 'EXECUTE' }
-    } catch (error) {
-      Logger.error('Error en InferenceEngine.evaluate:', error)
+    } catch {
+      Logger.inference('Error en InferenceEngine.evaluate')
 
       // Fail-safe diferenciado: Agroquímicos requieren confirmación si el motor falla.
       if (schedule.purpose === 'FERTIGATION' || schedule.purpose === 'FUMIGATION') {
@@ -324,7 +326,8 @@ export class InferenceEngine {
   }
 
   /**
-   * Obtiene la lluvia acumulada de las últimas N horas desde InfluxDB (rain_events).
+   * Obtiene la lluvia acumulada de las últimas N horas desde Postgres (RainEvent).
+   * Solo cuenta eventos correctamente cerrados (endedAt IS NOT NULL).
    */
   private static async getRecentRainAccumulation(lookbackHours: number): Promise<{
     durationSeconds: number
@@ -333,22 +336,22 @@ export class InferenceEngine {
     const result = { durationSeconds: 0, eventCount: 0 }
 
     try {
-      const query = `
-        SELECT 
-          SUM("duration_seconds") as total_rain,
-          COUNT(*) as event_count
-        FROM "rain_events"
-        WHERE time >= now() - interval '${lookbackHours} hours'
-        AND "zone" = '${ZoneType.EXTERIOR}'
-      `
-      const stream = influxClient.query(query)
+      const since = new Date(Date.now() - lookbackHours * 3600000)
 
-      for await (const row of stream) {
-        if (row.total_rain) result.durationSeconds = Number(row.total_rain)
-        if (row.event_count) result.eventCount = Number(row.event_count)
-      }
-    } catch (error) {
-      Logger.warn('No se pudo consultar lluvia acumulada de InfluxDB.', error)
+      const agg = await prisma.rainEvent.aggregate({
+        where: {
+          zone: 'EXTERIOR',
+          startedAt: { gte: since },
+          endedAt: { not: null },
+        },
+        _sum: { durationSeconds: true },
+        _count: { id: true },
+      })
+
+      result.durationSeconds = agg._sum.durationSeconds ?? 0
+      result.eventCount = agg._count.id ?? 0
+    } catch {
+      Logger.inference('No se pudo consultar lluvia acumulada de Postgres.')
     }
 
     return result
@@ -407,13 +410,10 @@ export class InferenceEngine {
           .filter(Boolean)
           .join(', ')
 
-        Logger.warn(`[ INFERENCE ] Datos incompletos en InfluxDB (Falta: ${missing})`)
+        Logger.inference(`Datos incompletos en InfluxDB (Falta: ${missing})`)
       }
-    } catch (error) {
-      Logger.error(
-        'No se pudo extraer telemetría reciente de InfluxDB para el motor de inferencia.',
-        error,
-      )
+    } catch {
+      Logger.inference('No se pudo extraer telemetría reciente de InfluxDB.')
     }
 
     return result

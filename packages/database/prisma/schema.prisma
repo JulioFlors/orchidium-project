@@ -310,6 +310,26 @@ model DailyEnvironmentStat {
   @@index([date])
 }
 
+model RainEvent {
+  id              String    @id @default(uuid())
+  /// Timestamp del primer mensaje "Raining" que abrió el evento
+  startedAt       DateTime
+  /// Timestamp del mensaje "Dry" o del timeout que cerró el evento
+  endedAt         DateTime?
+  /// Duración total calculada en segundos (endedAt - startedAt)
+  durationSeconds Int?
+  /// Intensidad máxima de lluvia registrada durante el evento (rain_intensity del sensor)
+  peakIntensity   Float?
+  /// Zona del sensor que reportó el evento
+  zone            ZoneType  @default(EXTERIOR)
+  /// Motivo de cierre: "Dry" (normal), "ORPHAN_TIMEOUT" (sin señal 10min), "REBOOT" (boot con Dry)
+  closedBy        String?
+
+  @@index([startedAt])
+  @@index([zone])
+  @@index([endedAt])
+}
+
 model DeviceLog {
   id        String       @id @default(uuid())
   device    String

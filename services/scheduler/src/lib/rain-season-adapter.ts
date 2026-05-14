@@ -1,7 +1,6 @@
 import { prisma, TaskPurpose, TaskSource, TaskStatus, ZoneType } from '@package/database'
 
 import { Logger } from './logger'
-import { influxClient } from './influx'
 
 /**
  * Adaptador de Temporada de Lluvia.
@@ -61,19 +60,13 @@ export async function evaluateRainSeason(options?: {
   } = options || {}
 
   try {
-    // 1. Lluvia acumulada en últimas 48h
-    const rainQuery = `
-      SELECT SUM("duration_seconds") as total_rain
-      FROM "rain_events"
-      WHERE time >= now() - interval '${RAIN_ADAPTER.LOOKBACK_HOURS} hours'
-      AND zone = '${ZoneType.EXTERIOR}'
-    `
-    const rainStream = influxClient.query(rainQuery)
-    let rainAccumulation48h = 0
-
-    for await (const row of rainStream) {
-      if (row.total_rain) rainAccumulation48h = Number(row.total_rain)
-    }
+    // 1. Lluvia acumulada en últimas 48h (solo eventos cerrados)
+    const since48h = new Date(now.getTime() - RAIN_ADAPTER.LOOKBACK_HOURS * 3600000)
+    const rainAgg = await prisma.rainEvent.aggregate({
+      where: { zone: ZoneType.EXTERIOR, startedAt: { gte: since48h }, endedAt: { not: null } },
+      _sum: { durationSeconds: true },
+    })
+    const rainAccumulation48h = rainAgg._sum.durationSeconds ?? 0
 
     // 2. Último riego exitoso (IRRIGATION por aspersión)
     const lastIrrigation = await prisma.taskLog.findFirst({
@@ -90,34 +83,30 @@ export async function evaluateRainSeason(options?: {
       : 999
 
     // 3. Lluvia de ayer (12h-36h atrás → ventana del día anterior)
-    const rainYesterdayQuery = `
-      SELECT SUM("duration_seconds") as total_rain
-      FROM "rain_events"
-      WHERE time >= now() - interval '36 hours'
-      AND time < now() - interval '12 hours'
-      AND zone = '${ZoneType.EXTERIOR}'
-    `
-    const rainYesterdayStream = influxClient.query(rainYesterdayQuery)
-    let rainYesterday = 0
-
-    for await (const row of rainYesterdayStream) {
-      if (row.total_rain) rainYesterday = Number(row.total_rain)
-    }
+    const sinceYesterday = new Date(now.getTime() - 36 * 3600000)
+    const untilYesterday = new Date(now.getTime() - 12 * 3600000)
+    const rainYesterdayAgg = await prisma.rainEvent.aggregate({
+      where: {
+        zone: ZoneType.EXTERIOR,
+        startedAt: { gte: sinceYesterday, lt: untilYesterday },
+        endedAt: { not: null },
+      },
+      _sum: { durationSeconds: true },
+    })
+    const rainYesterday = rainYesterdayAgg._sum.durationSeconds ?? 0
 
     // 4. Lluvia de anteayer (36h-60h atrás)
-    const rainDayBeforeQuery = `
-      SELECT SUM("duration_seconds") as total_rain
-      FROM "rain_events"
-      WHERE time >= now() - interval '60 hours'
-      AND time < now() - interval '36 hours'
-      AND zone = '${ZoneType.EXTERIOR}'
-    `
-    const rainDayBeforeStream = influxClient.query(rainDayBeforeQuery)
-    let rainDayBefore = 0
-
-    for await (const row of rainDayBeforeStream) {
-      if (row.total_rain) rainDayBefore = Number(row.total_rain)
-    }
+    const sinceDayBefore = new Date(now.getTime() - 60 * 3600000)
+    const untilDayBefore = new Date(now.getTime() - 36 * 3600000)
+    const rainDayBeforeAgg = await prisma.rainEvent.aggregate({
+      where: {
+        zone: ZoneType.EXTERIOR,
+        startedAt: { gte: sinceDayBefore, lt: untilDayBefore },
+        endedAt: { not: null },
+      },
+      _sum: { durationSeconds: true },
+    })
+    const rainDayBefore = rainDayBeforeAgg._sum.durationSeconds ?? 0
 
     // 5. Lógica de decisión
     const rainedYesterday = rainYesterday >= RAIN_ADAPTER.SIGNIFICANT_RAIN_SECONDS
@@ -205,8 +194,8 @@ export async function evaluateRainSeason(options?: {
       lastIrrigationDate,
       daysSinceLastIrrigation,
     }
-  } catch (error) {
-    Logger.error('[ RAIN ADAPTER ] Error evaluando temporada de lluvia:', error)
+  } catch {
+    Logger.rain('Error evaluando temporada de lluvia.')
 
     return {
       shouldDeferIrrigation: false,
@@ -238,9 +227,7 @@ async function createDeferredIrrigation(scheduledAt: Date, reason: string) {
   })
 
   if (existing) {
-    Logger.info(
-      `[ RAIN ADAPTER ] Ya existe tarea para ${scheduledAt.toLocaleString()}. No se crea duplicado.`,
-    )
+    Logger.rain(`Ya existe tarea para ${scheduledAt.toLocaleString()}. No se crea duplicado.`)
 
     return
   }
@@ -257,9 +244,7 @@ async function createDeferredIrrigation(scheduledAt: Date, reason: string) {
     },
   })
 
-  Logger.success(
-    `[ RAIN ADAPTER ] Tarea de riego diferida creada para ${scheduledAt.toLocaleString()}.`,
-  )
+  Logger.rain(`Tarea de riego diferida creada para ${scheduledAt.toLocaleString()}.`)
 }
 
 function getNext6am(from: Date, daysAhead: number): Date {

@@ -133,7 +133,7 @@ export function QueueTaskCard({ task, onCancel, icon, colorClassName }: QueueTas
             colorClassName={colorClassName}
             icon={icon}
             size="md"
-            variant="vibrant"
+            variant="overlay"
           />
           <div className="flex flex-1 flex-col gap-y-1 overflow-hidden text-left">
             <div className="tds-xs:flex-row tds-xs:items-center tds-xs:gap-x-2 tds-xs:gap-y-0 tds-xs:flex contents">

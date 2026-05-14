@@ -1,11 +1,12 @@
 from machine import reset #type: ignore
 from micropython import const
 from network import STA_IF, WLAN #type: ignore
-from utime import sleep #type: ignore
+from ntptime import settime
+from utime   import sleep #type: ignore
 
 # ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
-DEBUG = False
+DEBUG = True
 
 # ---- Colors for logs ----
 # Solo se crea si estamos en modo desarrollo
@@ -49,7 +50,7 @@ def connect_wifi_sync():
     if wlan.isconnected():
         if DEBUG: print(f"\n📡  Conexión WiFi Establecida {Colors.GREEN}| IP: {wlan.ifconfig()[0]}{Colors.RESET}")
 
-        # Inyección de DNS
+        # ---- Inyección de DNS ----
         try:
             cloudflare_dns = "1.1.1.1"
             ip, subnet, gateway, dns = wlan.ifconfig()
@@ -59,8 +60,23 @@ def connect_wifi_sync():
         except Exception as e:
             if DEBUG: print(f"⚠️  Error forzando DNS en Boot: {e}")
 
+
+        # ---- Sincronización de Tiempo NTP ----
+        if DEBUG: print(f"\n🕒  Sincronizando ", end="")
+
+        for _ in range(5):
+            try:
+                settime()
+                if DEBUG: print(f"\n🕒  Hora del sistema {Colors.GREEN}Sincronizada{Colors.RESET}")
+                break
+            except:
+                if DEBUG: print(f"{Colors.BLUE}.{Colors.RESET}", end="")
+                sleep(1)
+        else:
+            if DEBUG: print(f"\n⚠️  Hora del sistema {Colors.YELLOW}Desincronizada{Colors.RESET}")
+
         return True
-    
+
     if DEBUG: print(f"\n❌  No se pudo establecer la conexión WiFi {Colors.RED}(Timeout){Colors.RESET}.")
     return False
 
@@ -92,7 +108,7 @@ import sys
 import gc
 
 # Limpiamos módulos del cache (forzamos re-importación limpia en main.py)
-for mod in ['machine', 'network', 'utime']:
+for mod in ['machine', 'network', 'utime', 'ntptime']:
     if mod in sys.modules:
         del sys.modules[mod]
 

@@ -256,14 +256,6 @@ export async function processPostponedTasks() {
       continue
     }
 
-    // [🔄 RECUPERACIÓN]: Si la tarea está esperando al nodo (NVS), no la re-despachamos
-    if (
-      task.status === TaskStatus.FAILED &&
-      task.notes?.includes('Esperando recuperación automática')
-    ) {
-      continue
-    }
-
     if (now >= task.scheduledAt.getTime() && now <= expirationTime) {
       postponed.push(task)
     }
@@ -428,9 +420,7 @@ export async function processAuthorizedTasks() {
     })
 
     for (const task of authorizedTasks) {
-      Logger.info(
-        `[ POLLER ] Procesando tarea autorizada: ${task.id.slice(0, 8)} (${task.purpose})`,
-      )
+      Logger.info(`[ POLL ] Procesando tarea autorizada: ${task.id.slice(0, 8)} (${task.purpose})`)
 
       // Antes de ejecutar, pasar por el Motor de Inferencia para el Veto de último minuto
       if (task.schedule) {
@@ -468,6 +458,7 @@ export async function cancelTaskExecution(taskId: string, userId?: string, reaso
     ]
     const isActivelyRunning = activeStatuses.includes(task.status)
 
+    // El estado final será CANCELLED, pero si está activa esperaremos al ACK físico
     const finalStatus = TaskStatus.CANCELLED
 
     // Buscar nombre del administrador si hay userId
@@ -490,15 +481,23 @@ export async function cancelTaskExecution(taskId: string, userId?: string, reaso
         ? `Cancelación manual${adminSuffix}: Interrupción de operación activa.`
         : `Cancelación manual${adminSuffix}: Tarea descartada antes de iniciar.`)
 
-    // 1. Si está activa, enviar OFF al hardware
+    // 1. Si está activa, enviar OFF al hardware y marcar para cierre atómico
     if (isActivelyRunning) {
-      stopSequence(task.purpose, task.id)
-    }
+      const atomicReason = `[ATOMIC_CANCEL] ${finalReason}`
 
-    // 2. Persistir cambio
-    await recordTaskEvent(taskId, finalStatus, finalReason, {
-      userId,
-    })
+      // Marcamos la tarea con la nota especial pero mantenemos su estado actual (ej. IN_PROGRESS)
+      // para que el poller de MQTT sepa que debe transicionar a CANCELLED al recibir el OFF.
+      await recordTaskEvent(taskId, task.status, atomicReason, {
+        userId,
+      })
+
+      stopSequence(task.purpose, task.id)
+    } else {
+      // 2. Si NO está activa, cancelar lógicamente de inmediato
+      await recordTaskEvent(taskId, finalStatus, finalReason, {
+        userId,
+      })
+    }
 
     return { success: true, status: finalStatus }
   } catch (error) {
