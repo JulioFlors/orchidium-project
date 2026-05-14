@@ -141,7 +141,22 @@ export async function processTaskLog(taskLog: TaskLog) {
         await recordTaskEvent(
           taskLog.id,
           TaskStatus.COMPLETED,
-          `Riego finalizado tras recuperaciones (Total: ${taskLog.duration} min).`,
+          `Riego completado (Meta alcanzada: ${taskLog.duration} min).`,
+        )
+
+        return
+      }
+
+      // [Regla de Tolerancia]: 1 minuto de tolerancia por cada 5 minutos de duración total
+      const toleranceSec = Math.floor(taskLog.duration / 5) * 60
+      if (durationToExecuteSec <= toleranceSec) {
+        Logger.warn(
+          `Tarea ${taskLog.id.slice(0, 8)} finalizada por margen de tolerancia (${durationToExecuteSec}s restantes <= ${toleranceSec}s).`,
+        )
+        await recordTaskEvent(
+          taskLog.id,
+          TaskStatus.COMPLETED,
+          `Riego completado (Meta alcanzada dentro del margen de tolerancia: ${toleranceSec}s).`,
         )
 
         return

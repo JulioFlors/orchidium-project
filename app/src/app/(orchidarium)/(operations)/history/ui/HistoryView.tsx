@@ -115,17 +115,19 @@ export function HistoryView() {
       tasks.some((t) =>
         [
           'PENDING',
+          'AUTHORIZED',
           'CONFIRMED',
           'IN_PROGRESS',
           'WAITING_CONFIRMATION',
           'DISPATCHED',
           'ACKNOWLEDGED',
+          'FAILED',
         ].includes(t.status),
       ),
     [tasks],
   )
 
-  useSWR(getKey(0, []), fetcher, {
+  useSWR(getKey(0, null as any), fetcher, {
     refreshInterval: hasActiveTasks ? 10000 : 60000,
     onSuccess: (newData) => {
       if (pages) {

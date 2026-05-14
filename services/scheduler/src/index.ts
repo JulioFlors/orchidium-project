@@ -524,25 +524,35 @@ async function handleNodeOffline(reason: string, origin: 'BROKER' | 'NODE' | 'SC
     },
   })
 
-  for (const task of interruptedTasks) {
+    for (const task of interruptedTasks) {
     irrigationRetryManager.confirmByTaskId(task.id)
     systemRetryManager.confirm(task.id)
 
     let extraNotes: string
     let addedMinutes = 0
+    let targetStatus = TaskStatus.FAILED
 
     if (task.actualStartAt && task.status === TaskStatus.IN_PROGRESS) {
       // Tarea que ya inició: calculamos tiempo ejecutado
       const elapsedMs = Date.now() - new Date(task.actualStartAt).getTime()
+      const elapsedMinutes = Math.floor(elapsedMs / 60000)
 
-      addedMinutes = Math.floor(elapsedMs / 60000)
-      extraNotes = `Interrumpida tras ${addedMinutes} min de riego efectivo.`
+      if (elapsedMinutes >= task.duration) {
+        // [Auto-Completado]: Si ya pasó el tiempo programado, cerramos la tarea
+        addedMinutes = Math.max(0, task.duration - (task.completedMinutes || 0))
+        extraNotes = 'Riego completado (Confirmación de cierre tardía).'
+        targetStatus = TaskStatus.COMPLETED
+      } else {
+        addedMinutes = elapsedMinutes
+        extraNotes = `Interrumpida tras ${addedMinutes} min de riego efectivo.`
+        targetStatus = TaskStatus.FAILED
+      }
     } else {
       // Tarea que nunca llegó a ejecutarse (DISPATCHED o ACKNOWLEDGED sin inicio)
       extraNotes = 'El Nodo Actuador No Responde.'
     }
 
-    await recordTaskEvent(task.id, TaskStatus.FAILED, extraNotes, {
+    await recordTaskEvent(task.id, targetStatus, extraNotes, {
       completedMinutes: { increment: addedMinutes },
     })
   }
@@ -638,18 +648,27 @@ async function handleNodeSync(isBoot: boolean = false) {
 
       let extraNotes: string
       let addedMinutes = 0
+      let targetStatus = TaskStatus.FAILED
 
       if (task.actualStartAt && task.status === TaskStatus.IN_PROGRESS) {
         const elapsedMs = Date.now() - new Date(task.actualStartAt).getTime()
+        const elapsedMinutes = Math.floor(elapsedMs / 60000)
 
-        addedMinutes = Math.floor(elapsedMs / 60000)
-        extraNotes = `Interrumpida tras ${addedMinutes} min de riego efectivo.`
+        if (elapsedMinutes >= task.duration) {
+          addedMinutes = Math.max(0, task.duration - (task.completedMinutes || 0))
+          extraNotes = 'Riego completado (Confirmación de cierre tardía).'
+          targetStatus = TaskStatus.COMPLETED
+        } else {
+          addedMinutes = elapsedMinutes
+          extraNotes = `Interrumpida tras ${addedMinutes} min de riego efectivo.`
+          targetStatus = TaskStatus.FAILED
+        }
       } else {
         // Tarea que nunca llegó a ejecutarse (DISPATCHED o ACKNOWLEDGED sin inicio)
         extraNotes = 'El Nodo Actuador No Responde.'
       }
 
-      await recordTaskEvent(task.id, TaskStatus.FAILED, extraNotes, {
+      await recordTaskEvent(task.id, targetStatus, extraNotes, {
         completedMinutes: { increment: addedMinutes },
       })
     }
