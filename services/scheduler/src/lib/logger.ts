@@ -32,10 +32,10 @@ const getLogTime = () => {
  */
 const formatLog = (icon: string, tag: string, color: string, msg: string) => {
   const time = getLogTime()
-  // Alineación: padding mínimo de 8 caracteres para el tag, sin truncar.
-  const paddedTag = tag.toUpperCase().padEnd(8)
+  // Alineación: padding de 4 caracteres exactos.
+  const paddedTag = tag.toUpperCase().slice(0, 4).padEnd(4)
 
-  return `${colors.white}[ ${time} ]${colors.reset} ${color}${icon} [ ${paddedTag}]${colors.reset} ${msg}`
+  return `${colors.white}[ ${time} ]${colors.reset} ${color}${icon} [ ${paddedTag} ]${colors.reset} ${msg}`
 }
 
 export const Logger = {
@@ -59,7 +59,7 @@ export const Logger = {
 
   /** Error con detalle opcional de excepción. */
   error: (msg: string, err?: unknown) => {
-    console.error(formatLog('❌', 'ERROR', colors.red, msg))
+    console.error(formatLog('❌', 'ERR ', colors.red, msg))
     if (err) {
       let prefix = 'ERR'
       let detail = String(err)
@@ -83,7 +83,7 @@ export const Logger = {
   /** Debug (solo en desarrollo). */
   debug: (msg: string) => {
     if (process.env.NODE_ENV !== 'production') {
-      console.log(formatLog('🔎', 'DEBUG', colors.dim, msg))
+      console.log(formatLog('🔎', 'DBUG', colors.dim, msg))
     }
   },
 
@@ -109,7 +109,7 @@ export const Logger = {
   mqtt: (msg: string) => console.log(formatLog('📡', 'MQTT', colors.magenta, msg)),
 
   /** ACK recibido del nodo. */
-  ack: (msg: string) => console.log(formatLog('📬', 'ACK', colors.green, msg)),
+  ack: (msg: string) => console.log(formatLog('📬', 'ACK ', colors.green, msg)),
 
   // ---- Dominio: Tareas y Circuitos ----
 
@@ -119,12 +119,12 @@ export const Logger = {
   // ---- Dominio: Rutinas y Crons ----
 
   /** Ejecución y estado de crons programados. */
-  cron: (msg: string) => console.log(formatLog('⏰', 'SCHEDULE', colors.cyan, msg)),
+  cron: (msg: string) => console.log(formatLog('⏰', 'CRON', colors.cyan, msg)),
 
   // ---- Dominio: Motor de Inferencia ----
 
   /** Decisiones del Motor de Inferencia Ambiental. */
-  inference: (msg: string) => console.log(formatLog('🔮', 'INFERENCE', colors.blue, msg)),
+  inference: (msg: string) => console.log(formatLog('🔮', 'INFR', colors.blue, msg)),
 
   // ---- Dominio: Agroquímicos ----
 
@@ -139,10 +139,10 @@ export const Logger = {
   // ---- Dominio: Clasificador de Día ----
 
   /** Clasificación del día (DIF, DLI, temporal de lluvia). */
-  dayClass: (msg: string) => console.log(formatLog('☀️', 'DAYCLASS', colors.yellow, msg)),
+  dayClass: (msg: string) => console.log(formatLog('☀️', 'DAYC', colors.yellow, msg)),
 
   // ---- Dominio: Telemetría / Cierre Diario ----
 
   /** Procesamiento de telemetría histórica (cierre diario). */
-  telemetry: (msg: string) => console.log(formatLog('📊', 'TELEMETRY', colors.cyan, msg)),
+  telemetry: (msg: string) => console.log(formatLog('📊', 'TLMT', colors.cyan, msg)),
 }

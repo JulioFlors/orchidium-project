@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect, useRef, useReducer } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   IoCloseOutline,
+  IoCodeSlashOutline,
   IoHardwareChipOutline,
   IoHeartOutline,
   IoInformationCircleOutline,
@@ -93,6 +94,13 @@ const TOOL_COLORS: Record<
     border: 'border-red-500/30',
     icon: 'text-red-500',
     pulse: 'bg-red-400',
+  },
+  nvs: {
+    bg: 'from-amber-500/30 to-amber-500/10',
+    ring: 'ring-amber-500/15',
+    border: 'border-amber-500/30',
+    icon: 'text-amber-500',
+    pulse: 'bg-amber-400',
   },
   ram: {
     bg: 'from-indigo-500/30 to-indigo-500/10',
@@ -278,7 +286,19 @@ export function ToolboxGrid({
           label="Heartbeat"
           onClick={() => onCommand('ui_heartbeat', 'heartbeat')}
         />
-
+        <ToolCard
+          active={activeAudits.includes('nvs')}
+          colorKey="nvs"
+          disabled={!isOnline}
+          icon={
+            <IoCodeSlashOutline
+              className={clsx(!activeAudits.includes('nvs') && TOOL_COLORS.nvs.icon)}
+              size={24}
+            />
+          }
+          label="NVS Stack"
+          onClick={() => onCommand('audit_nvs', 'nvs')}
+        />
         <ToolCard
           active={activeAudits.includes('ram')}
           colorKey="ram"
@@ -368,7 +388,7 @@ function CustomTooltip({ active, payload, label, chartColor, activeAudit }: Cust
     let formattedVal = val.toFixed(1)
 
     if (activeAudit === 'rain') {
-      formattedVal = `${Math.round(val)}`
+      formattedVal = `${Math.round(val)} %`
     } else if (activeAudit === 'lux') {
       formattedVal = val >= 1000 ? `${(val / 1000).toFixed(1)}k` : val.toFixed(1)
       formattedVal += ' lux'
@@ -419,106 +439,17 @@ export function AuditConsoleCard({
   onStop,
   onClear,
 }: AuditConsoleCardProps) {
+  const accumulatorRef = useRef<Record<string, unknown>>({})
   const { data: session } = authClient.useSession()
 
-  const [displayPayload, dispatch] = useReducer(
-    (
-      state: AuditPayload | null,
-      action: {
-        type: string
-        payload?: unknown
-        currentPayload?: unknown
-        isChartable?: boolean
-        activeAudit?: string | null
-      },
-    ): AuditPayload | null => {
-      switch (action.type) {
-        case 'HYDRATE':
-          return action.payload as AuditPayload
-        case 'CLEAR':
-          return null
-        case 'RECEIVE': {
-          const { currentPayload, isChartable, activeAudit } = action
-
-          if (!currentPayload) return state
-          if (isChartable) {
-            const prevPayload = (state as { history?: unknown[] }) || { history: [] }
-            const incomingPayload = (currentPayload as Record<string, unknown>) || {}
-            const prevHistory = prevPayload.history || []
-            let incomingHistory = (incomingPayload.history as unknown[]) || []
-
-            if (incomingHistory.length === 0 && activeAudit) {
-              const hasKey =
-                typeof incomingPayload === 'object' &&
-                incomingPayload !== null &&
-                (incomingPayload[activeAudit] !== undefined || incomingPayload.val !== undefined)
-              const val = hasKey
-                ? ((incomingPayload as Record<string, unknown>)[activeAudit] ??
-                  (incomingPayload as Record<string, unknown>).val)
-                : ((incomingPayload as Record<string, unknown>).temperature ??
-                  (incomingPayload as Record<string, unknown>).humidity ??
-                  (incomingPayload as Record<string, unknown>).illuminance ??
-                  (incomingPayload as Record<string, unknown>).rain_intensity ??
-                  incomingPayload)
-
-              if (val !== undefined && val !== null) {
-                const timestamp = (incomingPayload as Record<string, unknown>)?.time
-                  ? Number((incomingPayload as Record<string, unknown>).time) < 1000000000
-                    ? Number((incomingPayload as Record<string, unknown>).time) + 946684800
-                    : Number((incomingPayload as Record<string, unknown>).time)
-                  : Date.now() / 1000
-
-                incomingHistory = [[timestamp, val]]
-              }
-            }
-            const mergedMap = new Map<string, unknown>()
-            const getSampleKey = (item: unknown) => {
-              if (!Array.isArray(item) || item.length < 2) return null
-
-              return `${item[0]}_${JSON.stringify(item[1])}`
-            }
-
-            prevHistory.forEach((i) => {
-              const k = getSampleKey(i)
-
-              if (k) mergedMap.set(k, i)
-            })
-            incomingHistory.forEach((i) => {
-              const k = getSampleKey(i)
-
-              if (k) mergedMap.set(k, i)
-            })
-            const mergedHistory = Array.from(mergedMap.values())
-              .sort(
-                (a, b) =>
-                  (Array.isArray(a) ? Number(a[0]) : 0) - (Array.isArray(b) ? Number(b[0]) : 0),
-              )
-              .slice(-100)
-
-            return {
-              ...incomingPayload,
-              history: mergedHistory,
-              receivedAt: Date.now(),
-            } as AuditPayload
-          }
-
-          return {
-            ...(currentPayload as Record<string, unknown>),
-            receivedAt: Date.now(),
-          } as AuditPayload
-        }
-        default:
-          return state
-      }
-    },
-    null,
-  )
+  const [displayPayload, setDisplayPayload] = useState<AuditPayload | null>(null)
+  const [localReceivedAt, setLocalReceivedAt] = useState<number | null>(null)
   const [hasMounted, setHasMounted] = useState(false)
 
-  // Determinar si el tipo de auditoría actual admite gráficas de tendencia
-  const isChartable = ['lux', 'rain', 'ram', 'health', 'temp', 'hum'].includes(activeAudit || '')
-
+  // ---- Hidratación Segura y Carga de Cache ----
   useEffect(() => {
+    // Usamos un pequeño delay para asegurar que el layout y las animaciones
+    // hayan terminado antes de intentar renderizar gráficas (evita width -1 en Recharts)
     const timer = setTimeout(() => {
       setHasMounted(true)
       if (activeAudit && ['lux', 'rain', 'ram', 'health', 'temp', 'hum'].includes(activeAudit)) {
@@ -530,9 +461,17 @@ export function AuditConsoleCard({
           try {
             const parsed = JSON.parse(cached) as AuditPayload
 
-            dispatch({ type: 'HYDRATE', payload: parsed })
+            setDisplayPayload((prev) => {
+              // Si ya tenemos datos ( history ), no pisamos con el cache a menos que el cache sea más reciente
+              const prevHistory = (prev as { history?: unknown[] })?.history || []
+
+              if (prevHistory.length > 0) return prev as AuditPayload
+
+              return parsed
+            })
+            if (parsed.receivedAt) setLocalReceivedAt(parsed.receivedAt)
           } catch {
-            // No hacer nada
+            // No hacer nada si el cache está corrupto
           }
         }
       }
@@ -541,13 +480,13 @@ export function AuditConsoleCard({
     return () => clearTimeout(timer)
   }, [activeAudit, deviceId])
 
+  // Auto-limpieza si la sesión caduca
   useEffect(() => {
     if (session === null) {
       clearAuditData()
-      dispatch({ type: 'CLEAR' })
     }
   }, [session])
-
+  // ---- Limpieza Automática al Cerrar (Safe Cleanup) ----
   const unmountRef = useRef({ isActive, onStop, isManualStopping: false })
 
   useEffect(() => {
@@ -556,9 +495,12 @@ export function AuditConsoleCard({
   }, [isActive, onStop])
 
   useEffect(() => {
+    // Capturamos la referencia al objeto actual para el cleanup
     const cleanupRef = unmountRef.current
 
     return () => {
+      // SOLO enviamos parada si el componente se desmonta de forma "huérfana"
+      // (ej. el usuario cambia de pestaña del admin) y NO si fue un stop manual.
       if (cleanupRef.isActive && cleanupRef.onStop && !cleanupRef.isManualStopping) {
         cleanupRef.onStop()
       }
@@ -566,19 +508,135 @@ export function AuditConsoleCard({
   }, [])
 
   useEffect(() => {
-    if (currentPayload) {
-      dispatch({ type: 'RECEIVE', currentPayload, isChartable, activeAudit })
-    }
-  }, [currentPayload, activeAudit, isChartable])
+    if (!currentPayload) return
 
-  useEffect(() => {
-    if (displayPayload && activeAudit) {
-      window.localStorage.setItem(
-        `${AUDIT_STORAGE_PREFIX}history_${deviceId}_${activeAudit}`,
-        JSON.stringify(displayPayload),
+    if (activeAudit === 'nvs') {
+      try {
+        const payloadObj =
+          typeof currentPayload === 'string' ? JSON.parse(currentPayload) : currentPayload
+
+        if (
+          payloadObj &&
+          typeof payloadObj === 'object' &&
+          'chunk' in payloadObj &&
+          'total' in payloadObj &&
+          'data' in payloadObj
+        ) {
+          const { chunk, total, data } = payloadObj as {
+            chunk: number
+            total: number
+            data: Record<string, unknown>
+          }
+
+          if (chunk === 1) {
+            accumulatorRef.current = { ...data }
+          } else {
+            accumulatorRef.current = { ...accumulatorRef.current, ...data }
+          }
+
+          if (chunk === total) {
+            setDisplayPayload({ ...accumulatorRef.current })
+          }
+        }
+      } catch {
+        // Error silencioso
+      }
+    } else {
+      const isChartable = ['lux', 'rain', 'ram', 'health', 'temp', 'hum'].includes(
+        activeAudit || '',
       )
+
+      if (isChartable) {
+        setDisplayPayload((prev: unknown) => {
+          const prevPayload = (prev as { history?: unknown[] }) || { history: [] }
+          const incomingPayload = (currentPayload as Record<string, unknown>) || {}
+          const prevHistory = prevPayload.history || []
+          let incomingHistory = (incomingPayload.history as unknown[]) || []
+
+          if (incomingHistory.length === 0 && activeAudit) {
+            // Caso A: El payload es un objeto y tiene la clave de la auditoría (o 'val')
+            // Caso B: El payload ya es el valor primitivo (número/string)
+            // Caso C: El payload es un objeto pero NO tiene la clave (ya fue pre-indexado en el padre, ej: RAM)
+            const hasKey =
+              typeof incomingPayload === 'object' &&
+              incomingPayload !== null &&
+              (incomingPayload[activeAudit] !== undefined || incomingPayload.val !== undefined)
+
+            const val = hasKey
+              ? ((incomingPayload as Record<string, unknown>)[activeAudit] ??
+                (incomingPayload as Record<string, unknown>).val)
+              : ((incomingPayload as Record<string, unknown>).temperature ??
+                (incomingPayload as Record<string, unknown>).humidity ??
+                (incomingPayload as Record<string, unknown>).illuminance ??
+                (incomingPayload as Record<string, unknown>).rain_intensity ??
+                incomingPayload)
+
+            // Solo agregamos si el valor es válido (no nulo/undefined)
+            if (val !== undefined && val !== null) {
+              const timestamp = (incomingPayload as Record<string, unknown>)?.time
+                ? Number((incomingPayload as Record<string, unknown>).time) < 1000000000
+                  ? Number((incomingPayload as Record<string, unknown>).time) + 946684800
+                  : Number((incomingPayload as Record<string, unknown>).time)
+                : Date.now() / 1000
+
+              incomingHistory = [[timestamp, val]]
+            }
+          }
+
+          const mergedMap = new Map<string, unknown>()
+
+          // Usamos una llave que combine timestamp y un hash del valor para evitar colisiones en el mismo segundo
+          const getSampleKey = (item: unknown) => {
+            if (!Array.isArray(item) || item.length < 2) return null
+            const ts = item[0]
+            const val = JSON.stringify(item[1])
+
+            return `${ts}_${val}`
+          }
+
+          prevHistory.forEach((item) => {
+            const key = getSampleKey(item)
+
+            if (key) mergedMap.set(key, item)
+          })
+          incomingHistory.forEach((item) => {
+            const key = getSampleKey(item)
+
+            if (key) mergedMap.set(key, item)
+          })
+          const mergedHistory = Array.from(mergedMap.values())
+            .sort((a, b) => {
+              const tsA = Array.isArray(a) ? Number(a[0]) : 0
+              const tsB = Array.isArray(b) ? Number(b[0]) : 0
+
+              return tsA - tsB
+            })
+            .slice(-100) // Aumentado a 100 muestras para historial más extenso
+
+          const nextState = { ...incomingPayload, history: mergedHistory, receivedAt: Date.now() }
+
+          if (typeof window !== 'undefined' && activeAudit) {
+            window.localStorage.setItem(
+              `${AUDIT_STORAGE_PREFIX}history_${deviceId}_${activeAudit}`,
+              JSON.stringify(nextState),
+            )
+          }
+
+          setLocalReceivedAt(nextState.receivedAt)
+
+          return nextState
+        })
+      } else {
+        const nextState = {
+          ...(currentPayload as Record<string, unknown>),
+          receivedAt: Date.now(),
+        }
+
+        setDisplayPayload(nextState)
+        setLocalReceivedAt(nextState.receivedAt)
+      }
     }
-  }, [displayPayload, activeAudit, deviceId])
+  }, [currentPayload, activeAudit, deviceId])
 
   const activeColor = activeAudit
     ? TOOL_COLORS[activeAudit]
@@ -590,6 +648,8 @@ export function AuditConsoleCard({
   const renderTrendChart = () => {
     const history = (displayPayload as { history?: unknown[] })?.history
 
+    // Evitamos renderizar el gráfico si el componente no ha terminado de montarse
+    // o si el historial está vacío, para evitar errores de Recharts (width -1)
     if (!hasMounted || !Array.isArray(history) || history.length === 0) {
       return (
         <div className="flex h-60 w-full items-center justify-center opacity-20">
@@ -606,6 +666,7 @@ export function AuditConsoleCard({
         const [ts, data] = val
 
         timeStr = typeof ts === 'number' ? formatSmartDateTime(ts * 1000) : String(ts)
+
         if (typeof data === 'object' && data !== null) {
           if (activeAudit === 'ram') {
             const r = data as { a?: number }
@@ -635,8 +696,6 @@ export function AuditConsoleCard({
 
       return { name: timeStr, value }
     })
-
-    const gradientId = `audit-grad-${activeAudit}`
 
     return (
       <div
@@ -670,7 +729,7 @@ export function AuditConsoleCard({
                   : activeAudit === 'lux'
                     ? [0, 90000]
                     : activeAudit === 'rain'
-                      ? [0, 4095]
+                      ? [0, 100]
                       : activeAudit === 'temp'
                         ? [0, 50]
                         : activeAudit === 'hum'
@@ -678,10 +737,11 @@ export function AuditConsoleCard({
                           : ['auto', 'auto']
               }
               fontSize={11}
+              scale="auto"
               stroke="var(--color-secondary)"
               tickFormatter={(value) => {
                 if (activeAudit === 'health') return `${value}dB`
-                if (activeAudit === 'rain') return `${value}`
+                if (activeAudit === 'rain') return `${value}%`
                 if (activeAudit === 'temp') return `${value}°`
                 if (activeAudit === 'hum') return `${value}%`
 
@@ -725,7 +785,7 @@ export function AuditConsoleCard({
           <div
             className={clsx(
               'h-12 w-12 animate-spin rounded-full border-2 border-current border-t-transparent',
-              TOOL_COLORS[activeColor].icon.replace('text-', 'border-'),
+              TOOL_COLORS[activeColor].icon.replace('text-', 'text-'),
             )}
           />
           <span
@@ -775,13 +835,21 @@ export function AuditConsoleCard({
       }
     }
 
+    if (activeAudit === 'nvs' && displayPayload) {
+      return (
+        <pre className="whitespace-pre-wrap text-blue-300">
+          {JSON.stringify(displayPayload, null, 2)}
+        </pre>
+      )
+    }
+
     if (activeAudit === 'ram' && dataForUi && typeof dataForUi === 'object') {
       const raw = dataForUi as {
-        free?: number
         f?: number
-        used?: number
         a?: number
+        used?: number
         total?: number
+        free?: number
       }
       const free = raw.free ?? raw.f ?? 0
       const used = raw.used ?? raw.a ?? 0
@@ -828,6 +896,7 @@ export function AuditConsoleCard({
                 </span>
               </div>
             </div>
+
             <div className="grid w-full grid-cols-2 gap-3 border-t border-zinc-200/50 pt-6 dark:border-white/5">
               <div className="bg-black-and-white/5 flex flex-col items-start gap-1 rounded-lg p-3">
                 <div className="flex items-center gap-1.5">
@@ -858,6 +927,7 @@ export function AuditConsoleCard({
                 </span>
               </div>
             </div>
+
             <div className="mt-4 flex w-full items-center justify-between px-2">
               <div className="flex items-center gap-2">
                 <IoInformationCircleOutline className="text-zinc-400" />
@@ -867,6 +937,8 @@ export function AuditConsoleCard({
                 {(total / 1024).toFixed(1)} KB
               </span>
             </div>
+
+            {/* Gráfico de Tendencia RAM */}
             <div className="mt-8 flex w-full flex-col gap-2">
               <div className="flex items-center gap-2 px-2 text-zinc-400">
                 <IoStatsChartOutline className="text-sm" />
@@ -880,7 +952,10 @@ export function AuditConsoleCard({
     }
 
     if ((activeAudit === 'health' || activeAudit === 'state') && dataForUi) {
-      const raw = dataForUi as { rssi?: number; ip?: string }
+      const raw = dataForUi as {
+        rssi?: number
+        ip?: string
+      }
       const rssi = raw.rssi ?? 0
       const ip = raw.ip ?? '0.0.0.0'
       const signal = getWiFiSignalLabel(rssi)
@@ -894,7 +969,7 @@ export function AuditConsoleCard({
               </div>
               <div className="flex flex-col gap-0.5">
                 <span className="text-sm font-black tracking-widest text-zinc-400 uppercase">
-                  Fuerza de la Señal
+                  Fuerza de la Señal Inalámbrica
                 </span>
                 <div className="flex items-center gap-2">
                   <span className={clsx('text-sm font-bold', signal.color)}>{signal.label}</span>
@@ -903,6 +978,7 @@ export function AuditConsoleCard({
               </div>
             </div>
           </div>
+
           <div className="mt-4 grid grid-cols-2 gap-4">
             <div className="bg-black-and-white/5 flex flex-col gap-1 rounded-lg p-3">
               <span className="text-sm font-bold text-zinc-400 uppercase">Dirección IP</span>
@@ -927,6 +1003,7 @@ export function AuditConsoleCard({
               </span>
             </div>
           </div>
+
           <div className="mt-6 flex flex-col gap-2">
             <div className="flex items-center gap-2 text-zinc-400">
               <IoStatsChartOutline className="text-sm" />
@@ -938,8 +1015,12 @@ export function AuditConsoleCard({
       )
     }
 
-    if (['lux', 'rain', 'ram', 'health', 'temp', 'hum'].includes(activeAudit || '')) {
-      return renderTrendChart()
+    const isChartable = ['lux', 'rain', 'ram', 'health'].includes(activeAudit || '')
+
+    if (isChartable) {
+      const chart = renderTrendChart()
+
+      if (chart) return chart
     }
 
     return (
@@ -947,7 +1028,7 @@ export function AuditConsoleCard({
         <div
           className={clsx(
             'h-12 w-12 animate-spin rounded-full border-2 border-current border-t-transparent',
-            TOOL_COLORS[activeColor].icon.replace('text-', 'border-'),
+            TOOL_COLORS[activeColor].icon,
           )}
         />
         <span
@@ -962,6 +1043,7 @@ export function AuditConsoleCard({
     )
   }
 
+  const gradientId = `audit-grad-${activeAudit}`
   const content = renderContent()
 
   return (
@@ -994,9 +1076,9 @@ export function AuditConsoleCard({
           )}
         </div>
         <div className="flex items-center gap-2">
-          {displayPayload?.receivedAt && (
+          {localReceivedAt && (
             <span className="font-mono text-[10px] font-medium tracking-tight text-zinc-400 opacity-60">
-              {formatSmartDateTime(displayPayload.receivedAt)}
+              {formatSmartDateTime(localReceivedAt)}
             </span>
           )}
           <div className="flex items-center gap-0.5 border-l border-zinc-200 pl-2 dark:border-white/5">
@@ -1011,6 +1093,7 @@ export function AuditConsoleCard({
                 }}
               >
                 <IoStop size={12} />
+                {/* Custom Tooltip - Cohesión Visual Pristinoplant */}
                 <div className="animate-in fade-in slide-in-from-top-1 border-input-outline bg-surface pointer-events-none absolute -bottom-[34px] left-1/2 z-50 hidden -translate-x-1/2 rounded border px-2.5 py-1.5 text-[10px] font-bold text-white shadow-2xl group-hover:block">
                   <div className="border-input-outline bg-surface absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 border-t border-l" />
                   Cancelar
@@ -1027,6 +1110,7 @@ export function AuditConsoleCard({
                 onClick={onStart}
               >
                 <IoPlay className="ml-0.5" size={12} />
+                {/* Custom Tooltip - Cohesión Visual Pristinoplant */}
                 {isOnline && (
                   <div className="animate-in fade-in slide-in-from-top-1 border-input-outline bg-surface pointer-events-none absolute -bottom-[34px] left-1/2 z-50 hidden -translate-x-1/2 rounded border px-2.5 py-1.5 text-[10px] font-bold text-white shadow-2xl group-hover:block">
                     <div className="border-input-outline bg-surface absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 border-t border-l" />
@@ -1035,6 +1119,7 @@ export function AuditConsoleCard({
                 )}
               </button>
             )}
+
             <ActionMenu
               hoverOnly={false}
               items={[
@@ -1047,7 +1132,7 @@ export function AuditConsoleCard({
                         `${AUDIT_STORAGE_PREFIX}history_${deviceId}_${activeAudit}`,
                       )
                     }
-                    dispatch({ type: 'CLEAR' })
+                    setDisplayPayload(null)
                     onClear?.()
                   },
                 },
@@ -1055,8 +1140,10 @@ export function AuditConsoleCard({
                   label: 'Cerrar',
                   icon: <IoCloseOutline />,
                   onClick: () => {
+                    // Marcamos como parada manual para evitar duplicados en el unmount
                     unmountRef.current.isManualStopping = true
                     onStop?.()
+
                     if (activeAudit && typeof window !== 'undefined') {
                       window.sessionStorage.removeItem(`audit_history_${deviceId}_${activeAudit}`)
                     }

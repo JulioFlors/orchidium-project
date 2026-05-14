@@ -29,6 +29,7 @@ interface MqttState {
   publish: (topic: string, message: string | object, retain?: boolean) => void
   publishWithAck: (topic: string, message: string | object) => void
   clearAck: (payload: string) => void
+  clearAcksForTopic: (topicPrefix: string) => void
   startRetryLoop: () => void
   stopRetryLoop: () => void
 }
@@ -320,6 +321,24 @@ export const useMqttStore = create<MqttState>()(
           delete rest[payload]
 
           return { pendingAcks: rest }
+        })
+      },
+
+      clearAcksForTopic: (topicPrefix) => {
+        set((state) => {
+          const next = { ...state.pendingAcks }
+          let changed = false
+
+          Object.entries(next).forEach(([payload, ack]) => {
+            if (ack.topic.startsWith(topicPrefix)) {
+              delete next[payload]
+              changed = true
+            }
+          })
+
+          if (!changed) return state
+
+          return { pendingAcks: next }
         })
       },
     }),

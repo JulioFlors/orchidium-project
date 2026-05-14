@@ -2,6 +2,9 @@
 
 import { revalidatePath } from 'next/cache'
 import prisma, { TaskPurpose, ZoneType, CollisionGuard } from '@package/database'
+import { headers } from 'next/headers'
+
+import { auth } from '@/lib/server/auth'
 
 // Mapeo inverso de Frontend -> Backend
 const CIRCUIT_TO_PURPOSE: Record<string, TaskPurpose> = {
@@ -22,6 +25,9 @@ export async function createManualTask(
   zones: ZoneType[] = [ZoneType.ZONA_A],
 ) {
   try {
+    const session = await auth.api.getSession({ headers: await headers() })
+    const adminName = session?.user?.name || 'Admin'
+
     const purpose = CIRCUIT_TO_PURPOSE[circuit]
 
     if (!purpose) throw new Error('Circuito inválido')
@@ -47,7 +53,7 @@ export async function createManualTask(
           executedAt: new Date(),
           duration: durationMinutes,
           zones: zones,
-          notes: 'Ejecución manual desde el Panel de Control',
+          notes: `Ejecución manual iniciada por ${adminName} desde el Panel de Control`,
         },
       })
 
@@ -56,7 +62,7 @@ export async function createManualTask(
         data: {
           taskId: newLog.id,
           status: 'DISPATCHED',
-          notes: 'Usuario inició ejecución manual desde el Panel de Control.',
+          notes: `${adminName} inició ejecución manual desde el Panel de Control.`,
         },
       })
 

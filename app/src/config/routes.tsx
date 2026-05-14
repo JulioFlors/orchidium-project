@@ -73,16 +73,16 @@ export const adminRoutes: AdminRoute[] = [
     layout: 'informational',
     items: [
       {
-        name: 'Estación Meteorológica',
-        url: '/monitoring',
-        icon: <IoHardwareChipOutline />,
-        description: 'Telemetría cruda y gráficas',
-      },
-      {
         name: 'Análisis Botánico',
         url: '/botanics',
         icon: <IoLeafOutline />,
         description: 'Procesamiento de datos biológicos',
+      },
+      {
+        name: 'Estación Meteorológica',
+        url: '/monitoring',
+        icon: <IoHardwareChipOutline />,
+        description: 'Telemetría cruda y gráficas',
       },
     ],
   },

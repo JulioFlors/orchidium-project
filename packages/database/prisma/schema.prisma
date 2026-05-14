@@ -272,6 +272,8 @@ model DailyEnvironmentStat {
   maxHumidity         Float?
   lightDurationHours  Float
   totalRainDuration   Int
+  /// Intensidad promedio de lluvia del día (calculada de RainEvents)
+  avgRainIntensity    Float?
   createdAt           DateTime @default(now())
   avgIlluminance      Float?
   maxIlluminance      Float?
@@ -320,6 +322,8 @@ model RainEvent {
   durationSeconds Int?
   /// Intensidad máxima de lluvia registrada durante el evento (rain_intensity del sensor)
   peakIntensity   Float?
+  /// Intensidad promedio de lluvia calculada durante el evento
+  avgIntensity    Float?
   /// Zona del sensor que reportó el evento
   zone            ZoneType  @default(EXTERIOR)
   /// Motivo de cierre: "Dry" (normal), "ORPHAN_TIMEOUT" (sin señal 10min), "REBOOT" (boot con Dry)

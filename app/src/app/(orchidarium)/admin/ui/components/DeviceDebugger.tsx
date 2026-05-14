@@ -46,7 +46,8 @@ const DEVICES: DeviceConfig[] = [
 ]
 
 export function DeviceDebugger() {
-  const { subscribe, publishWithAck, messages, status, pendingAcks } = useMqttStore()
+  const { subscribe, publishWithAck, messages, status, pendingAcks, clearAcksForTopic } =
+    useMqttStore()
   const { data: session } = authClient.useSession()
 
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>(DEVICES[0].id)
@@ -87,6 +88,14 @@ export function DeviceDebugger() {
   const auditStateTopic = `${selectedDevice.baseTopic}/audit/state`
 
   const { connectionState } = useDeviceHeartbeat(statusTopic)
+
+  // ---- Seguridad de Reintentos ----
+  // Si el dispositivo se desconecta, cancelamos cualquier reintento pendiente hacia él
+  useEffect(() => {
+    if (connectionState !== 'online' && connectionState !== 'unknown') {
+      clearAcksForTopic(selectedDevice.baseTopic)
+    }
+  }, [connectionState, selectedDevice.baseTopic, clearAcksForTopic])
 
   useEffect(() => {
     const fetchLogs = async () => {

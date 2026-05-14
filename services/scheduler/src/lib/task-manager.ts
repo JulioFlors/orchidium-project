@@ -267,7 +267,7 @@ export async function processPostponedTasks() {
       ? 'Reactivando 1 tarea pendiente/postergada'
       : `Reactivando ${postponed.length} tareas pendientes/postergadas`
 
-    Logger.info(`${introText}.`)
+    Logger.task(`${introText}.`)
 
     for (const task of postponed) {
       await processTaskLog(task)
@@ -294,12 +294,17 @@ export async function cleanupExpiredTasks() {
   // 1. Limpieza de tareas estándar (Ventana Dinámica)
   const standardCandidates = await prisma.taskLog.findMany({
     where: {
-      status: { in: [TaskStatus.PENDING, TaskStatus.FAILED] },
+      status: {
+        in: [TaskStatus.PENDING, TaskStatus.FAILED, TaskStatus.DISPATCHED, TaskStatus.ACKNOWLEDGED],
+      },
       purpose: { notIn: ['FERTIGATION', 'FUMIGATION'] },
       OR: [
         { notes: { contains: 'Nodo Actuador no está conectado' } },
         { notes: { contains: 'Reintentando al reconectar' } },
         { notes: { contains: 'Interrumpida' } },
+        { notes: { contains: 'Sin respuesta del Nodo Actuador' } },
+        { notes: { contains: 'El Nodo Actuador No Responde' } },
+        { notes: { contains: 'Ejecución manual' } },
       ],
     },
   })
@@ -335,7 +340,7 @@ export async function cleanupExpiredTasks() {
   }
 
   if (allTasksToExpire.length > 0) {
-    Logger.warn(`Limpieza: ${allTasksToExpire.length} tareas marcaron como expiradas.`)
+    Logger.task(`Limpieza: ${allTasksToExpire.length} tareas marcaron como expiradas.`)
   }
 }
 
@@ -395,8 +400,8 @@ export async function preScheduleAgrochemicals() {
             },
           })
 
-          Logger.info(
-            `[ AGRO ] Pre-agendada rutina "${schedule.name}" para el ${nextOccurrence.toLocaleString('es-VE')}`,
+          Logger.agro(
+            `Pre-agendada rutina "${schedule.name}" para el ${nextOccurrence.toLocaleString('es-VE')}`,
           )
         }
       }
@@ -420,14 +425,14 @@ export async function processAuthorizedTasks() {
     })
 
     for (const task of authorizedTasks) {
-      Logger.info(`[ POLL ] Procesando tarea autorizada: ${task.id.slice(0, 8)} (${task.purpose})`)
+      Logger.task(`Poll: Procesando tarea autorizada: ${task.id.slice(0, 8)} (${task.purpose})`)
 
       // Antes de ejecutar, pasar por el Motor de Inferencia para el Veto de último minuto
       if (task.schedule) {
         const inference = await InferenceEngine.evaluate(task.schedule)
 
         if (inference.shouldCancel) {
-          Logger.warn(`[ AGRO ] VETO AMBIENTAL aplicado a tarea autorizada: ${inference.reason}`)
+          Logger.agro(`Veto ambiental aplicado a tarea autorizada: ${inference.reason}`)
           await recordTaskEvent(task.id, TaskStatus.CANCELLED, inference.reason)
           continue
         }

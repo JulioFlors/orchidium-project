@@ -237,7 +237,7 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
         entry.max_illuminance_time = stat.maxIllumTime
       }
       if (fieldsToQuery.includes('rain_intensity')) {
-        entry.rain_intensity = stat.totalRainDuration > 0 ? 100 : 0
+        entry.rain_intensity = stat.avgRainIntensity ?? (stat.totalRainDuration > 0 ? 100 : 0)
       }
 
       // KPIs Botánicos (Procesados)
@@ -404,73 +404,64 @@ export async function getLastRainState() {
   }
 }
 
-/**
- * Obtiene un resumen de los eventos de lluvia en un rango determinado.
- */
 export async function getRainSummaryInternal(range: string, zone: ZoneType) {
-  let rangeString = '24h'
+  let startDate = new Date()
 
   switch (range) {
+    case '12h':
+      startDate = new Date(Date.now() - 12 * 3600000)
+      break
+    case '24h':
+      startDate = new Date(Date.now() - 24 * 3600000)
+      break
     case '7d':
-      rangeString = '7d'
+      startDate = new Date(Date.now() - 7 * 24 * 3600000)
       break
     case '30d':
-      rangeString = '30d'
+      startDate = new Date(Date.now() - 30 * 24 * 3600000)
       break
     case 'all':
-      rangeString = '365d'
+      startDate = new Date(0)
       break
     default:
-      rangeString = '24h'
+      startDate = new Date(Date.now() - 24 * 3600000)
   }
 
-  const timeFilter = range === 'all' ? '' : `AND time >= now() - interval '${rangeString}'`
-
-  const query = `
-    SELECT *
-    FROM rain_events
-    WHERE zone = '${zone}'
-    ${timeFilter}
-    ORDER BY time ASC
-  `
-
   try {
-    const reader = influxClient.query(query)
-    const events = []
-    let totalDuration = 0
-    let totalIntensity = 0
+    const rainEvents = await prisma.rainEvent.findMany({
+      where: {
+        zone: zone as ZoneType,
+        startedAt: { gte: startDate },
+      },
+      orderBy: { startedAt: 'asc' },
+    })
 
-    for await (const row of reader as AsyncIterable<InfluxRow>) {
-      const timeStr = safeTimeToISO(row.time)
+    const events = rainEvents.map((ev) => ({
+      time: ev.startedAt.toISOString(),
+      duration: ev.durationSeconds || 0,
+      intensity: ev.avgIntensity || ev.peakIntensity || 0,
+    }))
 
-      events.push({
-        time: timeStr,
-        duration: Number(row.duration_seconds),
-        intensity: Number(row.intensity_percent),
-      })
-      totalDuration += Number(row.duration_seconds)
-      totalIntensity += Number(row.intensity_percent)
-    }
+    const totalDuration = rainEvents.reduce((acc, ev) => acc + (ev.durationSeconds || 0), 0)
+    const totalIntensity = rainEvents.reduce(
+      (acc, ev) => acc + (ev.avgIntensity || ev.peakIntensity || 0),
+      0,
+    )
 
     return {
       totalDurationSeconds: totalDuration,
-      averageIntensity: events.length > 0 ? Math.round(totalIntensity / events.length) : 0,
-      eventCount: events.length,
+      averageIntensity: rainEvents.length > 0 ? Math.round(totalIntensity / rainEvents.length) : 0,
+      eventCount: rainEvents.length,
       events,
     }
   } catch (error: unknown) {
-    const err = error as Error
-    const errorMessage = err.message || err.toString()
+    Logger.error('Error al consultar RainEvents en Postgres:', error)
 
-    if (errorMessage.includes('not found') || errorMessage.includes('table')) {
-      return {
-        totalDurationSeconds: 0,
-        averageIntensity: 0,
-        eventCount: 0,
-        events: [],
-      }
+    return {
+      totalDurationSeconds: 0,
+      averageIntensity: 0,
+      eventCount: 0,
+      events: [],
     }
-
-    throw error
   }
 }

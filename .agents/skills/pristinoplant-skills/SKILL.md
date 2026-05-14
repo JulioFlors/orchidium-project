@@ -79,6 +79,12 @@ Formato: `[Emoji] [tipo] ([área]): [Título Conciso]`
    - ✅ *Correcto:* `import { Button } from '@/components'`
    - Esto asegura encapsulamiento y facilita refactorizaciones.
 
+2. **Registro de Logs (Backend/Scheduler)**:
+   - **MÁXIMO 4 CARACTERES**: Todos los tags de sistema (dentro de los corchetes) deben tener un máximo de 4 caracteres para garantizar una alineación vertical perfecta en la consola.
+   - ❌ *Incorrecto:* `[ SCHEDULE ]`, `[ INFERENCE ]`, `[ TELEMETRY ]`
+   - ✅ *Correcto:* `[ CRON ]`, `[ INFR ]`, `[ TLMT ]`
+   - Usar siempre los métodos especializados del `Logger` (`Logger.agro()`, `Logger.task()`, etc.) en lugar de tags manuales en strings de `Logger.info`.
+
 ## Reglas de Base de Datos (Prisma) — La Biblia
 
 > [!CAUTION]

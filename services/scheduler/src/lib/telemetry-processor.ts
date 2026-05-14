@@ -51,17 +51,23 @@ export async function processDay(
 
   // ── 1. Lluvia ─────────────────────────────────────────────────────────────
   let totalRain = 0
+  let avgRainIntensity: number | null = null
 
   if (isExterior) {
     try {
-      const rainQuery = `SELECT SUM(duration_seconds) as total_rain FROM "rain_events" WHERE "zone" = '${zone}' AND time >= '${dayStart.toISOString()}' AND time < '${dayEnd.toISOString()}'`
-      const rainStream = influxClient.query(rainQuery)
+      const rainAgg = await prisma.rainEvent.aggregate({
+        where: {
+          zone: ZoneType.EXTERIOR,
+          startedAt: { gte: dayStart, lt: dayEnd },
+        },
+        _sum: { durationSeconds: true },
+        _avg: { avgIntensity: true },
+      })
 
-      for await (const row of rainStream) {
-        totalRain = Number(row.total_rain || 0)
-      }
-    } catch {
-      // Tabla puede no existir — normal
+      totalRain = rainAgg._sum.durationSeconds || 0
+      avgRainIntensity = rainAgg._avg.avgIntensity || null
+    } catch (err) {
+      Logger.error(`[${dayLabel}] Error calculando totalRain desde Postgres:`, err)
     }
   }
 
@@ -309,6 +315,7 @@ export async function processDay(
     maxIllumTime: toCaracasTimeStr(maxLumTime),
     lightDurationHours: isExterior ? 8 : 0,
     totalRainDuration: Math.round(totalRain),
+    avgRainIntensity: avgRainIntensity ? Number(avgRainIntensity.toFixed(2)) : null,
     dli,
     vpdAvg,
     vpdMin: vpdMinFinal,

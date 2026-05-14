@@ -22,6 +22,7 @@ import {
   resumeInterruptedTasks,
 } from './lib/task-manager'
 import { processDay } from './lib/telemetry-processor'
+import { influxClient } from './lib/influx'
 
 // ---- Configuración de Reglas ----
 
@@ -425,15 +426,45 @@ async function closeRainEvent(reason: string, endTime: Date = new Date()) {
 
     const durationSeconds = Math.round((endTime.getTime() - event.startedAt.getTime()) / 1000)
 
+    // Consultar intensidad en InfluxDB
+    let avgIntensity: number | null = null
+    let peakIntensity: number | null = null
+
+    try {
+      const intensityQuery = `
+        SELECT MEAN(rain_intensity) as avg_int, MAX(rain_intensity) as peak_int 
+        FROM "environment_metrics" 
+        WHERE "zone" = 'EXTERIOR' 
+          AND time >= '${event.startedAt.toISOString()}' 
+          AND time <= '${endTime.toISOString()}'
+      `
+      const stream = influxClient.query(intensityQuery)
+
+      for await (const row of stream) {
+        if (row.avg_int != null) avgIntensity = Number(row.avg_int)
+        if (row.peak_int != null) peakIntensity = Number(row.peak_int)
+      }
+    } catch (err) {
+      Logger.warn('No se pudo recuperar la intensidad de lluvia de InfluxDB:', err)
+    }
+
     if (!openRainEventId) return
 
     await prisma.rainEvent.update({
       where: { id: openRainEventId },
-      data: { endedAt: endTime, durationSeconds, closedBy: reason },
+      data: {
+        endedAt: endTime,
+        durationSeconds,
+        closedBy: reason,
+        avgIntensity,
+        peakIntensity,
+      },
     })
 
+    const intensityLog = avgIntensity ? ` | Int. Promedio: ${Math.round(avgIntensity)}%` : ''
+
     Logger.rain(
-      `Evento de lluvia cerrado (${reason}) — Duración: ${Math.round(durationSeconds / 60)} min (ID: ${openRainEventId.slice(0, 8)})`,
+      `Evento de lluvia cerrado (${reason}) — Duración: ${Math.round(durationSeconds / 60)} min${intensityLog} (ID: ${openRainEventId.slice(0, 8)})`,
     )
   } catch (err) {
     Logger.error('Error cerrando RainEvent en Postgres:', err)
@@ -541,7 +572,7 @@ async function handleNodeSync(isBoot: boolean = false) {
   // Si ya sincronizamos hace menos de 5 segundos, ignoramos la redundancia
   if (timeSinceLastSync < 5000) {
     if (isBoot) {
-      Logger.debug('[ MQTT ] Boot redundante detectado. Ignorando sincronización duplicada.')
+      Logger.debug('Boot redundante detectado. Ignorando sincronización duplicada.')
     }
 
     return
