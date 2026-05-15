@@ -1,8 +1,10 @@
 import { prisma, TaskStatus, TaskLog } from '@package/database'
 import { Cron } from 'croner'
 
+import { isCurrentlyRaining } from '../index'
+
 import { Logger } from './logger'
-import { executeSequence, stopSequence } from './mqtt-handler'
+import { executeSequence, stopSequence, irrigationRetryManager } from './mqtt-handler'
 import { InferenceEngine } from './inference-engine'
 
 const recentEvents = new Map<string, number>()
@@ -116,6 +118,28 @@ export async function recordTaskEvent(
  */
 export async function processTaskLog(taskLog: TaskLog) {
   try {
+    // [🛡️ HARD BLOCK]: Si está lloviendo AHORA (según sensor físico), no abrimos el circuito.
+    const isWaterTask = [
+      'IRRIGATION',
+      'HUMIDIFICATION',
+      'SOIL_WETTING',
+      'FERTIGATION',
+      'FUMIGATION',
+    ].includes(taskLog.purpose)
+
+    if (isWaterTask && taskLog.source !== 'MANUAL' && isCurrentlyRaining()) {
+      Logger.rain(
+        `Cancelando ejecución automática de ${taskLog.purpose} (${taskLog.id.slice(0, 8)}). El sensor de lluvia está activo.`,
+      )
+      await recordTaskEvent(
+        taskLog.id,
+        TaskStatus.CANCELLED,
+        'Cancelación automática: Lluvia detectada en curso (Veto ambiental).',
+      )
+
+      return
+    }
+
     // [Smart Recalibration]: Usamos los minutos ya completados registrados en la DB
     // y el tiempo transcurrido si la tarea quedó en un limbo IN_PROGRESS.
     const alreadyCompletedSec = (taskLog.completedMinutes || 0) * 60
@@ -149,6 +173,7 @@ export async function processTaskLog(taskLog: TaskLog) {
 
       // [Regla de Tolerancia]: 1 minuto de tolerancia por cada 5 minutos de duración total
       const toleranceSec = Math.floor(taskLog.duration / 5) * 60
+
       if (durationToExecuteSec <= toleranceSec) {
         Logger.warn(
           `Tarea ${taskLog.id.slice(0, 8)} finalizada por margen de tolerancia (${durationToExecuteSec}s restantes <= ${toleranceSec}s).`,
@@ -277,6 +302,12 @@ export async function processPostponedTasks() {
   }
 
   if (postponed.length > 0) {
+    if (irrigationRetryManager.connectionState !== 'online') {
+      Logger.debug(`Poll: ${postponed.length} tareas postergadas esperando reconexión del nodo.`)
+
+      return
+    }
+
     const isSingle = postponed.length === 1
     const introText = isSingle
       ? 'Reactivando 1 tarea pendiente/postergada'
@@ -440,6 +471,11 @@ export async function processAuthorizedTasks() {
     })
 
     for (const task of authorizedTasks) {
+      if (irrigationRetryManager.connectionState !== 'online') {
+        Logger.debug(`Poll: Tarea autorizada ${task.id.slice(0, 8)} en espera (Nodo Offline).`)
+        break // Si el nodo está offline, no procesamos ninguna
+      }
+
       Logger.task(`Poll: Procesando tarea autorizada: ${task.id.slice(0, 8)} (${task.purpose})`)
 
       // Antes de ejecutar, pasar por el Motor de Inferencia para el Veto de último minuto

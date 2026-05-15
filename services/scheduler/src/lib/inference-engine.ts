@@ -1,5 +1,7 @@
 import { prisma, TaskStatus, AutomationSchedule, ZoneType } from '@package/database'
 
+import { isCurrentlyRaining } from '../index'
+
 import { Logger } from './logger'
 import { classifyCurrentDay } from './day-classifier'
 import { influxClient } from './influx'
@@ -17,8 +19,9 @@ const THRESHOLDS = {
   MIN_RAIN_FOR_SOIL_WETTING: 1200, // 20 min de lluvia acumulada → omitir humectación suelo
 
   // Ventanas de análisis (horas)
-  RAIN_LOOKBACK_IRRIGATION: 12, // Lluvia acumulada en 12h → aplica a IRRIGATION
+  RAIN_LOOKBACK_IRRIGATION: 24, // Lluvia acumulada en 24h → aplica a IRRIGATION
   RAIN_LOOKBACK_SOIL_WETTING: 4, // Lluvia acumulada en 4h → aplica a SOIL_WETTING
+  RAIN_LOOKBACK_HUMIDIFICATION: 8, // Lluvia acumulada en 8h → aplica a HUMIDIFICATION (8am-4pm)
 
   // Microclima Interior (bajo mallasombra)
   // TODO: Calibrar con datos reales del DHT22 cuando esté activo
@@ -132,10 +135,14 @@ export class InferenceEngine {
 
       // ── 3. HARD BLOCK: Lluvia Real en Curso ──
       // Si está lloviendo AHORA → no ejecutar ninguna tarea hídrica
-      if (localConditions.exterior.rain_intensity && localConditions.exterior.rain_intensity > 0) {
+      const currentlyRaining =
+        isCurrentlyRaining() ||
+        (localConditions.exterior.rain_intensity && localConditions.exterior.rain_intensity > 0)
+
+      if (currentlyRaining) {
         return {
           shouldCancel: true,
-          reason: `Está lloviendo ahora (sensor de lluvia activo). Intensidad: ${localConditions.exterior.rain_intensity}.`,
+          reason: `Está lloviendo ahora (sensor activo: ${isCurrentlyRaining()}, intensidad: ${localConditions.exterior.rain_intensity || 0}).`,
           action: 'SKIP',
           metadata: { localConditions },
         }
@@ -155,16 +162,32 @@ export class InferenceEngine {
         }
       }
 
-      // ── 4.1 Lluvia Acumulada → SOIL_WETTING (>20min en 4h) ──
+      // ── 4.1 Lluvia Acumulada → SOIL_WETTING (Ventana 4h) ──
       if (purpose === 'SOIL_WETTING') {
         const recentRain = await this.getRecentRainAccumulation(
           THRESHOLDS.RAIN_LOOKBACK_SOIL_WETTING,
         )
 
-        if (recentRain.durationSeconds >= THRESHOLDS.MIN_RAIN_FOR_SOIL_WETTING) {
+        if (recentRain.durationSeconds > 0) {
           return {
             shouldCancel: true,
-            reason: `Lluvia acumulada: ${Math.round(recentRain.durationSeconds / 60)} min en las últimas ${THRESHOLDS.RAIN_LOOKBACK_SOIL_WETTING}h.`,
+            reason: `Cancelación automática: Lluvia detectada en las últimas ${THRESHOLDS.RAIN_LOOKBACK_SOIL_WETTING} horas. Suelo ya humectado.`,
+            action: 'SKIP',
+            metadata: { recentRain },
+          }
+        }
+      }
+
+      // ── 4.2 Lluvia Acumulada → HUMIDIFICATION (Día Botánico 8h) ──
+      if (purpose === 'HUMIDIFICATION') {
+        const recentRain = await this.getRecentRainAccumulation(
+          THRESHOLDS.RAIN_LOOKBACK_HUMIDIFICATION,
+        )
+
+        if (recentRain.durationSeconds > 0) {
+          return {
+            shouldCancel: true,
+            reason: `Cancelación automática: Lluvia detectada durante el día botánico (últimas 8h). Ambiente saturado.`,
             action: 'SKIP',
             metadata: { recentRain },
           }

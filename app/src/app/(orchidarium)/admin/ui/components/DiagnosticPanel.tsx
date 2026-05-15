@@ -2,22 +2,21 @@
 
 import { useState, useEffect, useRef } from 'react'
 import {
-  IoCloseOutline,
-  IoCodeSlashOutline,
-  IoHardwareChipOutline,
   IoHeartOutline,
   IoInformationCircleOutline,
-  IoPlay,
   IoPlayCircleOutline,
   IoPulseOutline,
   IoSearchOutline,
   IoStatsChartOutline,
   IoStop,
   IoTimeOutline,
-  IoTrashOutline,
   IoWifiOutline,
   IoThermometerOutline,
   IoWaterOutline,
+  IoHardwareChipOutline,
+  IoPlay,
+  IoTrashOutline,
+  IoCloseOutline,
 } from 'react-icons/io5'
 import {
   Area,
@@ -94,13 +93,6 @@ const TOOL_COLORS: Record<
     border: 'border-red-500/30',
     icon: 'text-red-500',
     pulse: 'bg-red-400',
-  },
-  nvs: {
-    bg: 'from-amber-500/30 to-amber-500/10',
-    ring: 'ring-amber-500/15',
-    border: 'border-amber-500/30',
-    icon: 'text-amber-500',
-    pulse: 'bg-amber-400',
   },
   ram: {
     bg: 'from-indigo-500/30 to-indigo-500/10',
@@ -287,19 +279,6 @@ export function ToolboxGrid({
           onClick={() => onCommand('ui_heartbeat', 'heartbeat')}
         />
         <ToolCard
-          active={activeAudits.includes('nvs')}
-          colorKey="nvs"
-          disabled={!isOnline}
-          icon={
-            <IoCodeSlashOutline
-              className={clsx(!activeAudits.includes('nvs') && TOOL_COLORS.nvs.icon)}
-              size={24}
-            />
-          }
-          label="NVS Stack"
-          onClick={() => onCommand('audit_nvs', 'nvs')}
-        />
-        <ToolCard
           active={activeAudits.includes('ram')}
           colorKey="ram"
           disabled={!isOnline}
@@ -388,7 +367,7 @@ function CustomTooltip({ active, payload, label, chartColor, activeAudit }: Cust
     let formattedVal = val.toFixed(1)
 
     if (activeAudit === 'rain') {
-      formattedVal = `${Math.round(val)} %`
+      formattedVal = val.toString()
     } else if (activeAudit === 'lux') {
       formattedVal = val >= 1000 ? `${(val / 1000).toFixed(1)}k` : val.toFixed(1)
       formattedVal += ' lux'
@@ -439,7 +418,6 @@ export function AuditConsoleCard({
   onStop,
   onClear,
 }: AuditConsoleCardProps) {
-  const accumulatorRef = useRef<Record<string, unknown>>({})
   const { data: session } = authClient.useSession()
 
   const [displayPayload, setDisplayPayload] = useState<AuditPayload | null>(null)
@@ -510,43 +488,11 @@ export function AuditConsoleCard({
   useEffect(() => {
     if (!currentPayload) return
 
-    if (activeAudit === 'nvs') {
-      try {
-        const payloadObj =
-          typeof currentPayload === 'string' ? JSON.parse(currentPayload) : currentPayload
+    const isChartable = ['lux', 'rain', 'ram', 'health', 'temp', 'hum'].includes(activeAudit || '')
 
-        if (
-          payloadObj &&
-          typeof payloadObj === 'object' &&
-          'chunk' in payloadObj &&
-          'total' in payloadObj &&
-          'data' in payloadObj
-        ) {
-          const { chunk, total, data } = payloadObj as {
-            chunk: number
-            total: number
-            data: Record<string, unknown>
-          }
-
-          if (chunk === 1) {
-            accumulatorRef.current = { ...data }
-          } else {
-            accumulatorRef.current = { ...accumulatorRef.current, ...data }
-          }
-
-          if (chunk === total) {
-            setDisplayPayload({ ...accumulatorRef.current })
-          }
-        }
-      } catch {
-        // Error silencioso
-      }
-    } else {
-      const isChartable = ['lux', 'rain', 'ram', 'health', 'temp', 'hum'].includes(
-        activeAudit || '',
-      )
-
-      if (isChartable) {
+    if (isChartable) {
+      // Usamos un micro-task para evitar el renderizado en cascada síncrono que reporta el linter
+      Promise.resolve().then(() => {
         setDisplayPayload((prev: unknown) => {
           const prevPayload = (prev as { history?: unknown[] }) || { history: [] }
           const incomingPayload = (currentPayload as Record<string, unknown>) || {}
@@ -554,9 +500,6 @@ export function AuditConsoleCard({
           let incomingHistory = (incomingPayload.history as unknown[]) || []
 
           if (incomingHistory.length === 0 && activeAudit) {
-            // Caso A: El payload es un objeto y tiene la clave de la auditoría (o 'val')
-            // Caso B: El payload ya es el valor primitivo (número/string)
-            // Caso C: El payload es un objeto pero NO tiene la clave (ya fue pre-indexado en el padre, ej: RAM)
             const hasKey =
               typeof incomingPayload === 'object' &&
               incomingPayload !== null &&
@@ -571,7 +514,6 @@ export function AuditConsoleCard({
                 (incomingPayload as Record<string, unknown>).rain_intensity ??
                 incomingPayload)
 
-            // Solo agregamos si el valor es válido (no nulo/undefined)
             if (val !== undefined && val !== null) {
               const timestamp = (incomingPayload as Record<string, unknown>)?.time
                 ? Number((incomingPayload as Record<string, unknown>).time) < 1000000000
@@ -584,8 +526,6 @@ export function AuditConsoleCard({
           }
 
           const mergedMap = new Map<string, unknown>()
-
-          // Usamos una llave que combine timestamp y un hash del valor para evitar colisiones en el mismo segundo
           const getSampleKey = (item: unknown) => {
             if (!Array.isArray(item) || item.length < 2) return null
             const ts = item[0]
@@ -611,7 +551,7 @@ export function AuditConsoleCard({
 
               return tsA - tsB
             })
-            .slice(-100) // Aumentado a 100 muestras para historial más extenso
+            .slice(-100)
 
           const nextState = { ...incomingPayload, history: mergedHistory, receivedAt: Date.now() }
 
@@ -626,15 +566,17 @@ export function AuditConsoleCard({
 
           return nextState
         })
-      } else {
-        const nextState = {
-          ...(currentPayload as Record<string, unknown>),
-          receivedAt: Date.now(),
-        }
+      })
+    } else {
+      const nextState = {
+        ...(currentPayload as Record<string, unknown>),
+        receivedAt: Date.now(),
+      }
 
+      Promise.resolve().then(() => {
         setDisplayPayload(nextState)
         setLocalReceivedAt(nextState.receivedAt)
-      }
+      })
     }
   }, [currentPayload, activeAudit, deviceId])
 
@@ -729,7 +671,7 @@ export function AuditConsoleCard({
                   : activeAudit === 'lux'
                     ? [0, 90000]
                     : activeAudit === 'rain'
-                      ? [0, 100]
+                      ? [0, 4095]
                       : activeAudit === 'temp'
                         ? [0, 50]
                         : activeAudit === 'hum'
@@ -741,7 +683,7 @@ export function AuditConsoleCard({
               stroke="var(--color-secondary)"
               tickFormatter={(value) => {
                 if (activeAudit === 'health') return `${value}dB`
-                if (activeAudit === 'rain') return `${value}%`
+                if (activeAudit === 'rain') return value.toString()
                 if (activeAudit === 'temp') return `${value}°`
                 if (activeAudit === 'hum') return `${value}%`
 
@@ -833,14 +775,6 @@ export function AuditConsoleCard({
 
         dataForUi = Array.isArray(lastPoint) ? lastPoint[1] : lastPoint
       }
-    }
-
-    if (activeAudit === 'nvs' && displayPayload) {
-      return (
-        <pre className="whitespace-pre-wrap text-blue-300">
-          {JSON.stringify(displayPayload, null, 2)}
-        </pre>
-      )
     }
 
     if (activeAudit === 'ram' && dataForUi && typeof dataForUi === 'object') {

@@ -88,10 +88,132 @@ async function waitForMosquitto(retries = 15) {
 }
 
 // ---- Gestión de Estado Local ----
-let lastRainState: string | null = null
+let lastRainState: 'Raining' | 'Dry' = 'Dry'
 let lastFirmwareHeartbeat: number = Date.now()
 let lastSyncTimestamp: number = 0
 let openRainEventId: string | null = null // ID del RainEvent abierto en Postgres
+
+// Buffers para validación inteligente de lluvia (Humedad Residual)
+const telemetryBuffer: { lux: number; temp: number; hum: number; timestamp: number }[] = []
+let baselineLux: number | null = null
+let baselineTemp: number | null = null
+let baselineHum: number | null = null
+let isRainOverridden = false
+let rainStartedAt: number | null = null
+let lastVetoAt: number | null = null
+let isWaitingForBaselineFallback = false
+
+/**
+ * Devuelve el estado actual de lluvia considerando el veto por humedad residual.
+ */
+export function isCurrentlyRaining(): boolean {
+  return lastRainState === 'Raining' && !isRainOverridden
+}
+
+/**
+ * Abre un nuevo evento de lluvia en PostgreSQL o reanuda uno existente.
+ */
+async function openRainEvent(timestamp: Date = new Date()) {
+  if (!openRainEventId) {
+    try {
+      const existing = await prisma.rainEvent.findFirst({
+        where: { zone: 'EXTERIOR', endedAt: null },
+        orderBy: { startedAt: 'desc' },
+      })
+
+      if (existing) {
+        openRainEventId = existing.id
+        Logger.rain(`Evento de lluvia reanudado (ID: ${existing.id.slice(0, 8)})`)
+      } else {
+        const newEvent = await prisma.rainEvent.create({
+          data: { startedAt: timestamp, zone: 'EXTERIOR' },
+        })
+
+        openRainEventId = newEvent.id
+        Logger.rain(`Evento de lluvia abierto (ID: ${newEvent.id.slice(0, 8)})`)
+      }
+    } catch (err) {
+      Logger.error('Error abriendo RainEvent en Postgres:', err)
+    }
+  }
+}
+
+/**
+ * Cierra el evento de lluvia abierto en Postgres y calcula la duración.
+ * @param reason Motivo de cierre: "Dry", "ORPHAN_TIMEOUT", "REBOOT", "SCHEDULER_OVERRIDE"
+ * @param endTime Timestamp de cierre (por defecto: ahora)
+ */
+async function closeRainEvent(reason: string, endTime: Date = new Date()) {
+  if (!openRainEventId) {
+    // Buscar en DB por si el Scheduler se reinició con un evento huérfano
+    const existing = await prisma.rainEvent
+      .findFirst({
+        where: { zone: 'EXTERIOR', endedAt: null },
+        orderBy: { startedAt: 'desc' },
+      })
+      .catch(() => null)
+
+    if (!existing) return
+    openRainEventId = existing.id
+  }
+
+  try {
+    const event = await prisma.rainEvent.findUnique({ where: { id: openRainEventId } })
+
+    if (!event || event.endedAt) {
+      openRainEventId = null
+
+      return
+    }
+
+    const durationSeconds = Math.round((endTime.getTime() - event.startedAt.getTime()) / 1000)
+
+    // Consultar intensidad en InfluxDB
+    let avgIntensity: number | null = null
+    let peakIntensity: number | null = null
+
+    try {
+      const intensityQuery = `
+        SELECT MEAN(rain_intensity) as avg_int, MAX(rain_intensity) as peak_int 
+        FROM "environment_metrics" 
+        WHERE "zone" = 'EXTERIOR' 
+          AND time >= '${event.startedAt.toISOString()}' 
+          AND time <= '${endTime.toISOString()}'
+      `
+      const stream = influxClient.query(intensityQuery)
+
+      for await (const row of stream) {
+        if (row.avg_int != null) avgIntensity = Number(row.avg_int)
+        if (row.peak_int != null) peakIntensity = Number(row.peak_int)
+      }
+    } catch (err) {
+      Logger.warn('No se pudo recuperar la intensidad de lluvia de InfluxDB:', err)
+    }
+
+    if (!openRainEventId) return
+
+    await prisma.rainEvent.update({
+      where: { id: openRainEventId },
+      data: {
+        endedAt: endTime,
+        durationSeconds,
+        closedBy: reason,
+        avgIntensity,
+        peakIntensity,
+      },
+    })
+
+    const intensityLog = avgIntensity ? ` | Int. Promedio: ${Math.round(avgIntensity)}%` : ''
+
+    Logger.rain(
+      `Evento de lluvia cerrado (${reason}) — Duración: ${Math.round(durationSeconds / 60)} min${intensityLog} (ID: ${openRainEventId.slice(0, 8)})`,
+    )
+  } catch (err) {
+    Logger.error('Error cerrando RainEvent en Postgres:', err)
+  } finally {
+    openRainEventId = null
+  }
+}
 
 // Timeout para eventos de lluvia huérfanos (10 minutos sin señales de vida)
 const RAIN_ORPHAN_TIMEOUT_MS = 10 * 60 * 1000
@@ -114,40 +236,36 @@ function setupMqttHandlers() {
     )
   }
 
-  mqttClient.on('connect', () => {
-    Logger.success('Conectado a Broker MQTT')
-    subscribe()
-  })
-
-  // Si ya estamos conectados (por el waitForMosquitto), suscribir de inmediato
-  if (mqttClient.connected) {
-    Logger.success('Conectado a Broker MQTT')
+  let isFirstConnection = true
+  const onConnect = () => {
+    if (isFirstConnection) {
+      Logger.success('Conectado a Broker MQTT')
+      isFirstConnection = false
+    }
     subscribe()
   }
+
+  mqttClient.on('connect', onConnect)
+  if (mqttClient.connected) onConnect()
 
   mqttClient.on('message', async (topic, payload) => {
     try {
       const message = payload.toString().trim()
+      const previousHeartbeat = lastFirmwareHeartbeat
 
       // Heartbeat: cualquier mensaje del firmware actualiza el timestamp general
-      if (
-        topic.startsWith('PristinoPlant/Actuator_Controller/') ||
-        topic.startsWith('PristinoPlant/Weather_Station/')
-      ) {
-        lastFirmwareHeartbeat = Date.now()
-      }
+      // Se actualizará lastFirmwareHeartbeat al final de este handler.
 
       // 1. Monitoreo de Conexión del Nodo Actuador
       if (topic === 'PristinoPlant/Actuator_Controller/status') {
-        // Nota: lastFirmwareHeartbeat (línea 139) ya cubre el heartbeat universal del actuador.
-
         if (message === 'online') {
           if (irrigationRetryManager.connectionState === 'online') {
-            // Heartbeat periódico: solo actualizar timestamp, no registrar en DB
+            lastFirmwareHeartbeat = Date.now()
+
             return
           }
 
-          await handleNodeSync(false)
+          await handleNodeSync(false, previousHeartbeat)
         } else if (
           message === 'lwt_disconnect' &&
           irrigationRetryManager.connectionState !== 'offline'
@@ -178,7 +296,7 @@ function setupMqttHandlers() {
 
         // No forzamos un offline previo, saltamos directamente al sync
         // para que evalúe si es un REBOOT o una sesión nueva.
-        await handleNodeSync(true)
+        await handleNodeSync(true, previousHeartbeat)
 
         return
       }
@@ -335,6 +453,120 @@ function setupMqttHandlers() {
         return
       }
 
+      // 3.5 Lecturas Ambientales (Validación de Lluvia / Humedad Residual)
+      if (topic === 'PristinoPlant/Weather_Station/Exterior/readings') {
+        try {
+          const data = JSON.parse(message)
+          const lux = Number(data.illuminance || 0)
+          const temp = Number(data.temperature || 0)
+          const hum = Number(data.humidity || 0)
+
+          if (lastRainState === 'Dry') {
+            telemetryBuffer.push({ lux, temp, hum, timestamp: Date.now() })
+            if (telemetryBuffer.length > 10) telemetryBuffer.shift()
+          }
+
+          if (lastRainState === 'Raining' && !isRainOverridden) {
+            // Lógica de Fallback de Baseline (si no hubo datos pre-lluvia)
+            if (isWaitingForBaselineFallback && rainStartedAt) {
+              const elapsed = Date.now() - rainStartedAt
+
+              if (elapsed < 10 * 60 * 1000) {
+                // Capturamos el MÁXIMO durante la lluvia como baseline de emergencia
+                if (baselineLux === null || lux > baselineLux) baselineLux = lux
+                if (baselineTemp === null || temp > baselineTemp) baselineTemp = temp
+                if (baselineHum === null || hum > baselineHum) baselineHum = hum
+              } else {
+                isWaitingForBaselineFallback = false
+                Logger.debug(
+                  `Captura de fallback finalizada. Baseline: ${baselineLux?.toFixed(0)}lx / ${baselineTemp?.toFixed(1)}°C / ${baselineHum?.toFixed(1)}%.`,
+                )
+              }
+            }
+
+            // Si está lloviendo y no hemos vetado aún, evaluamos recuperación inteligente
+            const now = new Date()
+            const options: Intl.DateTimeFormatOptions = {
+              timeZone: 'America/Caracas',
+              hour: 'numeric',
+              hour12: false,
+            }
+            const caracasHour = parseInt(new Intl.DateTimeFormat('en-US', options).format(now))
+
+            // Ventana operativa: 6:00 AM - 5:00 PM
+            const isWindow = caracasHour >= 6 && caracasHour < 17
+
+            if (baselineTemp !== null) {
+              const luxRecovery = isWindow && baselineLux !== null && lux > baselineLux * 1.2
+              const tempRecovery = temp > baselineTemp + 2
+              const humRecovery = baselineHum !== null && hum < baselineHum - 2 // Desaturación detectada
+              const absoluteSun = isWindow && lux > 26000
+
+              if (luxRecovery || tempRecovery || humRecovery || absoluteSun) {
+                const reason = luxRecovery
+                  ? `Recuperación lumínica (+${Math.round((lux / baselineLux! - 1) * 100)}% vs mín.)`
+                  : tempRecovery
+                    ? `Recuperación térmica (+${(temp - baselineTemp).toFixed(1)}°C vs mín.)`
+                    : humRecovery
+                      ? `Recuperación de humedad (${hum.toFixed(1)}% vs mín.)`
+                      : 'Cielo Templado detectado (>26k lux)'
+
+                Logger.rain(
+                  `Veto de lluvia inteligente: ${reason}. Baseline: ${baselineLux?.toFixed(0)}lx / ${baselineTemp.toFixed(1)}°C / ${baselineHum?.toFixed(1)}%. Actual: ${lux.toFixed(0)}lx / ${temp.toFixed(1)}°C / ${hum.toFixed(1)}%.`,
+                )
+
+                isRainOverridden = true
+                lastVetoAt = Date.now()
+                await closeRainEvent('SCHEDULER_OVERRIDE')
+              }
+            }
+          }
+
+          // --- Lógica de Reversión de Veto (Anti-Intermitencia) ---
+          // Si el veto está activo pero las condiciones vuelven a ser "de lluvia", lo anulamos.
+          // Solo permitimos la re-apertura en un plazo de 30 minutos tras el veto,
+          // ya que el baseline original se vuelve obsoleto después de ese tiempo.
+          if (
+            isRainOverridden &&
+            baselineLux !== null &&
+            baselineTemp !== null &&
+            lastVetoAt !== null
+          ) {
+            const timeSinceVeto = (Date.now() - lastVetoAt) / 60000
+            const isWindowValid = timeSinceVeto < 30 // Ventana de 30 minutos
+
+            if (isWindowValid) {
+              const lostLux = lux < baselineLux * 1.1 // Regresó a la oscuridad
+              const lostTemp = temp < baselineTemp + 1 // Regresó al frío
+              const lostHum = baselineHum !== null && hum > baselineHum + 5 // Regresó a la humedad
+
+              if (lostLux || lostTemp || lostHum) {
+                const reason = lostLux
+                  ? 'Nubes regresaron (Lux bajo)'
+                  : lostTemp
+                    ? 'Baja térmica'
+                    : 'Saturación de humedad'
+
+                Logger.rain(
+                  `Anulando veto: ${reason} tras ${timeSinceVeto.toFixed(1)}min. La lluvia parece haber vuelto.`,
+                )
+                isRainOverridden = false
+                lastVetoAt = null
+                // Si el sensor físico sigue marcando Raining, re-abrimos el evento
+                if (lastRainState === 'Raining') {
+                  await openRainEvent()
+                }
+              }
+            } else {
+              // Si pasaron más de 30 min, el veto es permanente para este ciclo
+              // ya que el baseline no es confiable. El evento solo cerrará cuando el firmware diga Dry.
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+
       // 4. Detección y Persistencia de Lluvia
       if (topic === 'PristinoPlant/Weather_Station/Exterior/rain/state') {
         let state = message
@@ -354,123 +586,63 @@ function setupMqttHandlers() {
         lastFirmwareHeartbeat = Date.now()
 
         if (state === 'Raining') {
+          if (isRainOverridden) return // Evitar reapertura si el veto está activo
+
           if (lastRainState !== 'Raining') {
             Logger.rain('Lluvia detectada por sensores en tiempo real.')
+            rainStartedAt = Date.now()
+
+            // Capturar baseline justo antes de que empiece a llover
+            // Usamos el valor MÍNIMO de los últimos 10 minutos (sin promedios)
+            const now = Date.now()
+            const freshSamples = telemetryBuffer.filter((s) => now - s.timestamp < 10 * 60 * 1000)
+
+            if (freshSamples.length > 0) {
+              baselineLux = Math.min(...freshSamples.map((s) => s.lux))
+              baselineTemp = Math.min(...freshSamples.map((s) => s.temp))
+              baselineHum = Math.min(...freshSamples.map((s) => s.hum))
+              isWaitingForBaselineFallback = false
+
+              Logger.debug(
+                `Capturando Baseline de lluvia (Mínimo últimos 10m): ${baselineLux.toFixed(0)}lx / ${baselineTemp.toFixed(1)}°C / ${baselineHum.toFixed(1)}%. [${freshSamples.length} muestras]`,
+              )
+            } else {
+              // Fallback: Si no hay buffer, activamos captura del máximo durante los primeros 10 min de lluvia
+              baselineLux = null
+              baselineTemp = null
+              baselineHum = null
+              isWaitingForBaselineFallback = true
+              Logger.warn(
+                'Sin baseline pre-lluvia (buffer vacío o antiguo). Iniciando captura de fallback (Máximo en lluvia).',
+              )
+            }
+
+            isRainOverridden = false
           }
           lastRainState = 'Raining'
 
           // Abrir o reutilizar evento de lluvia en Postgres
-          if (!openRainEventId) {
-            try {
-              // Verificar si ya existe un evento abierto (por reinicio del Scheduler)
-              const existing = await prisma.rainEvent.findFirst({
-                where: { zone: 'EXTERIOR', endedAt: null },
-                orderBy: { startedAt: 'desc' },
-              })
-
-              if (existing) {
-                openRainEventId = existing.id
-                Logger.rain(`Evento de lluvia reanudado (ID: ${existing.id.slice(0, 8)})`)
-              } else {
-                const newEvent = await prisma.rainEvent.create({
-                  data: { startedAt: rainTimestamp, zone: 'EXTERIOR' },
-                })
-
-                openRainEventId = newEvent.id
-                Logger.rain(`Evento de lluvia abierto (ID: ${newEvent.id.slice(0, 8)})`)
-              }
-            } catch (err) {
-              Logger.error('Error abriendo RainEvent en Postgres:', err)
-            }
-          }
+          await openRainEvent(rainTimestamp)
         } else if (state === 'Dry') {
           lastRainState = 'Dry'
+          isRainOverridden = false // Limpiar veto al recibir confirmación física de secado
           await closeRainEvent('Dry', rainTimestamp)
         }
 
         return
       }
+
+      // Actualizar el latido al final del procesamiento exitoso
+      if (
+        topic.startsWith('PristinoPlant/Actuator_Controller/') ||
+        topic.startsWith('PristinoPlant/Weather_Station/')
+      ) {
+        lastFirmwareHeartbeat = Date.now()
+      }
     } catch (error: Error | unknown) {
       Logger.error('Error procesando QoS Message:', error)
     }
   })
-}
-
-/**
- * Cierra el evento de lluvia abierto en Postgres y calcula la duración.
- * @param reason Motivo de cierre: "Dry", "ORPHAN_TIMEOUT", "REBOOT"
- * @param endTime Timestamp de cierre (por defecto: ahora)
- */
-async function closeRainEvent(reason: string, endTime: Date = new Date()) {
-  if (!openRainEventId) {
-    // Buscar en DB por si el Scheduler se reinició con un evento huérfano
-    const existing = await prisma.rainEvent
-      .findFirst({
-        where: { zone: 'EXTERIOR', endedAt: null },
-        orderBy: { startedAt: 'desc' },
-      })
-      .catch(() => null)
-
-    if (!existing) return
-    openRainEventId = existing.id
-  }
-
-  try {
-    const event = await prisma.rainEvent.findUnique({ where: { id: openRainEventId } })
-
-    if (!event || event.endedAt) {
-      openRainEventId = null
-
-      return
-    }
-
-    const durationSeconds = Math.round((endTime.getTime() - event.startedAt.getTime()) / 1000)
-
-    // Consultar intensidad en InfluxDB
-    let avgIntensity: number | null = null
-    let peakIntensity: number | null = null
-
-    try {
-      const intensityQuery = `
-        SELECT MEAN(rain_intensity) as avg_int, MAX(rain_intensity) as peak_int 
-        FROM "environment_metrics" 
-        WHERE "zone" = 'EXTERIOR' 
-          AND time >= '${event.startedAt.toISOString()}' 
-          AND time <= '${endTime.toISOString()}'
-      `
-      const stream = influxClient.query(intensityQuery)
-
-      for await (const row of stream) {
-        if (row.avg_int != null) avgIntensity = Number(row.avg_int)
-        if (row.peak_int != null) peakIntensity = Number(row.peak_int)
-      }
-    } catch (err) {
-      Logger.warn('No se pudo recuperar la intensidad de lluvia de InfluxDB:', err)
-    }
-
-    if (!openRainEventId) return
-
-    await prisma.rainEvent.update({
-      where: { id: openRainEventId },
-      data: {
-        endedAt: endTime,
-        durationSeconds,
-        closedBy: reason,
-        avgIntensity,
-        peakIntensity,
-      },
-    })
-
-    const intensityLog = avgIntensity ? ` | Int. Promedio: ${Math.round(avgIntensity)}%` : ''
-
-    Logger.rain(
-      `Evento de lluvia cerrado (${reason}) — Duración: ${Math.round(durationSeconds / 60)} min${intensityLog} (ID: ${openRainEventId.slice(0, 8)})`,
-    )
-  } catch (err) {
-    Logger.error('Error cerrando RainEvent en Postgres:', err)
-  } finally {
-    openRainEventId = null
-  }
 }
 
 /**
@@ -524,13 +696,13 @@ async function handleNodeOffline(reason: string, origin: 'BROKER' | 'NODE' | 'SC
     },
   })
 
-    for (const task of interruptedTasks) {
+  for (const task of interruptedTasks) {
     irrigationRetryManager.confirmByTaskId(task.id)
     systemRetryManager.confirm(task.id)
 
     let extraNotes: string
     let addedMinutes = 0
-    let targetStatus = TaskStatus.FAILED
+    let targetStatus: TaskStatus = TaskStatus.FAILED
 
     if (task.actualStartAt && task.status === TaskStatus.IN_PROGRESS) {
       // Tarea que ya inició: calculamos tiempo ejecutado
@@ -575,7 +747,7 @@ async function handleNodeOffline(reason: string, origin: 'BROKER' | 'NODE' | 'SC
  * Orquesta la sincronización completa del nodo tras una reconexión o reinicio.
  * Implementa un bloqueo de 5 segundos para evitar ráfagas redundantes.
  */
-async function handleNodeSync(isBoot: boolean = false) {
+async function handleNodeSync(isBoot: boolean = false, previousHeartbeat: number = Date.now()) {
   const now = Date.now()
   const timeSinceLastSync = now - lastSyncTimestamp
 
@@ -593,8 +765,8 @@ async function handleNodeSync(isBoot: boolean = false) {
   let statusToSave: DeviceStatus = 'ONLINE'
 
   if (isBoot) {
-    // Calculamos el tiempo desde el último latido físico en vez del lastSync
-    const timeSinceLastHeartbeat = now - lastFirmwareHeartbeat
+    // Usamos el latido previo capturado al inicio del mensaje para la validación
+    const timeSinceLastHeartbeat = now - previousHeartbeat
 
     // Si ha pasado más de 15 minutos desde el último heartbeat exitoso,
     // asumimos que el dispositivo estuvo apagado (o en ciclo de reconexión fallida)
@@ -617,8 +789,6 @@ async function handleNodeSync(isBoot: boolean = false) {
     Logger.node('ONLINE')
   }
 
-  // Registro en la base de datos para el Timeline/Widget
-  // Solo registramos si realmente el estado cambió o es un REBOOT explícito
   if (irrigationRetryManager.connectionState !== 'online' || statusToSave === 'REBOOT') {
     await prisma.deviceLog
       .create({
@@ -629,6 +799,13 @@ async function handleNodeSync(isBoot: boolean = false) {
         },
       })
       .catch((err) => Logger.error('Fallo persistiendo deviceLog (ONLINE/REBOOT)', err))
+  }
+
+  // Asegurar que el secuenciador transicione a modo estabilización (online)
+  // Esto evita que latidos posteriores disparen eventos ONLINE duplicados.
+  if (irrigationRetryManager.connectionState === 'offline') {
+    irrigationRetryManager.setStabilizing()
+    systemRetryManager.setStabilizing()
   }
 
   // Si es un REBOOT en caliente, el hardware apagó los pines.
@@ -648,7 +825,7 @@ async function handleNodeSync(isBoot: boolean = false) {
 
       let extraNotes: string
       let addedMinutes = 0
-      let targetStatus = TaskStatus.FAILED
+      let targetStatus: TaskStatus = TaskStatus.FAILED
 
       if (task.actualStartAt && task.status === TaskStatus.IN_PROGRESS) {
         const elapsedMs = Date.now() - new Date(task.actualStartAt).getTime()

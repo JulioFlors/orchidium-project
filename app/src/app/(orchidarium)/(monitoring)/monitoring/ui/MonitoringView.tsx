@@ -32,6 +32,8 @@ interface RainData {
   totalDurationSeconds: number
   averageIntensity: number
   eventCount: number
+  isActive: boolean
+  activeEventId: string | null
   events?: { time: string; duration: number; intensity: number }[]
 }
 
@@ -262,6 +264,10 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
 
   // 4. Estado de Lluvia persistente y Realtime (Aislado de las lecturas analógicas)
   const rainState = useMemo(() => {
+    // Fuente de Verdad A: Estado del Sistema (Postgres)
+    const dbState = cardStatusResponse?.lastRainState?.state || 'Dry'
+
+    // Fuente de Verdad B: Tiempo Real (MQTT)
     const rainTopic = `PristinoPlant/Weather_Station/${ZoneType.EXTERIOR}/rain/state`
     const msg = mqttMessages[rainTopic]
 
@@ -269,15 +275,22 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
       try {
         const payload =
           typeof msg.payload === 'object' ? msg.payload : JSON.parse(String(msg.payload))
+        const mqttState = payload.state === 'Raining' ? 'Raining' : 'Dry'
 
-        return payload.state === 'Raining' ? 'Raining' : 'Dry'
+        // Si MQTT dice que llueve pero Postgres dice que no,
+        // confiamos en Postgres (podría ser un veto del scheduler o humedad residual).
+        if (mqttState === 'Raining' && dbState === 'Dry') {
+          return 'Dry'
+        }
+
+        return mqttState
       } catch {
-        // Fallback al estado de SWR si hay error de parseo
+        // Fallback
       }
     }
 
-    // Si no hay mensaje MQTT reciente, usar el último estado hidratado desde InfluxDB (SWR)
-    return cardStatusResponse?.lastRainState?.state || 'Dry'
+    // Si no hay mensaje MQTT reciente, usar Postgres
+    return dbState
   }, [mqttMessages, cardStatusResponse])
 
   const current = useMemo(() => {
@@ -827,6 +840,9 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               description={
                 rainData ? (
                   <div className="flex items-center gap-2">
+                    {rainData.isActive && (
+                      <span className="flex h-2 w-2 animate-pulse rounded-full bg-blue-500" />
+                    )}
                     <span className="font-semibold">{rainData.eventCount} eventos</span>
                     <span className="text-primary/20">|</span>
                     <span className="font-semibold">Prom: {rainData.averageIntensity}%</span>
@@ -839,7 +855,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               isActive={selectedMetric === 'rain_events'}
               isLoading={isRainLoading}
               isOffline={false}
-              status="optimal"
+              status={rainData?.isActive ? 'warning' : 'optimal'}
               title={MetricLabels.rain_events}
               unit={metricRanges[zone]?.['rain_events'] === '12h' ? '' : 'Eventos'}
               value={

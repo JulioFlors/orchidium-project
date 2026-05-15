@@ -127,7 +127,7 @@ export function HistoryView() {
     [tasks],
   )
 
-  useSWR(getKey(0, null as any), fetcher, {
+  useSWR(getKey(0, [] as HistoryTask[]), fetcher, {
     refreshInterval: hasActiveTasks ? 10000 : 60000,
     onSuccess: (newData) => {
       if (pages) {

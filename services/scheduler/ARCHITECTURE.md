@@ -77,12 +77,14 @@ Las reglas fueron definidas directamente por los cultivadores (padres del desarr
 | 1 | Cancelación Manual | TaskLog con status CANCELLED ±5min | SKIP | Todos |
 | 2 | Telemetría + Clasificación | Obtener datos sensores + DayClassifier | — | — |
 | 3 | Lluvia Real en Curso | `rain_intensity > 0` (sensor gotas) | SKIP | Todos |
-| 4 | Lluvia Acumulada (12h) | `>20min` en últimas 12h | SKIP | IRRIGATION |
+| 4 | Lluvia Acumulada (24h) | `>20min` en últimas 24h | SKIP | IRRIGATION |
 | 4.1 | Lluvia Acumulada (4h) | `>20min` en últimas 4h | SKIP | SOIL_WETTING |
 | 5 | HR Interior Crítica | `>90%` + día nublado o lluvia reciente | SKIP | Todo lo hídrico |
 | 6 | Día Fresco | `HR>80%` + `Temp<28°C` + `Lux prom<26k` | SKIP | HUMIDIFICATION |
 | 7 | Pulverización por Clima | Promedio 8am-4pm `≤26k` lux | SKIP | HUMIDIFICATION |
 | 8 | Protección Fertilización | AMBAS APIs `>95%` + día OVERCAST/RAINY | SKIP | FERTIGATION/FUMIGATION |
+| 9 | Veto Inteligente | Lux+20%, Temp+2°C o Hum-2% vs Baseline | VETO | Automáticos |
+| 10 | Reversión de Veto | Retorno a Baseline (Oscuridad/Frío) | UNVETO | Si Rain físico |
 | — | Default | Ninguna condición bloquea | EXECUTE | Todos |
 
 #### Datos que NO están calibrados (TODO)

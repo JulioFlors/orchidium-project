@@ -199,11 +199,9 @@ Incluso con autorización, el motor puede vetar si detecta tormenta inminente.
 
 **Objetivo:** Regar las raíces aéreas y el sustrato con aspersión directa.
 
-#### Hard Block: Lluvia Acumulada
-
 ```text
-SI lluvia_acumulada(últimas 12h) ≥ 20 minutos → SKIP
-MOTIVO: La lluvia ya proporcionó el agua equivalente.
+SI lluvia_acumulada(últimas 24h) ≥ 20 minutos → SKIP
+MOTIVO: La lluvia ya proporcionó el agua equivalente en el ciclo diario previo.
 ```
 
 #### Evaluación Cruzada con Historial
@@ -405,11 +403,12 @@ Para evitar "cielos de papel" (pronósticos que no ocurren):
 
 | Factor | Umbral | Aplicación |
 | :--- | :--- | :--- |
-| **Lluvia Acumulada** | > 1200s (20 min) / ventana | Veto Riego/Humectación |
-| **Humedad Crítica** | > 90% HR | Veto Hídricos (con contexto adicional) |
-| **Día Nublado** | < 26,000 lux (promedio 8am-4pm) | Veto Humidificación |
-| **Tormenta Inminente** | > 95% Prob. API (consenso) | Veto Agroquímicos |
-| **HR Crítica (Agro)** | > 95% HR | Veto Agroquímicos |
+| **Lluvia Acumulada** | > 1200s (20 min) / ventana | Veto Riego (24h) / Humectación (4h) |
+| **Veto Inteligente: Lux** | > 20% sobre Baseline Mín. | Liberación de Veto (Recuperación Lumínica) |
+| **Veto Inteligente: Temp** | > +2.0°C sobre Baseline Mín. | Liberación de Veto (Recuperación Térmica) |
+| **Veto Inteligente: Hum** | < -2.0% bajo Baseline Mín. | Liberación de Veto (Desaturación) |
+| **Cielo Templado** | > 26,000 lux (tiempo real) | Liberación inmediata de Veto (Sol despejado) |
+| **Anti-Intermitencia** | Lux/Temp regresan a Baseline | Anulación de Veto (Re-apertura de evento) |
 | **Nebulización Máxima** | 3 minutos | Limitación de duración |
 
 > [!NOTE]

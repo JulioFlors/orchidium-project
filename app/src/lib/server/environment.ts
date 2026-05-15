@@ -370,37 +370,39 @@ export async function getLastHeartbeat(source: string, zone?: ZoneType) {
 }
 
 /**
- * Obtiene el último estado de lluvia (Raining/Dry) registrado.
+ * Obtiene el último estado de lluvia (Raining/Dry) basado en la base de datos (Postgres).
+ * Un evento abierto (endedAt: null) significa que para el sistema sigue lloviendo.
  */
 export async function getLastRainState() {
-  const query = `
-    SELECT value, time 
-    FROM system_events 
-    WHERE source = 'Weather_Station' 
-    AND zone = '${ZoneType.EXTERIOR}' 
-    AND event_type = 'Rain_State' 
-    AND time >= now() - interval '24 hours'
-    ORDER BY time DESC
-    LIMIT 1
-  `
-
   try {
-    const reader = influxClient.query(query)
+    // 1. Verificar si hay un evento abierto en Postgres
+    const activeEvent = await prisma.rainEvent.findFirst({
+      where: { zone: ZoneType.EXTERIOR, endedAt: null },
+      orderBy: { startedAt: 'desc' },
+    })
 
-    for await (const row of reader as AsyncIterable<InfluxRow>) {
-      if (row.time) {
-        return {
-          timestamp: new Date(safeTimeToISO(row.time)).getTime(),
-          state: String(row.value || 'Dry'),
-        }
+    if (activeEvent) {
+      return {
+        state: 'Raining',
+        timestamp: activeEvent.startedAt.getTime(),
+        eventId: activeEvent.id,
       }
     }
 
-    return { state: 'Dry', timestamp: Date.now() }
-  } catch (error) {
-    Logger.error('Error al obtener el último estado de lluvia:', error)
+    // 2. Si no hay evento abierto, buscamos el último cerrado para tener referencia de tiempo
+    const lastEvent = await prisma.rainEvent.findFirst({
+      where: { zone: ZoneType.EXTERIOR },
+      orderBy: { startedAt: 'desc' },
+    })
 
-    return null
+    return {
+      state: 'Dry',
+      timestamp: lastEvent?.endedAt?.getTime() || Date.now(),
+    }
+  } catch (error) {
+    Logger.error('Error al obtener el estado de lluvia desde Postgres:', error)
+
+    return { state: 'Dry', timestamp: Date.now() }
   }
 }
 
@@ -448,10 +450,14 @@ export async function getRainSummaryInternal(range: string, zone: ZoneType) {
       0,
     )
 
+    const activeEvent = rainEvents.find((ev) => ev.endedAt === null)
+
     return {
       totalDurationSeconds: totalDuration,
       averageIntensity: rainEvents.length > 0 ? Math.round(totalIntensity / rainEvents.length) : 0,
       eventCount: rainEvents.length,
+      isActive: !!activeEvent,
+      activeEventId: activeEvent?.id || null,
       events,
     }
   } catch (error: unknown) {

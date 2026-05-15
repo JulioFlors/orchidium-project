@@ -588,7 +588,14 @@ def setup_sensors():
                 if DEBUG: print(f"    ├─ 🔄 Reintentando ({attempt}/5)")
 
             try:
-                sleep_ms(2000) # Estabilización del sensor
+                # [Fix Atómico]: Limpiamos la línea antes de la lectura
+                # Forzamos HIGH fuerte para limpiar capacitancia y asegurar un estado conocido.
+                dht_pin.init(Pin.OUT)
+                dht_pin.value(1)
+                sleep_ms(10)
+                dht_pin.init(Pin.IN, Pin.PULL_UP)
+
+                sleep_ms(2000) # Estabilización del sensor post-limpieza
                 dht_test.measure()
                 temp = dht_test.temperature()
                 hum  = dht_test.humidity()
@@ -610,13 +617,8 @@ def setup_sensors():
             except Exception as e:
                 if attempt == 5: raise # Si falla el último intento, propagamos el error
                 
-                # [Software Fix para Cables Largos]: 
-                # Forzamos la línea a HIGH fuertemente para limpiar capacitancia parásita
-                # y "destrabar" el bus de datos del DHT22 antes del próximo sleep_ms(2000).
-                try:
-                    dht_pin.init(Pin.OUT)
-                    dht_pin.value(1)
-                except: pass
+                # El reintento manejará la limpieza de la línea al inicio del próximo ciclo.
+                pass
                 
                 continue # Reintentar silenciosamente
         
@@ -1987,20 +1989,9 @@ async def rain_monitor_task():
                     rain_Batch.append(intensity)
                     rain_cycle_counter += 1
 
-                # [HEARTBEAT DE SINCRONIZACIÓN]
-                # Republicamos el estado Raining periódicamente para que el sistema
-                # no quede desincronizado tras un reboot del broker o del ingest.
-                if now_ts - rain_last_heartbeat >= RAIN_HEARTBEAT_INTERVAL:
-                    if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
-                        try:
-                            payload_hb = '{"state":"Raining","timestamp":%d,"heartbeat":true}' % now_ts
-                            async with mqtt_lock:
-                                if client and getattr(client, 'sock', None):
-                                    client.publish(MQTT_TOPIC_RAIN_STATE, payload_hb, retain=False, qos=0)
-                            rain_last_heartbeat = now_ts
-                            if DEBUG: print(f"\n🌧️  Heartbeat Lluvia: Raining (sync)")
-                        except Exception:
-                            pass  # El heartbeat es no crítico, lo intentará en el próximo ciclo
+                # El heartbeat redundante ha sido eliminado.
+                # El Scheduler es ahora la autoridad para mantener el estado del evento.
+                pass
 
                 # [REINTENTO DE ESTADO SUCIO]
                 if rain_state_dirty and rain_dirty_payload:
