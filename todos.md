@@ -27,6 +27,7 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 * [x] **Calidad de Código & Linting:**
   * [x] Corregir crash de ESLint en archivos Markdown mediante restricción de reglas de `import/react/next` a archivos de script.
   * [x] Unificar configuración de linting en `@package/eslint-config`.
+* [x] **Mantenimiento y Salud del VPS:** Documentar e integrar comandos de administración (OS, Docker, Recursos, Logs) en el protocolo maestro del agente para garantizar la trazabilidad y optimización del servidor de producción.
 
 ### 📄 0.3 Documentación & Trazabilidad
 
@@ -138,6 +139,7 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
   * [x] Ingest: Limpieza de `stateCache` selectiva por nodo en eventos de `boot`.
 * [x] **WeatherGuard Básico:** "Si llovió > X mm, cancelar riego" o si hay precipitaciones pronosticadas.
 * [x] **Integración Ingest/Scheduler:** Suscripción reactiva a eventos de lluvia (`rain/event`, `rain/state`) para toma de decisiones instantánea.
+* [x] **Harden DHT22 (Stability & Recovery):** Implementado "Atomic Fix" (limpieza de línea) pre-lectura y recuperación automática tras desconexiones físicas en el firmware.
 * [x] **Precisión Temporal en Lluvia:** Implementado envío de `timestamp` (Unix/MicroPython) desde el firmware para el inicio y fin de la lluvia, con normalización de época en la ingesta para garantizar historia fidedigna post-reconexión.
 
 ### 💡 3.2 Motor de Inferencias (El Cerebro Analítico)

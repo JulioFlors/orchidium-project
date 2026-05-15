@@ -82,7 +82,17 @@ export function ShopSidebar({ suggestions = [] }: Props) {
     )
   }
 
+  const sortedShopRoutes = [...shopRoutes].sort((a, b) =>
+    a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }),
+  )
+
   const route = sidebarRoute ? shopRoutes.find((r) => r.slug === sidebarRoute) : null
+  const sortedCategories = route?.categories
+    ? [...route.categories].sort((a, b) =>
+        a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }),
+      )
+    : []
+
   const showCategory = !!(route?.categories && route.categories.length > 0)
 
   return (
@@ -98,7 +108,7 @@ export function ShopSidebar({ suggestions = [] }: Props) {
           transition={{ duration: 0.2 }}
         >
           <div className="grid w-full grid-cols-1 gap-2.5">
-            {route!.categories!.map((cat) => (
+            {sortedCategories.map((cat) => (
               <Link
                 key={cat.slug}
                 className="focus-sidebar-img block"
@@ -153,7 +163,7 @@ export function ShopSidebar({ suggestions = [] }: Props) {
           </div>
 
           <div className="flex w-full flex-1 flex-col">
-            {shopRoutes.map((route) => {
+            {sortedShopRoutes.map((route) => {
               // No renderizar ruta del login Si estamos logeados
               if (route.slug === 'login' && isAuthenticated) return null
 

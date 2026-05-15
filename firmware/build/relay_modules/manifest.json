@@ -1,9 +1,9 @@
 {
   "name": "Relay Modules",
   "description": "Nodo Actuador + Meteorológica Exterior",
-  "version": "0.14.0",
-  "date": "13-05-2026",
-  "notes_release": "[🚀 RAM Optimization & Resilience]: Extracción de NVS legacy para liberar RAM. La Recuperación Elástica del Circuito de Riego (reinicio de tareas interrumpidas) y el cálculo de eventos de lluvia se delegan íntegramente al Scheduler backend. Hardening del driver MQTT con limpieza atómica de sockets y protección DNS.",
+  "version": "0.14.2",
+  "date": "15-05-2026",
+  "notes_release": "[🌡️ DHT22 & Rain Resilience]: Implementación de limpieza atómica de línea (Atomic Fix) pre-lectura para eliminar capacitancia residual y mecanismo de recuperación automática para restaurar lecturas tras fallos físicos sin reinicio. Limpieza de logs duplicados en la sincronización de lluvia. [📡 Red & LwIP Tuning]: Optimización de resiliencia MQTT. Aumento de backoff para limpieza de sockets LwIP (EBUSY -16) con reseteos WiFi más profundos (20s). Tratamiento de -16256 (PK_ALLOC_FAILED) como error transitorio dependiente de liberación de RAM por EBUSY, previniendo reinicios duros innecesarios.",
   "files": [
     "app.mpy",
     "boot.py",

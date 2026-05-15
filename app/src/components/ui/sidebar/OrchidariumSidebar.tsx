@@ -18,10 +18,17 @@ export function OrchidariumSidebar() {
   })
   const unreadCount = data?.unreadCount || 0
 
+  // ---- NIVEL 1: adminRoutes ----
+  const sortedAdminRoutes = [...adminRoutes].sort((a, b) =>
+    a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }),
+  )
+
   // ---- NIVEL 2: sidebarItems ----
   const route = sidebarRoute ? adminRoutes.find((r) => r.slug === sidebarRoute) : null
   const allItems = route
-    ? [...(route?.items || []), ...(route?.groups?.flatMap((g) => g.items) || [])]
+    ? [...(route?.items || []), ...(route?.groups?.flatMap((g) => g.items) || [])].sort((a, b) =>
+        a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }),
+      )
     : []
   const showSubMenu = !!(route && allItems.length > 0)
 
@@ -83,7 +90,7 @@ export function OrchidariumSidebar() {
           transition={{ duration: 0.2 }}
         >
           <div className="flex w-full flex-1 flex-col">
-            {adminRoutes.map((route) => (
+            {sortedAdminRoutes.map((route) => (
               <button
                 key={route.slug}
                 className="focus-sidebar-content group px-3 py-2"

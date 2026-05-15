@@ -12,6 +12,8 @@ Este documento define la estrategia de alto nivel dividida en 4 fases de ingenie
 
 - [x] **Integración DHT22 Exterior (v0.10.1)**: Telemetría de clima real en nodo actuador con batching resiliente.
 - [/] **Dashboard Botánico**: Implementación de KPIs de salud (DIF, DLI, VPD, Riesgo) en el frontend.
+- [x] **Harden DHT22 (Stability & Recovery):** Implementado "Atomic Fix" (limpieza de línea) pre-lectura y recuperación automática tras desconexiones físicas en el firmware.
+- [x] **Precisión Temporal en Lluvia:** Implementado envío de `timestamp` (Unix/MicroPython) desde el firmware para el inicio y fin de la lluvia, con normalización de época en la ingesta para garantizar historia fidedigna post-reconexión.
 - [x] **Unificación de Tareas**: Eliminación del estado `SKIPPED` y consolidación de la lógica de cancelación.
 - [x] **Biblia de Base de Datos**: Protocolo estricto de migraciones y recuperación de datos procesados.
 
@@ -129,6 +131,10 @@ Interfaz para crear/editar/eliminar rutinas de automatización (`AutomationSched
 - Notificaciones de desconexión/reconexión de nodos vía Telegram/WhatsApp.
 - Flexible por zona: nuevos nodos Sensors se registran automáticamente.
 - Ver: `docs/observability_architecture.md`.
+
+### v0.14.2 - Robustecimiento DHT22 (Mayo 2026)
+
+- **Harden DHT22:** Implementación de limpieza atómica de línea (Atomic Fix) pre-lectura y mecanismo de recuperación automática para eliminar el estado "OFF" permanente por ruido eléctrico o desconexiones físicas en el nodo actuador.
 
 ### v0.8.0 - Resiliencia y Fidelidad (Abril 2026)
 

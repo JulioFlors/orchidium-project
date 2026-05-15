@@ -2,9 +2,9 @@
 # Relay Modules: Actuator Controller Firmware.
 # Descripcion: Firmware dedicado para el control de las electrovalvulas, la bomba
 #              y la estacion meteorologica exterior (lluvia e iluminancia).
-# Fecha: 13-05-2026
-# Version: v0.14.0
-# notes_release: [🚀 RAM Optimization & Resilience]: Extracción de NVS legacy para liberar RAM. La Recuperación Elástica del Circuito de Riego (reinicio de tareas interrumpidas) y el cálculo de eventos de lluvia se delegan íntegramente al Scheduler backend. Hardening del driver MQTT con limpieza atómica de sockets y protección DNS.
+# Fecha: 15-05-2026
+# Version: v0.14.2
+# notes_release: [🌡️ DHT22 & Rain Resilience]: Implementación de limpieza atómica de línea (Atomic Fix) pre-lectura para eliminar capacitancia residual y mecanismo de recuperación automática para restaurar lecturas tras fallos físicos sin reinicio. Limpieza de logs duplicados en la sincronización de lluvia. [📡 Red & LwIP Tuning]: Optimización de resiliencia MQTT. Aumento de backoff para limpieza de sockets LwIP (EBUSY -16) con reseteos WiFi más profundos (20s). Tratamiento de -16256 (PK_ALLOC_FAILED) como error transitorio dependiente de liberación de RAM por EBUSY, previniendo reinicios duros innecesarios.
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib.
@@ -82,6 +82,9 @@ MQTT_TOPIC_RAIN_EVENT     = const(b"PristinoPlant/Weather_Station/EXTERIOR/rain/
 
 # [Exterior Metrics]: Batch de lecturas ambientales (lux, lluvia, etc).
 MQTT_TOPIC_EXTERIOR_METRICS = const(b"PristinoPlant/Weather_Station/EXTERIOR/readings")
+
+# [Climate Sync]: Respuesta de sincronización de clima al Scheduler.
+MQTT_TOPIC_CLIMATE_SYNC     = const(b"PristinoPlant/Weather_Station/EXTERIOR/climate/sync")
 
 # ---- Parámetros LWT (Last Will and Testament) ----
 LWT_TOPIC = MQTT_TOPIC_STATUS
@@ -260,9 +263,15 @@ def get_dht_sample():
     """Lectura bajo demanda del DHT22 para auditoría."""
     if dht_sensor is None: return None
     try:
+        # [Harden]: Atomic Fix obligatorio por estabilidad de cable largo
+        clean_dht_line()
+        from utime import sleep_ms
+        sleep_ms(1500)
+        
         dht_sensor.measure()
         return (round(dht_sensor.temperature(), 1), round(dht_sensor.humidity(), 1))
-    except: return None
+    except:
+        return None
 
 AUDIT_SAMPLE_FNS = {
     "lux":      get_lux_sample,
@@ -560,6 +569,21 @@ def setup_relays():
         },
     }
 
+# ---- Función Auxiliar: Limpieza Atómica de Línea DHT22 ----
+def clean_dht_line():
+    """
+    Aplica el 'Atomic Fix' para limpiar la capacitancia residual en la línea de datos.
+    Fuerza un estado HIGH controlado antes de ceder el control al driver DHT.
+    """
+    from machine import Pin
+    from utime import sleep_ms
+    # Pin 23 es el estándar para el DHT22 en el Actuator Controller
+    p = Pin(23, Pin.IN, Pin.PULL_UP)
+    p.init(Pin.OUT)
+    p.value(1)
+    sleep_ms(20)
+    p.init(Pin.IN, Pin.PULL_UP)
+
 # ---- Función Auxiliar: Inicializar Sensores ----
 def setup_sensors():
     """Inicializa los sensores cableados al nodo actuador de forma segura."""
@@ -571,68 +595,32 @@ def setup_sensors():
     from machine import ADC, I2C, Pin, SoftI2C # type: ignore
     from utime import sleep_ms # type: ignore
 
-    # 0. Sensor DHT22
+    # 0. Sensor DHT22 (Clima Exterior)
     try:
         from dht import DHT22 # type: ignore
-        # Activamos PULL_UP interno por software para estabilizar la señal en cables largos
-        dht_pin = Pin(23, Pin.IN, Pin.PULL_UP)
-        dht_test = DHT22(dht_pin)
-        
-        if DEBUG:
-            print(f"\n🌡️  Conectando {Colors.YELLOW}DHT22{Colors.RESET}")
+        if DEBUG: print(f"\n🌡️  Inicializando {Colors.YELLOW}DHT22{Colors.RESET} (Modo Optimista)")
 
-        # Bucle de reintentos (Máximo 5 intentos de inicialización)
-        dht_success = False
-        for attempt in range(1, 6):
-            if attempt > 1:
-                if DEBUG: print(f"    ├─ 🔄 Reintentando ({attempt}/5)")
+        # [OPTIMISTA]: Instanciamos siempre. El loop de clima y sync_climate validarán.
+        clean_dht_line()
+        sleep_ms(2000)
+        dht_sensor = DHT22(Pin(23, Pin.IN, Pin.PULL_UP))
 
-            try:
-                # [Fix Atómico]: Limpiamos la línea antes de la lectura
-                # Forzamos HIGH fuerte para limpiar capacitancia y asegurar un estado conocido.
-                dht_pin.init(Pin.OUT)
-                dht_pin.value(1)
-                sleep_ms(10)
-                dht_pin.init(Pin.IN, Pin.PULL_UP)
-
-                sleep_ms(2000) # Estabilización del sensor post-limpieza
-                dht_test.measure()
-                temp = dht_test.temperature()
-                hum  = dht_test.humidity()
-
-                # Validación de rango físico razonable (descarta pines flotantes)
-                if -10 < temp < 60 and 0 < hum < 100:
-                    dht_sensor = dht_test
-                    dht_success = True
-                    if DEBUG:
-                        print(f"    ├─ ✅ {Colors.GREEN}Conectado{Colors.RESET}")
-                        print(f"    ├─ 📊 Valor: {Colors.YELLOW}{temp:.1f} °C{Colors.RESET}")
-                        print(f"    └─ 📊 Valor: {Colors.BLUE}{hum:.1f} %{Colors.RESET}")
-                    break # Éxito, salimos del bucle
-                else:
-                    if DEBUG:
-                        print(f"    ├─ ❌ {Colors.RED}Fuera de rango{Colors.RESET}")
-                        print(f"    ├─ 📊 Valor: {Colors.YELLOW}{temp:.1f} °C{Colors.RESET}")
-                        print(f"    └─ 📊 Valor: {Colors.BLUE}{hum:.1f} %{Colors.RESET}")
-            except Exception as e:
-                if attempt == 5: raise # Si falla el último intento, propagamos el error
-                
-                # El reintento manejará la limpieza de la línea al inicio del próximo ciclo.
-                pass
-                
-                continue # Reintentar silenciosamente
-        
-        if not dht_success:
-            dht_sensor = None
-
-    except Exception as e:
-        if DEBUG:
-            # Error 116 (ETIMEDOUT) suele indicar que el sensor no está conectado físicamente
-            if isinstance(e, OSError) and e.args and e.args[0] == 116:
-                print(f"    └─ ❌ {Colors.RED}Desconectado (Timeout){Colors.RESET}")
+        # Verificación rápida (informativa, no fatal)
+        try:
+            dht_sensor.measure()
+            temp, hum = dht_sensor.temperature(), dht_sensor.humidity()
+            if -10 <= temp <= 60 and 0 <= hum <= 100:
+                if DEBUG:
+                    print(f"    ├─ ✅ {Colors.GREEN}Verificado{Colors.RESET}")
+                    print(f"    ├─ 📊 Valor: {Colors.YELLOW}{temp:.1f} °C{Colors.RESET}")
+                    print(f"    └─ 📊 Valor: {Colors.BLUE}{hum:.1f} %{Colors.RESET}")
             else:
-                print(f"    └─ ❌ {Colors.RED}Fallo tras reintentos: {e}{Colors.RESET}")
-        dht_sensor = None
+                if DEBUG: print(f"    └─ ⚠️ {Colors.YELLOW}Fuera de rango (Scheduler sincronizará){Colors.RESET}")
+        except Exception:
+            if DEBUG: print(f"    └─ ⚠️ {Colors.YELLOW}Sin respuesta en boot (Scheduler sincronizará){Colors.RESET}")
+    except Exception as e:
+        if DEBUG: print(f"    └─ ❌ Fallo inicialización: {e}")
+        dht_sensor = None # Solo si el import de DHT22 falla (hardware inexistente)
 
     # 1. Sensor de Iluminancia (BH1750 / I2C)
     # [Diagnóstico Exhaustivo]: Prueba múltiples configuraciones, SoftI2C y Hardware I2C.
@@ -912,6 +900,41 @@ async def mqtt_processor_task():
                         
                         del action
                     del parts
+
+                # 5. Comando: Sincronización de Clima (Scheduler → Firmware)
+                if m_low == b"sync_climate":
+                    if DEBUG: print(f"    └─ Acción: {Colors.CYAN}Sync Climate (Re-Setup DHT22){Colors.RESET}")
+                    sync_result = b"dht_not_available"
+                    try:
+                        from dht import DHT22 as _DHT
+                        from machine import Pin as _Pin
+                        from utime import sleep_ms as _sms
+                        # [RE-SETUP COMPLETO]: Limpieza atómica + nuevo objeto
+                        clean_dht_line()
+                        _sms(2000)
+                        
+                        # Actualizamos el objeto global
+                        global dht_sensor
+                        dht_sensor = _DHT(_Pin(23, _Pin.IN, _Pin.PULL_UP))
+                        dht_sensor.measure()
+                        t = round(dht_sensor.temperature(), 1)
+                        h = round(dht_sensor.humidity(), 1)
+                        if -10 <= t <= 60 and 0 <= h <= 100:
+                            sync_result = '{"temp":%s,"hum":%s}' % (str(t), str(h))
+                        else:
+                            sync_result = b"dht_range_error"
+                    except Exception:
+                        sync_result = b"dht_read_error"
+
+                    try:
+                        if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
+                            async with mqtt_lock:
+                                if client and getattr(client, 'sock', None):
+                                    client.publish(MQTT_TOPIC_CLIMATE_SYNC, sync_result, retain=False, qos=0)
+                    except (MQTTException, OSError) as e:
+                        if DEBUG: log_mqtt_exception("Fallo publicando sync_climate", e)
+                        force_disconnect_mqtt()
+                        await check_critical_mqtt_errors(e)
 
                 # Cierre de bloque de comandos y limpieza de RAM
                 del m_low
@@ -1270,11 +1293,11 @@ async def check_critical_mqtt_errors(e):
     
     # [CRÍTICO] Errores de MbedTLS/RAM que NO se recuperan con gc.collect():
     #   -17040  = MBEDTLS_ERR_SSL_FATAL_ALERT (contexto TLS corrupto a nivel C)
-    #   -16256  = MBEDTLS_ERR_PK_ALLOC_FAILED (sin RAM para claves RSA)
+    #   -16256  = MBEDTLS_ERR_PK_ALLOC_FAILED (sin RAM para claves RSA) - TRANSITORIO por EBUSY
     #   -30592  = MBEDTLS_ERR_SSL_ALLOC_FAILED (sin RAM para contexto SSL)
     #   12      = ENOMEM (heap de MicroPython agotada, fragmentación crítica)
-    # NOTA: -202 (SSL Handshake Failed) es TRANSITORIO y se recupera con reconexion.
-    if isinstance(e, OSError) and e.args and e.args[0] in [-17040, -16256, -30592, 12]:
+    # NOTA: -202 y -16256 son TRANSITORIOS y se recuperan con reconexion o backoff.
+    if isinstance(e, OSError) and e.args and e.args[0] in [-17040, -30592, 12]:
         if DEBUG:
             print(f"\n💀  {Colors.RED}DEATH:{Colors.RESET} Fallo crítico de SSL/Red/RAM ({e.args[0]}).")
             print(f"\n🔄  {Colors.BLUE}Reiniciando Dispositivo{Colors.RESET}\n")
@@ -1409,7 +1432,7 @@ async def mqtt_connector_task(client_id):
                                     try:
                                         wlan.disconnect()
                                         wlan.active(False)
-                                        await asyncio.sleep(2)
+                                        await asyncio.sleep(20)
                                         wlan.active(True)
                                         wlan.connect(WIFI_SSID, WIFI_PASS)
                                         # Esperamos reconexión WiFi (máx 15s)
@@ -1419,6 +1442,9 @@ async def mqtt_connector_task(client_id):
                                     except Exception:
                                         pass
                             backoff_delay = [20, 40, 60][min(connect_attempt, 2)]
+                            # [Anti-EBUSY] Espera larga específica para que LwIP libere sockets TCP.
+                            if isinstance(e_connect, OSError) and e_connect.args and e_connect.args[0] == -16:
+                                backoff_delay = 45
                             await asyncio.sleep(backoff_delay)
                         else:
                             raise e_connect  # Último intento: propagar al handler externo
@@ -1515,8 +1541,8 @@ async def mqtt_connector_task(client_id):
                     if not (wlan and wlan.isconnected()):
                         continue
                 else:
-                    # Backoff estándar
-                    await asyncio.sleep(10)
+                    # Backoff estándar (suficiente para que LwIP limpie TIME_WAIT)
+                    await asyncio.sleep(30)
                 continue
 
         # 🔄 Gestionamos la Conexión Activa
@@ -1935,7 +1961,7 @@ async def rain_monitor_task():
                         payload_boot = '{"state":"%s","timestamp":%d}' % (boot_state_to_publish, boot_timestamp_to_publish)
                         async with mqtt_lock:
                             client.publish(MQTT_TOPIC_RAIN_STATE, payload_boot, retain=False, qos=0)
-                        if DEBUG: print(f"    └─ Rain Monitor: {boot_state_to_publish}")
+                        # Log omitido para evitar duplicidad con la lectura inicial
                     except Exception as e:
                         if DEBUG: print(f"    └─ ⚠️ Error publicando estado lluvia: {e}")
                         force_disconnect_mqtt()
@@ -2219,6 +2245,7 @@ async def climate_monitor_task():
     * Envía 2 batches independientes (temp, hum) cada 10 min.
     * Offset de 2s entre publicaciones para no saturar el stack de red
     """
+    global dht_sensor
     from utime import time
     from umqtt.simple2 import MQTTException # type: ignore
 
@@ -2233,24 +2260,36 @@ async def climate_monitor_task():
 
     while True:
         try:
+            # ---- GESTIÓN DE TIEMPOS Y SENSOR DHT22 ----
+            current_time = time()
+            current_ts   = current_time
+            has_temp, has_hum = False, False
+
+            # 2. Lectura Normal (Siempre con Atomic Fix por seguridad de línea)
             if dht_sensor is not None:
                 try:
+                    # Limpieza atómica obligatoria antes de cada lectura periódica
+                    # Esto garantiza que el bus esté limpio a pesar del ruido/capacitancia.
+                    clean_dht_line()
+                    await asyncio.sleep_ms(1500) # Estabilización post-limpieza
+
                     # dht.measure() es bloqueante (~25ms) y apaga interrupciones.
                     dht_sensor.measure()
                     temp = round(dht_sensor.temperature(), 1)
                     hum  = round(dht_sensor.humidity(), 1)
 
                     # Validación de rango (descarta lecturas corruptas por ruido)
-                    if -10 < temp < 60:
+                    if -10 <= temp <= 60:
                         temperature_Batch.append(temp)
-                    if 0 < hum < 100:
+                    if 0 <= hum <= 100:
                         humidity_Batch.append(hum)
 
                 except Exception:
-                    pass # Lectura fallida (ruido/sensor ocupado). Se ignora.
+                    # [OPTIMISTA]: No matamos el sensor. El cable largo causa fallos transitorios.
+                    # El próximo ciclo (60s) reintentará con Atomic Fix.
+                    if DEBUG: print(f"⚠️  DHT22: Fallo de lectura transitorio. Reintentará en 60s.")
 
                 # Publicar Batches cada 10 minutos (600 segundos)
-                current_ts = time()
                 if current_ts - last_dht_publish >= 600:
                     has_temp = temperature_Batch.count > 0
                     has_hum  = humidity_Batch.count > 0

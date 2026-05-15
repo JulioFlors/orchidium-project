@@ -265,3 +265,45 @@ Para garantizar la seguridad total de la base de datos de producción y evitar r
 2. **`todos.md`**: Actualizar la lista de micro-tareas e issues técnicos a medida que se descubran, se pospongan o culminen durante el ciclo de vida de un request.
 3. **`commit.txt`**: Alimentar progresivamente este archivo con los changelogs usando el formato de Conventional Commits.
 4. **Cierre de Sesión**: Antes de despedirse, el agente debe verificar que todas las actividades realizadas en la sesión estén reflejadas en las bitácoras correspondientes.
+
+### Paso 11: Mantenimiento y Salud del VPS
+
+Protocolo para garantizar que el servidor de producción (Ubuntu 24.04) opere de forma eficiente y sin cuellos de botella.
+
+1. **Actualización del Sistema Operativo (OS)**:
+   Ejecutar periódicamente para aplicar parches de seguridad.
+
+   ```bash
+   apt update && apt upgrade -y
+   ```
+
+2. **Higiene de Docker (Recuperación de Disco)**:
+   El VPS tiene almacenamiento limitado. Elimina capas de imágenes antiguas y contenedores huérfanos.
+
+   ```bash
+   # Limpieza segura (imágenes no usadas y contenedores detenidos)
+   docker system prune -f
+   # Limpieza profunda (incluye volúmenes no utilizados - Usar con precaución)
+   docker volume prune -f
+   ```
+
+3. **Diagnóstico de Salud (Recursos)**:
+   Usar estos comandos si notas lentitud en el dashboard o fallos de conexión.
+
+   ```bash
+   # RAM: Revisar la columna 'available'
+   free -h
+   # DISCO: Revisar si '/' está cerca del 100%
+   df -h
+   # CPU: Monitor interactivo
+   htop
+   # CONTENEDORES: Foto estática del consumo de cada microservicio
+   docker stats --no-stream
+   ```
+
+4. **Vaciado de Logs (Mantenimiento de Emergencia)**:
+   Si un servicio genera logs masivos, vacía el archivo físico sin detener el contenedor:
+
+   ```bash
+   sudo sh -c 'truncate -s 0 $(docker inspect --format="{{.LogPath}}" scheduler)'
+   ```

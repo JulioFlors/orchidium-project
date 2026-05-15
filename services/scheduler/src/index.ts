@@ -10,6 +10,7 @@ import {
   emaManager,
   syncNodeSampling,
   resetSamplingState,
+  executeSystemCommand,
   MQTT_BROKER_URL,
 } from './lib/mqtt-handler'
 import {
@@ -92,6 +93,11 @@ let lastRainState: 'Raining' | 'Dry' = 'Dry'
 let lastFirmwareHeartbeat: number = Date.now()
 let lastSyncTimestamp: number = 0
 let openRainEventId: string | null = null // ID del RainEvent abierto en Postgres
+
+// ---- Sincronización de Clima (DHT22) ----
+let climateSyncTimer: NodeJS.Timeout | null = null
+let climateSyncAttempts = 0
+const CLIMATE_SYNC_MAX_RETRIES = 6 // 6 × 5min = 30min
 
 // Buffers para validación inteligente de lluvia (Humedad Residual)
 const telemetryBuffer: { lux: number; temp: number; hum: number; timestamp: number }[] = []
@@ -226,6 +232,7 @@ function setupMqttHandlers() {
         'PristinoPlant/Actuator_Controller/irrigation/state',
         'PristinoPlant/Actuator_Controller/status',
         'PristinoPlant/Actuator_Controller/status/boot',
+        'PristinoPlant/Weather_Station/EXTERIOR/climate/sync',
         'PristinoPlant/Weather_Station/Exterior/readings',
         'PristinoPlant/Weather_Station/Exterior/rain/state',
         'PristinoPlant/Weather_Station/ZONA_A/status',
@@ -448,6 +455,32 @@ function setupMqttHandlers() {
               )
             }
           }
+        }
+
+        return
+      }
+
+      // 3.4 Respuesta de Sincronización de Clima (DHT22)
+      if (topic === 'PristinoPlant/Weather_Station/EXTERIOR/climate/sync') {
+        if (message.startsWith('{')) {
+          try {
+            const data = JSON.parse(message)
+
+            Logger.info(`🌡️  DHT22 sincronizado: ${data.temp}°C / ${data.hum}%`)
+          } catch {
+            /* ignore */
+          }
+
+          if (climateSyncTimer) {
+            clearInterval(climateSyncTimer)
+            climateSyncTimer = null
+          }
+          climateSyncAttempts = 0
+        } else {
+          Logger.warn(
+            `🌡️  DHT22 reportó fallo en sincronización: ${message}. Reintentando en 5min.`,
+          )
+          startClimateSyncRetry()
         }
 
         return
@@ -862,7 +895,44 @@ async function handleNodeSync(isBoot: boolean = false, previousHeartbeat: number
   // El secuenciador ya está en modo STABILIZING (60s) gracias al caller de boot
   resetSamplingState()
   syncNodeSampling(undefined, true)
+  requestClimateSync()
   await processPostponedTasks()
+}
+
+/**
+ * Envía comando sync_climate al nodo actuador.
+ */
+function requestClimateSync() {
+  executeSystemCommand('sync_climate', true)
+}
+
+/**
+ * Programa reintentos de sync_climate cada 5min hasta recibir datos válidos.
+ */
+function startClimateSyncRetry() {
+  if (climateSyncTimer) return // Ya hay retry activo
+
+  climateSyncTimer = setInterval(
+    () => {
+      climateSyncAttempts++
+
+      if (climateSyncAttempts > CLIMATE_SYNC_MAX_RETRIES) {
+        Logger.warn(
+          `🌡️  DHT22: Máximo de reintentos alcanzado (${CLIMATE_SYNC_MAX_RETRIES}). Esperando próximo boot.`,
+        )
+        if (climateSyncTimer) clearInterval(climateSyncTimer)
+        climateSyncTimer = null
+
+        return
+      }
+
+      Logger.info(
+        `🌡️  DHT22: Reintento de sincronización (${climateSyncAttempts}/${CLIMATE_SYNC_MAX_RETRIES})`,
+      )
+      requestClimateSync()
+    },
+    5 * 60 * 1000,
+  )
 }
 
 // ---- Lógica de Rutinas (Crons) ----

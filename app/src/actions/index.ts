@@ -1,5 +1,7 @@
 export * from './admin/get-connectivity-logs'
 
+export * from './admin/audit-actions'
+
 export * from './auth/admin-users'
 
 export * from './auth/verify-email'

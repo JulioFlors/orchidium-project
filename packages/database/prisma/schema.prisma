@@ -345,6 +345,18 @@ model DeviceLog {
   @@index([timestamp])
 }
 
+model AuditLog {
+  id        String   @id @default(uuid())
+  deviceId  String
+  type      String   // temp, hum, lux, health, etc.
+  value     Float?
+  data      Json?    // Para payloads complejos como health (rssi, ip) o batches
+  timestamp DateTime @default(now())
+
+  @@index([deviceId, type])
+  @@index([timestamp])
+}
+
 model WeatherForecast {
   id           String           @id @default(uuid())
   timestamp    DateTime

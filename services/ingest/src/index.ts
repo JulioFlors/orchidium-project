@@ -73,6 +73,7 @@ const TOPIC_ROUTES: Record<string, PacketProcessor> = {
   // Necesitamos inyectar el 5to argumento (eventType)
   '/status': (s, z, c, p) => processZoneStateEvent(s, z, c, p, 'Device_Status'),
   '/rain/state': (s, z, c, p) => processZoneStateEvent(s, z, c, p, 'Rain_State'),
+  '/audit': processAuditPacket,
 }
 
 // ---- Global Influx Client (puntero) ----
@@ -301,6 +302,85 @@ async function processEnvironmentPacket(
     await writeToInflux(point)
   } catch (e) {
     Logger.error('Error procesando paquete de datos Ambientales', e)
+  }
+}
+
+async function processAuditPacket(
+  source: string,
+  _zone: ZoneType,
+  _context: string,
+  payload: string,
+) {
+  try {
+    const data = JSON.parse(payload)
+    const timestamp = new Date()
+
+    // Mapeo de llaves de payload a tipos de auditoría internos
+    const metricMapping: Record<string, string> = {
+      temperature: 'temp',
+      humidity: 'hum',
+      illuminance: 'lux',
+      rain_intensity: 'rain',
+      health: 'health',
+      ram: 'ram',
+    }
+
+    for (const [key, auditType] of Object.entries(metricMapping)) {
+      if (data[key] !== undefined) {
+        const val = data[key]
+        const value = typeof val === 'number' ? val : null
+        const complexData = typeof val === 'object' ? val : null
+
+        await saveAuditPoint(source, auditType, value, complexData, timestamp)
+      }
+    }
+  } catch (e) {
+    Logger.error(`[ AUDIT ] Error procesando paquete de ${source}:`, e)
+  }
+}
+
+/**
+ * Persiste un punto de auditoría en PostgreSQL y mantiene el límite de 500 registros.
+ */
+async function saveAuditPoint(
+  deviceId: string,
+  type: string,
+  value: number | null,
+  data: unknown,
+  timestamp: Date,
+) {
+  try {
+    // 1. Guardar el nuevo punto
+    await prisma.auditLog.create({
+      data: {
+        deviceId,
+        type,
+        value,
+        data: data || undefined,
+        timestamp,
+      },
+    })
+
+    // 2. Aplicar límite de 500 registros (FIFO)
+    // Buscamos si hay exceso de registros (más de 500)
+    const toDelete = await prisma.auditLog.findMany({
+      where: { deviceId, type },
+      orderBy: { timestamp: 'desc' },
+      skip: 500,
+      select: { id: true },
+    })
+
+    if (toDelete.length > 0) {
+      await prisma.auditLog.deleteMany({
+        where: {
+          id: { in: toDelete.map((d) => d.id) },
+        },
+      })
+    }
+
+    Logger.metric(`[ AUDIT ] [ ${deviceId} ] ${type} -> ${value ?? JSON.stringify(data)}`)
+  } catch (e) {
+    Logger.error(`[ AUDIT ] Error persistiendo punto ${type}:`, e)
   }
 }
 

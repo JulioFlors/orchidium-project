@@ -30,8 +30,9 @@ import {
 import clsx from 'clsx'
 
 import { ActionMenu, Card, StatusCircleIcon } from '@/components'
-import { authClient, AUDIT_STORAGE_PREFIX, clearAuditData } from '@/lib'
+import { authClient, clearAuditData } from '@/lib'
 import { formatRelativeHeartbeat, formatSmartDateTime } from '@/utils'
+import { getAuditHistory, clearAuditHistory } from '@/actions'
 
 // ---- Interfaces de Auditoría ----
 interface AuditPayload {
@@ -426,36 +427,40 @@ export function AuditConsoleCard({
 
   // ---- Hidratación Segura y Carga de Cache ----
   useEffect(() => {
-    // Usamos un pequeño delay para asegurar que el layout y las animaciones
-    // hayan terminado antes de intentar renderizar gráficas (evita width -1 en Recharts)
-    const timer = setTimeout(() => {
-      setHasMounted(true)
-      if (activeAudit && ['lux', 'rain', 'ram', 'health', 'temp', 'hum'].includes(activeAudit)) {
-        const cached = window.localStorage.getItem(
-          `${AUDIT_STORAGE_PREFIX}history_${deviceId}_${activeAudit}`,
-        )
-
-        if (cached) {
-          try {
-            const parsed = JSON.parse(cached) as AuditPayload
-
-            setDisplayPayload((prev) => {
-              // Si ya tenemos datos ( history ), no pisamos con el cache a menos que el cache sea más reciente
-              const prevHistory = (prev as { history?: unknown[] })?.history || []
-
-              if (prevHistory.length > 0) return prev as AuditPayload
-
-              return parsed
-            })
-            if (parsed.receivedAt) setLocalReceivedAt(parsed.receivedAt)
-          } catch {
-            // No hacer nada si el cache está corrupto
-          }
-        }
-      }
-    }, 100)
+    const timer = setTimeout(() => setHasMounted(true), 100)
 
     return () => clearTimeout(timer)
+  }, [])
+
+  // ---- Hidratación de Historial desde Base de Datos (Postgres) ----
+  useEffect(() => {
+    if (!activeAudit || !deviceId) return
+
+    const hydrateFromDB = async () => {
+      const response = await getAuditHistory(deviceId, activeAudit)
+
+      if (response.ok && response.logs && response.logs.length > 0) {
+        // Mapear logs de Postgres ( AuditLog ) al formato esperado por la gráfica [ts, val]
+        const history = response.logs.map((log) => {
+          const ts = log.timestamp ? new Date(log.timestamp).getTime() / 1000 : 0
+          const val = log.value !== null ? log.value : log.data
+
+          return [ts, val]
+        })
+
+        setDisplayPayload((prev) => {
+          const prevHistory = (prev as { history?: unknown[] })?.history || []
+
+          if (prevHistory.length > 0) return prev as AuditPayload
+
+          return { history, receivedAt: Date.now() }
+        })
+
+        setLocalReceivedAt(Date.now())
+      }
+    }
+
+    hydrateFromDB()
   }, [activeAudit, deviceId])
 
   // Auto-limpieza si la sesión caduca
@@ -464,8 +469,8 @@ export function AuditConsoleCard({
       clearAuditData()
     }
   }, [session])
-  // ---- Limpieza Automática al Cerrar (Safe Cleanup) ----
   const unmountRef = useRef({ isActive, onStop, isManualStopping: false })
+  const stopCalledRef = useRef(false) // Guardia local para evitar dobles clics o race conditions
 
   useEffect(() => {
     unmountRef.current.isActive = isActive
@@ -473,12 +478,15 @@ export function AuditConsoleCard({
   }, [isActive, onStop])
 
   useEffect(() => {
-    // Capturamos la referencia al objeto actual para el cleanup
+    // Capturamos la referencia al objeto actual para el cleanup.
+    // Al usar un objeto mutable, los cambios en sus propiedades (como isManualStopping)
+    // serán visibles en la función de cleanup incluso si el componente ya se desmontó.
     const cleanupRef = unmountRef.current
 
     return () => {
       // SOLO enviamos parada si el componente se desmonta de forma "huérfana"
       // (ej. el usuario cambia de pestaña del admin) y NO si fue un stop manual.
+      // También verificamos que siga activo según la última actualización del ref.
       if (cleanupRef.isActive && cleanupRef.onStop && !cleanupRef.isManualStopping) {
         cleanupRef.onStop()
       }
@@ -554,13 +562,6 @@ export function AuditConsoleCard({
             .slice(-100)
 
           const nextState = { ...incomingPayload, history: mergedHistory, receivedAt: Date.now() }
-
-          if (typeof window !== 'undefined' && activeAudit) {
-            window.localStorage.setItem(
-              `${AUDIT_STORAGE_PREFIX}history_${deviceId}_${activeAudit}`,
-              JSON.stringify(nextState),
-            )
-          }
 
           setLocalReceivedAt(nextState.receivedAt)
 
@@ -949,7 +950,7 @@ export function AuditConsoleCard({
       )
     }
 
-    const isChartable = ['lux', 'rain', 'ram', 'health'].includes(activeAudit || '')
+    const isChartable = ['lux', 'rain', 'ram', 'health', 'temp', 'hum'].includes(activeAudit || '')
 
     if (isChartable) {
       const chart = renderTrendChart()
@@ -1022,6 +1023,8 @@ export function AuditConsoleCard({
                 disabled={isPending}
                 type="button"
                 onClick={() => {
+                  if (stopCalledRef.current) return
+                  stopCalledRef.current = true
                   unmountRef.current.isManualStopping = true
                   onStop?.()
                 }}
@@ -1060,11 +1063,9 @@ export function AuditConsoleCard({
                 {
                   label: 'Limpiar Datos',
                   icon: <IoTrashOutline />,
-                  onClick: () => {
-                    if (activeAudit && typeof window !== 'undefined') {
-                      window.localStorage.removeItem(
-                        `${AUDIT_STORAGE_PREFIX}history_${deviceId}_${activeAudit}`,
-                      )
+                  onClick: async () => {
+                    if (activeAudit && deviceId) {
+                      await clearAuditHistory(deviceId, activeAudit)
                     }
                     setDisplayPayload(null)
                     onClear?.()
@@ -1074,6 +1075,9 @@ export function AuditConsoleCard({
                   label: 'Cerrar',
                   icon: <IoCloseOutline />,
                   onClick: () => {
+                    if (stopCalledRef.current) return
+                    stopCalledRef.current = true
+
                     // Marcamos como parada manual para evitar duplicados en el unmount
                     unmountRef.current.isManualStopping = true
                     onStop?.()
