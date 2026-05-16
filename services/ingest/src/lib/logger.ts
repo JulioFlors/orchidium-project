@@ -10,6 +10,7 @@ const colors = {
   magenta: '\x1b[95m',
   cyan: '\x1b[96m',
   white: '\x1b[97m',
+  dim: '\x1b[90m',
 }
 
 const getLogTime = () => {
@@ -82,5 +83,16 @@ export const Logger = {
   /** @deprecated Usar metric / rain / state según el tipo de dato. */
   influx: (msg: string) => {
     console.log(formatLog('💾', 'INFLUX', colors.green, msg))
+  },
+  /**
+   * Estado de conectividad de un nodo (estilo Scheduler).
+   */
+  node: (status: 'ONLINE' | 'OFFLINE' | 'REBOOT', nodeName: string, origin?: string) => {
+    const icon = status === 'ONLINE' ? '🟢' : status === 'REBOOT' ? '🔄' : '🔴'
+    const color =
+      status === 'ONLINE' ? colors.green : status === 'REBOOT' ? colors.blue : colors.red
+    const originStr = origin ? ` ${colors.dim}[${origin}]${colors.reset}` : ''
+
+    console.log(formatLog(icon, 'NODE', color, `${status} -> ${nodeName}${originStr}`))
   },
 }

@@ -10,6 +10,9 @@ description: Protocolo maestro de desarrollo. Define convenciones git, manejo de
 >
 > [!CAUTION]
 > **PROHIBICIÓN DE GIT (PASO 2)**: El Agente tiene **PROHIBIDO** ejecutar `git commit`, `git push` o cualquier comando que altere el repositorio remoto. El Agente solo debe generar/actualizar el archivo `commit.txt`. Ignorar esta regla es una violación directa del protocolo.
+>
+> [!IMPORTANT]
+> **MODO PLANIFICACIÓN**: Es obligatorio trabajar siempre en Modo Planificación. Debes proponer un `implementation_plan.md` y esperar la **aprobación explícita** del usuario antes de realizar cualquier cambio en el código.
 
 Este documento define las directrices, convenciones y flujos de trabajo ESTRICTOS para el desarrollo del proyecto "Pristinoplant".
 
@@ -32,6 +35,10 @@ Este documento define las directrices, convenciones y flujos de trabajo ESTRICTO
 2. **Usuario**: Perfil de aprendizaje. Explicaciones claras.
 3. **Archivos de Chat**: Usar `.txt` para archivos efímeros (context.txt, commit.txt).
 4. **Artefactos**: Todos los documentos generados (`walkthrough.md`, `implementation_plan.md`, `task.md`, etc.) y el **razonamiento** (pensamientos internos) deben estar en **Español**.
+5. **Modo Planificación (MANDATORIO)**: Para cualquier cambio que no sea una corrección trivial de sintaxis o formato, el Agente debe operar en **Modo Planificación**. Esto implica:
+   - Investigar y proponer un `implementation_plan.md`.
+   - Requerir **permiso explícito** del usuario antes de ejecutar el plan propuesto.
+   - Mantener el progreso actualizado en `task.md`.
 
 ### Paso 2: Flujo de Trabajo de Commits (Estricto)
 
@@ -41,6 +48,10 @@ Este documento define las directrices, convenciones y flujos de trabajo ESTRICTO
 2. **Acción**:
    - El Agente **NUNCA** ejecuta `git commit` directamente.
    - El Agente se limita a generar/anexar el contenido en `commit.txt`.
+
+   > [!WARNING]
+   > **Codificación Crítica**: El archivo `commit.txt` DEBE estar en **UTF-8 sin BOM**. Está terminantemente **PROHIBIDO** usar el operador de redirección `>` de PowerShell, ya que genera archivos UTF-16 que contienen bytes NUL, lo que provoca el error `a NUL byte in commit log message not allowed` al intentar hacer el commit. El Agente debe usar sus herramientas internas de escritura de archivos para garantizar la codificación correcta.
+
 3. **Aprobación**: El usuario revisa el contenido de `commit.txt` y ejecuta el commit manualmente.
 4. **Finalización**: Una vez que el usuario ejecuta el commit, el archivo `commit.txt` debe desaparecer o ser limpiado para la siguiente tarea.
 

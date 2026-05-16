@@ -16,9 +16,9 @@ export const metadata: Metadata = {
 }
 
 export default async function Page() {
-  // Pre-cargamos los datos para las tarjetas por defecto (EXTERIOR, 12h)
+  // Pre-cargamos los datos para las tarjetas por defecto (EXTERIOR, 24h)
   const [historyRes, rainRes, hbExterior, hbZonaA] = await Promise.all([
-    getSensorData('12h', ZoneType.EXTERIOR),
+    getSensorData('24h', ZoneType.EXTERIOR),
     getRainData(ZoneType.EXTERIOR),
     getLastHeartbeat('Actuator_Controller'),
     getLastHeartbeat('Weather_Station', ZoneType.ZONA_A),
@@ -33,7 +33,7 @@ export default async function Page() {
   const fallback: Record<string, unknown> = {}
 
   if (historyRes.success) {
-    fallback[`/api/environment/history?range=12h&zone=${ZoneType.EXTERIOR}`] = {
+    fallback[`/api/environment/history?range=24h&zone=${ZoneType.EXTERIOR}`] = {
       data: historyRes.data,
       liveKPIs: historyRes.liveKPIs,
       lastRainState: historyRes.lastRainState,

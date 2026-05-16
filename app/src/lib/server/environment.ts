@@ -72,20 +72,7 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
     let timeFilter = `AND time >= now() - interval '24 hours'`
 
     if (range === '1h') timeFilter = `AND time >= now() - interval '1 hours'`
-    if (range === '12h') {
-      // "Día Botánico": 5:00 AM VET → 7:00 PM VET (14h operativas).
-      // Si estamos en madrugada (antes de 5 AM VET), retrocedemos al día anterior
-      // para no mostrar una ventana vacía.
-      const currentVETHour = (now.getUTCHours() - 4 + 24) % 24
-      const baseDay =
-        currentVETHour < 5
-          ? new Date(midnightVETInUTC.getTime() - 24 * 3600000) // Ayer
-          : midnightVETInUTC // Hoy
-      const start = new Date(baseDay.getTime() + 5 * 3600000)
-      const end = new Date(baseDay.getTime() + 19 * 3600000)
-
-      timeFilter = `AND time >= TIMESTAMP '${start.toISOString()}' AND time <= TIMESTAMP '${end.toISOString()}'`
-    }
+    if (range === '12h') timeFilter = `AND time >= now() - interval '12 hours'`
 
     const query = `
       SELECT *

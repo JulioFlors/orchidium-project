@@ -122,12 +122,12 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     }
   }
 
-  // 1. Consulta para "Current Status" / Tarjetas (Rango fijo 12h)
+  // 1. Consulta para "Current Status" / Tarjetas (Rango fijo 24h para asegurar KPIs y datos frescos)
   const {
     data: cardStatusResponse,
     error: cardStatusError,
     isLoading: isCardStatusLoading,
-  } = useSWR<SensorDataResponse>(`/api/environment/history?range=12h&zone=${zone}`, fetcher, {
+  } = useSWR<SensorDataResponse>(`/api/environment/history?range=24h&zone=${zone}`, fetcher, {
     refreshInterval: 30000,
     revalidateOnFocus: false,
     errorRetryCount: 3,

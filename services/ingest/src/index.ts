@@ -74,6 +74,7 @@ const TOPIC_ROUTES: Record<string, PacketProcessor> = {
   '/status': (s, z, c, p) => processZoneStateEvent(s, z, c, p, 'Device_Status'),
   '/rain/state': (s, z, c, p) => processZoneStateEvent(s, z, c, p, 'Rain_State'),
   '/audit': processAuditPacket,
+  '/climate/sync': processEnvironmentPacket,
 }
 
 // ---- Global Influx Client (puntero) ----
@@ -263,9 +264,9 @@ async function processEnvironmentPacket(
           .setTag('context', context)
           .setTimestamp(new Date(unixTimestamp * 1000))
 
-        // Mapeo Directo (Estandarización Estricta)
-        const t = metrics.temperature
-        const h = metrics.humidity
+        // Mapeo Directo (Estandarización Estricta) con soporte para alias cortos
+        const t = metrics.temperature ?? metrics.temp
+        const h = metrics.humidity ?? metrics.hum
         const l = metrics.illuminance
         const r = metrics.rain_intensity
 
@@ -288,8 +289,8 @@ async function processEnvironmentPacket(
       .setTag('context', context)
       .setTimestamp(new Date())
 
-    const t = data.temperature
-    const h = data.humidity
+    const t = data.temperature ?? data.temp
+    const h = data.humidity ?? data.hum
     const l = data.illuminance
     const r = data.rain_intensity
 
@@ -572,7 +573,7 @@ async function start() {
     if (firmwareSource === 'Actuator_Controller') {
       // Manejo de Reinicio Físico (Boot)
       if (topic.endsWith('/status/boot')) {
-        Logger.warn(`[ BOOT ] Nodo reiniciado: ${firmwareSource}.`)
+        Logger.node('REBOOT', firmwareSource)
 
         // Limpiar solo las claves de este nodo (no nuclear)
         for (const key of stateCache.keys()) {
@@ -611,7 +612,7 @@ async function start() {
 
           // LWT: registramos el la desconexion del nodo `offline`.
           if (messageValue === 'offline') {
-            Logger.warn(`[ LWT ] ${firmwareSource} Desconectado.`)
+            Logger.node('OFFLINE', firmwareSource, 'BROKER')
           }
         }
       }
@@ -633,7 +634,7 @@ async function start() {
 
       // Manejo de BOOT para sensores
       if (topic.endsWith('/status/boot')) {
-        Logger.warn(`[ BOOT ] Nodo sensor reiniciado: ${firmwareSource}/${zoneSlug}.`)
+        Logger.node('REBOOT', `${firmwareSource}/${zoneSlug}`)
 
         // Limpiar solo las claves de este nodo (no nuclear)
         for (const key of stateCache.keys()) {

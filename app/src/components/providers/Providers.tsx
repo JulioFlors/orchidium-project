@@ -7,10 +7,8 @@ import { MqttProvider } from '@/components'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <MqttProvider>
-      <ThemeProvider disableTransitionOnChange enableSystem attribute="class" defaultTheme="system">
-        {children}
-      </ThemeProvider>
-    </MqttProvider>
+    <ThemeProvider disableTransitionOnChange enableSystem attribute="class" defaultTheme="system">
+      <MqttProvider>{children}</MqttProvider>
+    </ThemeProvider>
   )
 }

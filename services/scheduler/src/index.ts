@@ -1,7 +1,7 @@
 import { prisma, TaskStatus, CollisionGuard, ZoneType, DeviceStatus } from '@package/database'
 import { Cron } from 'croner'
 
-import { Logger } from './lib/logger'
+import { Logger, colors } from './lib/logger'
 import { InferenceEngine } from './lib/inference-engine'
 import {
   mqttClient,
@@ -466,7 +466,9 @@ function setupMqttHandlers() {
           try {
             const data = JSON.parse(message)
 
-            Logger.info(`🌡️  DHT22 sincronizado: ${data.temp}°C / ${data.hum}%`)
+            Logger.info(
+              `DHT22: ${colors.yellow}🌡️ ${data.temp}°C${colors.reset}, ${colors.blue}💧 ${data.hum}%${colors.reset}`,
+            )
           } catch {
             /* ignore */
           }

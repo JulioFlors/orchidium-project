@@ -1,6 +1,6 @@
 import { Prisma } from '@package/database'
 
-const colors = {
+export const colors = {
   reset: '\x1b[0m',
   bold: '\x1b[1m',
   red: '\x1b[91m',
