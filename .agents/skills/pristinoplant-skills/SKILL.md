@@ -96,6 +96,25 @@ Formato: `[Emoji] [tipo] ([área]): [Título Conciso]`
    - ✅ *Correcto:* `[ CRON ]`, `[ INFR ]`, `[ TLMT ]`
    - Usar siempre los métodos especializados del `Logger` (`Logger.agro()`, `Logger.task()`, etc.) en lugar de tags manuales en strings de `Logger.info`.
 
+3. **Zona Horaria y Evitar Desfases en el VPS (Bug del Desfase UTC)**:
+   - **REGLA ABSOLUTA**: Todo cálculo de tiempo botánico, ventanas operativas diarias (ej. rango 8:00 AM - 4:00 PM) o evaluación de históricos de sensores debe realizarse considerando de forma explícita el huso horario de Caracas (`America/Caracas`, UTC-4).
+   - **PROHIBICIÓN**: Está estrictamente **PROHIBIDO** utilizar `new Date().getHours()` o métodos que dependan de la zona horaria del servidor sin normalizar/desfasar. Dado que los VPS de producción corren en zona **UTC**, el uso directo de la hora del sistema provoca un desfase de **4 horas tempranas** en los rangos (por ejemplo, evaluando de 4:00 AM a 12:00 PM local en vez de 8:00 AM a 4:00 PM), corrompiendo promedios y cancelando rutinas hídricas incorrectamente.
+   - **PATRONES DE CORRECCIÓN**:
+     - **Consultas ISO en InfluxDB/Postgres**: Desfasar manualmente a UTC la ventana deseada de Caracas:
+
+       ```typescript
+       const inicioCaracas = new Date(fechaBase)
+       inicioCaracas.setUTCHours(12, 0, 0, 0) // 8:00 AM Caracas (UTC-4) = 12:00 PM UTC
+       const finCaracas = new Date(fechaBase)
+       finCaracas.setUTCHours(20, 0, 0, 0) // 4:00 PM Caracas (UTC-4) = 8:00 PM UTC
+       ```
+
+     - **Extracción de Hora Local en Influx/Telemetría**:
+
+       ```typescript
+       const localHour = (tDate.getUTCHours() - 4 + 24) % 24
+       ```
+
 ## Reglas de Base de Datos (Prisma) — La Biblia
 
 > [!CAUTION]

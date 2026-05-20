@@ -68,11 +68,36 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
   midnightVET.setUTCHours(0, 0, 0, 0)
   const midnightVETInUTC = new Date(midnightVET.getTime() + VET_OFFSET)
 
-  if (range === '1h' || range === '12h' || range === '24h') {
+  if (
+    range === '1h' ||
+    range === '12h' ||
+    range === '24h' ||
+    range === '5-19h' ||
+    range === '8-16h' ||
+    range === '1D'
+  ) {
     let timeFilter = `AND time >= now() - interval '24 hours'`
 
     if (range === '1h') timeFilter = `AND time >= now() - interval '1 hours'`
     if (range === '12h') timeFilter = `AND time >= now() - interval '12 hours'`
+
+    if (range === '5-19h') {
+      const start = new Date(midnightVETInUTC.getTime() + 5 * 3600000)
+      const end = new Date(midnightVETInUTC.getTime() + 19 * 3600000 + 59 * 1000)
+
+      timeFilter = `AND time >= TIMESTAMP '${start.toISOString()}' AND time <= TIMESTAMP '${end.toISOString()}'`
+    } else if (range === '8-16h') {
+      const start = new Date(midnightVETInUTC.getTime() + 8 * 3600000)
+      const end = new Date(midnightVETInUTC.getTime() + 16 * 3600000 + 59 * 1000)
+
+      timeFilter = `AND time >= TIMESTAMP '${start.toISOString()}' AND time <= TIMESTAMP '${end.toISOString()}'`
+    } else if (range === '1D') {
+      const yesterdayMidnightVETInUTC = new Date(midnightVETInUTC.getTime() - 24 * 3600000)
+      const start = new Date(yesterdayMidnightVETInUTC.getTime() + 5 * 3600000)
+      const end = new Date(yesterdayMidnightVETInUTC.getTime() + 19 * 3600000 + 59 * 1000)
+
+      timeFilter = `AND time >= TIMESTAMP '${start.toISOString()}' AND time <= TIMESTAMP '${end.toISOString()}'`
+    }
 
     const query = `
       SELECT *
@@ -162,7 +187,9 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
         isLive: true,
       }
 
-      const lastRainState = range === '12h' || range === '24h' ? await getLastRainState() : null
+      const lastRainState = ['12h', '24h', '5-19h', '8-16h', '1D'].includes(range)
+        ? await getLastRainState()
+        : null
 
       return { data, liveKPIs, lastRainState }
     } catch (error) {
@@ -260,6 +287,7 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
 
           fieldsToQuery.forEach((f) => {
             let values = rawRows
+              .filter((r) => r[f] != null && r[f] !== '')
               .map((r) => ({ val: Number(r[f]), time: r.time }))
               .filter((v) => !isNaN(v.val))
 

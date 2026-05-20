@@ -102,7 +102,7 @@ const TOOL_COLORS: Record<
     icon: 'text-indigo-500',
     pulse: 'bg-indigo-400',
   },
-  health: {
+  wifi: {
     bg: 'from-purple-500/30 to-purple-500/10',
     ring: 'ring-purple-500/15',
     border: 'border-purple-500/30',
@@ -116,7 +116,7 @@ const AUDIT_CHART_COLORS: Record<string, string> = {
   temp: '#fb923c', // orange-400
   rain: '#3b82f6', // blue
   ram: '#818cf8', // indigo
-  health: '#a855f7', // purple-500
+  wifi: '#a855f7', // purple-500
   hum: '#e879f9', // fuchsia-400
 }
 
@@ -293,17 +293,17 @@ export function ToolboxGrid({
           onClick={() => onCommand('audit_ram_on', 'ram')}
         />
         <ToolCard
-          active={activeAudits.includes('health')}
-          colorKey="health"
+          active={activeAudits.includes('wifi')}
+          colorKey="wifi"
           disabled={!isOnline}
           icon={
             <IoWifiOutline
-              className={clsx(!activeAudits.includes('health') && TOOL_COLORS.health.icon)}
+              className={clsx(!activeAudits.includes('wifi') && TOOL_COLORS.wifi.icon)}
               size={24}
             />
           }
           label="Wi-Fi Audit"
-          onClick={() => onCommand('audit_health_on', 'health')}
+          onClick={() => onCommand('audit_wifi_on', 'wifi')}
         />
         <ToolCard
           active={activeAudits.includes('temp')}
@@ -496,7 +496,7 @@ export function AuditConsoleCard({
   useEffect(() => {
     if (!currentPayload) return
 
-    const isChartable = ['lux', 'rain', 'ram', 'health', 'temp', 'hum'].includes(activeAudit || '')
+    const isChartable = ['lux', 'rain', 'ram', 'wifi', 'temp', 'hum'].includes(activeAudit || '')
 
     if (isChartable) {
       // Usamos un micro-task para evitar el renderizado en cascada síncrono que reporta el linter
@@ -615,7 +615,7 @@ export function AuditConsoleCard({
             const r = data as { a?: number }
 
             value = Number(r.a ?? 0) / 1024
-          } else if (activeAudit === 'health') {
+          } else if (activeAudit === 'wifi') {
             const h = data as { rssi?: number }
 
             value = Number(h.rssi ?? 0)
@@ -667,7 +667,7 @@ export function AuditConsoleCard({
             <YAxis
               axisLine={false}
               domain={
-                activeAudit === 'health'
+                activeAudit === 'wifi'
                   ? [-100, -30]
                   : activeAudit === 'lux'
                     ? [0, 90000]
@@ -683,7 +683,7 @@ export function AuditConsoleCard({
               scale="auto"
               stroke="var(--color-secondary)"
               tickFormatter={(value) => {
-                if (activeAudit === 'health') return `${value}dB`
+                if (activeAudit === 'wifi') return `${value}dB`
                 if (activeAudit === 'rain') return value.toString()
                 if (activeAudit === 'temp') return `${value}°`
                 if (activeAudit === 'hum') return `${value}%`
@@ -886,7 +886,7 @@ export function AuditConsoleCard({
       }
     }
 
-    if ((activeAudit === 'health' || activeAudit === 'state') && dataForUi) {
+    if ((activeAudit === 'wifi' || activeAudit === 'state') && dataForUi) {
       const raw = dataForUi as {
         rssi?: number
         ip?: string
@@ -950,7 +950,7 @@ export function AuditConsoleCard({
       )
     }
 
-    const isChartable = ['lux', 'rain', 'ram', 'health', 'temp', 'hum'].includes(activeAudit || '')
+    const isChartable = ['lux', 'rain', 'ram', 'wifi', 'temp', 'hum'].includes(activeAudit || '')
 
     if (isChartable) {
       const chart = renderTrendChart()
@@ -993,7 +993,7 @@ export function AuditConsoleCard({
             )}
           />
           <h3 className="flex items-center gap-2 font-mono text-xs font-bold tracking-[0.2em] text-zinc-500 uppercase opacity-80 dark:text-zinc-400">
-            {activeAudit === 'health'
+            {activeAudit === 'wifi'
               ? 'Audit/WiFi'
               : activeAudit
                 ? `Audit/${activeAudit}`

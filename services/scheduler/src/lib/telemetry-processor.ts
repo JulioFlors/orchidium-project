@@ -5,6 +5,11 @@ import { influxClient } from './influx'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Límites mínimos de muestras para considerar un día válido
+const MIN_SAMPLES_TEMP_HUM = 500
+const MIN_SAMPLES_LUX_BOTANICAL = 250
+const MIN_SAMPLES_LUX_TOTAL = 420
+
 function rowTimeToDate(rawTime: unknown): Date {
   if (rawTime instanceof Date) return rawTime
   const s = String(rawTime)
@@ -89,6 +94,7 @@ export async function processDay(
     maxHumTime: string | null = null
 
   let countLum = 0,
+    countLumTotal = 0,
     sumLum = 0,
     minLum = Infinity,
     maxLum = -Infinity
@@ -202,31 +208,34 @@ export async function processDay(
         }
       }
 
-      // Iluminancia (solo 08:00–16:00)
-      if (row.illuminance != null && isDaytime) {
+      // Iluminancia (solo 08:00–16:00 para promedio y DLI, pero contando total)
+      if (row.illuminance != null) {
         const v = Number(row.illuminance)
 
         if (!isNaN(v) && v >= 0) {
-          sumLum += v
-          countLum++
-          if (v < minLum) {
-            minLum = v
-            minLumTime = tIso
-          }
-          if (v > maxLum) {
-            maxLum = v
-            maxLumTime = tIso
-          }
-
-          // DLI
-          if (lastLuxTime) {
-            const deltaSeconds = (tDate.getTime() - lastLuxTime.getTime()) / 1000
-
-            if (deltaSeconds > 0 && deltaSeconds < 900) {
-              dliAccumulator += v * 0.018 * deltaSeconds
+          countLumTotal++
+          if (isDaytime) {
+            sumLum += v
+            countLum++
+            if (v < minLum) {
+              minLum = v
+              minLumTime = tIso
             }
+            if (v > maxLum) {
+              maxLum = v
+              maxLumTime = tIso
+            }
+
+            // DLI
+            if (lastLuxTime) {
+              const deltaSeconds = (tDate.getTime() - lastLuxTime.getTime()) / 1000
+
+              if (deltaSeconds > 0 && deltaSeconds < 900) {
+                dliAccumulator += v * 0.018 * deltaSeconds
+              }
+            }
+            lastLuxTime = tDate
           }
-          lastLuxTime = tDate
         }
       }
     }
@@ -275,19 +284,45 @@ export async function processDay(
   }
 
   // ── 4. Cálculos finales ──────────────────────────────────────────────────
-  const dli = dliAccumulator > 0 ? Number((dliAccumulator / 1_000_000).toFixed(2)) : null
-  const vpdAvg = vpdCount > 0 ? Number((vpdSum / vpdCount).toFixed(3)) : null
-  const vpdMinFinal = vpdMin !== Infinity ? Number(vpdMin.toFixed(3)) : null
-  const vpdMaxFinal = vpdMax !== -Infinity ? Number(vpdMax.toFixed(3)) : null
-  const avgTempDay = countTempDay > 0 ? Number((sumTempDay / countTempDay).toFixed(2)) : null
+  const isTempValid = countTemp >= MIN_SAMPLES_TEMP_HUM
+  const isHumValid = countHum >= MIN_SAMPLES_TEMP_HUM
+  const isLuxValid = countLumTotal >= MIN_SAMPLES_LUX_TOTAL || countLum >= MIN_SAMPLES_LUX_BOTANICAL
+
+  const dli =
+    isLuxValid && dliAccumulator > 0 ? Number((dliAccumulator / 1_000_000).toFixed(2)) : null
+  const isVpdValid = isTempValid && isHumValid
+  const vpdAvg = isVpdValid && vpdCount > 0 ? Number((vpdSum / vpdCount).toFixed(3)) : null
+  const vpdMinFinal = isVpdValid && vpdMin !== Infinity ? Number(vpdMin.toFixed(3)) : null
+  const vpdMaxFinal = isVpdValid && vpdMax !== -Infinity ? Number(vpdMax.toFixed(3)) : null
+
+  if (!isTempValid && countTemp > 0) {
+    Logger.warn(
+      `[${dayLabel}] [${zone}] Temperatura descartada por baja densidad de muestras (${countTemp} < ${MIN_SAMPLES_TEMP_HUM}).`,
+    )
+  }
+  if (!isHumValid && countHum > 0) {
+    Logger.warn(
+      `[${dayLabel}] [${zone}] Humedad descartada por baja densidad de muestras (${countHum} < ${MIN_SAMPLES_TEMP_HUM}).`,
+    )
+  }
+  if (!isLuxValid && countLumTotal > 0) {
+    Logger.warn(
+      `[${dayLabel}] [${zone}] Iluminancia/DLI descartada por baja densidad de muestras (Total: ${countLumTotal} < ${MIN_SAMPLES_LUX_TOTAL} y Window: ${countLum} < ${MIN_SAMPLES_LUX_BOTANICAL}).`,
+    )
+  }
+
+  const avgTempDay =
+    isTempValid && countTempDay > 0 ? Number((sumTempDay / countTempDay).toFixed(2)) : null
   const avgTempNight =
-    countTempNight > 0 ? Number((sumTempNight / countTempNight).toFixed(2)) : null
+    isTempValid && countTempNight > 0 ? Number((sumTempNight / countTempNight).toFixed(2)) : null
   const dif =
     avgTempDay !== null && avgTempNight !== null
       ? Number((avgTempDay - avgTempNight).toFixed(2))
       : null
   const highHumidityHours =
-    maxHighHumStreakMinutes > 0 ? Number((maxHighHumStreakMinutes / 60).toFixed(1)) : null
+    isHumValid && maxHighHumStreakMinutes > 0
+      ? Number((maxHighHumStreakMinutes / 60).toFixed(1))
+      : null
 
   if (dryRun) {
     Logger.info(
@@ -298,22 +333,22 @@ export async function processDay(
   }
 
   const coreData = {
-    avgTemperature: safeAvg(sumTemp, countTemp),
-    minTemperature: safeInf(minTemp),
-    minTempTime: toCaracasTimeStr(minTempTime),
-    maxTemperature: safeInf(maxTemp),
-    maxTempTime: toCaracasTimeStr(maxTempTime),
-    avgHumidity: safeAvg(sumHum, countHum),
-    minHumidity: safeInf(minHum),
-    minHumTime: toCaracasTimeStr(minHumTime),
-    maxHumidity: safeInf(maxHum),
-    maxHumTime: toCaracasTimeStr(maxHumTime),
-    avgIlluminance: safeAvg(sumLum, countLum),
-    minIlluminance: safeInf(minLum),
-    minIllumTime: toCaracasTimeStr(minLumTime),
-    maxIlluminance: safeInf(maxLum),
-    maxIllumTime: toCaracasTimeStr(maxLumTime),
-    lightDurationHours: isExterior ? 8 : 0,
+    avgTemperature: isTempValid ? safeAvg(sumTemp, countTemp) : null,
+    minTemperature: isTempValid ? safeInf(minTemp) : null,
+    minTempTime: isTempValid ? toCaracasTimeStr(minTempTime) : null,
+    maxTemperature: isTempValid ? safeInf(maxTemp) : null,
+    maxTempTime: isTempValid ? toCaracasTimeStr(maxTempTime) : null,
+    avgHumidity: isHumValid ? safeAvg(sumHum, countHum) : null,
+    minHumidity: isHumValid ? safeInf(minHum) : null,
+    minHumTime: isHumValid ? toCaracasTimeStr(minHumTime) : null,
+    maxHumidity: isHumValid ? safeInf(maxHum) : null,
+    maxHumTime: isHumValid ? toCaracasTimeStr(maxHumTime) : null,
+    avgIlluminance: isLuxValid ? safeAvg(sumLum, countLum) : null,
+    minIlluminance: isLuxValid ? safeInf(minLum) : null,
+    minIllumTime: isLuxValid ? toCaracasTimeStr(minLumTime) : null,
+    maxIlluminance: isLuxValid ? safeInf(maxLum) : null,
+    maxIllumTime: isLuxValid ? toCaracasTimeStr(maxLumTime) : null,
+    lightDurationHours: isExterior && isLuxValid ? 8 : 0,
     totalRainDuration: Math.round(totalRain),
     avgRainIntensity: avgRainIntensity ? Number(avgRainIntensity.toFixed(2)) : null,
     dli,

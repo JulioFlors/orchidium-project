@@ -2,6 +2,38 @@ import { Logger } from './logger'
 import { influxClient } from './influx'
 
 /**
+ * Convierte timestamps crudos de InfluxDB (nanosegundos o milisegundos) a Date válido.
+ * InfluxDB puede retornar timestamps como BigInt en nanosegundos (19+ dígitos)
+ * o como milisegundos (13 dígitos). Esta función normaliza ambos formatos.
+ */
+function rowTimeToDate(rawTime: unknown): Date {
+  if (rawTime instanceof Date) return rawTime
+  const s = String(rawTime)
+
+  return s.length > 13 ? new Date(Number(s.substring(0, 13))) : new Date(Number(s))
+}
+
+/**
+ * Verifica si una fecha (hora local) cae estrictamente dentro del rango botánico:
+ * de 8:00:00 AM a 4:00:59 PM (inclusive en ambos extremos).
+ *
+ * Utilizada para filtrar lecturas de lux que quedan fuera de la ventana de luz
+ * solar representativa del día botánico y que podrían acumular minutos erróneos
+ * de nubosidad durante el amanecer, anochecer o la madrugada.
+ */
+function isWithinBotanicalHours(date: Date): boolean {
+  const localHour = (date.getUTCHours() - 4 + 24) % 24
+  const min = date.getUTCMinutes()
+  const sec = date.getUTCSeconds()
+
+  const secondsSinceMidnight = localHour * 3600 + min * 60 + sec
+  const startSec = 8 * 3600 // 08:00:00
+  const endSec = 16 * 3600 + 59 // 16:00:59
+
+  return secondsSinceMidnight >= startSec && secondsSinceMidnight <= endSec
+}
+
+/**
  * Clasificador de Día — Calibrado con datos reales del orquideario.
  *
  * Fuente de calibración: MonitoringView.tsx climate() + observaciones de campo:
@@ -28,7 +60,8 @@ export interface DayClassification {
   type: DayType
   avgLuxSince8am: number
   currentLux: number
-  overcastMinutes: number // Minutos consecutivos con <15k lux recientes
+  overcastMinutes: number // Minutos consecutivos con <26k lux recientes
+  overcastHeavyMinutes: number // Minutos consecutivos con <10k lux (nubosidad intensa → posible lluvia)
   evaluatedAt: Date
 }
 
@@ -45,6 +78,9 @@ const LUX_THRESHOLDS = {
 // Umbral de "nublado consecutivo" — sincronizado con InferenceEngine
 const OVERCAST_LUX_THRESHOLD = 26000
 
+// Umbral de nubosidad intensa para correlación de lluvia (≤10k lux entre 8am-4pm)
+const HEAVY_OVERCAST_LUX_THRESHOLD = 10000
+
 /**
  * Clasifica el tipo de día actual basándose en datos de iluminancia acumulados.
  *
@@ -54,30 +90,50 @@ const OVERCAST_LUX_THRESHOLD = 26000
  */
 export async function classifyCurrentDay(): Promise<DayClassification> {
   const now = new Date()
-  const currentHour = now.getHours()
+  const currentCaracasHour = (now.getUTCHours() - 4 + 24) % 24
 
-  // Determinar la ventana de evaluación
-  const startEval = new Date(now)
-
-  startEval.setHours(8, 0, 0, 0)
+  // Determinar la ventana de evaluación usando la fecha en Caracas local
+  const caracasTime = new Date(now.getTime() - 4 * 60 * 60000)
+  const startEval = new Date(
+    Date.UTC(
+      caracasTime.getUTCFullYear(),
+      caracasTime.getUTCMonth(),
+      caracasTime.getUTCDate(),
+      12,
+      0,
+      0,
+      0,
+    ),
+  ) // 8:00 AM Caracas = 12:00 PM UTC
 
   const endEval = new Date(now)
 
-  if (currentHour < 16) {
+  if (currentCaracasHour < 16) {
     // Si es antes de las 4pm, evaluamos hasta "ahora"
     endEval.setTime(now.getTime())
   } else {
     // Si es después de las 4pm, evaluamos el bloque completo del día (8am - 4pm)
-    endEval.setHours(16, 0, 0, 0)
+    endEval.setTime(
+      Date.UTC(
+        caracasTime.getUTCFullYear(),
+        caracasTime.getUTCMonth(),
+        caracasTime.getUTCDate(),
+        20,
+        0,
+        0,
+        0,
+      ),
+    ) // 4:00 PM Caracas = 8:00 PM UTC
   }
 
-  // Si aún no son las 8am, no hay datos representativos
-  if (currentHour < 8) {
+  // Si aún no son las 8am en Caracas, no hay datos representativos
+  if (currentCaracasHour < 8) {
     return {
       type: 'DESCONOCIDO',
       avgLuxSince8am: 0,
       currentLux: 0,
       overcastMinutes: 0,
+      overcastHeavyMinutes: 0,
       evaluatedAt: now,
     }
   }
@@ -88,16 +144,37 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
 
     // 1. Promedio de Lux en la ventana (8am hasta ahora o hasta las 4pm)
     const avgQuery = `
-      SELECT AVG(illuminance) as avg_lux
+      SELECT AVG(illuminance) as avg_lux, COUNT(illuminance) as count_lux
       FROM "environment_metrics"
       WHERE time >= '${startISO}' AND time <= '${endISO}'
       AND source = 'Weather_Station'
     `
     const avgStream = influxClient.query(avgQuery)
     let avgLux = 0
+    let countLux = 0
 
     for await (const row of avgStream) {
       if (row.avg_lux != null) avgLux = Number(row.avg_lux)
+      if (row.count_lux != null) countLux = Number(row.count_lux)
+    }
+
+    // Validación de densidad temporal en tiempo real
+    const elapsedMinutes = Math.min((endEval.getTime() - startEval.getTime()) / 60000, 480)
+    const minRequiredSamples = Math.max(10, Math.floor(elapsedMinutes * 0.3))
+
+    if (countLux < minRequiredSamples) {
+      Logger.dayClass(
+        `Clasificación abortada: baja densidad de muestras (${countLux} muestras registradas de ${Math.round(elapsedMinutes)} min transcurridos, requerido: ${minRequiredSamples}).`,
+      )
+
+      return {
+        type: 'DESCONOCIDO',
+        avgLuxSince8am: 0,
+        currentLux: 0,
+        overcastMinutes: 0,
+        overcastHeavyMinutes: 0,
+        evaluatedAt: now,
+      }
     }
 
     // 2. Lux instantáneo (el último dato de la ventana evaluada)
@@ -128,42 +205,82 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
     `
     const overcastStream = influxClient.query(overcastQuery)
     let overcastMinutes = 0
+    let overcastHeavyMinutes = 0
     let lastTime: Date | null = null
+    let lastTimeHeavy: Date | null = null
+    let heavyBroken = false // Rompe la cadena de nubosidad intensa (<10k)
+    let standardBroken = false // Rompe la cadena de nubosidad estándar (10k-26k)
 
     for await (const row of overcastStream) {
       const lux = Number(row.illuminance || 0)
-      const rowTime = new Date(String(row.time))
+      const rowTime = rowTimeToDate(row.time)
 
-      if (!lastTime) {
-        // Primera iteración (el dato más reciente)
-        const ageMs = now.getTime() - rowTime.getTime()
+      // Protección contra timestamps inválidos de InfluxDB
+      if (isNaN(rowTime.getTime())) continue
 
-        if (lux < OVERCAST_LUX_THRESHOLD) {
-          // Sumamos el tiempo desde el dato hasta "ahora", con tope de 30 min por si el nodo se desconectó
-          overcastMinutes += Math.min(ageMs, 30 * 60000) / 60000
-          lastTime = rowTime
+      // Filtro de horario botánico estricto (8:00:00 AM – 4:00:59 PM)
+      // Las lecturas fuera de este rango no son representativas del estado del cielo
+      // y podrían acumular minutos erróneos durante el amanecer o atardecer.
+      if (!isWithinBotanicalHours(rowTime)) {
+        heavyBroken = true
+        standardBroken = true
+        continue
+      }
+
+      // ── Nubosidad estándar (<=26k lux) ──
+      if (!standardBroken) {
+        if (lux <= OVERCAST_LUX_THRESHOLD) {
+          if (!lastTime) {
+            // Primera muestra: sumamos tiempo desde el dato hasta "ahora"
+            const ageMs = now.getTime() - rowTime.getTime()
+
+            overcastMinutes += Math.min(ageMs, 30 * 60000) / 60000
+            lastTime = rowTime
+          } else {
+            const jumpMs = lastTime.getTime() - rowTime.getTime()
+
+            if (jumpMs > 30 * 60000) {
+              standardBroken = true
+            } else {
+              overcastMinutes += jumpMs / 60000
+              lastTime = rowTime
+            }
+          }
         } else {
-          break
-        }
-      } else {
-        // Siguientes iteraciones (hacia atrás en el tiempo)
-        const jumpMs = lastTime.getTime() - rowTime.getTime()
-
-        // Protección contra vacíos de datos: si el salto es > 30 min (3 batches perdidos)
-        if (jumpMs > 30 * 60000) {
-          break
-        }
-
-        if (lux < OVERCAST_LUX_THRESHOLD) {
-          overcastMinutes += jumpMs / 60000
-          lastTime = rowTime
-        } else {
-          break
+          standardBroken = true
         }
       }
+
+      // ── Nubosidad intensa (<10k lux) ──
+      if (!heavyBroken) {
+        if (lux < HEAVY_OVERCAST_LUX_THRESHOLD) {
+          if (!lastTimeHeavy) {
+            // Primera muestra: sumamos tiempo desde el dato hasta "ahora"
+            const ageMs = now.getTime() - rowTime.getTime()
+
+            overcastHeavyMinutes += Math.min(ageMs, 30 * 60000) / 60000
+            lastTimeHeavy = rowTime
+          } else {
+            const jumpMs = lastTimeHeavy.getTime() - rowTime.getTime()
+
+            if (jumpMs > 30 * 60000) {
+              heavyBroken = true
+            } else {
+              overcastHeavyMinutes += jumpMs / 60000
+              lastTimeHeavy = rowTime
+            }
+          }
+        } else {
+          heavyBroken = true
+        }
+      }
+
+      // Optimización: si ambas cadenas están rotas, no hay necesidad de seguir iterando
+      if (heavyBroken && standardBroken) break
     }
 
     overcastMinutes = Math.round(overcastMinutes)
+    overcastHeavyMinutes = Math.round(overcastHeavyMinutes)
 
     // 4. Clasificar por promedio acumulado
     let type: DayType
@@ -181,7 +298,7 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
     }
 
     Logger.dayClass(
-      `Tipo: ${type} | Lux promedio (8am-ahora): ${avgLux.toFixed(0)} | Lux actual: ${currentLux.toFixed(0)} | Nublado consecutivo: ${overcastMinutes} min`,
+      `Tipo: ${type} | Lux promedio (8am-ahora): ${avgLux.toFixed(0)} | Lux actual: ${currentLux.toFixed(0)} | Nublado consecutivo: ${overcastMinutes} min | Nublado intenso: ${overcastHeavyMinutes} min`,
     )
 
     return {
@@ -189,6 +306,7 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
       avgLuxSince8am: avgLux,
       currentLux,
       overcastMinutes,
+      overcastHeavyMinutes,
       evaluatedAt: now,
     }
   } catch {
@@ -199,6 +317,7 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
       avgLuxSince8am: 0,
       currentLux: 0,
       overcastMinutes: 0,
+      overcastHeavyMinutes: 0,
       evaluatedAt: now,
     }
   }

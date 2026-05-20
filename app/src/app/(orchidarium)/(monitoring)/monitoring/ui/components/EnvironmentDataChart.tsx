@@ -222,7 +222,14 @@ export function EnvironmentDataChart({
   const getTimeFormatter = (r: string) => {
     const opts: Intl.DateTimeFormatOptions = { timeZone: 'America/Caracas' }
 
-    if (r === '24h') {
+    if (r === '24h' || r === '5-19h' || r === '8-16h') {
+      opts.hour = 'numeric'
+      opts.minute = '2-digit'
+      opts.hour12 = true
+    } else if (r === '1D') {
+      opts.weekday = 'short'
+      opts.day = 'numeric'
+      opts.month = 'short'
       opts.hour = 'numeric'
       opts.minute = '2-digit'
       opts.hour12 = true
@@ -278,14 +285,16 @@ export function EnvironmentDataChart({
       let statsData = validPoints
 
       if (dataKey === 'illuminance' && !isMacroDetected) {
-        // Filtrar por horario diurno (08:00:00 - 16:00:59)
-        statsData = validPoints.filter((d) => {
-          const dDate = new Date(String(d.time))
-          const hour = (dDate.getUTCHours() - 4 + 24) % 24
-          const min = dDate.getUTCMinutes()
+        if (range === '12h' || range === '24h') {
+          // Filtrar por horario diurno (08:00:00 - 16:00:59) para evitar sesgar el promedio con valores nocturnos de 0 lx
+          statsData = validPoints.filter((d) => {
+            const dDate = new Date(String(d.time))
+            const hour = (dDate.getUTCHours() - 4 + 24) % 24
+            const min = dDate.getUTCMinutes()
 
-          return (hour >= 8 && hour < 16) || (hour === 16 && min === 0)
-        })
+            return (hour >= 8 && hour < 16) || (hour === 16 && min === 0)
+          })
+        }
       }
 
       const values = statsData.map((d) => Number(d[dataKey]))
@@ -304,7 +313,7 @@ export function EnvironmentDataChart({
     }
 
     return { isMacro: isMacroDetected, count, min, max, avg }
-  }, [dataKey, chartDataFiltered])
+  }, [dataKey, chartDataFiltered, range])
 
   const { isMacro, count, min, max, avg } = stats
 
@@ -313,6 +322,11 @@ export function EnvironmentDataChart({
 
     return val.toFixed(1)
   }
+
+  const rangeOptions =
+    dataKey === 'illuminance'
+      ? ['5-19h', '8-16h', '1D', '7d', '30d', 'all']
+      : ['12h', '24h', '7d', '30d', 'all']
 
   return (
     <div
@@ -337,7 +351,7 @@ export function EnvironmentDataChart({
             </div>
           )}
           <div>
-            <h3 className="text-primary text-lg font-bold tracking-tight">Histórico</h3>
+            <h3 className="text-primary text-lg font-bold tracking-tight">{title}</h3>
             {isMacro && (
               <span className="text-secondary text-[10px] font-semibold tracking-widest uppercase">
                 (Macro-Visión Estadística)
@@ -346,12 +360,13 @@ export function EnvironmentDataChart({
           </div>
         </div>
 
-        <div className="bg-hover-overlay tds-sm:self-auto inline-flex self-start rounded-md p-1">
-          {['12h', '24h', '7d', '30d', 'all'].map((r) => (
+        <div className="bg-hover-overlay tds-sm:w-auto tds-sm:inline-flex flex w-full rounded-md p-1">
+          {rangeOptions.map((r) => (
             <button
               key={r}
               className={clsx(
                 'focus-visible:outline-accessibility mx-px cursor-pointer rounded-md px-3 py-1 text-xs font-semibold uppercase outline-transparent focus-visible:outline-2 focus-visible:-outline-offset-2',
+                'tds-sm:flex-none flex-1 text-center',
                 range === r
                   ? 'bg-surface text-primary shadow-sm'
                   : 'text-secondary hover:text-primary',

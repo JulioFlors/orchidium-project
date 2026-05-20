@@ -74,7 +74,6 @@ const TOPIC_ROUTES: Record<string, PacketProcessor> = {
   '/status': (s, z, c, p) => processZoneStateEvent(s, z, c, p, 'Device_Status'),
   '/rain/state': (s, z, c, p) => processZoneStateEvent(s, z, c, p, 'Rain_State'),
   '/audit': processAuditPacket,
-  '/climate/sync': processEnvironmentPacket,
 }
 
 // ---- Global Influx Client (puntero) ----
@@ -322,7 +321,7 @@ async function processAuditPacket(
       humidity: 'hum',
       illuminance: 'lux',
       rain_intensity: 'rain',
-      health: 'health',
+      wifi: 'wifi',
       ram: 'ram',
     }
 
@@ -620,6 +619,20 @@ async function start() {
       const hasSensorData = Object.keys(TOPIC_ROUTES).some((suffix) => topic.endsWith(suffix))
 
       if (!hasSensorData) return
+
+      // Procesar rutas de tópicos para Actuator_Controller (e.g., /audit)
+      const matchingSuffix = Object.keys(TOPIC_ROUTES).find((suffix) => topic.endsWith(suffix))
+
+      if (matchingSuffix) {
+        const processor = TOPIC_ROUTES[matchingSuffix]
+        const context = matchingSuffix.replace(/^\//, '')
+
+        await processor(firmwareSource, ZoneType.EXTERIOR, context, messageValue)
+      } else {
+        Logger.warn(`No hay ruta definida para el tópico: ${topic}`)
+      }
+
+      return
     }
 
     if (firmwareSource === 'Weather_Station') {

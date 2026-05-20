@@ -24,13 +24,41 @@ const THRESHOLDS = {
   RAIN_LOOKBACK_HUMIDIFICATION: 8, // Lluvia acumulada en 8h → aplica a HUMIDIFICATION (8am-4pm)
 
   // Microclima Interior (bajo mallasombra)
-  // TODO: Calibrar con datos reales del DHT22 cuando esté activo
-  MAX_HUMIDITY_CRITICAL: 90, // HR > 90% → skip todo lo hídrico (tentativo)
-  MAX_HUMIDITY_FOR_MISTING: 80, // HR > 80% + día nublado → skip HUMIDIFICATION
-  MIN_HUMIDITY_TRIGGER: 50, // HR < 50% → raíces aéreas deshidratándose
+  // TODO: [EMA INTERIOR DESHABILITADO] — El firmware weather_station/main.py aún no ha sido
+  // actualizado con arquitectura robusta, y no existen datos históricos calibrados del interior.
+  // Habilitar estos umbrales únicamente después de:
+  //   1. Actualizar firmware weather_station a nivel de resiliencia del nodo actuador.
+  //   2. Recolectar un histórico suficiente del microclima interior.
+  //   3. Validar el comportamiento real contra los umbrales propuestos.
+  // El umbral tentativo de saturación interior sería >= 97.9% por paridad con el exterior
+  // (mismo sensor DHT22, misma física), pero requiere validación con datos reales.
+  //
+  // MAX_HUMIDITY_CRITICAL: 97.9,  // TODO: HR > 97.9% → skip todo lo hídrico
+  // MAX_HUMIDITY_FOR_MISTING: 80, // TODO: HR > 80% + día nublado → skip HUMIDIFICATION
+  // MIN_HUMIDITY_TRIGGER: 50,     // TODO: HR < 50% → raíces aéreas deshidratándose
+
+  // Amanecer: HR natural por rocío alcanza 95-98%
+  MAX_HUMIDITY_DAWN: 100, // Umbral de HR para ventana de amanecer (4:00-7:00 AM, incluye evaluación de 6AM)
+  DAWN_START_HOUR: 4,
+  DAWN_END_HOUR: 7,
+
+  // Respaldo Nocturno: HR exterior sostenida (EMA Exterior, zone = EXTERIOR)
+  // Usado para cancelar el riego de las 6AM cuando el sensor de lluvia físico no se activó.
+  // TODO: [CALIBRACIÓN INICIAL] — Este umbral y la ventana de 60 min son valores de inicio.
+  // Monitorear si genera:
+  //   (a) Falsos positivos: ambiente saturado de noche sin lluvia real.
+  //   (b) Falsos negativos: lluvia real sin que la HR exterior sostenga este promedio 60 min.
+  // Si ocurre (b), reducir la ventana a 30-45 min en BACKUP_NOCTURNAL_LOOKBACK_MIN.
+  BACKUP_NOCTURNAL_HR_THRESHOLD: 97.9, // HR promedio exterior >= 97.9% en la ventana nocturna
+  BACKUP_NOCTURNAL_LOOKBACK_MIN: 120, // Ventana de búsqueda de 120 min (2 horas)
+
+  // Correlación de lluvia por HR sostenida (minutos)
+  SUSTAINED_HR_MINUTES: 20, // Mínimo de min consecutivos con HR >= umbral para cancelar
+  SUSTAINED_HR_LOOKBACK_MIN: 120, // Ventana de búsqueda (2 horas)
 
   // Iluminancia (calibrado con observaciones de campo marzo-abril 2026)
   OVERCAST_LUX_THRESHOLD: 26000, // Promedio diario < 26k = nublado confirmado
+  HEAVY_OVERCAST_LUX: 10000, // Nubosidad intensa → posible lluvia
 
   // Duración máxima de nebulización (minutos)
   MAX_NEBULIZATION_MINUTES: 3, // > 3min la línea gotea y riega plantas debajo
@@ -148,6 +176,61 @@ export class InferenceEngine {
         }
       }
 
+      // ── 3.1: Veto Autoridad Principal — Criterio del Día Anterior (solo IRRIGATION) ──
+      // Cancela el riego de aspersión de las 6AM si las condiciones de ayer fueron
+      // lo suficientemente húmedas como para que el suelo aún esté humectado.
+      // Se aplica solo en ventana de evaluación matutina (antes de las 7AM).
+      const localHour = (now.getUTCHours() - 4 + 24) % 24
+
+      if (purpose === 'IRRIGATION' && localHour < 7) {
+        const yesterdayRain = await this.getYesterdayRainAccumulation(now)
+        const yesterdayLux = await this.getYesterdayAverageLux(now)
+
+        // Criterio A1: Lluvia >20 min acumulada ayer + promedio de lux < 26k (evapotranspiración mínima)
+        const criterioA1 =
+          yesterdayRain.durationSeconds >= THRESHOLDS.MIN_RAIN_FOR_IRRIGATION &&
+          yesterdayLux < THRESHOLDS.OVERCAST_LUX_THRESHOLD
+
+        // TODO: [EVALUACIÓN HISTÓRICA] El Criterio A2 (nubosidad severa sola) ha sido desactivado temporalmente para IRRIGATION.
+        // Se evidenció que días muy nublados (como el 19 de mayo) pueden no tener lluvia significativa,
+        // lo que provocaría sub-riego de aspersión.
+        // const hadHeavyOvercast = await this.hasYesterdayHeavyOvercast60Min(now)
+        // const criterioA2 = hadHeavyOvercast
+
+        if (criterioA1) {
+          const razon = `Lluvia acumulada ayer: ${Math.round(yesterdayRain.durationSeconds / 60)} min + Lux promedio: ${yesterdayLux.toFixed(0)} (< ${THRESHOLDS.OVERCAST_LUX_THRESHOLD} lux)`
+
+          return {
+            shouldCancel: true,
+            reason: `VETO AUTORIDAD (día anterior): ${razon}. Riego de aspersión omitido.`,
+            action: 'SKIP',
+            metadata: { yesterdayRain, yesterdayLux },
+          }
+        }
+      }
+
+      // ── 3.2: Veto Respaldo Nocturno — HR exterior promedio >= 97.9% (solo IRRIGATION) ──
+      // Mecanismo de redundancia por fallo del sensor de lluvia físico.
+      // Activo en la ventana nocturna: 7:00 PM (19:00) hasta 5:59:59 AM del día siguiente.
+      if (purpose === 'IRRIGATION') {
+        const isNocturnalWindow = localHour >= 19 || localHour < 6
+
+        if (isNocturnalWindow) {
+          const avgExtHum = await this.getExternalRecentAverageHumidity(
+            THRESHOLDS.BACKUP_NOCTURNAL_LOOKBACK_MIN,
+          )
+
+          if (avgExtHum >= THRESHOLDS.BACKUP_NOCTURNAL_HR_THRESHOLD) {
+            return {
+              shouldCancel: true,
+              reason: `VETO RESPALDO NOCTURNO: HR exterior promedio ${avgExtHum.toFixed(1)}% ≥ ${THRESHOLDS.BACKUP_NOCTURNAL_HR_THRESHOLD}% en las últimas 2 horas (posible lluvia sin registro del sensor físico).`,
+              action: 'SKIP',
+              metadata: { avgExtHum },
+            }
+          }
+        }
+      }
+
       // ── 4. Lluvia Acumulada → IRRIGATION (>20min en 12h) ──
       if (purpose === 'IRRIGATION') {
         const recentRain = await this.getRecentRainAccumulation(THRESHOLDS.RAIN_LOOKBACK_IRRIGATION)
@@ -194,36 +277,77 @@ export class InferenceEngine {
         }
       }
 
-      // ── 5. Humedad Interior Crítica ──
-      // TODO: Calibrar umbral cuando DHT22 esté activo. 90% es tentativo.
-      // No cancelar basándose en un único parámetro → requiere más contexto.
-      // Solo aplica si HR > 90% Y adicionalmente el día es nublado o llovió recientemente.
-      if (interiorHum > 0) {
-        // Solo evaluar si tenemos datos reales del sensor
-        const recentRainCheck = await this.getRecentRainAccumulation(4)
-        const rainedRecently = recentRainCheck.durationSeconds > 0
-        const cloudyDay = dayClass.type === 'NUBLADO' || dayClass.type === 'LLUVIOSO'
-
-        if (
-          interiorHum > THRESHOLDS.MAX_HUMIDITY_CRITICAL &&
-          (rainedRecently || cloudyDay) &&
-          (purpose === 'IRRIGATION' || purpose === 'HUMIDIFICATION' || purpose === 'SOIL_WETTING')
-        ) {
-          return {
-            shouldCancel: true,
-            reason: `HR ${dataUsed} ${interiorHum.toFixed(0)}% (crítica) + ${cloudyDay ? `día ${dayClass.type}` : `lluvia reciente (${Math.round(recentRainCheck.durationSeconds / 60)}min)`}. Omitiendo ${purpose}.`,
-            action: 'SKIP',
-            metadata: { localConditions, dayClass },
-          }
-        }
-      }
+      // TODO: [EMA INTERIOR DESHABILITADO] — Bloque de Humedad Crítica Interior.
+      //
+      // Este bloque evalúa la HR del sensor DHT22 interior (bajo mallasombra) para cancelar
+      // tareas hídricas cuando el microclima ya está saturado.
+      //
+      // ESTADO: Deshabilitado. El firmware weather_station/main.py no ha sido actualizado
+      // con arquitectura robusta, y no existen datos históricos calibrados del interior que
+      // permitan validar los umbrales propuestos.
+      //
+      // CONDICIONES PARA HABILITAR:
+      //   1. Actualizar firmware weather_station a nivel de resiliencia del nodo actuador.
+      //   2. Recolectar un histórico real del microclima interior (DHT22 bajo mallasombra).
+      //   3. Validar umbrales: tentativo >= 97.9% (paridad con EMA exterior, mismo sensor DHT22).
+      //
+      // CUANDO SE HABILITE, reemplazar este bloque por la lógica original:
+      //
+      // if (
+      //   interiorHum > 0 &&
+      //   (purpose === 'IRRIGATION' || purpose === 'HUMIDIFICATION' || purpose === 'SOIL_WETTING')
+      // ) {
+      //   const currentHour = now.getHours()
+      //   const isDawn =
+      //     currentHour >= THRESHOLDS.DAWN_START_HOUR && currentHour < THRESHOLDS.DAWN_END_HOUR
+      //
+      //   const effectiveHumThreshold = isDawn
+      //     ? THRESHOLDS.MAX_HUMIDITY_DAWN
+      //     : THRESHOLDS.MAX_HUMIDITY_CRITICAL  // TODO: 97.9% una vez calibrado
+      //
+      //   if (interiorHum > effectiveHumThreshold) {
+      //     const recentRainCheck = await this.getRecentRainAccumulation(4)
+      //     const rainedRecently = recentRainCheck.durationSeconds > 0
+      //
+      //     if (isDawn) {
+      //       const sustainedHR = await this.getSustainedHighHumidity(
+      //         THRESHOLDS.SUSTAINED_HR_LOOKBACK_MIN,
+      //         THRESHOLDS.MAX_HUMIDITY_DAWN,
+      //       )
+      //       if (rainedRecently || sustainedHR.minutes >= THRESHOLDS.SUSTAINED_HR_MINUTES) {
+      //         const evidencia = rainedRecently
+      //           ? `lluvia real (${Math.round(recentRainCheck.durationSeconds / 60)}min)`
+      //           : `HR >=${THRESHOLDS.MAX_HUMIDITY_DAWN}% sostenida por ${sustainedHR.minutes}min`
+      //         return {
+      //           shouldCancel: true,
+      //           reason: `HR INT ${interiorHum.toFixed(0)}% (amanecer) + ${evidencia}. Omitiendo ${purpose}.`,
+      //           action: 'SKIP',
+      //           metadata: { localConditions, dayClass, sustainedHR },
+      //         }
+      //       }
+      //     } else {
+      //       const cloudyDay = dayClass.type === 'NUBLADO' || dayClass.type === 'LLUVIOSO'
+      //       if (rainedRecently || cloudyDay) {
+      //         return {
+      //           shouldCancel: true,
+      //           reason: `HR INT ${interiorHum.toFixed(0)}% (crítica) + ${cloudyDay ? `día ${dayClass.type}` : `lluvia reciente`}. Omitiendo ${purpose}.`,
+      //           action: 'SKIP',
+      //           metadata: { localConditions, dayClass },
+      //         }
+      //       }
+      //     }
+      //   }
+      // }
 
       // ── 6. Pulverización innecesaria (día nublado + HR alta) ──
       // HR > 80% + día promedio < 26k lux → no pulverizar
-      // TODO: Calibrar HR cuando sensor activo
+      // TODO: [EMA INTERIOR] — Este umbral de HR (80%) es provisional. Calibrar con datos
+      // reales del DHT22 interior cuando el firmware weather_station esté actualizado.
+      const MAX_HUMIDITY_FOR_MISTING_PROVISIONAL = 80 // TODO: reemplazar con THRESHOLDS una vez calibrado
+
       if (
         purpose === 'HUMIDIFICATION' &&
-        interiorHum > THRESHOLDS.MAX_HUMIDITY_FOR_MISTING &&
+        interiorHum > MAX_HUMIDITY_FOR_MISTING_PROVISIONAL &&
         interiorTemp < 28 &&
         dayClass.avgLuxSince8am < THRESHOLDS.OVERCAST_LUX_THRESHOLD &&
         dayClass.type !== 'DESCONOCIDO'
@@ -440,5 +564,324 @@ export class InferenceEngine {
     }
 
     return result
+  }
+
+  /**
+   * Consulta los últimos N minutos de HR en InfluxDB y calcula
+   * cuántos minutos consecutivos (hacia atrás desde ahora) la HR
+   * se mantuvo >= el umbral dado. Usado para distinguir rocío
+   * natural de lluvia real en horario de amanecer.
+   *
+   * @remarks Reservado para uso futuro con el EMA Interior.
+   * TODO: [EMA INTERIOR] Conectar al bloque de Humedad Crítica Interior cuando se habilite.
+   */
+  // @ts-expect-error -- TS6133: Método reservado para el EMA interior. Se activará cuando el firmware weather_station esté calibrado.
+  private static async _getSustainedHighHumidity(
+    lookbackMinutes: number,
+    threshold: number,
+  ): Promise<{ minutes: number }> {
+    const result = { minutes: 0 }
+
+    try {
+      const query = `
+        SELECT humidity, time
+        FROM "environment_metrics"
+        WHERE time >= now() - INTERVAL '${lookbackMinutes} minutes'
+        AND source = 'Weather_Station'
+        AND zone = '${ZoneType.EXTERIOR}'
+        ORDER BY time DESC
+      `
+
+      const stream = influxClient.query(query)
+      let lastTime: Date | null = null
+      let consecutiveMinutes = 0
+
+      for await (const row of stream) {
+        const hum = Number(row.humidity || 0)
+
+        if (hum < threshold) break // Se rompió la cadena
+
+        // Parsear timestamp de InfluxDB de forma segura
+        const rawTime = row.time
+        let rowTime: Date
+
+        if (rawTime instanceof Date) {
+          rowTime = rawTime
+        } else {
+          const s = String(rawTime)
+
+          rowTime = s.length > 13 ? new Date(Number(s.substring(0, 13))) : new Date(Number(s))
+        }
+
+        if (isNaN(rowTime.getTime())) continue
+
+        if (!lastTime) {
+          // Primera iteración (dato más reciente)
+          const ageMs = Date.now() - rowTime.getTime()
+
+          consecutiveMinutes += Math.min(ageMs, 30 * 60000) / 60000
+          lastTime = rowTime
+        } else {
+          const jumpMs = lastTime.getTime() - rowTime.getTime()
+
+          if (jumpMs > 30 * 60000) break // Salto de datos demasiado grande
+          consecutiveMinutes += jumpMs / 60000
+          lastTime = rowTime
+        }
+      }
+
+      result.minutes = Math.round(consecutiveMinutes)
+    } catch {
+      Logger.inference('Error consultando HR sostenida en InfluxDB.')
+    }
+
+    return result
+  }
+
+  /**
+   * Consulta la lluvia acumulada del DÍA ANTERIOR completo (de 00:00:00 a 23:59:59).
+   * Fuente: Postgres (RainEvent), zona EXTERIOR.
+   * Utilizada para el Veto de Autoridad Principal de riego de las 6AM.
+   */
+  private static async getYesterdayRainAccumulation(
+    now: Date,
+  ): Promise<{ durationSeconds: number; eventCount: number }> {
+    const result = { durationSeconds: 0, eventCount: 0 }
+
+    try {
+      const yesterday = new Date(now)
+
+      yesterday.setDate(yesterday.getDate() - 1)
+
+      const start = new Date(yesterday)
+
+      start.setHours(0, 0, 0, 0)
+
+      const end = new Date(yesterday)
+
+      end.setHours(23, 59, 59, 999)
+
+      const agg = await prisma.rainEvent.aggregate({
+        where: {
+          zone: 'EXTERIOR',
+          startedAt: { gte: start, lte: end },
+          endedAt: { not: null },
+        },
+        _sum: { durationSeconds: true },
+        _count: { id: true },
+      })
+
+      result.durationSeconds = agg._sum.durationSeconds ?? 0
+      result.eventCount = agg._count.id ?? 0
+    } catch {
+      Logger.inference('No se pudo consultar lluvia acumulada de ayer (Postgres).')
+    }
+
+    return result
+  }
+
+  /**
+   * Consulta el promedio de iluminancia del día botánico del DÍA ANTERIOR (8:00 AM - 4:00 PM).
+   * Fuente: InfluxDB, EMA Exterior (zone = EXTERIOR).
+   * Utilizada para el Veto de Autoridad Principal (Criterio A1).
+   */
+  private static async getYesterdayAverageLux(now: Date): Promise<number> {
+    try {
+      const caracasYesterday = new Date(now.getTime() - 4 * 60 * 60000 - 24 * 60 * 60000)
+      const start = new Date(
+        Date.UTC(
+          caracasYesterday.getUTCFullYear(),
+          caracasYesterday.getUTCMonth(),
+          caracasYesterday.getUTCDate(),
+          12,
+          0,
+          0,
+          0,
+        ),
+      ) // 8:00 AM Caracas = 12:00 PM UTC
+      const end = new Date(
+        Date.UTC(
+          caracasYesterday.getUTCFullYear(),
+          caracasYesterday.getUTCMonth(),
+          caracasYesterday.getUTCDate(),
+          20,
+          0,
+          0,
+          0,
+        ),
+      ) // 4:00 PM Caracas = 8:00 PM UTC
+
+      const query = `
+        SELECT AVG(illuminance) as avg_lux, COUNT(illuminance) as count_lux
+        FROM "environment_metrics"
+        WHERE time >= '${start.toISOString()}' AND time <= '${end.toISOString()}'
+        AND source = 'Weather_Station'
+        AND zone = 'EXTERIOR'
+      `
+      const stream = influxClient.query(query)
+
+      for await (const row of stream) {
+        if (row.avg_lux != null && row.count_lux != null) {
+          const count = Number(row.count_lux)
+
+          if (count < 250) {
+            Logger.inference(
+              `Lux promedio de ayer ignorado por baja densidad de muestras (${count} < 250). Retornando default alto 999999 para evitar veto falso.`,
+            )
+
+            return 999999
+          }
+
+          return Number(row.avg_lux)
+        }
+      }
+    } catch {
+      Logger.inference('No se pudo consultar lux promedio de ayer (InfluxDB).')
+    }
+
+    return 0
+  }
+
+  /**
+   * Detecta si durante el día botánico del DÍA ANTERIOR (8:00 AM - 4:00 PM)
+   * hubo al menos 60 minutos continuos con lux < 10,000 (nubosidad severa / cielo cerrado).
+   * Fuente: InfluxDB, EMA Exterior (zone = EXTERIOR).
+   * Utilizada para el Veto de Autoridad Principal (Criterio A2).
+   *
+   * Implementa una ventana deslizante de 60 minutos (3,600,000 ms) recorriendo
+   * los datos de forma cronológica (ASC) para encontrar el primer período donde
+   * todos los puntos registrados superan la brecha de tiempo máximo de 30 min y
+   * contienen al menos 50 muestras válidas.
+   */
+  // @ts-expect-error -- TS6133: Método reservado para análisis histórico o evaluación futura. Desactivado temporalmente para aspersión.
+  private static async _hasYesterdayHeavyOvercast60Min(now: Date): Promise<boolean> {
+    try {
+      const caracasYesterday = new Date(now.getTime() - 4 * 60 * 60000 - 24 * 60 * 60000)
+      const start = new Date(
+        Date.UTC(
+          caracasYesterday.getUTCFullYear(),
+          caracasYesterday.getUTCMonth(),
+          caracasYesterday.getUTCDate(),
+          12,
+          0,
+          0,
+          0,
+        ),
+      ) // 8:00 AM Caracas = 12:00 PM UTC
+      const end = new Date(
+        Date.UTC(
+          caracasYesterday.getUTCFullYear(),
+          caracasYesterday.getUTCMonth(),
+          caracasYesterday.getUTCDate(),
+          20,
+          0,
+          0,
+          0,
+        ),
+      ) // 4:00 PM Caracas = 8:00 PM UTC
+
+      const query = `
+        SELECT illuminance, time
+        FROM "environment_metrics"
+        WHERE time >= '${start.toISOString()}' AND time <= '${end.toISOString()}'
+        AND source = 'Weather_Station'
+        AND zone = 'EXTERIOR'
+        ORDER BY time ASC
+      `
+      const stream = influxClient.query(query)
+      const readings: { t: number; lux: number }[] = []
+
+      for await (const row of stream) {
+        const lux = Number(row.illuminance || 0)
+        const rawTime = row.time
+        const s =
+          rawTime instanceof Date ? rawTime.getTime() : Number(String(rawTime).substring(0, 13))
+
+        if (!isNaN(s)) readings.push({ t: s, lux })
+      }
+
+      // Ventana deslizante: buscar cualquier intervalo de >= 60 min continuo con lux < 10k
+      const WINDOW_MS = 60 * 60000
+      const MAX_GAP_MS = 30 * 60000
+      const HEAVY_LUX = 10000
+
+      for (let i = 0; i < readings.length; i++) {
+        if (readings[i].lux >= HEAVY_LUX) continue // Este punto no es pesado → saltar
+
+        // Inicio de una posible cadena desde el punto i
+        const windowStart = readings[i].t
+        let prev = readings[i].t
+        let valid = true
+        let count = 1
+
+        for (let j = i + 1; j < readings.length; j++) {
+          const gap = readings[j].t - prev
+
+          if (gap > MAX_GAP_MS) {
+            valid = false
+            break
+          } // Brecha de datos → rompe cadena
+
+          if (readings[j].lux >= HEAVY_LUX) {
+            valid = false
+            break
+          } // Punto no pesado → rompe
+
+          prev = readings[j].t
+          count++
+
+          if (prev - windowStart >= WINDOW_MS) {
+            if (count >= 50) {
+              return true // ¡Encontrado con suficiente densidad de datos!
+            } else {
+              break // Rompe para intentar desde la siguiente posición inicial
+            }
+          }
+        }
+
+        if (!valid) continue
+      }
+    } catch {
+      Logger.inference('No se pudo consultar nubosidad severa de ayer (InfluxDB).')
+    }
+
+    return false
+  }
+
+  private static async getExternalRecentAverageHumidity(lookbackMinutes: number): Promise<number> {
+    try {
+      const query = `
+        SELECT humidity
+        FROM "environment_metrics"
+        WHERE time >= now() - INTERVAL '${lookbackMinutes} minutes'
+        AND source = 'Weather_Station'
+        AND zone = 'EXTERIOR'
+        ORDER BY time DESC
+      `
+      const stream = influxClient.query(query)
+      let sum = 0
+      let count = 0
+
+      for await (const row of stream) {
+        if (row.humidity != null) {
+          sum += Number(row.humidity)
+          count++
+        }
+      }
+
+      if (count < 50) {
+        Logger.inference(
+          `Humedad exterior reciente ignorada por baja densidad de datos (${count} muestras < 50 en los últimos ${lookbackMinutes} min).`,
+        )
+
+        return 0
+      }
+
+      return sum / count
+    } catch {
+      Logger.inference('No se pudo consultar HR promedio exterior reciente (InfluxDB).')
+    }
+
+    return 0
   }
 }

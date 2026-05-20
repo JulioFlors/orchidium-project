@@ -400,6 +400,10 @@ export function executeEmaCommand(command: string, isPersistent: boolean = false
 
 let lastSamplingState: 'on' | 'off' | null = null
 
+export function isLuxSamplingActive(): boolean {
+  return lastSamplingState === 'on'
+}
+
 export function resetSamplingState() {
   lastSamplingState = null
 }

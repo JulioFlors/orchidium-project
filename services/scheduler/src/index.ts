@@ -12,6 +12,7 @@ import {
   resetSamplingState,
   executeSystemCommand,
   MQTT_BROKER_URL,
+  isLuxSamplingActive,
 } from './lib/mqtt-handler'
 import {
   cleanupExpiredTasks,
@@ -97,7 +98,17 @@ let openRainEventId: string | null = null // ID del RainEvent abierto en Postgre
 // ---- Sincronización de Clima (DHT22) ----
 let climateSyncTimer: NodeJS.Timeout | null = null
 let climateSyncAttempts = 0
-const CLIMATE_SYNC_MAX_RETRIES = 6 // 6 × 5min = 30min
+const CLIMATE_SYNC_AGGRESSIVE_RETRIES = 6 // Fase agresiva: 6 × 5min = 30min
+const CLIMATE_SYNC_PASSIVE_INTERVAL_MS = 15 * 60 * 1000 // Fase pasiva: cada 15min
+let climateSyncPhase: 'idle' | 'aggressive' | 'passive' = 'idle'
+
+// ---- Watchdog Resiliente Sensores ----
+let dht22Present = false
+let dht22Alive = false
+let illuminancePresent = false
+let illuminanceAlive = false
+let lastClimateBatchAt = Date.now()
+let lastLuxBatchAt = Date.now()
 
 // Buffers para validación inteligente de lluvia (Humedad Residual)
 const telemetryBuffer: { lux: number; temp: number; hum: number; timestamp: number }[] = []
@@ -232,9 +243,8 @@ function setupMqttHandlers() {
         'PristinoPlant/Actuator_Controller/irrigation/state',
         'PristinoPlant/Actuator_Controller/status',
         'PristinoPlant/Actuator_Controller/status/boot',
-        'PristinoPlant/Weather_Station/EXTERIOR/climate/sync',
-        'PristinoPlant/Weather_Station/Exterior/readings',
-        'PristinoPlant/Weather_Station/Exterior/rain/state',
+        'PristinoPlant/Weather_Station/EXTERIOR/readings',
+        'PristinoPlant/Weather_Station/EXTERIOR/rain/state',
         'PristinoPlant/Weather_Station/ZONA_A/status',
         'PristinoPlant/Weather_Station/ZONA_A/readings',
         'PristinoPlant/Weather_Station/ZONA_A/cmd/received',
@@ -295,11 +305,63 @@ function setupMqttHandlers() {
         return
       }
 
-      // 1.5 Detección de Reinicio Rápido (Boot Explícito)
+      // 1.5 Detección de Reinicio Rápido (Boot Telemetry Unificado)
       if (topic === 'PristinoPlant/Actuator_Controller/status/boot') {
         irrigationRetryManager.setStabilizing()
         systemRetryManager.setStabilizing()
-        // Nota: lastFirmwareHeartbeat (línea 139) ya actualizó el timestamp de este mensaje.
+        // Nota: lastFirmwareHeartbeat ya actualizó el timestamp de este mensaje.
+
+        // Inicializamos presencia y salud como falsos al reiniciar (reinicio en frío / reinicio plano)
+        dht22Present = false
+        dht22Alive = false
+        illuminancePresent = false
+        illuminanceAlive = false
+        lastClimateBatchAt = Date.now()
+        lastLuxBatchAt = Date.now()
+
+        if (message === 'reboot') {
+          Logger.info(
+            '🔌 Reinicio detectado en Nodo Actuador (reboot plano). Se esperará telemetría inicial para marcar presencia de sensores.',
+          )
+        } else if (message.startsWith('{')) {
+          try {
+            const bootData = JSON.parse(message)
+
+            Logger.info(`🔌 Telemetría Unificada de Arranque (Nodo Actuador):`)
+
+            if (bootData.lux !== undefined) {
+              Logger.info(
+                `    ├─ ☀️ Iluminancia: ${colors.yellow}${bootData.lux} lx${colors.reset}`,
+              )
+              illuminancePresent = true
+              illuminanceAlive = true
+              lastLuxBatchAt = Date.now()
+            }
+
+            if (bootData.temp !== undefined && bootData.hum !== undefined) {
+              Logger.info(
+                `    ├─ 🌡️ Clima (DHT22): ${colors.yellow}${bootData.temp}°C${colors.reset}, ${colors.blue}${bootData.hum}%${colors.reset}`,
+              )
+              dht22Present = true
+              dht22Alive = true
+              lastClimateBatchAt = Date.now()
+            } else {
+              Logger.warn(
+                `    ├─ ⚠️ Clima (DHT22): ${colors.red}Fallo de inicialización en hardware detectado.${colors.reset}`,
+              )
+            }
+
+            if (bootData.rain !== undefined) {
+              const rainColor = bootData.rain_state === 'Raining' ? colors.blue : colors.yellow
+
+              Logger.info(
+                `    └─ 🌧️ Sensor Lluvia: ${rainColor}${bootData.rain_state}${colors.reset} (${bootData.rain} raw)`,
+              )
+            }
+          } catch {
+            // Fallback si no se pudo parsear el JSON
+          }
+        }
 
         // No forzamos un offline previo, saltamos directamente al sync
         // para que evalúe si es un REBOOT o una sesión nueva.
@@ -460,41 +522,27 @@ function setupMqttHandlers() {
         return
       }
 
-      // 3.4 Respuesta de Sincronización de Clima (DHT22)
-      if (topic === 'PristinoPlant/Weather_Station/EXTERIOR/climate/sync') {
-        if (message.startsWith('{')) {
-          try {
-            const data = JSON.parse(message)
-
-            Logger.info(
-              `DHT22: ${colors.yellow}🌡️ ${data.temp}°C${colors.reset}, ${colors.blue}💧 ${data.hum}%${colors.reset}`,
-            )
-          } catch {
-            /* ignore */
-          }
-
-          if (climateSyncTimer) {
-            clearInterval(climateSyncTimer)
-            climateSyncTimer = null
-          }
-          climateSyncAttempts = 0
-        } else {
-          Logger.warn(
-            `🌡️  DHT22 reportó fallo en sincronización: ${message}. Reintentando en 5min.`,
-          )
-          startClimateSyncRetry()
-        }
-
-        return
-      }
-
       // 3.5 Lecturas Ambientales (Validación de Lluvia / Humedad Residual)
-      if (topic === 'PristinoPlant/Weather_Station/Exterior/readings') {
+      if (topic === 'PristinoPlant/Weather_Station/EXTERIOR/readings') {
         try {
           const data = JSON.parse(message)
           const lux = Number(data.illuminance || 0)
           const temp = Number(data.temperature || 0)
           const hum = Number(data.humidity || 0)
+
+          if (data.temperature !== undefined || data.humidity !== undefined) {
+            dht22Present = true
+            dht22Alive = true
+            lastClimateBatchAt = Date.now()
+          }
+
+          if (data.illuminance !== undefined) {
+            illuminancePresent = true
+            illuminanceAlive = true
+            lastLuxBatchAt = Date.now()
+          }
+
+          clearSyncTimerIfHealthy()
 
           if (lastRainState === 'Dry') {
             telemetryBuffer.push({ lux, temp, hum, timestamp: Date.now() })
@@ -603,7 +651,7 @@ function setupMqttHandlers() {
       }
 
       // 4. Detección y Persistencia de Lluvia
-      if (topic === 'PristinoPlant/Weather_Station/Exterior/rain/state') {
+      if (topic === 'PristinoPlant/Weather_Station/EXTERIOR/rain/state') {
         let state = message
         let rainTimestamp: Date = new Date()
 
@@ -697,6 +745,45 @@ async function checkRainOrphanTimeout() {
     lastRainState = 'Dry'
     // Cerrar el evento en Postgres con el motivo ORPHAN_TIMEOUT
     await closeRainEvent('ORPHAN_TIMEOUT')
+  }
+}
+
+/**
+ * Watchdog Pasivo de Sensores Ambientales:
+ * Si el nodo está ONLINE, pero no hemos recibido lecturas del DHT22 (o BH1750 cuando está activo)
+ * en 25 minutos (ventana de tolerancia que cubre 2 batches perdidos tras la inicialización),
+ * declaramos al sensor MUERTO y solicitamos una resincronización reactiva (sync_climate).
+ * Nota crítica: El Relay 8 siempre permanece encendido para alimentar los sensores y el pluviómetro.
+ */
+function checkSensorsHealth() {
+  if (irrigationRetryManager.connectionState !== 'online') return
+
+  const now = Date.now()
+  const timeSinceLastClimate = now - lastClimateBatchAt
+  const timeSinceLastLux = now - lastLuxBatchAt
+
+  let triggered = false
+
+  if (dht22Alive && timeSinceLastClimate > 25 * 60 * 1000) {
+    dht22Alive = false
+    triggered = true
+    Logger.warn(
+      `🌡️  Watchdog DHT22: Se detectó silencio de datos climáticos durante ${Math.round(timeSinceLastClimate / 60000)} minutos. Declarando sensor degradado.`,
+    )
+  }
+
+  if (illuminanceAlive && isLuxSamplingActive() && timeSinceLastLux > 25 * 60 * 1000) {
+    illuminanceAlive = false
+    triggered = true
+    Logger.warn(
+      `☀️  Watchdog BH1750: Se detectó silencio de datos de iluminancia durante ${Math.round(timeSinceLastLux / 60000)} minutos. Declarando sensor degradado.`,
+    )
+  }
+
+  if (triggered) {
+    Logger.warn('Iniciando ciclo de recuperación de sensores ambientales (Hard Reset).')
+    requestClimateSync()
+    startClimateSyncRetry()
   }
 }
 
@@ -897,8 +984,40 @@ async function handleNodeSync(isBoot: boolean = false, previousHeartbeat: number
   // El secuenciador ya está en modo STABILIZING (60s) gracias al caller de boot
   resetSamplingState()
   syncNodeSampling(undefined, true)
-  requestClimateSync()
+
+  // Al arrancar (boot), nos aseguramos de limpiar cualquier temporizador previo
+  if (isBoot) {
+    if (climateSyncTimer) {
+      clearInterval(climateSyncTimer)
+      climateSyncTimer = null
+    }
+    climateSyncAttempts = 0
+    climateSyncPhase = 'idle'
+  }
+
   await processPostponedTasks()
+}
+
+/**
+ * Limpia el temporizador de resincronización si todos los sensores presentes están vivos y sanos.
+ */
+function clearSyncTimerIfHealthy() {
+  const climateHealthy = !dht22Present || dht22Alive
+  const luxHealthy = !illuminancePresent || !isLuxSamplingActive() || illuminanceAlive
+
+  if (climateHealthy && luxHealthy) {
+    if (climateSyncTimer) {
+      clearInterval(climateSyncTimer)
+      climateSyncTimer = null
+      if (climateSyncPhase !== 'idle') {
+        Logger.info(
+          `🌡️  Watchdog: Todos los sensores activos reportaron éxito. Sincronización recuperada desde fase ${climateSyncPhase} (${climateSyncAttempts} intentos).`,
+        )
+      }
+    }
+    climateSyncAttempts = 0
+    climateSyncPhase = 'idle'
+  }
 }
 
 /**
@@ -913,23 +1032,29 @@ function requestClimateSync() {
  */
 function startClimateSyncRetry() {
   if (climateSyncTimer) return // Ya hay retry activo
+  climateSyncPhase = 'aggressive'
 
   climateSyncTimer = setInterval(
     () => {
       climateSyncAttempts++
 
-      if (climateSyncAttempts > CLIMATE_SYNC_MAX_RETRIES) {
-        Logger.warn(
-          `🌡️  DHT22: Máximo de reintentos alcanzado (${CLIMATE_SYNC_MAX_RETRIES}). Esperando próximo boot.`,
-        )
+      if (climateSyncAttempts > CLIMATE_SYNC_AGGRESSIVE_RETRIES) {
+        // Transición a modo pasivo (sin rendirse)
         if (climateSyncTimer) clearInterval(climateSyncTimer)
-        climateSyncTimer = null
+        climateSyncPhase = 'passive'
+        Logger.warn(
+          `🌡️  DHT22: Fase agresiva agotada (${CLIMATE_SYNC_AGGRESSIVE_RETRIES} intentos). Entrando en modo pasivo (cada 15min).`,
+        )
+        climateSyncTimer = setInterval(() => {
+          Logger.info('🌡️  DHT22: Reintento pasivo de sincronización.')
+          requestClimateSync()
+        }, CLIMATE_SYNC_PASSIVE_INTERVAL_MS)
 
         return
       }
 
       Logger.info(
-        `🌡️  DHT22: Reintento de sincronización (${climateSyncAttempts}/${CLIMATE_SYNC_MAX_RETRIES})`,
+        `🌡️  DHT22: Reintento agresivo (${climateSyncAttempts}/${CLIMATE_SYNC_AGGRESSIVE_RETRIES})`,
       )
       requestClimateSync()
     },
@@ -946,6 +1071,7 @@ async function initScheduler() {
 
   // Verificación periódica de inactividad de nodos y eventos (cada 15s)
   setInterval(checkRainOrphanTimeout, 60_000)
+  setInterval(checkSensorsHealth, 60_000)
 
   // Cron de limpieza de tareas expiradas (Ventana de 20 min / 24h agroquímicos)
   new Cron('*/5 * * * *', { timezone: 'America/Caracas' }, async () => {

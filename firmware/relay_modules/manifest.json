@@ -1,9 +1,9 @@
 {
   "name": "Relay Modules",
-  "description": "Nodo Actuador + Meteorológica Exterior",
-  "version": "0.14.2",
-  "date": "15-05-2026",
-  "notes_release": "[🌡️ DHT22 & Rain Resilience]: Implementación de limpieza atómica de línea (Atomic Fix) pre-lectura para eliminar capacitancia residual y mecanismo de recuperación automática para restaurar lecturas tras fallos físicos sin reinicio. Limpieza de logs duplicados en la sincronización de lluvia. [📡 Red & LwIP Tuning]: Optimización de resiliencia MQTT. Aumento de backoff para limpieza de sockets LwIP (EBUSY -16) con reseteos WiFi más profundos (20s). Tratamiento de -16256 (PK_ALLOC_FAILED) como error transitorio dependiente de liberación de RAM por EBUSY, previniendo reinicios duros innecesarios.",
+  "description": "Nodo Actuador (sistema de riego) + Nodo EMA (Meteorológia Exterior).",
+  "version": "0.15.0",
+  "date": "20-05-2026",
+  "notes_release": "[🛡️ Resiliencia Sensorial Unificada]: Extracción DRY de flush_telemetry a función dedicada (publish_single_batch). Rename health→wifi en auditorías. Audit state con retain=True para sincronización del Digital Twin.",
   "files": [
     "app.mpy",
     "boot.py",
