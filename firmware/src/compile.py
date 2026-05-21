@@ -4,6 +4,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Configurar salida UTF-8 en Windows para evitar fallos por emojis
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except AttributeError:
+        pass
+
+
 # ---- Contexto ----
 # Script centralizado para compilar firmware MicroPython.
 # Uso: python compile.py <nombre_carpeta_proyecto>

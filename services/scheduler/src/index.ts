@@ -203,12 +203,17 @@ async function closeRainEvent(reason: string, endTime: Date = new Date()) {
     let peakIntensity: number | null = null
 
     try {
+      // Optimizamos la consulta:
+      // 1. Añadimos un límite razonable (no necesitamos 10,000 puntos para un promedio).
+      // 2. Especificamos que si el rango es enorme, Influx debe agrupar/muestrear.
       const intensityQuery = `
-        SELECT MEAN(rain_intensity) as avg_int, MAX(rain_intensity) as peak_int 
+        SELECT MEAN("rain_intensity") as avg_int, MAX("rain_intensity") as peak_int 
         FROM "environment_metrics" 
         WHERE "zone" = 'EXTERIOR' 
           AND time >= '${event.startedAt.toISOString()}' 
           AND time <= '${endTime.toISOString()}'
+        GROUP BY time(1m) 
+        LIMIT 1000
       `
       const stream = influxClient.query(intensityQuery)
 
@@ -263,12 +268,12 @@ function flushBootLog() {
   const logLines = [
     '📡 Weather Station Exterior (Batch Inicial Cargado):',
     bootAccumulator.lux !== null
-      ? `├─ ☀️  Iluminancia: ${colors.yellow}${bootAccumulator.lux.toFixed(0)} lx${colors.reset}`
-      : `├─ ⚠️  Iluminancia: ${colors.red}No detectada en batch inicial${colors.reset}`,
+      ? `                                        ├─ ☀️  Iluminancia: ${colors.yellow}${bootAccumulator.lux.toFixed(0)} lx${colors.reset}`
+      : `                                        ├─ ⚠️  Iluminancia: ${colors.red}No detectada en batch inicial${colors.reset}`,
     bootAccumulator.temp !== null && bootAccumulator.hum !== null
-      ? `├─ 🌡️  Clima: ${colors.yellow}${bootAccumulator.temp.toFixed(1)}°C${colors.reset} / ${colors.blue}${bootAccumulator.hum.toFixed(1)}%${colors.reset}`
-      : `├─ ⚠️  Clima: ${colors.red}Fallo de inicialización en hardware detectado${colors.reset}`,
-    `└─ 🌧️  Sensor Lluvia: ${lastRainState === 'Raining' ? colors.blue : colors.yellow}${lastRainState}${colors.reset}`,
+      ? `                                        ├─ 🌡️  Clima: ${colors.yellow}${bootAccumulator.temp.toFixed(1)}°C${colors.reset} / ${colors.blue}${bootAccumulator.hum.toFixed(1)}%${colors.reset}`
+      : `                                        ├─ ⚠️  Clima: ${colors.red}Fallo de inicialización en hardware detectado${colors.reset}`,
+    `                                        └─ 🌧️  Sensor Lluvia: ${lastRainState === 'Raining' ? colors.blue : colors.yellow}${lastRainState}${colors.reset}`,
   ]
 
   Logger.info(logLines.join('\n'))
@@ -365,12 +370,7 @@ function setupMqttHandlers() {
         lastClimateBatchAt = Date.now()
         lastLuxBatchAt = Date.now()
 
-        // No forzamos un offline previo, saltamos directamente al sync
-        // para que evalúe si es un REBOOT o una sesión nueva.
-        await handleNodeSync(true, previousHeartbeat)
-
-        // Inicializamos el acumulador para recoger las métricas de los 3 batches
-        // independientes que el firmware publica tras el boot.
+        // 🚀 INICIALIZACIÓN SÍNCRONA PRE-AWAIT (Evita condición de carrera)
         isSystemReady = false
         if (bootAccumulator?.timer) clearTimeout(bootAccumulator.timer)
         bootAccumulator = {
@@ -378,8 +378,12 @@ function setupMqttHandlers() {
           temp: null,
           hum: null,
           bootAt: Date.now(),
-          timer: setTimeout(() => flushBootLog(), 60000), // Ampliado a 60s
+          timer: setTimeout(() => flushBootLog(), 30000), // Ajustado a 30s
         }
+
+        // No forzamos un offline previo, saltamos directamente al sync
+        // para que evalúe si es un REBOOT o una sesión nueva.
+        await handleNodeSync(true, previousHeartbeat)
 
         return
       }

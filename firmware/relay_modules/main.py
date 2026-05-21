@@ -112,7 +112,6 @@ dht_sensor             = None # DHT22 (Temp + Humedad)
 illuminance_sensor     = None # BH1750 (I2C)
 rain_sensor_analog     = None # Sensor de gotas de lluvia (ADC)
 i2c_bus                = None # Bus I2C global para diagnóstico
-BH1750                 = None # Clase del driver del sensor de luz
 
 # ---- Variables Globales de Estado ----
 # Lista de temporizadores de riego activos
@@ -127,15 +126,6 @@ mqtt_message_buffer = []
 # Evento asíncrono para notificar cambios de estado de un actuador
 state_changed = asyncio.Event()
 
-# Diccionario de Sincronización para Auditorías Independientes
-audit_events = {
-    "lux":      asyncio.Event(),
-    "rain":     asyncio.Event(),
-    "ram":      asyncio.Event(),
-    "wifi":     asyncio.Event(),
-    "temp":     asyncio.Event(),
-    "hum":      asyncio.Event()
-}
 # Evento maestro para despertar al Ticker Unificado de Auditoría
 audit_master_event = asyncio.Event()
 
@@ -160,9 +150,12 @@ mqtt_lock = asyncio.Lock()
 # Variables de control
 wlan   = None # Conexión WiFi
 client = None # Cliente  MQTT
+wifi_reset_requested = False # Flag para solicitar hard-reset de WiFi de forma coordinada
+
 
 # ---- Globales de Telemetría & Recuperación ----
-last_rain_raw = 4095 # Última lectura cruda (Seco por defecto)
+last_rain_raw = None # 🚀 Inicializado en None
+current_rain_state = None # 🚀 Cache global del estado de lluvia para reconexiones MQTT
 RAIN_START_VALUE = const(2600)
 RAIN_STOP_VALUE = const(3200)
 RAIN_TARGET_SAMPLES = const(10)
@@ -651,7 +644,11 @@ async def setup_sensors(force_hard_reset=False):
     * Si es en el arranque (force_hard_reset=False) y el DHT22 falla, realiza de forma autónoma
       hasta 3 reintentos de rescate físico antes de desistir.
     """
-    global dht_sensor, rain_sensor_analog, illuminance_sensor, last_rain_raw
+    global dht_sensor, rain_sensor_analog, illuminance_sensor, last_rain_raw, current_rain_state
+
+    # Inicializamos variables globales de lluvia en None al inicio del setup
+    last_rain_raw = None
+    current_rain_state = None
 
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
@@ -780,6 +777,8 @@ async def setup_sensors(force_hard_reset=False):
         if valid_samples == 0:
             if DEBUG: print(f"    └─ ❌ {Colors.RED}Desconectado{Colors.RESET} (Fallo lectura ADC)")
             rain_sensor_analog = None
+            current_rain_state = 'Dry'
+            last_rain_raw = None
         else:
             r_avg = raw_sum // valid_samples
             
@@ -789,6 +788,7 @@ async def setup_sensors(force_hard_reset=False):
             if r_avg > 1400:
                 rain_sensor_analog = adc_rain
                 last_rain_raw = r_avg
+                current_rain_state = 'Raining' if r_avg < RAIN_START_VALUE else 'Dry'
                 if DEBUG:
                     print(f"    ├─ ✅ {Colors.GREEN}Conectado{Colors.RESET}")
                     print(f"    └─ 📊 Valor: {Colors.BLUE}{r_avg}{Colors.RESET}")
@@ -797,9 +797,13 @@ async def setup_sensors(force_hard_reset=False):
                     print(f"    ├─ ❌ {Colors.RED}Desconectado{Colors.RESET}")
                     print(f"    └─ 📊 Valor: {Colors.BLUE}{r_avg}{Colors.RESET}")
                 rain_sensor_analog = None
+                current_rain_state = 'Dry'
+                last_rain_raw = None
     except Exception as e:
         if DEBUG: print(f"    └─ ❌ Exception Lluvia: {Colors.RED}{e}{Colors.RESET}")
         rain_sensor_analog = None
+        current_rain_state = 'Dry'
+        last_rain_raw = None
 
 # ---- Función Auxiliar: Callback de estado ----
 def sub_status_callback(pid, status):
@@ -929,9 +933,6 @@ async def mqtt_processor_task():
                                     was_asleep = not any(AUDIT_MODE.values())
                                     AUDIT_MODE[category] = True
                                     AUDIT_COUNTERS[category] = 0
-                                    if category in audit_events:
-                                        audit_events[category].set()
-                                    
                                     if was_asleep:
                                         audit_master_event.set()
                                     
@@ -940,8 +941,6 @@ async def mqtt_processor_task():
                                     if DEBUG: print(f"    └─ AUDIT {category.upper()}: Ya está {Colors.GREEN}ON{Colors.RESET}")
                             elif action == b"off":
                                 AUDIT_MODE[category] = False
-                                if category in audit_events:
-                                    audit_events[category].clear() # Detenemos la corrutina específica
 
                                 collect()
                                 if DEBUG: print(f"    └─ AUDIT {category.upper()}: {Colors.RED}OFF{Colors.RESET}")
@@ -1167,11 +1166,18 @@ def shutdown():
             client.publish(MQTT_TOPIC_STATUS, b"offline", retain=True, qos=0)
             sleep_ms(300)
 
-            # Publicamos 'OFF' para cada relé que haya cambiado de estado.
-            for relay_info in relays.values():
-                if relay_info['last_published_state'] != 'OFF':
-                    client.publish(relay_info['topic'], b"OFF", retain=True, qos=0)
-                    sleep_ms(300)
+            # 🚀 Publicamos el snapshot consolidado de relays en OFF
+            fragments = []
+            for r_id, r_info in relays.items():
+                fragments.append('"%s":{"state":"%s","task_id":"%s","id":%d}' % (
+                    r_info['name'], 
+                    r_info['state'], 
+                    r_info.get('task_id', ''), 
+                    r_id
+                ))
+            payload = "{" + ",".join(fragments) + "}"
+            client.publish(MQTT_TOPIC_STATE, payload, retain=True, qos=0)
+            sleep_ms(300)
         except: pass
 
     # Invalidamos el cliente MQTT forzando una reconexión completa.
@@ -1197,7 +1203,7 @@ def shutdown():
 async def wifi_coro():
     """**Gestiona la (re)conexión asíncrona del WiFi**"""
     # Gestión de variables globales
-    global wlan
+    global wlan, wifi_reset_requested
 
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
@@ -1212,10 +1218,16 @@ async def wifi_coro():
     wifi_disconnect_start = None # Marca de tiempo para calcular la duración de la desconexión
 
     while True:
-        if not wlan.isconnected():
+        if not wlan.isconnected() or wifi_reset_requested:
+            was_reset_requested = wifi_reset_requested
+            wifi_reset_requested = False
 
             if connected_once:
-                if DEBUG: print(f"📡  WiFi {Colors.RED}Desconectado{Colors.RESET}\n")
+                if DEBUG:
+                    if was_reset_requested:
+                        print(f"📡  WiFi {Colors.RED}Reset Solicitado por Red-16 EBUSY{Colors.RESET}\n")
+                    else:
+                        print(f"📡  WiFi {Colors.RED}Desconectado{Colors.RESET}\n")
 
             # ---- Verificación Previa (Safety Check) ----
             # Iniciamos el contador de desconexión por primera vez
@@ -1234,7 +1246,9 @@ async def wifi_coro():
                 # fuerza a la capa de red a limpiar todos los estados internos, timers y handshakes pendientes antes de intentar una nueva conexión
                 wlan.disconnect()
                 wlan.active(False)
-                await asyncio.sleep(1)
+                # Si fue solicitado por reset (ej: EBUSY), esperamos 10 segundos para purga completa de sockets.
+                # De lo contrario, 2 segundos es suficiente.
+                await asyncio.sleep(10 if was_reset_requested else 2)
                 wlan.active(True)
 
                 if DEBUG: print(f"\n\n📡  Conectándose a {Colors.BLUE}{WIFI_SSID}{Colors.RESET}", end="")
@@ -1308,8 +1322,8 @@ def _connection_timeout_handler(t):
 # ---- CORRUTINA: Manejo centralizado de Errores Críticos MQTT ----
 async def check_critical_mqtt_errors(e):
     """Evalúa si la excepción es crítica y requiere un reinicio por HW/SW."""
-    from umqtt.simple2 import MQTTException # type: ignore
     
+
     # [CRÍTICO] Errores de MbedTLS/RAM que NO se recuperan con gc.collect():
     #   -17040  = MBEDTLS_ERR_SSL_FATAL_ALERT (contexto TLS corrupto a nivel C)
     #   -16256  = MBEDTLS_ERR_PK_ALLOC_FAILED (sin RAM para claves RSA) - TRANSITORIO por EBUSY
@@ -1353,6 +1367,8 @@ async def flush_telemetry_batches_async():
                     await asyncio.sleep_ms(500)
     except Exception as _e:
         if DEBUG: print(f"⚠️ Fallo en flush_telemetry_batches_async: {_e}")
+        force_disconnect_mqtt()
+        await check_critical_mqtt_errors(_e)
 
 # ---- Utilidades de Telemetría: Publica de manera sincrona todos los batches ----
 def flush_telemetry_batches():
@@ -1374,14 +1390,14 @@ def flush_telemetry_batches():
 async def mqtt_connector_task(client_id):
     """Gestiona la (re)conexión y operación MQTT con verificación activa."""
     # Gestión de variables globales
-    global client
+    global client, wifi_reset_requested, last_rain_raw, current_rain_state
 
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
     from gc            import collect
     from machine       import Timer
     from umqtt.simple2 import MQTTClient, MQTTException  # type: ignore
-    from utime         import sleep_ms, ticks_diff, ticks_ms, time # type: ignore
+    from utime         import ticks_diff, ticks_ms, time # type: ignore
 
     # =========================================================================
 
@@ -1483,34 +1499,27 @@ async def mqtt_connector_task(client_id):
                         break  # Éxito, salimos del bucle
                     except (MQTTException, OSError) as e_connect:
                         if connect_attempt < max_connect_attempts - 1:
-                            # Limpiamos socket residual antes de reintentar
-                            if DEBUG: log_mqtt_exception("Intento de conexión fallido", e_connect)
-                            try: client.disconnect()
-                            except: pass
-                            client = None
-                            collect()
+                            # Limpiamos socket residual de forma robusta con force_disconnect_mqtt
+                            if DEBUG: log_mqtt_exception("Intento de conexión fallida", e_connect)
+                            force_disconnect_mqtt()
 
-                            # [Anti-EBUSY] Si el error es EBUSY (-16), el stack LwIP tiene sockets
-                            # TCP en TIME_WAIT que bloquean nuevos File Descriptors.
-                            # Reseteamos la interfaz WiFi para forzar la limpieza a nivel kernel.
-                            if isinstance(e_connect, OSError) and e_connect.args and e_connect.args[0] == -16:
+                            # [Anti-EBUSY] Si el error es EBUSY (16 o -16), el stack LwIP tiene sockets
+                            # TCP en TIME_WAIT. Solicitamos hard-reset de WiFi a wifi_coro de forma coordinada.
+                            if isinstance(e_connect, OSError) and e_connect.args and e_connect.args[0] in (16, -16):
+                                wifi_reset_requested = True
                                 if wlan:
-                                    try:
-                                        wlan.disconnect()
-                                        wlan.active(False)
-                                        await asyncio.sleep(20)
-                                        wlan.active(True)
-                                        wlan.connect(WIFI_SSID, WIFI_PASS)
-                                        # Esperamos reconexión WiFi (máx 15s)
-                                        for _ in range(15):
-                                            if wlan.isconnected(): break
-                                            await asyncio.sleep(1)
-                                    except Exception:
-                                        pass
-                            backoff_delay = [20, 40, 60][min(connect_attempt, 2)]
-                            # [Anti-EBUSY] Espera larga específica para que LwIP libere sockets TCP.
-                            if isinstance(e_connect, OSError) and e_connect.args and e_connect.args[0] == -16:
-                                backoff_delay = 45
+                                    try: wlan.disconnect()
+                                    except: pass
+
+                            # Esperamos a que el WiFi se reconecte y asigne IP válida (máx 45s)
+                            for _ in range(45):
+                                if wlan and wlan.isconnected() and wlan.ifconfig()[0] != '0.0.0.0':
+                                    break
+                                await asyncio.sleep(1)
+
+                            backoff_delay = [40, 80, 120][min(connect_attempt, 2)]
+                            if isinstance(e_connect, OSError) and e_connect.args and e_connect.args[0] in (16, -16):
+                                backoff_delay = 15 # Reducido porque ya esperamos la reconexión de WiFi
                             await asyncio.sleep(backoff_delay)
                         else:
                             raise e_connect  # Último intento: propagar al handler externo
@@ -1520,10 +1529,6 @@ async def mqtt_connector_task(client_id):
 
                 if not connect_success:
                     raise MQTTException(30)  # Forzar reconexión por timeout
-
-                # [Nivel 3.2] Reducir socket_timeout tras connect exitoso
-                # El handshake SSL necesita timeout largo, pero operaciones normales no.
-                client.socket_timeout = MQTT_SOCKET_TIMEOUT
 
                 # Solo tras conexión EXITOSA
                 # Reseteamos el cronómetro de fallas MQTT
@@ -1539,12 +1544,7 @@ async def mqtt_connector_task(client_id):
                 # Reseteamos el contador tras conexión exitosa
                 consecutive_mqtt_failures = 0
 
-                # Suscripción a tópicos
-                client.subscribe(MQTT_TOPIC_CMD, qos=1)
-                client.subscribe(MQTT_TOPIC_IRRIGATION_CMD, qos=1)
-                await asyncio.sleep_ms(500)
-
-                # Resincronizamos los estados de los actuadores.
+                # 🚀 1. Resincronizamos los estados de los actuadores en RAM.
                 for relay_info in relays.values():
                     relay_info['last_published_state'] = None
 
@@ -1555,9 +1555,8 @@ async def mqtt_connector_task(client_id):
                 # Publica el estado actual de las auditorías (Digital Twin) seguido de la sincronización de relays.
                 await publish_audit_state()
 
-                # [Boot Signal]: Primero señalizamos el arranque al Scheduler.
+                # 🚀 2. Boot Signal: Señalizamos el arranque al Scheduler.
                 # El Scheduler resetea dht22Present/illuminancePresent = false al recibirlo.
-                # Los batches de flush_telemetry_batches_async() que llegan DESPUÉS confirman la presencia.
                 try:
                     async with mqtt_lock:
                         if client and getattr(client, 'sock', None):
@@ -1566,13 +1565,53 @@ async def mqtt_connector_task(client_id):
                     if DEBUG: print(f"⚠️ Fallo publicando boot status: {_e}")
                 await asyncio.sleep_ms(500)
 
-                # [Initial Readings]: Vaciamos los RingBuffers DESPUÉS del /boot.
-                # El Scheduler ya tiene Present=false, por lo que estos batches confirmarán
-                # la presencia de los sensores. El Ingest los persiste en InfluxDB.
+                # 🚀 3. Métricas Ambientales (Batches): Vaciamos los RingBuffers DESPUÉS del /boot.
+                # Estos batches confirmarán la presencia de los sensores activos.
                 await flush_telemetry_batches_async()
                 await asyncio.sleep_ms(500)
 
-                # Notifica que MQTT está listo para las tareas de telemetría
+                # 🚀 4. Estado de Lluvia: Lectura fresca y publicación del estado actual de lluvia
+                if rain_sensor_analog is not None:
+                    try:
+                        raw = await fetch_rain_raw()
+                        last_rain_raw = raw
+                        if raw is not None:
+                            current_rain_state = 'Raining' if raw < RAIN_START_VALUE else 'Dry'
+                        else:
+                            current_rain_state = 'Dry'
+                    except Exception as e_rain:
+                        if DEBUG: print(f"⚠️ Error lectura lluvia pre-publicación: {e_rain}")
+                        last_rain_raw = None
+                        current_rain_state = 'Dry'
+                else:
+                    last_rain_raw = None
+                    current_rain_state = 'Dry'
+
+                if current_rain_state is not None:
+                    try:
+                        async with mqtt_lock:
+                            if client and getattr(client, 'sock', None):
+                                payload_rain = '{"state":"%s","timestamp":%d}' % (current_rain_state, time())
+                                client.publish(MQTT_TOPIC_RAIN_STATE, payload_rain.encode(), retain=False, qos=0)
+                    except Exception as pub_err:
+                        if DEBUG: print(f"⚠️ Error sincronización inicial lluvia: {pub_err}")
+                    await asyncio.sleep_ms(500)
+
+                # 🚀 5. Suscripción diferida a tópicos de control (QoS=1 para seguridad de órdenes)
+                try:
+                    async with mqtt_lock:
+                        if client and getattr(client, 'sock', None):
+                            client.subscribe(MQTT_TOPIC_CMD, qos=1)
+                    await asyncio.sleep_ms(500)
+                    async with mqtt_lock:
+                        if client and getattr(client, 'sock', None):
+                            client.subscribe(MQTT_TOPIC_IRRIGATION_CMD, qos=1)
+                    await asyncio.sleep_ms(500)
+                except Exception as sub_err:
+                    if DEBUG: print(f"⚠️ Error en suscripciones: {sub_err}")
+                    raise sub_err
+
+                # 🚀 6. Notifica que MQTT está listo para las tareas de telemetría periódicas
                 mqtt_connected_event.set()
 
             except (MQTTException, OSError) as e:
@@ -1592,21 +1631,17 @@ async def mqtt_connector_task(client_id):
                         print(f"⚠️  {Colors.YELLOW}Backoff:{Colors.RESET} {consecutive_mqtt_failures} fallos seguidos.")
                         print(f"    └─ Esperando {wait_time}s para liberar RAM y estabilizar red.")
                     
-                    # [Anti-EBUSY] Reset preventivo del stack WiFi en backoff largo.
-                    # LwIP mantiene sockets en TIME_WAIT hasta 120s (MSL×2).
-                    # Reiniciar la interfaz los libera inmediatamente.
+                    # [Anti-EBUSY] Reset preventivo del stack WiFi coordinado.
+                    wifi_reset_requested = True
                     if wlan:
-                        try:
-                            wlan.disconnect()
-                            wlan.active(False)
-                            await asyncio.sleep(3)
-                            wlan.active(True)
-                            wlan.connect(WIFI_SSID, WIFI_PASS)
-                            for _ in range(15):
-                                if wlan.isconnected(): break
-                                await asyncio.sleep(1)
-                        except Exception:
-                            pass
+                        try: wlan.disconnect()
+                        except: pass
+
+                    # Esperamos reconexión WiFi (máx 45s)
+                    for _ in range(45):
+                        if wlan and wlan.isconnected() and wlan.ifconfig()[0] != '0.0.0.0':
+                            break
+                        await asyncio.sleep(1)
 
                     collect()
                     await asyncio.sleep(wait_time)
@@ -1831,9 +1866,11 @@ async def state_publisher_task():
     while True:
         # Esperamos a que ocurra un evento
         await state_changed.wait()
-        
         # Limpiamos el estado para el próximo evento
         state_changed.clear()
+
+        # Esperamos la inicialización/reconexión MQTT
+        await mqtt_connected_event.wait()
 
         # Debounce (Anti-Rebotes): Pausa para agrupar múltiples cambios simultáneos
         await asyncio.sleep_ms(50)
@@ -1932,7 +1969,7 @@ async def rain_monitor_task():
     * Intervalos adaptativos: 10 minutos (Vigía) y 1 minuto (Ráfaga).
     * Maquina de Estados Finita con validación de histéresis.
     """
-    global last_rain_raw
+    global last_rain_raw, current_rain_state
 
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
@@ -1962,7 +1999,6 @@ async def rain_monitor_task():
     RAIN_HEARTBEAT_INTERVAL = 600  # 10 minutos
 
     current_interval = INTERVAL_NORMAL
-    current_state    = 'Dry'
     rain_cycle_counter = 0
     rain_publish_failures = 0  # [Tolerancia MQTT-3]: Contador de fallos consecutivos
 
@@ -1996,24 +2032,14 @@ async def rain_monitor_task():
 
                 if raw < RAIN_START_VALUE:
                     # ---- Sensor confirma lluvia ----
-                    current_state = 'Raining'
+                    current_rain_state = 'Raining'
                     current_interval = INTERVAL_BURST
                     if DEBUG: print(f"    └─ Rain Monitor: {Colors.BLUE}Raining{Colors.RESET}")
                 else:
                     # ---- Sensor dice seco ----
-                    current_state = 'Dry'
+                    current_rain_state = 'Dry'
                     current_interval = INTERVAL_NORMAL
                     if DEBUG: print(f"    └─ Rain Monitor: {Colors.YELLOW}Dry{Colors.RESET}")
-
-                # [Diferido Post-Boot]: Sincronizamos el estado inicial de lluvia en MQTT
-                if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
-                    try:
-                        payload = '{"state":"%s","timestamp":%d}' % (current_state, time())
-                        async with mqtt_lock:
-                            if client and getattr(client, 'sock', None):
-                                client.publish(MQTT_TOPIC_RAIN_STATE, payload, retain=False, qos=0)
-                    except Exception as pub_err:
-                        if DEBUG: print(f"⚠️ Error sincronización inicial lluvia: {pub_err}")
 
         except Exception as e:
             if DEBUG: print(f"\n⚠️  Error en primera lectura de lluvia: {e}")
@@ -2036,14 +2062,23 @@ async def rain_monitor_task():
             # Actualizamos caché para Auditoría (get_rain_sample)
             last_rain_raw = raw 
 
+            # Auto-recuperación de inicialización post-reset de sensores
+            if current_rain_state is None:
+                if raw < RAIN_START_VALUE:
+                    current_rain_state = 'Raining'
+                    current_interval = INTERVAL_BURST
+                else:
+                    current_rain_state = 'Dry'
+                    current_interval = INTERVAL_NORMAL
+
             # Cálculo de Intensidad
             clamped_raw = max(RAW_INTENSITY_MIN, min(raw, RAIN_STOP_VALUE))
             delta_max = RAIN_STOP_VALUE - RAW_INTENSITY_MIN
             intensity = round(((RAIN_STOP_VALUE - clamped_raw) / delta_max) * 100)
 
             # ---- ESTADO A: Inicia la lluvia ----
-            if raw < RAIN_START_VALUE and current_state == 'Dry':
-                current_state = 'Raining'
+            if raw < RAIN_START_VALUE and current_rain_state == 'Dry':
+                current_rain_state = 'Raining'
                 current_interval = INTERVAL_BURST
                 rain_cycle_counter = 0
 
@@ -2064,7 +2099,7 @@ async def rain_monitor_task():
                 if DEBUG: print(f"\n🌧️  Lluvia INICIADA (Raw: {raw}) | Modo Ráfaga: {INTERVAL_BURST}s")
 
             # ---- ESTADO B: Lloviendo (Acumulando + Detección de Parada) ----
-            elif current_state == 'Raining':
+            elif current_rain_state == 'Raining':
                 now_ts = time()
 
                 # Siempre acumulamos en el batch si el sensor detecta humedad
@@ -2153,7 +2188,7 @@ async def rain_monitor_task():
                             stale_min = (now_ts - rain_stable_since) // 60
                             stop_reason = f"Timeout de estabilización ({stale_min} min sin variación)"
 
-                    current_state = 'Dry'
+                    current_rain_state = 'Dry'
                     current_interval = INTERVAL_NORMAL
                     rain_consecutive_low = 0
                     rain_stable_since = 0
@@ -2511,8 +2546,6 @@ async def unified_audit_task():
                     if AUDIT_COUNTERS[category] >= 10:
                         AUDIT_MODE[category] = False
                         AUDIT_COUNTERS[category] = 0
-                        if category in audit_events:
-                            audit_events[category].clear()
                         if DEBUG: print(f"\n📡  Auto-OFF: {category.upper()}")
                         await publish_audit_state()
 
