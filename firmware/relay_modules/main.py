@@ -377,6 +377,7 @@ async def publish_audit_state():
                     if client and getattr(client, 'sock', None):
                         # Publicamos directo (MQTT convierte string a bytes)
                         client.publish(MQTT_TOPIC_AUDIT_STATE, payload, retain=True, qos=0)
+                await asyncio.sleep_ms(500)
             except (MQTTException, OSError) as e:
                 if DEBUG: log_mqtt_exception("Fallo sincronización estado auditoría", e)
                 # Invalidamos el cliente para que el loop principal detecte el fallo
@@ -1552,11 +1553,7 @@ async def mqtt_connector_task(client_id):
                 await asyncio.sleep_ms(500)
 
                 # Publica el estado actual de las auditorías (Digital Twin) seguido de la sincronización de relays.
-                try:
-                    await publish_audit_state()
-                except Exception as _e:
-                    if DEBUG: print(f"⚠️ Fallo publicando estado de auditorías: {_e}")
-                await asyncio.sleep_ms(500)
+                await publish_audit_state()
 
                 # [Boot Signal]: Primero señalizamos el arranque al Scheduler.
                 # El Scheduler resetea dht22Present/illuminancePresent = false al recibirlo.

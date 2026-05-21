@@ -129,8 +129,8 @@ class MQTTClient:
 				# Buffer TCP lleno: si superamos socket_timeout sin progreso, abortamos
 				if ticks_diff(ticks_ms(), G) > (A.socket_timeout * 1000):
 					raise MQTTException(3)  # Timeout de escritura (Evita el WDT Crash)
-				# 500ms da tiempo al stack TCP para drenar en redes lentas (>500ms latencia)
-				sleep_ms(500)
+				# 1000ms da tiempo al stack TCP para drenar en redes lentas (>500ms latencia)
+				sleep_ms(1000)
 				continue
 
 			if C == 0:

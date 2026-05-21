@@ -39,6 +39,7 @@ interface BootTelemetryAccumulator {
   timer: NodeJS.Timeout | null // Timer de fallback (loguea aunque falten métricas)
 }
 let bootAccumulator: BootTelemetryAccumulator | null = null
+let isSystemReady = false // Solo true tras recibir la primera telemetría post-boot
 
 async function init() {
   console.log() // Espacio en blanco
@@ -258,33 +259,24 @@ function flushBootLog() {
     clearTimeout(bootAccumulator.timer)
   }
 
-  Logger.info('Weather Station Exterior:')
+  // Garantizar orden estricto: Iluminancia -> Clima -> Lluvia
+  const logLines = [
+    '📡 Weather Station Exterior (Batch Inicial Cargado):',
+    bootAccumulator.lux !== null
+      ? `├─ ☀️  Iluminancia: ${colors.yellow}${bootAccumulator.lux.toFixed(0)} lx${colors.reset}`
+      : `├─ ⚠️  Iluminancia: ${colors.red}No detectada en batch inicial${colors.reset}`,
+    bootAccumulator.temp !== null && bootAccumulator.hum !== null
+      ? `├─ 🌡️  Clima: ${colors.yellow}${bootAccumulator.temp.toFixed(1)}°C${colors.reset} / ${colors.blue}${bootAccumulator.hum.toFixed(1)}%${colors.reset}`
+      : `├─ ⚠️  Clima: ${colors.red}Fallo de inicialización en hardware detectado${colors.reset}`,
+    `└─ 🌧️  Sensor Lluvia: ${lastRainState === 'Raining' ? colors.blue : colors.yellow}${lastRainState}${colors.reset}`,
+  ]
 
-  if (bootAccumulator.lux !== null) {
-    Logger.info(
-      `    ├─ ☀️ Iluminancia: ${colors.yellow}${bootAccumulator.lux.toFixed(0)} lx${colors.reset}`,
-    )
-  } else {
-    Logger.warn(
-      `    ├─ ⚠️ Iluminancia (BH1750): ${colors.red}No detectada en batch inicial${colors.reset}`,
-    )
-  }
-
-  if (bootAccumulator.temp !== null && bootAccumulator.hum !== null) {
-    Logger.info(
-      `    ├─ 🌡️ Clima (DHT22): ${colors.yellow}${bootAccumulator.temp.toFixed(1)}°C${colors.reset}, ${colors.blue}${bootAccumulator.hum.toFixed(1)}%${colors.reset}`,
-    )
-  } else {
-    Logger.warn(
-      `    ├─ ⚠️ Clima (DHT22): ${colors.red}Fallo de inicialización en hardware detectado${colors.reset}`,
-    )
-  }
-
-  const rainColor = lastRainState === 'Raining' ? colors.blue : colors.yellow
-
-  Logger.info(`    └─ 🌧️ Sensor Lluvia: ${rainColor}${lastRainState}${colors.reset}`)
-
+  Logger.info(logLines.join('\n'))
   bootAccumulator = null
+
+  if (!isSystemReady) {
+    isSystemReady = true
+  }
 }
 
 function setupMqttHandlers() {
@@ -379,13 +371,14 @@ function setupMqttHandlers() {
 
         // Inicializamos el acumulador para recoger las métricas de los 3 batches
         // independientes que el firmware publica tras el boot.
+        isSystemReady = false
         if (bootAccumulator?.timer) clearTimeout(bootAccumulator.timer)
         bootAccumulator = {
           lux: null,
           temp: null,
           hum: null,
           bootAt: Date.now(),
-          timer: setTimeout(() => flushBootLog(), 60000), // Fallback: loguea con lo que haya tras 60s
+          timer: setTimeout(() => flushBootLog(), 60000), // Ampliado a 60s
         }
 
         return
@@ -543,28 +536,29 @@ function setupMqttHandlers() {
         return
       }
 
-      // 3.5 Lecturas Ambientales (Validación de Lluvia / Humedad Residual)
+      // 3.5 Lecturas Ambientales (Validación de Lluvia / Humedad Residual - Soporte Batch + Accumulator Nnativo)
       if (topic === 'PristinoPlant/Weather_Station/EXTERIOR/readings') {
         try {
-          const data = JSON.parse(message)
+          const data = JSON.parse(message) as {
+            data?: [number, { temperature?: number; humidity?: number; illuminance?: number }][]
+            temperature?: number
+            humidity?: number
+            illuminance?: number
+          }
 
-          // Soporta formato batch {"data": [[ts, {metric}], ...]} y plano {metric: value}.
-          // Extrae el ÚLTIMO valor de cada métrica (el más reciente del batch).
-          // La presencia se activa si al menos una entrada del batch contiene esa métrica.
-          const batch = Array.isArray(data.data) ? data.data : null
+          let lux: number | null = null
+          let temp: number | null = null
+          let hum: number | null = null
 
-          let lux = 0,
-            temp = 0,
-            hum = 0
-          let hasTemp = false,
-            hasHum = false,
-            hasLux = false
+          let hasTemp = false
+          let hasHum = false
+          let hasLux = false
 
-          if (batch) {
-            for (const entry of batch) {
-              const metrics: Record<string, number> = (
-                Array.isArray(entry) ? entry[1] : entry
-              ) as Record<string, number>
+          // Caso A: Formato Batch unificado emitido por flush_telemetry_batches_async()
+          if (data.data && Array.isArray(data.data)) {
+            // El buffer del firmware almacena cronológicamente. El último es el más reciente (Last Value).
+            for (const entry of data.data) {
+              const metrics = entry[1]
 
               if (metrics.temperature !== undefined) {
                 temp = Number(metrics.temperature)
@@ -580,7 +574,7 @@ function setupMqttHandlers() {
               }
             }
           } else {
-            // Fallback: formato plano (legacy / otros nodos)
+            // Caso B: Fallback para mantener compatibilidad con mensajes planos directos (Legacy / Otros Nodos)
             if (data.temperature !== undefined) {
               temp = Number(data.temperature)
               hasTemp = true
@@ -595,6 +589,7 @@ function setupMqttHandlers() {
             }
           }
 
+          // Activamos la presencia real en el Watchdog basados en los campos extraídos del lote
           if (hasTemp || hasHum) {
             dht22Present = true
             dht22Alive = true
@@ -607,14 +602,14 @@ function setupMqttHandlers() {
             lastLuxBatchAt = Date.now()
           }
 
-          // Acumulación de telemetría post-boot: cada batch independiente
-          // (illuminance, temperature, humidity) aporta su métrica al acumulador.
-          if (bootAccumulator) {
-            if (hasLux) bootAccumulator.lux = lux
-            if (hasTemp) bootAccumulator.temp = temp
-            if (hasHum) bootAccumulator.hum = hum
+          // 🚀 [PRESERVADO]: Mecanismo reactivo de acumulación post-boot.
+          // Captura las variables del lote actual e hidrata el acumulador sin importar el orden de llegada.
+          if (typeof bootAccumulator !== 'undefined' && bootAccumulator) {
+            if (hasLux && lux !== null) bootAccumulator.lux = lux
+            if (hasTemp && temp !== null) bootAccumulator.temp = temp
+            if (hasHum && hum !== null) bootAccumulator.hum = hum
 
-            // Si ya tenemos las 3 métricas, logueamos inmediatamente sin esperar el timer.
+            // Si ya recolectamos las 3 métricas, flusheamos el log inmediatamente sin esperar el timeout
             const allPresent =
               bootAccumulator.lux !== null &&
               bootAccumulator.temp !== null &&
@@ -625,18 +620,23 @@ function setupMqttHandlers() {
 
           clearSyncTimerIfHealthy()
 
-          if (lastRainState === 'Dry') {
+          if (lastRainState === 'Dry' && lux !== null && temp !== null && hum !== null) {
             telemetryBuffer.push({ lux, temp, hum, timestamp: Date.now() })
             if (telemetryBuffer.length > 10) telemetryBuffer.shift()
           }
 
-          if (lastRainState === 'Raining' && !isRainOverridden) {
+          if (
+            lastRainState === 'Raining' &&
+            !isRainOverridden &&
+            lux !== null &&
+            temp !== null &&
+            hum !== null
+          ) {
             // Lógica de Fallback de Baseline (si no hubo datos pre-lluvia)
             if (isWaitingForBaselineFallback && rainStartedAt) {
               const elapsed = Date.now() - rainStartedAt
 
               if (elapsed < 10 * 60 * 1000) {
-                // Capturamos el MÁXIMO durante la lluvia como baseline de emergencia
                 if (baselineLux === null || lux > baselineLux) baselineLux = lux
                 if (baselineTemp === null || temp > baselineTemp) baselineTemp = temp
                 if (baselineHum === null || hum > baselineHum) baselineHum = hum
@@ -656,8 +656,6 @@ function setupMqttHandlers() {
               hour12: false,
             }
             const caracasHour = parseInt(new Intl.DateTimeFormat('en-US', options).format(now))
-
-            // Ventana operativa: 6:00 AM - 5:00 PM
             const isWindow = caracasHour >= 6 && caracasHour < 17
 
             if (baselineTemp !== null) {
@@ -686,23 +684,22 @@ function setupMqttHandlers() {
             }
           }
 
-          // --- Lógica de Reversión de Veto (Anti-Intermitencia) ---
-          // Si el veto está activo pero las condiciones vuelven a ser "de lluvia", lo anulamos.
-          // Solo permitimos la re-apertura en un plazo de 30 minutos tras el veto,
-          // ya que el baseline original se vuelve obsoleto después de ese tiempo.
+          // Lógica de Reversión de Veto (Anti-Intermitencia)
           if (
             isRainOverridden &&
             baselineLux !== null &&
             baselineTemp !== null &&
-            lastVetoAt !== null
+            lastVetoAt !== null &&
+            lux !== null &&
+            temp !== null &&
+            hum !== null
           ) {
             const timeSinceVeto = (Date.now() - lastVetoAt) / 60000
-            const isWindowValid = timeSinceVeto < 30 // Ventana de 30 minutos
 
-            if (isWindowValid) {
-              const lostLux = lux < baselineLux * 1.1 // Regresó a la oscuridad
-              const lostTemp = temp < baselineTemp + 1 // Regresó al frío
-              const lostHum = baselineHum !== null && hum > baselineHum + 5 // Regresó a la humedad
+            if (timeSinceVeto < 30) {
+              const lostLux = lux < baselineLux * 1.1
+              const lostTemp = temp < baselineTemp + 1
+              const lostHum = baselineHum !== null && hum > baselineHum + 5
 
               if (lostLux || lostTemp || lostHum) {
                 const reason = lostLux
@@ -712,23 +709,19 @@ function setupMqttHandlers() {
                     : 'Saturación de humedad'
 
                 Logger.rain(
-                  `Anulando veto: ${reason} tras ${timeSinceVeto.toFixed(1)}min. La lluvia parece haber vuelto.`,
+                  `Anulando veto: ${reason} tras ${timeSinceVeto.toFixed(1)}min. La lluvia ha vuelto.`,
                 )
                 isRainOverridden = false
                 lastVetoAt = null
-                // Si el sensor físico sigue marcando Raining, re-abrimos el evento
-                if (lastRainState === 'Raining') {
-                  await openRainEvent()
-                }
+                if (lastRainState === 'Raining') await openRainEvent()
               }
-            } else {
-              // Si pasaron más de 30 min, el veto es permanente para este ciclo
-              // ya que el baseline no es confiable. El evento solo cerrará cuando el firmware diga Dry.
             }
           }
-        } catch {
-          /* ignore */
+        } catch (err) {
+          Logger.error('Error parseando batch de lecturas en el Scheduler:', err)
         }
+
+        return
       }
 
       // 4. Detección y Persistencia de Lluvia
@@ -1240,6 +1233,31 @@ async function runTask(scheduleId: string) {
     })
 
     if (!schedule || !schedule.isEnabled) return
+
+    if (!isSystemReady) {
+      Logger.cron(`Rutina POSTERGADA: ${schedule.name}. Motivo: Nodo Actuador inicializándose.`)
+
+      await prisma.taskLog.create({
+        data: {
+          scheduleId: schedule.id,
+          purpose: schedule.purpose,
+          zones: schedule.zones,
+          status: TaskStatus.PENDING,
+          source: 'ROUTINE',
+          scheduledAt: new Date(),
+          duration: schedule.durationMinutes,
+          notes: 'Nodo Actuador inicializándose.',
+          events: {
+            create: {
+              status: TaskStatus.PENDING,
+              notes: 'Estabilizando Nodo Actuador tras reinicio.',
+            },
+          },
+        },
+      })
+
+      return
+    }
 
     if (irrigationRetryManager.connectionState !== 'online') {
       Logger.cron(`Rutina POSTERGADA: ${schedule.name}. Motivo: Nodo Actuador OFFLINE.`)

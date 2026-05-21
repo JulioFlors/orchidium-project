@@ -71,7 +71,7 @@ class CommandSequencer {
   }
 
   /**
-   * Pone al secuenciador en modo Estabilización (60s de silencio).
+   * Pone al secuenciador en modo Estabilización (120s de silencio).
    * Limpia cualquier cola previa para iniciar desde cero.
    */
   setStabilizing() {
@@ -83,7 +83,7 @@ class CommandSequencer {
     this.stabilizationTimer = setTimeout(() => {
       this.state = 'READY'
       this.processNext()
-    }, 60000)
+    }, 120000)
   }
 
   /**
