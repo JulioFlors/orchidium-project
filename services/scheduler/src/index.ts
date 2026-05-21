@@ -28,6 +28,18 @@ import { influxClient } from './lib/influx'
 
 // ---- Configuración de Reglas ----
 
+// Acumulador de telemetría post-boot: recoge las métricas de los 3 batches
+// independientes (illuminance, temperature, humidity) que llegan como mensajes
+// separados al mismo tópico EXTERIOR/readings.
+interface BootTelemetryAccumulator {
+  lux: number | null
+  temp: number | null
+  hum: number | null
+  bootAt: number // Timestamp del boot para ventana temporal
+  timer: NodeJS.Timeout | null // Timer de fallback (loguea aunque falten métricas)
+}
+let bootAccumulator: BootTelemetryAccumulator | null = null
+
 async function init() {
   console.log() // Espacio en blanco
   Logger.info('🚀 Iniciando Servicio Scheduler (PristinoPlant)')
@@ -235,6 +247,46 @@ async function closeRainEvent(reason: string, endTime: Date = new Date()) {
 // Timeout para eventos de lluvia huérfanos (10 minutos sin señales de vida)
 const RAIN_ORPHAN_TIMEOUT_MS = 10 * 60 * 1000
 
+/**
+ * Loguea el snapshot de arranque con los datos acumulados de los batches post-boot.
+ * Se invoca cuando se reciben todas las métricas o cuando expira la ventana de 5s.
+ */
+function flushBootLog() {
+  if (!bootAccumulator) return
+
+  if (bootAccumulator.timer) {
+    clearTimeout(bootAccumulator.timer)
+  }
+
+  Logger.info('Weather Station Exterior:')
+
+  if (bootAccumulator.lux !== null) {
+    Logger.info(
+      `    ├─ ☀️ Iluminancia: ${colors.yellow}${bootAccumulator.lux.toFixed(0)} lx${colors.reset}`,
+    )
+  } else {
+    Logger.warn(
+      `    ├─ ⚠️ Iluminancia (BH1750): ${colors.red}No detectada en batch inicial${colors.reset}`,
+    )
+  }
+
+  if (bootAccumulator.temp !== null && bootAccumulator.hum !== null) {
+    Logger.info(
+      `    ├─ 🌡️ Clima (DHT22): ${colors.yellow}${bootAccumulator.temp.toFixed(1)}°C${colors.reset}, ${colors.blue}${bootAccumulator.hum.toFixed(1)}%${colors.reset}`,
+    )
+  } else {
+    Logger.warn(
+      `    ├─ ⚠️ Clima (DHT22): ${colors.red}Fallo de inicialización en hardware detectado${colors.reset}`,
+    )
+  }
+
+  const rainColor = lastRainState === 'Raining' ? colors.blue : colors.yellow
+
+  Logger.info(`    └─ 🌧️ Sensor Lluvia: ${rainColor}${lastRainState}${colors.reset}`)
+
+  bootAccumulator = null
+}
+
 function setupMqttHandlers() {
   const subscribe = () => {
     mqttClient.subscribe(
@@ -305,13 +357,15 @@ function setupMqttHandlers() {
         return
       }
 
-      // 1.5 Detección de Reinicio Rápido (Boot Telemetry Unificado)
+      // 1.5 Detección de Reinicio del Nodo Actuador
       if (topic === 'PristinoPlant/Actuator_Controller/status/boot') {
         irrigationRetryManager.setStabilizing()
         systemRetryManager.setStabilizing()
         // Nota: lastFirmwareHeartbeat ya actualizó el timestamp de este mensaje.
 
-        // Inicializamos presencia y salud como falsos al reiniciar (reinicio en frío / reinicio plano)
+        // Inicializamos presencia y salud como falsos al reiniciar.
+        // La presencia real de cada sensor se confirmará cuando lleguen los primeros
+        // batches al tópico EXTERIOR/readings (publicados justo después del /boot).
         dht22Present = false
         dht22Alive = false
         illuminancePresent = false
@@ -319,53 +373,20 @@ function setupMqttHandlers() {
         lastClimateBatchAt = Date.now()
         lastLuxBatchAt = Date.now()
 
-        if (message === 'reboot') {
-          Logger.info(
-            '🔌 Reinicio detectado en Nodo Actuador (reboot plano). Se esperará telemetría inicial para marcar presencia de sensores.',
-          )
-        } else if (message.startsWith('{')) {
-          try {
-            const bootData = JSON.parse(message)
-
-            Logger.info(`🔌 Telemetría Unificada de Arranque (Nodo Actuador):`)
-
-            if (bootData.lux !== undefined) {
-              Logger.info(
-                `    ├─ ☀️ Iluminancia: ${colors.yellow}${bootData.lux} lx${colors.reset}`,
-              )
-              illuminancePresent = true
-              illuminanceAlive = true
-              lastLuxBatchAt = Date.now()
-            }
-
-            if (bootData.temp !== undefined && bootData.hum !== undefined) {
-              Logger.info(
-                `    ├─ 🌡️ Clima (DHT22): ${colors.yellow}${bootData.temp}°C${colors.reset}, ${colors.blue}${bootData.hum}%${colors.reset}`,
-              )
-              dht22Present = true
-              dht22Alive = true
-              lastClimateBatchAt = Date.now()
-            } else {
-              Logger.warn(
-                `    ├─ ⚠️ Clima (DHT22): ${colors.red}Fallo de inicialización en hardware detectado.${colors.reset}`,
-              )
-            }
-
-            if (bootData.rain !== undefined) {
-              const rainColor = bootData.rain_state === 'Raining' ? colors.blue : colors.yellow
-
-              Logger.info(
-                `    └─ 🌧️ Sensor Lluvia: ${rainColor}${bootData.rain_state}${colors.reset} (${bootData.rain} raw)`,
-              )
-            }
-          } catch {
-            // Fallback si no se pudo parsear el JSON
-          }
-        }
-
         // No forzamos un offline previo, saltamos directamente al sync
         // para que evalúe si es un REBOOT o una sesión nueva.
         await handleNodeSync(true, previousHeartbeat)
+
+        // Inicializamos el acumulador para recoger las métricas de los 3 batches
+        // independientes que el firmware publica tras el boot.
+        if (bootAccumulator?.timer) clearTimeout(bootAccumulator.timer)
+        bootAccumulator = {
+          lux: null,
+          temp: null,
+          hum: null,
+          bootAt: Date.now(),
+          timer: setTimeout(() => flushBootLog(), 60000), // Fallback: loguea con lo que haya tras 60s
+        }
 
         return
       }
@@ -526,20 +547,80 @@ function setupMqttHandlers() {
       if (topic === 'PristinoPlant/Weather_Station/EXTERIOR/readings') {
         try {
           const data = JSON.parse(message)
-          const lux = Number(data.illuminance || 0)
-          const temp = Number(data.temperature || 0)
-          const hum = Number(data.humidity || 0)
 
-          if (data.temperature !== undefined || data.humidity !== undefined) {
+          // Soporta formato batch {"data": [[ts, {metric}], ...]} y plano {metric: value}.
+          // Extrae el ÚLTIMO valor de cada métrica (el más reciente del batch).
+          // La presencia se activa si al menos una entrada del batch contiene esa métrica.
+          const batch = Array.isArray(data.data) ? data.data : null
+
+          let lux = 0,
+            temp = 0,
+            hum = 0
+          let hasTemp = false,
+            hasHum = false,
+            hasLux = false
+
+          if (batch) {
+            for (const entry of batch) {
+              const metrics: Record<string, number> = (
+                Array.isArray(entry) ? entry[1] : entry
+              ) as Record<string, number>
+
+              if (metrics.temperature !== undefined) {
+                temp = Number(metrics.temperature)
+                hasTemp = true
+              }
+              if (metrics.humidity !== undefined) {
+                hum = Number(metrics.humidity)
+                hasHum = true
+              }
+              if (metrics.illuminance !== undefined) {
+                lux = Number(metrics.illuminance)
+                hasLux = true
+              }
+            }
+          } else {
+            // Fallback: formato plano (legacy / otros nodos)
+            if (data.temperature !== undefined) {
+              temp = Number(data.temperature)
+              hasTemp = true
+            }
+            if (data.humidity !== undefined) {
+              hum = Number(data.humidity)
+              hasHum = true
+            }
+            if (data.illuminance !== undefined) {
+              lux = Number(data.illuminance)
+              hasLux = true
+            }
+          }
+
+          if (hasTemp || hasHum) {
             dht22Present = true
             dht22Alive = true
             lastClimateBatchAt = Date.now()
           }
 
-          if (data.illuminance !== undefined) {
+          if (hasLux) {
             illuminancePresent = true
             illuminanceAlive = true
             lastLuxBatchAt = Date.now()
+          }
+
+          // Acumulación de telemetría post-boot: cada batch independiente
+          // (illuminance, temperature, humidity) aporta su métrica al acumulador.
+          if (bootAccumulator) {
+            if (hasLux) bootAccumulator.lux = lux
+            if (hasTemp) bootAccumulator.temp = temp
+            if (hasHum) bootAccumulator.hum = hum
+
+            // Si ya tenemos las 3 métricas, logueamos inmediatamente sin esperar el timer.
+            const allPresent =
+              bootAccumulator.lux !== null &&
+              bootAccumulator.temp !== null &&
+              bootAccumulator.hum !== null
+
+            if (allPresent) flushBootLog()
           }
 
           clearSyncTimerIfHealthy()

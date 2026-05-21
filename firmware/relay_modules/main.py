@@ -17,7 +17,7 @@ from micropython import const
 
 # ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
-DEBUG = False
+DEBUG = True
 
 # ---- Configuración MQTT (const() para ahorro de RAM) ----
 # El broker esperará ~1.5x este valor antes de desconectar al cliente.
@@ -163,6 +163,8 @@ client = None # Cliente  MQTT
 
 # ---- Globales de Telemetría & Recuperación ----
 last_rain_raw = 4095 # Última lectura cruda (Seco por defecto)
+RAIN_START_VALUE = const(2600)
+RAIN_STOP_VALUE = const(3200)
 RAIN_TARGET_SAMPLES = const(10)
 
 # Flag de control para la sincronización del monitoreo de iluminancia (Día/Noche)
@@ -648,7 +650,7 @@ async def setup_sensors(force_hard_reset=False):
     * Si es en el arranque (force_hard_reset=False) y el DHT22 falla, realiza de forma autónoma
       hasta 3 reintentos de rescate físico antes de desistir.
     """
-    global dht_sensor, rain_sensor_analog, illuminance_sensor
+    global dht_sensor, rain_sensor_analog, illuminance_sensor, last_rain_raw
 
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
@@ -785,6 +787,7 @@ async def setup_sensors(force_hard_reset=False):
             # El sensor con LLUVIA Residual o Garuando puede leer entre 3000 y 3300
             if r_avg > 1400:
                 rain_sensor_analog = adc_rain
+                last_rain_raw = r_avg
                 if DEBUG:
                     print(f"    ├─ ✅ {Colors.GREEN}Conectado{Colors.RESET}")
                     print(f"    └─ 📊 Valor: {Colors.BLUE}{r_avg}{Colors.RESET}")
@@ -829,7 +832,7 @@ async def mqtt_processor_task():
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
     from gc    import collect
-    from ujson import dumps, loads # type: ignore
+    from ujson import loads # type: ignore
     from umqtt.simple2 import MQTTException # type: ignore
 
     while True:
@@ -846,7 +849,7 @@ async def mqtt_processor_task():
             # El parsing de JSON y decodificación de strings fragmenta la memoria.
             collect()
 
-            # Análisis del Payload (JSON vs TEXTO) -loads soporta bytes nativamente-
+            # Análisis del Payload (JSON vs TEXTO) - loads soporta bytes nativamente-
             try:
                 parsed_json = loads(msg)
                 type_label = "JSON"
@@ -875,7 +878,8 @@ async def mqtt_processor_task():
                     async with mqtt_lock:
                         # [Escudo de Concurrencia]: Validación de socket post-await
                         if client and getattr(client, 'sock', None):
-                            client.publish(MQTT_TOPIC_CMD_RECEIVED, msg, qos=1)
+                            # Cambiado a QoS 0 para estabilizar la entrega asíncrona sobre TLS
+                            client.publish(MQTT_TOPIC_CMD_RECEIVED, msg, qos=0)
             except (MQTTException, OSError) as e:
                 if DEBUG: log_mqtt_exception("Fallo en el ACK del comando", e)
                 force_disconnect_mqtt()
@@ -895,7 +899,8 @@ async def mqtt_processor_task():
                             try:
                                 # 🔒 Pedimos permiso para usar el socket
                                 async with mqtt_lock:
-                                    client.publish(MQTT_TOPIC_STATUS, b"rebooting", retain=True, qos=1)
+                                    if client and getattr(client, 'sock', None):
+                                        client.publish(MQTT_TOPIC_STATUS, b"rebooting", retain=True, qos=0)
                             except (MQTTException, OSError) as e:
                                 if DEBUG: log_mqtt_exception("Fallo publicación estado reinicio", e)
                                 force_disconnect_mqtt()
@@ -1158,13 +1163,13 @@ def shutdown():
             # El LWT para el cliente MQTT solo se envía si el cliente se desconecta inesperadamente. 
             # Si nos desconectamos limpiamente,
             # el broker no lo envía automáticamente.
-            client.publish(MQTT_TOPIC_STATUS, b"offline", retain=True, qos=1)
+            client.publish(MQTT_TOPIC_STATUS, b"offline", retain=True, qos=0)
             sleep_ms(300)
 
             # Publicamos 'OFF' para cada relé que haya cambiado de estado.
             for relay_info in relays.values():
                 if relay_info['last_published_state'] != 'OFF':
-                    client.publish(relay_info['topic'], b"OFF", retain=True, qos=1)
+                    client.publish(relay_info['topic'], b"OFF", retain=True, qos=0)
                     sleep_ms(300)
         except: pass
 
@@ -1329,20 +1334,26 @@ def publish_single_batch(metric_name, ring_buffer):
         return True
     return False
 
+# ---- Utilidades de Telemetría: Publica de manera asincrona todos los batches ----
 async def flush_telemetry_batches_async():
     """Vaciado asíncrono de buffers (evita bloquear el event loop cooperativo de uasyncio)."""
     try:
         if not (client and getattr(client, 'sock', None) and wlan and wlan.isconnected()):
             return
-        if publish_single_batch("illuminance", illuminance_Batch):
-            await asyncio.sleep_ms(300)
-        if publish_single_batch("temperature", temperature_Batch):
-            await asyncio.sleep_ms(300)
-        if publish_single_batch("humidity", humidity_Batch):
-            await asyncio.sleep_ms(300)
+        # 🔒 [Escudo de Concurrencia]: Cada publicación adquiere el lock para evitar
+        # interleaving de paquetes MQTT (ej: PUBACK/SUBACK pendientes mezclados con PUBLISH).
+        async with mqtt_lock:
+            if client and getattr(client, 'sock', None):
+                if publish_single_batch("illuminance", illuminance_Batch):
+                    await asyncio.sleep_ms(500)
+                if publish_single_batch("temperature", temperature_Batch):
+                    await asyncio.sleep_ms(500)
+                if publish_single_batch("humidity", humidity_Batch):
+                    await asyncio.sleep_ms(500)
     except Exception as _e:
         if DEBUG: print(f"⚠️ Fallo en flush_telemetry_batches_async: {_e}")
 
+# ---- Utilidades de Telemetría: Publica de manera sincrona todos los batches ----
 def flush_telemetry_batches():
     """Vaciado síncrono de buffers (exclusivo para detención segura / stopped_program)."""
     try:
@@ -1527,14 +1538,6 @@ async def mqtt_connector_task(client_id):
                 # Reseteamos el contador tras conexión exitosa
                 consecutive_mqtt_failures = 0
 
-                # [Boot Telemetry]: Publicamos evento simple de reinicio plano.
-                # El Scheduler/Ingest registran la inicialización del nodo de manera limpia.
-                try:
-                    client.publish(MQTT_TOPIC_STATUS + "/boot", b"reboot", retain=False, qos=1)
-                except Exception as _e:
-                    if DEBUG: print(f"⚠️ Fallo publicando boot status: {_e}")
-                await asyncio.sleep_ms(500)
-
                 # Suscripción a tópicos
                 client.subscribe(MQTT_TOPIC_CMD, qos=1)
                 client.subscribe(MQTT_TOPIC_IRRIGATION_CMD, qos=1)
@@ -1555,7 +1558,20 @@ async def mqtt_connector_task(client_id):
                     if DEBUG: print(f"⚠️ Fallo publicando estado de auditorías: {_e}")
                 await asyncio.sleep_ms(500)
 
-                # [Initial Readings DRY]: Vacía los RingBuffers asíncronamente para no bloquear el event loop.
+                # [Boot Signal]: Primero señalizamos el arranque al Scheduler.
+                # El Scheduler resetea dht22Present/illuminancePresent = false al recibirlo.
+                # Los batches de flush_telemetry_batches_async() que llegan DESPUÉS confirman la presencia.
+                try:
+                    async with mqtt_lock:
+                        if client and getattr(client, 'sock', None):
+                            client.publish(MQTT_TOPIC_STATUS + b"/boot", b"reboot", retain=False, qos=0)
+                except Exception as _e:
+                    if DEBUG: print(f"⚠️ Fallo publicando boot status: {_e}")
+                await asyncio.sleep_ms(500)
+
+                # [Initial Readings]: Vaciamos los RingBuffers DESPUÉS del /boot.
+                # El Scheduler ya tiene Present=false, por lo que estos batches confirmarán
+                # la presencia de los sensores. El Ingest los persiste en InfluxDB.
                 await flush_telemetry_batches_async()
                 await asyncio.sleep_ms(500)
 
@@ -1813,7 +1829,6 @@ async def state_publisher_task():
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
     from gc import collect
-    from ujson import dumps # type: ignore
     from umqtt.simple2 import MQTTException # type: ignore
 
     while True:
@@ -1924,15 +1939,9 @@ async def rain_monitor_task():
 
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
-    from ujson import dumps
     from utime import time
     from umqtt.simple2 import MQTTException # type: ignore
 
-    # Umbrales (ADC 0-4095)
-    # RAIN_START_VALUE  = 2300 # Mojado (OLD)
-    # RAIN_STOP_VALUE   = 2800 # Seco (OLD)
-    RAIN_START_VALUE  = 2600 # Mojado (Inicia evento)
-    RAIN_STOP_VALUE   = 3200 # Seco (Finaliza evento)
     RAW_INTENSITY_MIN = 1700 # 100%
 
     # Tiempos de Configuración
@@ -2171,6 +2180,7 @@ async def rain_monitor_task():
                                     client.publish(MQTT_TOPIC_RAIN_STATE, payload_dry, retain=False, qos=0)
                                     # Enviamos el último lote de ráfaga
                                     if payload_batch:
+                                        await asyncio.sleep_ms(500)
                                         client.publish(MQTT_TOPIC_EXTERIOR_METRICS, payload_batch, qos=0)
 
                             rain_state_dirty = False
@@ -2211,7 +2221,6 @@ async def illuminance_monitor_task():
 
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
-    from ujson import dumps
     from utime import time
     from umqtt.simple2 import MQTTException # type: ignore
 
@@ -2368,50 +2377,50 @@ async def climate_monitor_task():
                 await setup_sensors(force_hard_reset=True)
                 dht_read_failures = 0
 
-                # Publicar Batches cada 10 minutos (600 segundos)
-                if current_ts - last_dht_publish >= 600:
-                    has_temp = temperature_Batch.count > 0
-                    has_hum  = humidity_Batch.count > 0
+            # Publicar Batches cada 10 minutos (600 segundos)
+            if current_ts - last_dht_publish >= 600:
+                has_temp = temperature_Batch.count > 0
+                has_hum  = humidity_Batch.count > 0
 
-                    if (has_temp or has_hum) and client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
-                        try:
-                            # Lote A: Temperatura
-                            if has_temp:
-                                async with mqtt_lock:
-                                    # [Escudo de Concurrencia]: Validación de socket post-await
-                                    if client and getattr(client, 'sock', None):
-                                        # [Optimización RAM - Zero-Dict Manual JSON]: Construcción directa de JSON en string usando Generator Expression. Evita instanciar dicts o usar ujson.dumps, previniendo picos en el Heap.
-                                        data_str = ",".join('[%d,{"temperature":%s}]' % (it[0], str(it[1])) for it in temperature_Batch.get_all())
-                                        client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"data":[%s]}' % data_str, qos=0)
-                                        temperature_Batch.clear()
+                if (has_temp or has_hum) and client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
+                    try:
+                        # Lote A: Temperatura
+                        if has_temp:
+                            async with mqtt_lock:
+                                # [Escudo de Concurrencia]: Validación de socket post-await
+                                if client and getattr(client, 'sock', None):
+                                    # [Optimización RAM - Zero-Dict Manual JSON]: Construcción directa de JSON en string usando Generator Expression. Evita instanciar dicts o usar ujson.dumps, previniendo picos en el Heap.
+                                    data_str = ",".join('[%d,{"temperature":%s}]' % (it[0], str(it[1])) for it in temperature_Batch.get_all())
+                                    client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"data":[%s]}' % data_str, qos=0)
+                                    temperature_Batch.clear()
 
-                            # Offset de 2s entre publicaciones (FUERA del lock)
-                            if has_temp and has_hum:
-                                await asyncio.sleep(2)
+                        # Offset de 2s entre publicaciones (FUERA del lock)
+                        if has_temp and has_hum:
+                            await asyncio.sleep(2)
 
-                            # Lote B: Humedad
-                            if has_hum:
-                                async with mqtt_lock:
-                                    # [Escudo de Concurrencia]: Validación de socket post-await
-                                    if client and getattr(client, 'sock', None):
-                                        # [Optimización RAM - Zero-Dict Manual JSON]: Construcción directa de JSON en string usando Generator Expression. Evita instanciar dicts o usar ujson.dumps, previniendo picos en el Heap.
-                                        data_str = ",".join('[%d,{"humidity":%s}]' % (it[0], str(it[1])) for it in humidity_Batch.get_all())
-                                        client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"data":[%s]}' % data_str, qos=0)
-                                        humidity_Batch.clear()
+                        # Lote B: Humedad
+                        if has_hum:
+                            async with mqtt_lock:
+                                # [Escudo de Concurrencia]: Validación de socket post-await
+                                if client and getattr(client, 'sock', None):
+                                    # [Optimización RAM - Zero-Dict Manual JSON]: Construcción directa de JSON en string usando Generator Expression. Evita instanciar dicts o usar ujson.dumps, previniendo picos en el Heap.
+                                    data_str = ",".join('[%d,{"humidity":%s}]' % (it[0], str(it[1])) for it in humidity_Batch.get_all())
+                                    client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"data":[%s]}' % data_str, qos=0)
+                                    humidity_Batch.clear()
 
-                            if DEBUG: print(f"\n🌡️  DHT22: {Colors.YELLOW}Batches Temp + HRL Publicados{Colors.RESET}")
-                            dht_publish_failures = 0  # Reset en éxito
-                        except (MQTTException, OSError) as e:
-                            dht_publish_failures += 1
-                            if DEBUG: log_mqtt_exception("Fallo publicando Batch DHT22", e)
-                            # [Tolerancia MQTT-3]: Solo matamos el cliente tras 2+ fallos consecutivos
-                            if dht_publish_failures >= 2:
-                                force_disconnect_mqtt()
-                                dht_publish_failures = 0
-                            await check_critical_mqtt_errors(e)
+                        if DEBUG: print(f"\n🌡️  DHT22: {Colors.YELLOW}Batches Temp + HRL Publicados{Colors.RESET}")
+                        dht_publish_failures = 0  # Reset en éxito
+                    except (MQTTException, OSError) as e:
+                        dht_publish_failures += 1
+                        if DEBUG: log_mqtt_exception("Fallo publicando Batch DHT22", e)
+                        # [Tolerancia MQTT-3]: Solo matamos el cliente tras 2+ fallos consecutivos
+                        if dht_publish_failures >= 2:
+                            force_disconnect_mqtt()
+                            dht_publish_failures = 0
+                        await check_critical_mqtt_errors(e)
 
-                    # Siempre reseteamos el timer (evita reintentos infinitos en ventanas vacías)
-                    last_dht_publish = current_ts
+                # Siempre reseteamos el timer (evita reintentos infinitos en ventanas vacías)
+                last_dht_publish = current_ts
 
         except (MQTTException, OSError) as e:
             dht_publish_failures += 1
@@ -2516,7 +2525,8 @@ async def unified_audit_task():
                 payload = "{" + ",".join(fragments) + "}"
                 try:
                     async with mqtt_lock:
-                        client.publish(MQTT_TOPIC_AUDIT, payload, qos=0)
+                        if client and getattr(client, 'sock', None):
+                            client.publish(MQTT_TOPIC_AUDIT, payload, qos=0)
                 except Exception as e:
                     if DEBUG: log_mqtt_exception("Fallo publicación Batch de Auditoría", e)
                     # Invalidamos el cliente inmediatamente.
@@ -2630,7 +2640,7 @@ def stopped_program():
             # Flush de batches acumulados antes de desconectar
             flush_telemetry_batches()
 
-            client.publish(MQTT_TOPIC_STATUS, b"offline", retain=True, qos=1)
+            client.publish(MQTT_TOPIC_STATUS, b"offline", retain=True, qos=0)
             from utime import sleep_ms
             sleep_ms(300) 
         except:

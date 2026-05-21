@@ -609,13 +609,18 @@ async function start() {
 
           await writeToInflux(point)
 
-          // LWT: registramos el la desconexion del nodo `offline`.
+          // LWT: registramos la desconexión del nodo `offline`.
           if (messageValue === 'offline') {
             Logger.node('OFFLINE', firmwareSource, 'BROKER')
           }
         }
+
+        // 🔒 [SOLUCIÓN CONTROL DE FLUJO]: Detiene el flujo para que el tópico /status
+        // muera aquí y no continúe evaluando las rutas de telemetría inferiores.
+        return
       }
 
+      // --- LA LÓGICA PRESERVADA QUE INTRODUCE LOS PROCESADORES DE TELEMETRÍA/AUDITORÍA ---
       const hasSensorData = Object.keys(TOPIC_ROUTES).some((suffix) => topic.endsWith(suffix))
 
       if (!hasSensorData) return
