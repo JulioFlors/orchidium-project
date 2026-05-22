@@ -141,6 +141,9 @@ illuminance_wake_event = asyncio.Event()
 # Evento asíncrono para indicar que la conexión MQTT está establecida y lista
 mqtt_connected_event = asyncio.Event()
 
+# Evento asíncrono para solicitar reset de WiFi de forma coordinada
+wifi_reset_event = asyncio.Event()
+
 # Flag para controlar la estilización del log de la primera sincronización tras el arranque
 IS_BOOT_SYNCING = True
 
@@ -150,7 +153,6 @@ mqtt_lock = asyncio.Lock()
 # Variables de control
 wlan   = None # Conexión WiFi
 client = None # Cliente  MQTT
-wifi_reset_requested = False # Flag para solicitar hard-reset de WiFi de forma coordinada
 
 
 # ---- Globales de Telemetría & Recuperación ----
@@ -599,7 +601,7 @@ def setup_bh1750_sync():
             ("soft", 50000,    200000,  "SoftI2C Robusto"),
             ("soft", 10000,    500000,  "SoftI2C Lento (10m)"),
         ]
-        if DEBUG: print(f"\n☀️  Conectando {Colors.YELLOW}BH1750{Colors.RESET}")
+        if DEBUG: print(f"\n☀️  Verificando {Colors.YELLOW}BH1750{Colors.RESET}")
         for i, (bus_type, freq, timeout, label) in enumerate(BUS_CONFIGS):
             if sensor_connected: break
             is_last = (i == len(BUS_CONFIGS) - 1)
@@ -681,7 +683,7 @@ async def setup_sensors(force_hard_reset=False):
     dht_boot_ok = False
     try:
         from dht import DHT22
-        if DEBUG: print(f"\n🌡️  Inicializando {Colors.YELLOW}DHT22{Colors.RESET}")
+        if DEBUG: print(f"\n🌡️  Verificando {Colors.YELLOW}DHT22{Colors.RESET}")
  
         dht_sensor = DHT22(Pin(23, Pin.IN, Pin.PULL_UP))
 
@@ -697,7 +699,7 @@ async def setup_sensors(force_hard_reset=False):
                 temperature_Batch.append(round(temp, 1))
                 humidity_Batch.append(round(hum, 1))
                 if DEBUG:
-                    print(f"    ├─ ✅ {Colors.GREEN}Verificado{Colors.RESET}")
+                    print(f"    ├─ ✅ {Colors.GREEN}Conectado{Colors.RESET}")
                     print(f"    ├─ 📊 Valor: {Colors.YELLOW}{temp:.1f} °C{Colors.RESET}")
                     print(f"    └─ 📊 Valor: {Colors.BLUE}{hum:.1f} %{Colors.RESET}")
             else:
@@ -759,7 +761,7 @@ async def setup_sensors(force_hard_reset=False):
 
     # 3. Inicializar el Sensor de Lluvia (Salida Analógica)
     try:
-        if DEBUG: print(f"\n💧  Conectando {Colors.BLUE}Sensor de Lluvia{Colors.RESET}")
+        if DEBUG: print(f"\n💧  Verificando {Colors.BLUE}Sensor de Lluvia{Colors.RESET}")
         adc_rain = ADC(Pin(35))
         adc_rain.atten(ADC.ATTN_11DB)
         
@@ -1093,40 +1095,50 @@ def sub_callback(topic, msg, retained, dup):
     mqtt_msg_event.set()
 
 # ---- Función Auxiliar: Desconecta/Invalida Cliente MQTT ----
-def force_disconnect_mqtt():
+def force_disconnect_mqtt(silent=True):
     """**Cierra forzosamente el socket MQTT e invalida el cliente.**"""
     # Gestión de variables globales
     global client
-    
+
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
     from gc import collect
 
-    try:
-        if client:
-            if wlan and wlan.isconnected():
-                try: client.disconnect()
-                except: pass
-            else:
-                if hasattr(client, 'sock') and client.sock:
-                    try: client.sock.close()
-                    except: pass
-                if hasattr(client, 'sock_raw') and client.sock_raw and client.sock_raw is not client.sock:
-                    try: client.sock_raw.close()
-                    except: pass
-    except Exception:
-        pass
-    finally:
-        # Notificar que MQTT ya no está conectado
-        mqtt_connected_event.clear()
-        # Invalida el cliente y libera RAM de forma agresiva
-        if client:
-            try: client.sock = None
-            except: pass
-            client = None
-        collect()
-        if DEBUG: print(f"📡  Cliente  {Colors.GREEN}Desconectado{Colors.RESET}")
+    if client is not None:
 
+        # 1. Intentamos desconectarnos.
+        try:
+            if wlan and wlan.isconnected():
+                client.disconnect()
+        except Exception: pass
+
+        # 2. Forzamos el cierre de los sockets internos de MicroPython.
+        try:
+            if hasattr(client, 'sock') and client.sock:
+                client.sock.close()
+        except Exception: pass
+
+        try:
+            if hasattr(client, 'sock_raw') and client.sock_raw:
+                client.sock_raw.close()
+        except Exception: pass
+
+        # 3. Rompemos la referencia de forma atómica
+        try:
+            client.sock = None
+            client.sock_raw = None
+        except Exception: pass
+        
+        client = None
+
+        # Notificamos que MQTT ya no está conectado
+        mqtt_connected_event.clear()
+
+        collect()
+
+        # Solo imprimimos el log si NO se solicitó silencio y DEBUG está activo
+        if DEBUG and not silent:
+            print(f"📡  Cliente  {Colors.GREEN}Desconectado{Colors.RESET}")
 
 
 # ---- FUNCIÓN AUXILIAR: Gestión de desconexión (Graceful Shutdown - Relay Modules) ----
@@ -1181,7 +1193,7 @@ def shutdown():
         except: pass
 
     # Invalidamos el cliente MQTT forzando una reconexión completa.
-    force_disconnect_mqtt()
+    force_disconnect_mqtt(silent=False)
 
     # Desconectamos el WiFi.
     if wlan:
@@ -1203,7 +1215,7 @@ def shutdown():
 async def wifi_coro():
     """**Gestiona la (re)conexión asíncrona del WiFi**"""
     # Gestión de variables globales
-    global wlan, wifi_reset_requested
+    global wlan
 
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
@@ -1218,16 +1230,13 @@ async def wifi_coro():
     wifi_disconnect_start = None # Marca de tiempo para calcular la duración de la desconexión
 
     while True:
-        if not wlan.isconnected() or wifi_reset_requested:
-            was_reset_requested = wifi_reset_requested
-            wifi_reset_requested = False
+        if not wlan.isconnected() or wifi_reset_event.is_set():
+            # Limpiamos el evento inmediatamente al iniciar el ciclo de desconexión/reset
+            wifi_reset_event.clear()
 
             if connected_once:
                 if DEBUG:
-                    if was_reset_requested:
-                        print(f"📡  WiFi {Colors.RED}Reset Solicitado por Red-16 EBUSY{Colors.RESET}\n")
-                    else:
-                        print(f"📡  WiFi {Colors.RED}Desconectado{Colors.RESET}\n")
+                    print(f"📡  WiFi {Colors.RED}Desconectado / Reset Solicitado{Colors.RESET}\n")
 
             # ---- Verificación Previa (Safety Check) ----
             # Iniciamos el contador de desconexión por primera vez
@@ -1246,9 +1255,7 @@ async def wifi_coro():
                 # fuerza a la capa de red a limpiar todos los estados internos, timers y handshakes pendientes antes de intentar una nueva conexión
                 wlan.disconnect()
                 wlan.active(False)
-                # Si fue solicitado por reset (ej: EBUSY), esperamos 10 segundos para purga completa de sockets.
-                # De lo contrario, 2 segundos es suficiente.
-                await asyncio.sleep(10 if was_reset_requested else 2)
+                await asyncio.sleep(2)
                 wlan.active(True)
 
                 if DEBUG: print(f"\n\n📡  Conectándose a {Colors.BLUE}{WIFI_SSID}{Colors.RESET}", end="")
@@ -1390,7 +1397,7 @@ def flush_telemetry_batches():
 async def mqtt_connector_task(client_id):
     """Gestiona la (re)conexión y operación MQTT con verificación activa."""
     # Gestión de variables globales
-    global client, wifi_reset_requested, last_rain_raw, current_rain_state
+    global client, last_rain_raw, current_rain_state
 
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
@@ -1415,12 +1422,12 @@ async def mqtt_connector_task(client_id):
         # Esperamos a que el WiFi esté conectado
         if wlan is None or not wlan.isconnected():
             # Cedemos el control y esperamos a que la tarea wifi_coro haga su trabajo
-            await asyncio.sleep(5)
+            await asyncio.sleep(10)
             continue
 
         # 🔄 Gestionamos la (Re)conexión
         if client is None:
-            # Verificación de falla crítica por tiempo (5 Minutos)
+            # Verificación de falla crítica por tiempo (10 Minutos)
             if mqtt_disconnect_start is None:
                 mqtt_disconnect_start = time()
             
@@ -1432,105 +1439,76 @@ async def mqtt_connector_task(client_id):
                 safe_reset()
 
             try:
+                # Aseguremonos de arrancar con ningun socket colgado.
+                force_disconnect_mqtt() 
+
+                # Recolección agresiva pre-handshake
                 collect()
+                from gc import mem_free
 
-                # ---- Bucle de reintentos internos (evita reboot por fallo transitorio) ----
-                max_connect_attempts = 3
-                connect_success = False
-
-                for connect_attempt in range(max_connect_attempts):
-                    if not (wlan and wlan.isconnected()):
-                        break
-
+                if mem_free() < 48000: # Elevado a 48KB de seguridad para TLS robusto
+                    if DEBUG: print(f"⚠️  RAM insuficiente para SSL ({mem_free()//1024}KB). Forzando GC profundo.")
                     collect()
-                    from gc import mem_free
+                    await asyncio.sleep(3)
                     if mem_free() < 45000:
-                        if DEBUG: print(f"⚠️  RAM insuficiente para SSL ({mem_free()//1024}KB). Esperando GC.")
-                        collect()
-                        await asyncio.sleep(5)
-                        if mem_free() < 45000:
-                            if DEBUG: print(f"💀  RAM crítica ({mem_free()//1024}KB). Reiniciando.")
-                            await asyncio.sleep(1)
-                            safe_reset()
+                        if DEBUG: print(f"💀  RAM crítica persistente ({mem_free()//1024}KB). Hard-Reset de emergencia.")
+                        await asyncio.sleep(1)
+                        safe_reset()
 
-                    # Inicializa el Cliente MQTT (con timeout largo para handshake SSL)
-                    client = MQTTClient(
-                        client_id=client_id,
-                        server=MQTT_SERVER,
-                        port=MQTT_PORT,
-                        user=MQTT_USER,
-                        password=MQTT_PASS,
-                        keepalive=MQTT_KEEPALIVE,
-                        ssl=MQTT_SSL,
-                        ssl_params=MQTT_SSL_PARAMS,
-                        socket_timeout=MQTT_SOCKET_TIMEOUT,
-                        message_timeout=MQTT_MESSAGE_TIMEOUT
-                    )
+                # Inicializamos el Cliente MQTT
+                client = MQTTClient(
+                    client_id=client_id,
+                    server=MQTT_SERVER,
+                    port=MQTT_PORT,
+                    user=MQTT_USER,
+                    password=MQTT_PASS,
+                    keepalive=MQTT_KEEPALIVE,
+                    ssl=MQTT_SSL,
+                    ssl_params=MQTT_SSL_PARAMS,
+                    socket_timeout=MQTT_SOCKET_TIMEOUT,
+                    message_timeout=MQTT_MESSAGE_TIMEOUT
+                )
 
-                    # Configura Last Will and Testament (LWT)
-                    client.set_last_will(LWT_TOPIC, LWT_MESSAGE, retain=True, qos=1)
-                    
-                    # Configura el callback para mensajes entrantes
-                    client.set_callback(sub_callback)
+                # Configura Last Will and Testament (LWT)
+                client.set_last_will(LWT_TOPIC, LWT_MESSAGE, retain=True, qos=1)
+                
+                # Configura el callback para mensajes entrantes
+                client.set_callback(sub_callback)
 
-                    # Configura el callback de estado
-                    client.set_callback_status(sub_status_callback)
-                    
-                    # [SEGURIDAD] Watchdog para conexión síncrona bloqueante
-                    # Si client.connect() se BLOQUEA (socket blocking), 
-                    # el Timer nos reiniciará.
-                    wd_timer = Timer(0)
-                    wd_timer.init(period=wd_timeout_ms, mode=Timer.ONE_SHOT, callback=_connection_timeout_handler)
+                # Configura el callback de estado
+                client.set_callback_status(sub_status_callback)
+                
+                # [SEGURIDAD] Watchdog para conexión síncrona bloqueante
+                # Si client.connect() se BLOQUEA (socket blocking), 
+                # el Timer nos reiniciará.
+                wd_timer = Timer(0)
+                wd_timer.init(period=wd_timeout_ms, mode=Timer.ONE_SHOT, callback=_connection_timeout_handler)
 
-                    # [Optimización Crítica] Limpieza de RAM pre-SSL ya realizada arriba
-                    if DEBUG:
-                        if connect_attempt == 0:
-                            log_disk_usage()
-                            log_ram_usage()
-                            print(f"\n📡  Conectando {Colors.BLUE}Broker MQTT{Colors.RESET}")
-                        else:
-                            print(f"📡  Reintento {Colors.YELLOW}{connect_attempt + 1}/{max_connect_attempts}{Colors.RESET}")
+                if DEBUG:
+                    log_disk_usage()
+                    log_ram_usage()
+                    print(f"\n📡  Conectando {Colors.BLUE}Broker MQTT{Colors.RESET}")
 
-                    try:
-                        # Para persistencia, clean_session debe ser False. 
-                        # Esto permite que el Broker guarde las suscripciones y mensajes QOS 1 mientras estemos offline.
-                        client.connect(clean_session=True)
-                        connect_success = True
-                        break  # Éxito, salimos del bucle
-                    except (MQTTException, OSError) as e_connect:
-                        if connect_attempt < max_connect_attempts - 1:
-                            # Limpiamos socket residual de forma robusta con force_disconnect_mqtt
-                            if DEBUG: log_mqtt_exception("Intento de conexión fallida", e_connect)
-                            force_disconnect_mqtt()
+                try:
+                    # Para persistencia, clean_session debe ser False. 
+                    # Esto permite que el Broker guarde las suscripciones y mensajes QOS 1 mientras estemos offline.
+                    client.connect(clean_session=True)
+                except (MQTTException, OSError) as e_connect:
+                    # Desactivamos timer inmediatamente al fallar la llamada
+                    wd_timer.deinit()
 
-                            # [Anti-EBUSY] Si el error es EBUSY (16 o -16), el stack LwIP tiene sockets
-                            # TCP en TIME_WAIT. Solicitamos hard-reset de WiFi a wifi_coro de forma coordinada.
-                            if isinstance(e_connect, OSError) and e_connect.args and e_connect.args[0] in (16, -16):
-                                wifi_reset_requested = True
-                                if wlan:
-                                    try: wlan.disconnect()
-                                    except: pass
+                    # [🛡️ Limpieza de Fallo Silenciosa]: Destrucción absoluta e inmediata de la instancia fallida y sus sockets
+                    force_disconnect_mqtt()
 
-                            # Esperamos a que el WiFi se reconecte y asigne IP válida (máx 45s)
-                            for _ in range(45):
-                                if wlan and wlan.isconnected() and wlan.ifconfig()[0] != '0.0.0.0':
-                                    break
-                                await asyncio.sleep(1)
+                    # Solicitar reset de red asíncrono a wifi_coro para liberar sockets
+                    wifi_reset_event.set()
 
-                            backoff_delay = [40, 80, 120][min(connect_attempt, 2)]
-                            if isinstance(e_connect, OSError) and e_connect.args and e_connect.args[0] in (16, -16):
-                                backoff_delay = 15 # Reducido porque ya esperamos la reconexión de WiFi
-                            await asyncio.sleep(backoff_delay)
-                        else:
-                            raise e_connect  # Último intento: propagar al handler externo
-                    finally:
-                        # Desactivamos el timer de seguridad (siempre, éxito o fallo)
-                        wd_timer.deinit()
+                    raise e_connect  # Propagar al handler externo del while True
+                finally:
+                    try: wd_timer.deinit()
+                    except: pass
 
-                if not connect_success:
-                    raise MQTTException(30)  # Forzar reconexión por timeout
-
-                # Solo tras conexión EXITOSA
+                # ---- Conexión EXITOSA ----
                 # Reseteamos el cronómetro de fallas MQTT
                 mqtt_disconnect_start = None
 
@@ -1544,7 +1522,7 @@ async def mqtt_connector_task(client_id):
                 # Reseteamos el contador tras conexión exitosa
                 consecutive_mqtt_failures = 0
 
-                # 🚀 1. Resincronizamos los estados de los actuadores en RAM.
+                # 📡 1. Resincronizamos los estados de los actuadores en RAM.
                 for relay_info in relays.values():
                     relay_info['last_published_state'] = None
 
@@ -1552,25 +1530,25 @@ async def mqtt_connector_task(client_id):
                 state_changed.set()
                 await asyncio.sleep_ms(500)
 
-                # Publica el estado actual de las auditorías (Digital Twin) seguido de la sincronización de relays.
+                # Publicamos el estado actual de las auditorías (OFF)
                 await publish_audit_state()
 
-                # 🚀 2. Boot Signal: Señalizamos el arranque al Scheduler.
+                # 📡 2. Boot Signal: Señalizamos el arranque al Scheduler.
                 # El Scheduler resetea dht22Present/illuminancePresent = false al recibirlo.
                 try:
                     async with mqtt_lock:
                         if client and getattr(client, 'sock', None):
-                            client.publish(MQTT_TOPIC_STATUS + b"/boot", b"reboot", retain=False, qos=0)
+                            client.publish(b"PristinoPlant/Actuator_Controller/status/boot", b"reboot", retain=False, qos=0)
                 except Exception as _e:
                     if DEBUG: print(f"⚠️ Fallo publicando boot status: {_e}")
                 await asyncio.sleep_ms(500)
 
-                # 🚀 3. Métricas Ambientales (Batches): Vaciamos los RingBuffers DESPUÉS del /boot.
+                # 📡 3. Métricas Ambientales (Batches): Vaciamos los RingBuffers DESPUÉS del /boot.
                 # Estos batches confirmarán la presencia de los sensores activos.
                 await flush_telemetry_batches_async()
                 await asyncio.sleep_ms(500)
 
-                # 🚀 4. Estado de Lluvia: Lectura fresca y publicación del estado actual de lluvia
+                # 📡 4. Estado de Lluvia: Lectura fresca y publicación del estado actual de lluvia
                 if rain_sensor_analog is not None:
                     try:
                         raw = await fetch_rain_raw()
@@ -1603,15 +1581,17 @@ async def mqtt_connector_task(client_id):
                         if client and getattr(client, 'sock', None):
                             client.subscribe(MQTT_TOPIC_CMD, qos=1)
                     await asyncio.sleep_ms(500)
+
                     async with mqtt_lock:
                         if client and getattr(client, 'sock', None):
                             client.subscribe(MQTT_TOPIC_IRRIGATION_CMD, qos=1)
                     await asyncio.sleep_ms(500)
+
                 except Exception as sub_err:
                     if DEBUG: print(f"⚠️ Error en suscripciones: {sub_err}")
                     raise sub_err
 
-                # 🚀 6. Notifica que MQTT está listo para las tareas de telemetría periódicas
+                # 📡 6. Notifica que MQTT está listo para las tareas de telemetría periódicas
                 mqtt_connected_event.set()
 
             except (MQTTException, OSError) as e:
@@ -1623,6 +1603,9 @@ async def mqtt_connector_task(client_id):
                 # Invalidamos el cliente MQTT forzando una reconexión completa.
                 force_disconnect_mqtt()
 
+                # Solicitar reset de red asíncrono coordinado para evitar colisiones
+                wifi_reset_event.set()
+
                 # ---- Backoff Adaptativo ----
                 if consecutive_mqtt_failures >= 3:
                     # Backoff progresivo: 30s, 60s, 120s (cap)
@@ -1631,25 +1614,14 @@ async def mqtt_connector_task(client_id):
                         print(f"⚠️  {Colors.YELLOW}Backoff:{Colors.RESET} {consecutive_mqtt_failures} fallos seguidos.")
                         print(f"    └─ Esperando {wait_time}s para liberar RAM y estabilizar red.")
                     
-                    # [Anti-EBUSY] Reset preventivo del stack WiFi coordinado.
-                    wifi_reset_requested = True
-                    if wlan:
-                        try: wlan.disconnect()
-                        except: pass
-
-                    # Esperamos reconexión WiFi (máx 45s)
-                    for _ in range(45):
-                        if wlan and wlan.isconnected() and wlan.ifconfig()[0] != '0.0.0.0':
-                            break
-                        await asyncio.sleep(1)
-
                     collect()
                     await asyncio.sleep(wait_time)
-                    if not (wlan and wlan.isconnected()):
-                        continue
+                    # Esperamos pasivamente a que wifi_coro restablezca la conexión
+                    while wlan is None or not wlan.isconnected():
+                        await asyncio.sleep(1)
                 else:
                     # Backoff estándar (suficiente para que LwIP limpie TIME_WAIT)
-                    await asyncio.sleep(30)
+                    await asyncio.sleep(60)
                 continue
 
         # 🔄 Gestionamos la Conexión Activa
@@ -1673,7 +1645,7 @@ async def mqtt_connector_task(client_id):
                         if client and getattr(client, 'sock', None):
                             # Revisamos si hay mensajes entrantes
                             # Drenamos la cola MQTT (ráfaga de hasta 15 mensajes)
-                            # umqtt procesa 1 solo msj por llamada. Si se acumulan, PINGRESP se retrasa.
+                            # umqtt procesa 1 solo msj por llamada. Si se acumulan, PINGRESP se retrasan.
                             for _ in range(15):
                                 client.check_msg()
                     finally:
@@ -2677,7 +2649,7 @@ def stopped_program():
             pass
 
     # Invalidamos el cliente MQTT forzando una reconexión completa.
-    force_disconnect_mqtt()
+    force_disconnect_mqtt(silent=False)
 
     # Desconectamos el WiFi.
     if wlan and wlan.isconnected():

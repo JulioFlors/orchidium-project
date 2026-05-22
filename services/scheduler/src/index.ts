@@ -264,12 +264,20 @@ function flushBootLog() {
     clearTimeout(bootAccumulator.timer)
   }
 
+  // Determinar la línea de iluminancia de manera condicional según el muestreo nocturno
+  let luxLine: string
+  if (bootAccumulator.lux !== null) {
+    luxLine = `                                        ├─ ☀️  Iluminancia: ${colors.yellow}${bootAccumulator.lux.toFixed(0)} lx${colors.reset}`
+  } else if (!isLuxSamplingActive()) {
+    luxLine = `                                        ├─ 🌙  Iluminancia: ${colors.dim}Muestreo Suspendido (Anochecer)${colors.reset}`
+  } else {
+    luxLine = `                                        ├─ ⚠️  Iluminancia: ${colors.red}No detectada en batch inicial${colors.reset}`
+  }
+
   // Garantizar orden estricto: Iluminancia -> Clima -> Lluvia
   const logLines = [
     '📡 Weather Station Exterior (Batch Inicial Cargado):',
-    bootAccumulator.lux !== null
-      ? `                                        ├─ ☀️  Iluminancia: ${colors.yellow}${bootAccumulator.lux.toFixed(0)} lx${colors.reset}`
-      : `                                        ├─ ⚠️  Iluminancia: ${colors.red}No detectada en batch inicial${colors.reset}`,
+    luxLine,
     bootAccumulator.temp !== null && bootAccumulator.hum !== null
       ? `                                        ├─ 🌡️  Clima: ${colors.yellow}${bootAccumulator.temp.toFixed(1)}°C${colors.reset} / ${colors.blue}${bootAccumulator.hum.toFixed(1)}%${colors.reset}`
       : `                                        ├─ ⚠️  Clima: ${colors.red}Fallo de inicialización en hardware detectado${colors.reset}`,
@@ -613,9 +621,10 @@ function setupMqttHandlers() {
             if (hasTemp && temp !== null) bootAccumulator.temp = temp
             if (hasHum && hum !== null) bootAccumulator.hum = hum
 
-            // Si ya recolectamos las 3 métricas, flusheamos el log inmediatamente sin esperar el timeout
+            // Si ya recolectamos las métricas requeridas, flusheamos el log inmediatamente sin esperar el timeout
+            const isLuxRequired = isLuxSamplingActive()
             const allPresent =
-              bootAccumulator.lux !== null &&
+              (!isLuxRequired || bootAccumulator.lux !== null) &&
               bootAccumulator.temp !== null &&
               bootAccumulator.hum !== null
 
