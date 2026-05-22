@@ -2312,7 +2312,7 @@ async def illuminance_monitor_task():
             if current_ts - last_lux_publish >= 600:
                 # Intento de publicación resiliente:
                 # Solo reseteamos el timer si logramos enviar los datos o si el buffer está vacío.
-                if illuminance_Batch.count == 10:
+                if illuminance_Batch.count > 0:
                     if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
                         # 🔒 Pedimos permiso para usar el socket
                         async with mqtt_lock:
