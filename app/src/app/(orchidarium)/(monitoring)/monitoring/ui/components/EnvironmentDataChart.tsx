@@ -331,7 +331,7 @@ export function EnvironmentDataChart({
   const rangeOptions =
     allowedRanges ||
     (dataKey === 'illuminance'
-      ? ['5-19h', '8-16h', '1D', '7d', '30d', 'all']
+      ? ['8-16h', '5-19h', '1D', '7d', '30d', 'all']
       : ['12h', '24h', '7d', '30d', 'all'])
 
   return (
@@ -383,7 +383,7 @@ export function EnvironmentDataChart({
                 onRangeChange(r)
               }}
             >
-              {r === 'all' ? 'Todo' : r}
+              {r === 'all' ? 'Todo' : r === '5-19h' ? '14h' : r === '8-16h' ? '8h' : r}
             </button>
           ))}
         </div>

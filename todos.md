@@ -253,4 +253,4 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 * [x] **Optimización Status Exterior:** Unificar el status de la estación exterior con el del nodo actuador para ahorrar recursos (v0.6.1).
 * [x] **Migración Sensor Lluvia al Nodo Actuador:** ~~Mover lógica `rain_monitor_task()` del firmware Sensors al firmware Relays.~~ Migrado en v0.6.0. Incluye BH1750 exterior + sensor de gotas de lluvia. Tópicos MQTT bajo `PristinoPlant/Weather_Station/Exterior/`.
   * [x] Sensor de Iluminancia externo: ~~Desarrollar la logica para calcular la diferencia de iluminancia.~~ Implementado en v0.6.0 como `exterior_publish_task()` en el nodo actuador. Publica en `Exterior/readings` para comparar con el BH1750 interior.
-* [ ] **Sincronización de Firmware Weather Station:** Actualizar `weather_station/main.py` con las mejoras de resiliencia, auditoría y estandarización aplicadas en `relay_modules/main.py` (v0.12.1+).
+* [x] **Sincronización de Firmware Weather Station:** Actualizar `weather_station/main.py` con las mejoras de resiliencia, auditoría y estandarización aplicadas en `relay_modules/main.py` (v0.12.1+).

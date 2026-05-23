@@ -526,8 +526,14 @@ export class InferenceEngine {
 
       const stream = influxClient.query(sqlQuery)
 
-      let foundExterior = false
-      let foundInterior = false
+      let extLux: number | null = null
+      let extRain: number | null = null
+      let extTemp: number | null = null
+      let extHum: number | null = null
+
+      let intTemp: number | null = null
+      let intHum: number | null = null
+      let intLux: number | null = null
 
       for await (const row of stream) {
         // La zona determina el destino. Ambos nodos (Actuador y EMA) usan la fuente Weather_Station.
@@ -536,24 +542,52 @@ export class InferenceEngine {
           !isExterior &&
           (row.zone?.toString().startsWith('Zona_') || row.zone?.toString().startsWith('ZONA_'))
 
-        if (!foundExterior && isExterior && row.source === 'Weather_Station') {
-          result.exterior.lux = Number(row.illuminance || 0)
-          result.exterior.rain_intensity = Number(row.rain_intensity || 0)
-          result.exterior.temp = Number(row.temperature || 0)
-          result.exterior.hum = Number(row.humidity || 0)
-          foundExterior = true
-          result.foundExterior = true
-        } else if (!foundInterior && isInterior && row.source === 'Weather_Station') {
-          result.interior.temp = Number(row.temperature || 0)
-          result.interior.hum = Number(row.humidity || 0)
-          result.interior.lux = Number(row.illuminance || 0)
-          foundInterior = true
-          result.foundInterior = true
+        if (isExterior && row.source === 'Weather_Station') {
+          if (extLux === null && row.illuminance != null) {
+            extLux = Number(row.illuminance)
+          }
+          if (extRain === null && row.rain_intensity != null) {
+            extRain = Number(row.rain_intensity)
+          }
+          if (extTemp === null && row.temperature != null) {
+            extTemp = Number(row.temperature)
+          }
+          if (extHum === null && row.humidity != null) {
+            extHum = Number(row.humidity)
+          }
+        } else if (isInterior && row.source === 'Weather_Station') {
+          if (intTemp === null && row.temperature != null) {
+            intTemp = Number(row.temperature)
+          }
+          if (intHum === null && row.humidity != null) {
+            intHum = Number(row.humidity)
+          }
+          if (intLux === null && row.illuminance != null) {
+            intLux = Number(row.illuminance)
+          }
         }
       }
 
-      if (!foundExterior || !foundInterior) {
-        const missing = [!foundExterior && ZoneType.EXTERIOR, !foundInterior && 'INTERIOR']
+      if (extLux !== null || extRain !== null || extTemp !== null || extHum !== null) {
+        result.exterior.lux = extLux ?? 0
+        result.exterior.rain_intensity = extRain ?? 0
+        result.exterior.temp = extTemp ?? 0
+        result.exterior.hum = extHum ?? 0
+        result.foundExterior = true
+      }
+
+      if (intTemp !== null || intHum !== null || intLux !== null) {
+        result.interior.temp = intTemp ?? 0
+        result.interior.hum = intHum ?? 0
+        result.interior.lux = intLux ?? 0
+        result.foundInterior = true
+      }
+
+      if (!result.foundExterior || !result.foundInterior) {
+        const missing = [
+          !result.foundExterior && ZoneType.EXTERIOR,
+          !result.foundInterior && 'INTERIOR',
+        ]
           .filter(Boolean)
           .join(', ')
 

@@ -662,6 +662,7 @@ function setupMqttHandlers() {
                   const reason = !isInBurstWindow
                     ? `fin de ventana horaria (hora: ${caracasHour}h)`
                     : `iluminancia recuperada (${lux.toFixed(0)} lx)`
+
                   Logger.rain(
                     `Restableciendo intervalo de chequeo de lluvia a 10 minutos (Vigía) por ${reason}.`,
                   )
@@ -814,16 +815,13 @@ function setupMqttHandlers() {
               const unixTimestamp =
                 rawTimestamp < 1000000000 ? rawTimestamp + 946684800 : rawTimestamp
 
-              const ts = unixTimestamp * 1000
-              const diffMs = Math.abs(Date.now() - ts)
+              const diffMs = Math.abs(Date.now() - unixTimestamp * 1000)
 
               // Si el timestamp corregido difiere por más de 24 horas o es anterior a 2025, se descarta.
               if (diffMs < 24 * 60 * 60 * 1000 && unixTimestamp > 1735689600) {
-                rainTimestamp = new Date(ts)
+                rainTimestamp = new Date(unixTimestamp * 1000)
               } else {
-                Logger.warn(
-                  `Timestamp de lluvia desincronizado del firmware (${new Date(ts).toISOString()}). Usando hora del servidor.`,
-                )
+                // Silenciado: Timestamp de lluvia desincronizado del firmware. Usando hora del servidor.
               }
             }
           } catch {
@@ -1282,8 +1280,11 @@ async function checkAndRecoverMissingStats(daysToLookBack = 7) {
 
         // Si no existe, recuperamos el procesamiento del día de forma silenciosa
         if (!exists) {
-          await processDay(zone, targetDate)
-          processedCount++
+          const success = await processDay(zone, targetDate, false, true)
+
+          if (success) {
+            processedCount++
+          }
         }
       }
     }
@@ -1424,8 +1425,13 @@ async function runTask(scheduleId: string) {
       return
     }
 
-    if (irrigationRetryManager.connectionState !== 'online') {
-      Logger.cron(`Rutina POSTERGADA: ${schedule.name}. Motivo: Nodo Actuador OFFLINE.`)
+    if (!irrigationRetryManager.isReady) {
+      const isOffline = irrigationRetryManager.connectionState !== 'online'
+      const reason = isOffline
+        ? 'Nodo Actuador OFFLINE.'
+        : 'Estabilizando Nodo Actuador tras reinicio.'
+
+      Logger.cron(`Rutina POSTERGADA: ${schedule.name}. Motivo: ${reason}`)
 
       await prisma.taskLog.create({
         data: {
@@ -1436,11 +1442,15 @@ async function runTask(scheduleId: string) {
           source: 'ROUTINE',
           scheduledAt: new Date(),
           duration: schedule.durationMinutes,
-          notes: 'Nodo Actuador no está conectado. Esperando reconexión',
+          notes: isOffline
+            ? 'Nodo Actuador no está conectado. Esperando reconexión'
+            : 'Estabilizando Nodo Actuador tras reinicio.',
           events: {
             create: {
               status: TaskStatus.PENDING,
-              notes: 'Nodo Actuador OFFLINE: Esperando reconexión para ejecutar.',
+              notes: isOffline
+                ? 'Nodo Actuador OFFLINE: Esperando reconexión para ejecutar.'
+                : 'Estabilizando Nodo Actuador tras reinicio.',
             },
           },
         },

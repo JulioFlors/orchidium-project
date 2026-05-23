@@ -73,7 +73,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
       const metrics = ZoneMetrics[z] || []
 
       metrics.forEach((m) => {
-        initial[z][m] = m === 'illuminance' ? '5-19h' : '12h'
+        initial[z][m] = m === 'illuminance' ? '8-16h' : '12h'
       })
       // Agregar métricas especiales que no están en ZoneMetrics pero se muestran en la UI
       if (z === ZoneType.EXTERIOR) {

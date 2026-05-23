@@ -3,7 +3,7 @@
 # Descripción: Nodo de Monitoreo Ambiental del Orquideario (ZONA_A).
 # Fecha: 23-05-2026
 # Version: v0.9.0
-# notes_release: Robustecimiento del nodo EMA de la Zona A. Conectividad resiliente, ahorro de batería con apagado de radio y medidas de seguridad avanzadas.
+# notes_release: Robustecimiento del nodo EMA del Orquideario. Conectividad resiliente, ahorro de batería con apagado de radio y medidas de seguridad avanzadas.
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib. 
@@ -21,20 +21,23 @@ DEBUG = True
 
 # ---- Configuración MQTT (const() para ahorro de RAM) ----
 # El broker esperará ~1.5x este valor antes de desconectar al cliente.
-MQTT_KEEPALIVE       = const(60) # ~1.5x = 90 seg
+MQTT_KEEPALIVE       = const(90) # ~1.5x = 135 seg
 # Intervalo para enviar pings de 'keepalive' al broker MQTT.
-MQTT_PING_INTERVAL   = const(25) # seg (garantiza 3 pings en 90s con check de 5s)
+MQTT_PING_INTERVAL   = const(29) # seg (garantiza 4 pings en 120s con holgura de 15s)
 # Intervalo para revisar mensajes MQTT entrantes.
-MQTT_CHECK_INTERVAL  = const(5)  # seg (5x menos despertares, latencia de comando 5s max)
-# Timeout para operaciones de socket
+MQTT_CHECK_INTERVAL  = const(5)  # seg
+# Timeout para operaciones (check_msg, ping, publish)
+# Optimizado para fallar rápido y reintentar.
 MQTT_SOCKET_TIMEOUT  = const(45) # seg
-# Tiempo máximo de espera para QoS 1
+# tiempo máximo que el cliente esperará para que se complete un intercambio completo de mensajes MQTT(QoS) 1
+# [WDT Safety]: Debe ser MENOR que el Watchdog de Hardware (125s)
 MQTT_MESSAGE_TIMEOUT = const(90) # seg
 
 # ---- Configuración Resiliencia / Watchdog ----
 # Tiempo máximo sin conexión MQTT/WiFi antes de forzar un Hard Reset (10 minutos)
 MAX_OFFLINE_RESET_SEC = const(600)
-# Tiempo del Watchdog Timer (Hardware) en milisegundos (125 segundos)
+# Tiempo del Watchdog Timer (Hardware) en milisegundos (125 segundos (2 min 5 seg))
+# [WDT Safety]: Debe ser mayor que SOCKET_TIMEOUT y MESSAGE_TIMEOUT para evitar reinicios durante operaciones lentas.
 WDT_TIMEOUT_MS = const(125000)
 # Tamaño máximo de la cola de mensajes MQTT para evitar OOM
 MAX_BUFFER_SIZE = const(15)
@@ -83,8 +86,8 @@ class RingBuffer:
             self.index = 0
 
     def append(self, item):
-        self.ensure_init()
         from utime import time
+        self.ensure_init()
         self.buffer[self.index] = (time(), item)
         self.index = (self.index + 1) % self.size
 
@@ -112,9 +115,9 @@ temperature_Batch = RingBuffer(BATCH_SIZE)
 humidity_Batch    = RingBuffer(BATCH_SIZE)
 
 # ---- Hardware Global ----
-dht_sensor = None
-illuminance_sensor = None
-i2c_bus = None
+dht_sensor    = None # DHT22 (Temp + Humedad)
+bh1750_sensor = None # BH1750 (I2C)
+i2c_bus       = None # Bus I2C global para diagnóstico
 
 # ---- Variables Globales de Estado ----
 wlan    = None # Conexión WiFi
@@ -160,8 +163,8 @@ AUDIT_COUNTERS = {
 
 # ---- Funciones de Muestreo de Auditoría ----
 def get_lux_sample():
-    if illuminance_sensor is not None:
-        try: return round(illuminance_sensor.get_auto_luminance(), 1)
+    if bh1750_sensor is not None:
+        try: return round(bh1750_sensor.get_auto_luminance(), 1)
         except: return None
     return None
 
@@ -178,10 +181,10 @@ def get_ram_sample():
     return (mem_free(), mem_alloc())
 
 def get_dht_sample():
+    from utime import sleep_ms
     if dht_sensor is None: return None
     try:
         clean_dht_line()
-        from utime import sleep_ms
         sleep_ms(1500)
         dht_sensor.measure()
         return (round(dht_sensor.temperature(), 1), round(dht_sensor.humidity(), 1))
@@ -198,9 +201,9 @@ AUDIT_SAMPLE_FNS = {
 
 # ---- Función Auxiliar: Uso del disco ----
 def log_disk_usage():
+    import os
     if not DEBUG: return
     try:
-        import os
         fs_stat = os.statvfs('/')
         block_size = fs_stat[0]
         total_blocks = fs_stat[2]
@@ -215,9 +218,9 @@ def log_disk_usage():
 
 # ---- Función Auxiliar: Uso de la memoria RAM ----
 def log_ram_usage():
+    from gc import mem_free, mem_alloc
     if not DEBUG: return
     try:
-        from gc import mem_free, mem_alloc
         free = mem_free()
         alloc = mem_alloc()
         total = free + alloc
@@ -303,9 +306,17 @@ def clean_dht_line():
 
 # ---- Función Auxiliar: Setup del BH1750 (I2C) ----
 def setup_bh1750_sync():
-    global illuminance_sensor, i2c_bus
+    global bh1750_sensor, i2c_bus
     from machine import I2C, Pin, SoftI2C
     from utime import sleep_ms
+    try:
+        from bh1750 import BH1750
+    except ImportError:
+        if DEBUG: print("    ❌ Error: no se encontró bh1750.py")
+        bh1750_sensor = None
+        i2c_bus = None
+        return
+
     try:
         addr = 0x23 
         sensor_connected = False
@@ -326,13 +337,9 @@ def setup_bh1750_sync():
                     i2c_bus = I2C(0, scl=Pin(22), sda=Pin(21), freq=freq)
                 sleep_ms(150)
                 i2c_bus.writeto(addr, b'')
-                try: from bh1750 import BH1750
-                except ImportError:
-                    if DEBUG: print(f"{prefix} ❌ Error: no se encontró bh1750.py")
-                    return
-                illuminance_sensor = BH1750(bus=i2c_bus, addr=addr)
+                bh1750_sensor = BH1750(bus=i2c_bus, addr=addr)
                 sleep_ms(200)
-                lux_test = round(illuminance_sensor.get_auto_luminance(), 1)
+                lux_test = round(bh1750_sensor.get_auto_luminance(), 1)
                 if lux_test is not None:
                     illuminance_Batch.append(lux_test)
                 if DEBUG:
@@ -344,20 +351,20 @@ def setup_bh1750_sync():
                 continue
         if not sensor_connected:
             if DEBUG: print(f"    └─ ❌ {Colors.RED}Desconectado{Colors.RESET}")
-            illuminance_sensor = None
+            bh1750_sensor = None
             i2c_bus = None
     except Exception as e:
         if DEBUG: print(f"    └─ ❌ Exception: {Colors.RED}[{e}]{Colors.RESET}")
-        illuminance_sensor = None
+        bh1750_sensor = None
 
 # ---- Función Auxiliar: Inicializar Sensores ----
 async def setup_sensors():
-    global dht_sensor, illuminance_sensor
+    global dht_sensor, bh1750_sensor
     from machine import Pin
+    from dht import DHT22
     
     dht_boot_ok = False
     try:
-        from dht import DHT22
         if DEBUG: print(f"\n🌡️  Inicializando {Colors.YELLOW}DHT22{Colors.RESET}")
  
         dht_sensor = DHT22(Pin(4, Pin.IN, Pin.PULL_UP))
@@ -393,7 +400,6 @@ async def setup_sensors():
             try:
                 clean_dht_line()
                 await asyncio.sleep(1)
-                from dht import DHT22
                 dht_sensor = DHT22(Pin(4, Pin.IN, Pin.PULL_UP))
                 dht_sensor.measure()
                 temp, hum = dht_sensor.temperature(), dht_sensor.humidity()
@@ -420,6 +426,12 @@ async def setup_sensors():
 # ---- Función Auxiliar: Sincronizar Estado de RAM (Audit Mode) ----
 async def publish_audit_state():
     try:
+        from umqtt.simple2 import MQTTException
+    except ImportError:
+        if DEBUG: print("⚠️  Error: no se encontró umqtt.simple2")
+        return
+
+    try:
         if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
             lux_on  = "true" if AUDIT_MODE["lux"]  else "false"
             wifi_on = "true" if AUDIT_MODE["wifi"] else "false"
@@ -427,7 +439,7 @@ async def publish_audit_state():
             temp_on = "true" if AUDIT_MODE["temp"] else "false"
             hum_on  = "true" if AUDIT_MODE["hum"]  else "false"
 
-            hw_lux  = "true" if illuminance_sensor  else "false"
+            hw_lux  = "true" if bh1750_sensor  else "false"
             hw_dht  = "true" if dht_sensor          else "false"
 
             # Construcción manual de JSON (Zero-Dict)
@@ -436,7 +448,6 @@ async def publish_audit_state():
                 hw_lux, hw_dht, hw_dht
             )
 
-            from umqtt.simple2 import MQTTException
             try:
                 async with mqtt_lock:
                     if client and getattr(client, 'sock', None):
@@ -452,8 +463,12 @@ async def publish_audit_state():
 
 # ---- Callback de estado MQTT ----
 def sub_status_callback(pid, status):
+    try:
+        from umqtt import errno as umqtt_errno
+    except ImportError:
+        if DEBUG: print("⚠️  Error: no se encontró umqtt")
+        return
     if not DEBUG: return
-    from umqtt import errno as umqtt_errno
     if status == umqtt_errno.STIMEOUT:
         print(f"\n⚠️  {Colors.YELLOW}Timeout de entrega{Colors.RESET} (PID: {pid}): El broker no confirmó.")
     elif status == umqtt_errno.SUNKNOWNPID:
@@ -507,13 +522,13 @@ def force_disconnect_mqtt(silent=True):
 
 # ---- FUNCIÓN AUXILIAR: Gestión de desconexión (Graceful Shutdown) ----
 def shutdown():
+    from utime import sleep_ms
     """
     **Apagado Controlado (Weather Station)**
     * Publica `offline` explícitamente con QoS 1.
     * Flush de batches de telemetría acumulados de forma síncrona.
     * Desconecta MQTT y WiFi para ahorrar energía.
     """
-    from utime import sleep_ms
 
     if client and hasattr(client, 'sock') and client.sock and wlan and wlan.isconnected():
         try:
@@ -645,7 +660,11 @@ def _connection_timeout_handler(t):
 
 # ---- Manejo centralizado de Errores Críticos MQTT ----
 async def check_critical_mqtt_errors(e):
-    from umqtt.simple2 import MQTTException
+    try:
+        from umqtt.simple2 import MQTTException
+    except ImportError:
+        if DEBUG: print("⚠️  Error: no se encontró umqtt.simple2")
+        return
     
     if isinstance(e, OSError) and e.args and e.args[0] in [-17040, -30592, 12]:
         if DEBUG:
@@ -667,8 +686,13 @@ async def mqtt_connector_task(client_id):
 
     from gc      import collect
     from machine import Timer
-    from umqtt.simple2 import MQTTClient, MQTTException
     from utime   import ticks_diff, ticks_ms, time
+    try:
+        from umqtt.simple2 import MQTTClient, MQTTException
+    except ImportError:
+        if DEBUG: print("⚠️  Error: no se encontró umqtt.simple2")
+        while True:
+            await asyncio.sleep(60)
 
     wd_timeout_ms = (MQTT_SOCKET_TIMEOUT + 5) * 1000
     mqtt_disconnect_start = None
@@ -863,10 +887,10 @@ async def flush_telemetry_batches_async():
         await check_critical_mqtt_errors(_e)
 
 def flush_telemetry_batches():
+    from utime import sleep_ms
     try:
         if not (client and getattr(client, 'sock', None) and wlan and wlan.isconnected()):
             return
-        from utime import sleep_ms
 
         has_lux  = illuminance_Batch.count > 0
         has_temp = temperature_Batch.count > 0
@@ -903,6 +927,13 @@ def flush_telemetry_batches():
 async def command_processor_task():
     global IS_SAMPLING_LUX, CONNECTED_ALLOWED
     from gc import collect
+    from machine import reset
+    from utime import sleep
+    try:
+        from umqtt.simple2 import MQTTException
+    except ImportError:
+        if DEBUG: print("⚠️  Error: no se encontró umqtt.simple2")
+        class MQTTException(Exception): pass
 
     while True:
         try:
@@ -921,10 +952,17 @@ async def command_processor_task():
             # Acuse de recibo de comando (eco)
             try:
                 if client and wlan and wlan.isconnected():
+                    # 🔒 Pedimos permiso para usar el socket
                     async with mqtt_lock:
+                        # [Escudo de Concurrencia]
                         if client and getattr(client, 'sock', None):
-                            client.publish(MQTT_TOPIC_CMD_RECEIVED, msg, qos=1)
-            except: pass
+                            # QoS 0 para acuse de recibo
+                            client.publish(MQTT_TOPIC_CMD_RECEIVED, msg, qos=0)
+            except (MQTTException, OSError) as e:
+                if DEBUG: log_mqtt_exception("Fallo en el ACK del comando", e)
+                force_disconnect_mqtt()
+                await check_critical_mqtt_errors(e)
+            except Exception: pass
 
             if topic == MQTT_TOPIC_CMD:
                 # 1. Reset
@@ -932,12 +970,17 @@ async def command_processor_task():
                     if DEBUG: print(f"    └─ Cmd: reset")
                     try:
                         if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
-                            async with mqtt_lock:
-                                client.publish(MQTT_TOPIC_STATUS, b"rebooting", retain=True, qos=1)
-                    except: pass
+                            try:
+                                async with mqtt_lock:
+                                    if client and getattr(client, 'sock', None):
+                                        client.publish(MQTT_TOPIC_STATUS, b"rebooting", retain=True, qos=0)
+                            except (MQTTException, OSError) as e:
+                                if DEBUG: log_mqtt_exception("Fallo publicación estado reinicio", e)
+                                force_disconnect_mqtt()
+                                await check_critical_mqtt_errors(e)
+                        collect()
+                    except Exception: pass
                     
-                    from machine import reset
-                    from utime   import sleep
                     sleep(2)
                     reset()
 
@@ -949,6 +992,8 @@ async def command_processor_task():
                         if DEBUG: print("    └─ Bh1750: ON")
                     elif action == b"off":
                         IS_SAMPLING_LUX = False
+                        # Al apagar, limpiamos el buffer para no arrastrar basura de 0 lux
+                        illuminance_Batch.clear()
                         if DEBUG: print("    └─ Bh1750: OFF")
 
                 # 3. Comandos de Auditoría (Prefix: audit_)
@@ -977,6 +1022,24 @@ async def command_processor_task():
                                 if DEBUG: print(f"    └─ AUDIT {category.upper()}: OFF")
 
                             await publish_audit_state()
+
+                # 4. Sincronización de Clima (Scheduler → Firmware)
+                elif m_low == b"sync_climate":
+                    if DEBUG: print(f"    └─ Cmd: sync_climate")
+                    try:
+                        # Re-inicialización lógica de todos los sensores
+                        await setup_sensors()
+                        
+                        # Publicamos las lecturas frescas de inmediato
+                        if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
+                            await flush_telemetry_batches_async()
+                            if DEBUG: print("    └─ ✅ Sync exitoso: publicado en readings")
+                    except (MQTTException, OSError) as e:
+                        if DEBUG: log_mqtt_exception("Fallo en sync_climate", e)
+                        force_disconnect_mqtt()
+                        await check_critical_mqtt_errors(e)
+                    except Exception as e:
+                        if DEBUG: print(f"⚠️ Error en sync_climate: {e}")
                             
             del topic, msg, retained, dup
             collect()
@@ -1073,12 +1136,16 @@ async def sensor_publish_task():
     global CONNECTED_ALLOWED
     from gc import collect
 
+    dht_read_failures = 0
+    lux_read_failures = 0
+
     await asyncio.sleep(5)
 
     while True:
         temp, hum, lux = None, None, None
 
         # 1. DHT22
+        dht_ok = False
         if dht_sensor is not None:
             try:
                 clean_dht_line()
@@ -1086,15 +1153,37 @@ async def sensor_publish_task():
                 dht_sensor.measure()
                 temp = round(dht_sensor.temperature(), 1)
                 hum  = round(dht_sensor.humidity(), 1)
+                dht_ok = True
+                dht_read_failures = 0
             except: pass
 
+        if not dht_ok:
+            dht_read_failures += 1
+            if DEBUG: print(f"⚠️  DHT22: Fallo de lectura transitorio. Fallos: {dht_read_failures}")
+
         # 2. BH1750
-        if IS_SAMPLING_LUX and illuminance_sensor is not None:
+        lux_ok = False
+        if IS_SAMPLING_LUX and bh1750_sensor is not None:
             try:
-                lux_raw = illuminance_sensor.get_auto_luminance()
+                lux_raw = bh1750_sensor.get_auto_luminance()
                 if lux_raw is not None:
                     lux = round(lux_raw, 1)
+                    lux_ok = True
+                    lux_read_failures = 0
             except: pass
+        else:
+            lux_ok = True # No considerar fallo si no estamos muestreando lux
+
+        if not lux_ok:
+            lux_read_failures += 1
+            if DEBUG: print(f"⚠️  BH1750: Fallo de lectura transitorio. Fallos: {lux_read_failures}")
+
+        # 2.1 Re-setup si hay fallos repetidos
+        if dht_read_failures >= 5 or lux_read_failures >= 5:
+            if DEBUG: print(f"⚠️  Sensores: 5 Fallos consecutivos en lectura. Re-inicializando...")
+            await setup_sensors()
+            dht_read_failures = 0
+            lux_read_failures = 0
 
         # 3. Acumular en buffers
         if temp is not None: temperature_Batch.append(temp)
@@ -1172,6 +1261,7 @@ async def main():
 
 # ---- Detención local de Emergencia ----
 def stopped_program():
+    from utime import sleep_ms
     if DEBUG:
         print(f"\n\n📡  Programa {Colors.GREEN}Detenido{Colors.RESET}")
 
@@ -1181,7 +1271,6 @@ def stopped_program():
         except Exception as e:
             if DEBUG:
                 print(f"⚠️  Error en flush_telemetry_batches en stopped_program: {e}")
-        from utime import sleep_ms
         sleep_ms(500)
 
         try:

@@ -46,7 +46,8 @@ export async function processDay(
   zone: ZoneType,
   dayStart: Date,
   dryRun: boolean = false,
-): Promise<void> {
+  silent: boolean = false,
+): Promise<boolean> {
   const dayEnd = new Date(dayStart)
 
   dayEnd.setDate(dayEnd.getDate() + 1)
@@ -72,7 +73,7 @@ export async function processDay(
       totalRain = rainAgg._sum.durationSeconds || 0
       avgRainIntensity = rainAgg._avg.avgIntensity || null
     } catch (err) {
-      Logger.error(`[${dayLabel}] Error calculando totalRain desde Postgres:`, err)
+      if (!silent) Logger.error(`[${dayLabel}] Error calculando totalRain desde Postgres:`, err)
     }
   }
 
@@ -240,15 +241,15 @@ export async function processDay(
       }
     }
   } catch (err) {
-    Logger.error(`[${dayLabel}] [${zone}] Error InfluxDB`, err)
+    if (!silent) Logger.error(`[${dayLabel}] [${zone}] Error InfluxDB`, err)
 
-    return
+    return false
   }
 
   if (rowCount === 0) {
-    Logger.warn(`[${dayLabel}] [${zone}] Sin datos. Skipping.`)
+    if (!silent) Logger.warn(`[${dayLabel}] [${zone}] Sin datos. Skipping.`)
 
-    return
+    return false
   }
 
   // ── 3. Balance hídrico desde TaskLog ──────────────────────────────────────
@@ -295,20 +296,22 @@ export async function processDay(
   const vpdMinFinal = isVpdValid && vpdMin !== Infinity ? Number(vpdMin.toFixed(3)) : null
   const vpdMaxFinal = isVpdValid && vpdMax !== -Infinity ? Number(vpdMax.toFixed(3)) : null
 
-  if (!isTempValid && countTemp > 0) {
-    Logger.warn(
-      `[${dayLabel}] [${zone}] Temperatura descartada por baja densidad de muestras (${countTemp} < ${MIN_SAMPLES_TEMP_HUM}).`,
-    )
-  }
-  if (!isHumValid && countHum > 0) {
-    Logger.warn(
-      `[${dayLabel}] [${zone}] Humedad descartada por baja densidad de muestras (${countHum} < ${MIN_SAMPLES_TEMP_HUM}).`,
-    )
-  }
-  if (!isLuxValid && countLumTotal > 0) {
-    Logger.warn(
-      `[${dayLabel}] [${zone}] Iluminancia/DLI descartada por baja densidad de muestras (Total: ${countLumTotal} < ${MIN_SAMPLES_LUX_TOTAL} y Window: ${countLum} < ${MIN_SAMPLES_LUX_BOTANICAL}).`,
-    )
+  if (!silent) {
+    if (!isTempValid && countTemp > 0) {
+      Logger.warn(
+        `[${dayLabel}] [${zone}] Temperatura descartada por baja densidad de muestras (${countTemp} < ${MIN_SAMPLES_TEMP_HUM}).`,
+      )
+    }
+    if (!isHumValid && countHum > 0) {
+      Logger.warn(
+        `[${dayLabel}] [${zone}] Humedad descartada por baja densidad de muestras (${countHum} < ${MIN_SAMPLES_TEMP_HUM}).`,
+      )
+    }
+    if (!isLuxValid && countLumTotal > 0) {
+      Logger.warn(
+        `[${dayLabel}] [${zone}] Iluminancia/DLI descartada por baja densidad de muestras (Total: ${countLumTotal} < ${MIN_SAMPLES_LUX_TOTAL} y Window: ${countLum} < ${MIN_SAMPLES_LUX_BOTANICAL}).`,
+      )
+    }
   }
 
   const avgTempDay =
@@ -325,11 +328,13 @@ export async function processDay(
       : null
 
   if (dryRun) {
-    Logger.info(
-      `  [DRY-RUN] [${dayLabel}] [${zone}] rows=${rowCount} DLI=${dli} VPD=${vpdAvg} DIF=${dif}`,
-    )
+    if (!silent) {
+      Logger.info(
+        `  [DRY-RUN] [${dayLabel}] [${zone}] rows=${rowCount} DLI=${dli} VPD=${vpdAvg} DIF=${dif}`,
+      )
+    }
 
-    return
+    return false
   }
 
   const coreData = {
@@ -372,11 +377,13 @@ export async function processDay(
     coreData.irrigationMinutes === 0 &&
     coreData.nebulizationMinutes === 0
   ) {
-    Logger.warn(
-      `[${dayLabel}] [${zone}] Sin métricas válidas tras procesar ${rowCount} filas. Skipping upsert.`,
-    )
+    if (!silent) {
+      Logger.warn(
+        `[${dayLabel}] [${zone}] Sin métricas válidas tras procesar ${rowCount} filas. Skipping upsert.`,
+      )
+    }
 
-    return
+    return false
   }
 
   await prisma.dailyEnvironmentStat.upsert({
@@ -385,7 +392,11 @@ export async function processDay(
     update: coreData,
   })
 
-  Logger.success(
-    `[${dayLabel}] [${zone}] rows=${rowCount} DLI=${dli} VPD=${vpdAvg} DIF=${dif} riego=${irrigationMinutes}min OK`,
-  )
+  if (!silent) {
+    Logger.success(
+      `[${dayLabel}] [${zone}] rows=${rowCount} DLI=${dli} VPD=${vpdAvg} DIF=${dif} riego=${irrigationMinutes}min OK`,
+    )
+  }
+
+  return true
 }

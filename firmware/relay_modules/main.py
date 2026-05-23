@@ -1,9 +1,9 @@
 # -----------------------------------------------------------------------------
 # Relay Modules: Actuator Controller + Weather Station (Exterior)
 # Descripcion: Nodo Actuador (sistema de riego) + Nodo EMA (Meteorológia Exterior).
-# Fecha: 20-05-2026
-# Version: v0.15.0
-# notes_release: [🛡️ Resiliencia Sensorial Unificada]: Extracción DRY de flush_telemetry a función dedicada (publish_single_batch). Rename health→wifi en auditorías. Audit state con retain=True para sincronización del Digital Twin.
+# Fecha: 23-05-2026
+# Version: v0.15.1
+# notes_release: [Configuración MQTT]: se ajustaron los tiempo de configuracion mqtt para ser mas holdagos.
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib.
@@ -21,12 +21,12 @@ DEBUG = False
 
 # ---- Configuración MQTT (const() para ahorro de RAM) ----
 # El broker esperará ~1.5x este valor antes de desconectar al cliente.
-MQTT_KEEPALIVE       = const(60) # ~1.5x = 90 seg
+MQTT_KEEPALIVE       = const(90) # ~1.5x = 135 seg
 # Intervalo para enviar pings de 'keepalive' al broker MQTT.
-MQTT_PING_INTERVAL   = const(25) # seg (garantiza 3 pings en 90s con check de 5s)
+MQTT_PING_INTERVAL   = const(29) # seg (garantiza 4 pings en 120s con holgura de 15s)
 # Intervalo para revisar mensajes MQTT entrantes.
-MQTT_CHECK_INTERVAL  = const(10)  # seg
-# Timeout para operaciones normales (check_msg, ping, publish)
+MQTT_CHECK_INTERVAL  = const(5)  # seg
+# Timeout para operaciones (check_msg, ping, publish)
 # Optimizado para fallar rápido y reintentar.
 MQTT_SOCKET_TIMEOUT  = const(45) # seg
 # tiempo máximo que el cliente esperará para que se complete un intercambio completo de mensajes MQTT(QoS) 1
@@ -41,7 +41,8 @@ MAX_OFFLINE_RESET_SEC = const(600)
 WDT_TIMEOUT_MS = const(125000)
 # Tamaño máximo de la cola de mensajes MQTT para evitar OOM
 MAX_BUFFER_SIZE = const(15)
-
+# Tamaño de lote de telemetría (10 muestras = 10 minutos)
+BATCH_SIZE = const(10)
 
 # ---- Tópicos MQTT Pre-calculados (Optimización de RAM) ----
 # Usamos b"" (bytes) y constantes para evitar concatenación en tiempo de ejecución.
@@ -107,10 +108,10 @@ IRRIGATION_CIRCUITS = {
 relays = {}
 
 # ---- Hardware: Sensores ----
-dht_sensor             = None # DHT22 (Temp + Humedad)
-illuminance_sensor     = None # BH1750 (I2C)
-rain_sensor_analog     = None # Sensor de gotas de lluvia (ADC)
-i2c_bus                = None # Bus I2C global para diagnóstico
+dht_sensor         = None # DHT22 (Temp + Humedad)
+bh1750_sensor      = None # BH1750 (I2C)
+rain_sensor_analog = None # Sensor de gotas de lluvia (ADC)
+i2c_bus            = None # Bus I2C global para diagnóstico
 
 # ---- Variables Globales de Estado ----
 # Lista de temporizadores de riego activos
@@ -213,8 +214,8 @@ AUDIT_MODE = {
 
 # Funciones de Muestreo Unificadas para Auditoría (Lazy Reference)
 def get_lux_sample():
-    if illuminance_sensor:
-        try: return round(illuminance_sensor.get_auto_luminance(), 1)
+    if bh1750_sensor:
+        try: return round(bh1750_sensor.get_auto_luminance(), 1)
         except: return None
     return None
 
@@ -341,10 +342,10 @@ class RingBuffer:
         return n
 
 # Buffers de Telemetría (RingBuffer)
-illuminance_Batch = RingBuffer(10)
-rain_Batch        = RingBuffer(10)
-temperature_Batch = RingBuffer(10)
-humidity_Batch    = RingBuffer(10)
+illuminance_Batch = RingBuffer(BATCH_SIZE)
+rain_Batch        = RingBuffer(BATCH_SIZE)
+temperature_Batch = RingBuffer(BATCH_SIZE)
+humidity_Batch    = RingBuffer(BATCH_SIZE)
 
 # ---- Función Auxiliar: Sincronizar Estado de RAM (Audit Mode) ----
 async def publish_audit_state():
@@ -361,7 +362,7 @@ async def publish_audit_state():
             hum_on    = "true" if AUDIT_MODE["hum"]    else "false"
 
             # Mapeo de presencia de hardware
-            hw_lux  = "true" if illuminance_sensor  else "false"
+            hw_lux  = "true" if bh1750_sensor  else "false"
             hw_rain = "true" if rain_sensor_analog  else "false"
             hw_dht  = "true" if dht_sensor          else "false"
 
@@ -599,7 +600,7 @@ def clean_dht_line():
 # ---- Función Auxiliar: Setup del BH1750 ----
 def setup_bh1750_sync():
     """Inicializa el bus I2C y el sensor BH1750 buscando en múltiples configuraciones."""
-    global illuminance_sensor, i2c_bus
+    global bh1750_sensor, i2c_bus
     from machine import I2C, Pin, SoftI2C
     from utime import sleep_ms
     try:
@@ -626,9 +627,9 @@ def setup_bh1750_sync():
                 except ImportError:
                     if DEBUG: print(f"{prefix} ❌ Error: no se encontró bh1750.py")
                     return
-                illuminance_sensor = BH1750(bus=i2c_bus, addr=addr)
+                bh1750_sensor = BH1750(bus=i2c_bus, addr=addr)
                 sleep_ms(200)
-                lux_test = round(illuminance_sensor.get_auto_luminance(), 1)
+                lux_test = round(bh1750_sensor.get_auto_luminance(), 1)
                 if lux_test is not None:
                     illuminance_Batch.append(lux_test)
                 if DEBUG:
@@ -640,11 +641,11 @@ def setup_bh1750_sync():
                 continue
         if not sensor_connected:
             if DEBUG: print(f"    └─ ❌ {Colors.RED}Desconectado{Colors.RESET}")
-            illuminance_sensor = None
+            bh1750_sensor = None
             i2c_bus = None
     except Exception as e:
         if DEBUG: print(f"    └─ ❌ Exception: {Colors.RED}[{e}]{Colors.RESET}")
-        illuminance_sensor = None
+        bh1750_sensor = None
 
 # ---- Función Auxiliar: Inicializar y Restablecer Sensores ----
 async def setup_sensors(force_hard_reset=False):
@@ -655,7 +656,7 @@ async def setup_sensors(force_hard_reset=False):
     * Si es en el arranque (force_hard_reset=False) y el DHT22 falla, realiza de forma autónoma
       hasta 3 reintentos de rescate físico antes de desistir.
     """
-    global dht_sensor, rain_sensor_analog, illuminance_sensor, last_rain_raw, current_rain_state
+    global dht_sensor, rain_sensor_analog, bh1750_sensor, last_rain_raw, current_rain_state
 
     # Inicializamos variables globales de lluvia en None al inicio del setup
     last_rain_raw = None
@@ -674,7 +675,7 @@ async def setup_sensors(force_hard_reset=False):
         if DEBUG: print(f"\n⚡  {Colors.YELLOW}Hard Reset {Colors.RESET} [ DHT22 + Rain + BH1750 ]")
         dht_sensor = None
         rain_sensor_analog = None
-        illuminance_sensor = None
+        bh1750_sensor = None
 
         # Cortamos la energía
         sensor_relay['pin'].value(0)
@@ -727,7 +728,7 @@ async def setup_sensors(force_hard_reset=False):
             # Invalida instancias
             dht_sensor = None
             rain_sensor_analog = None
-            illuminance_sensor = None
+            bh1750_sensor = None
 
             # Cortamos la energía
             sensor_relay['pin'].value(0)
@@ -843,7 +844,7 @@ def sub_status_callback(pid, status):
 async def mqtt_processor_task():
     """**CONSUMIDOR MQTT: Procesa mensajes fuera del hilo del socket (Event-Driven).**"""
     # Gestión de variables globales
-    global mqtt_message_buffer, AUDIT_MODE, illuminance_sensor
+    global mqtt_message_buffer, AUDIT_MODE, bh1750_sensor
 
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
@@ -1586,7 +1587,7 @@ async def mqtt_connector_task(client_id):
                         if DEBUG: print(f"⚠️ Error sincronización inicial lluvia: {pub_err}")
                     await asyncio.sleep_ms(500)
 
-                # 🚀 5. Suscripción diferida a tópicos de control (QoS=1 para seguridad de órdenes)
+                # 📡 5. Suscripción diferida a tópicos de control (QoS=1 para seguridad de órdenes)
                 try:
                     async with mqtt_lock:
                         if client and getattr(client, 'sock', None):
@@ -2218,10 +2219,10 @@ async def illuminance_monitor_task():
             current_ts = time()
 
             lux_ok = False
-            if illuminance_sensor is not None:
+            if bh1750_sensor is not None:
                 try:
                     # Lectura de sensor BH1750 con auto-escala dinámica
-                    lux_raw = illuminance_sensor.get_auto_luminance()
+                    lux_raw = bh1750_sensor.get_auto_luminance()
                     if lux_raw is not None:
                         lux_val = round(lux_raw, 1)
                         illuminance_Batch.append(lux_val)

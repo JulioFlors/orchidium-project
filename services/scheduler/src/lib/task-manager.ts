@@ -302,8 +302,11 @@ export async function processPostponedTasks() {
   }
 
   if (postponed.length > 0) {
-    if (irrigationRetryManager.connectionState !== 'online') {
-      Logger.debug(`Poll: ${postponed.length} tareas postergadas esperando reconexión del nodo.`)
+    if (!irrigationRetryManager.isReady) {
+      const reason =
+        irrigationRetryManager.connectionState !== 'online' ? 'reconexión' : 'estabilización'
+
+      Logger.debug(`Poll: ${postponed.length} tareas postergadas esperando ${reason} del nodo.`)
 
       return
     }
@@ -471,9 +474,12 @@ export async function processAuthorizedTasks() {
     })
 
     for (const task of authorizedTasks) {
-      if (irrigationRetryManager.connectionState !== 'online') {
-        Logger.debug(`Poll: Tarea autorizada ${task.id.slice(0, 8)} en espera (Nodo Offline).`)
-        break // Si el nodo está offline, no procesamos ninguna
+      if (!irrigationRetryManager.isReady) {
+        const reason =
+          irrigationRetryManager.connectionState !== 'online' ? 'Offline' : 'Estabilizándose'
+
+        Logger.debug(`Poll: Tarea autorizada ${task.id.slice(0, 8)} en espera (Nodo ${reason}).`)
+        break // Si el nodo no está listo, no procesamos ninguna
       }
 
       Logger.task(`Poll: Procesando tarea autorizada: ${task.id.slice(0, 8)} (${task.purpose})`)

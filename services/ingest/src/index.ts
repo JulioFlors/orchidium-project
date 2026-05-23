@@ -220,15 +220,8 @@ async function processEnvironmentPacket(
       if (lastNodeUnix < 1000000000) lastNodeUnix += 946684800
 
       // Si el tiempo del nodo es basura (< 2025), calculamos el desplazamiento (offset)
-      const isBasura = lastNodeUnix < 1735689600
       const serverNow = Math.floor(Date.now() / 1000)
-      const backtrackingOffset = isBasura ? serverNow - lastNodeUnix : 0
-
-      if (isBasura && batch.length > 0) {
-        Logger.warn(
-          `[ INFL ] [ ${source} ] Hora desincronizada detectada. Aplicando Backtracking (+${backtrackingOffset}s) a ${batch.length} muestras.`,
-        )
-      }
+      const backtrackingOffset = lastNodeUnix < 1735689600 ? serverNow - lastNodeUnix : 0
 
       for (const entry of batch) {
         // Soporta formatos: [timestamp, metrics] o { ...metrics }
