@@ -133,7 +133,8 @@ let isRainOverridden = false
 let rainStartedAt: number | null = null
 let lastVetoAt: number | null = null
 let isWaitingForBaselineFallback = false
-let lastSentRainInterval: 'INTERVAL_BURST' | 'INTERVAL_NORMAL' | null = null
+let lastSentRainInterval: 'INTERVAL_BURST' | 'INTERVAL_NORMAL' = 'INTERVAL_NORMAL'
+let lastKnownLux: number | null = null
 
 /**
  * Devuelve el estado actual de lluvia considerando el veto por humedad residual.
@@ -631,6 +632,8 @@ function setupMqttHandlers() {
             lastLuxBatchAt = Date.now()
 
             if (lux !== null) {
+              lastKnownLux = lux // Guardar último valor conocido
+
               const now = new Date()
               const caracasHour = parseInt(
                 new Intl.DateTimeFormat('en-US', {
@@ -640,24 +643,30 @@ function setupMqttHandlers() {
                 }).format(now),
               )
 
-              let targetInterval: 'INTERVAL_BURST' | 'INTERVAL_NORMAL' = 'INTERVAL_NORMAL'
+              const isInBurstWindow = caracasHour >= 8 && caracasHour < 16
+              const isBurstLux = lux <= 10000
 
-              if (caracasHour >= 8 && caracasHour < 16) {
-                if (lux <= 10000) {
-                  targetInterval = 'INTERVAL_BURST' // Ráfaga a 1 min si está oscuro
-                } else {
-                  targetInterval = 'INTERVAL_NORMAL' // Restablecer a 10 min si está claro
+              if (isInBurstWindow && isBurstLux) {
+                // Debe ir a ráfaga
+                if (lastSentRainInterval !== 'INTERVAL_BURST') {
+                  lastSentRainInterval = 'INTERVAL_BURST'
+                  Logger.rain(
+                    `Ajustando intervalo de chequeo de lluvia a 1 minuto (Ráfaga) por iluminancia (${lux.toFixed(0)} lx) a las ${caracasHour}h.`,
+                  )
+                  executeSystemCommand('INTERVAL_BURST', true)
                 }
               } else {
-                targetInterval = 'INTERVAL_NORMAL' // Fuera de ventana 8am-4pm, siempre 10 min
-              }
-
-              if (lastSentRainInterval !== targetInterval) {
-                lastSentRainInterval = targetInterval
-                Logger.rain(
-                  `Ajustando intervalo de chequeo de lluvia a ${targetInterval === 'INTERVAL_BURST' ? '1 minuto (Ráfaga)' : '10 minutos (Vigía)'} por iluminancia (${lux.toFixed(0)} lx) a las ${caracasHour}h Caracas.`,
-                )
-                executeSystemCommand(targetInterval, true)
+                // Debe ir a normal, pero ÚNICAMENTE si previamente lo habíamos cambiado a BURST
+                if (lastSentRainInterval === 'INTERVAL_BURST') {
+                  lastSentRainInterval = 'INTERVAL_NORMAL'
+                  const reason = !isInBurstWindow
+                    ? `fin de ventana horaria (hora: ${caracasHour}h)`
+                    : `iluminancia recuperada (${lux.toFixed(0)} lx)`
+                  Logger.rain(
+                    `Restableciendo intervalo de chequeo de lluvia a 10 minutos (Vigía) por ${reason}.`,
+                  )
+                  executeSystemCommand('INTERVAL_NORMAL', true)
+                }
               }
             }
           }
@@ -1141,6 +1150,30 @@ async function handleNodeSync(isBoot: boolean = false, previousHeartbeat: number
   resetSamplingState()
   syncNodeSampling(undefined, true)
 
+  // Al reconectarse o reiniciarse el nodo, asumimos que se inicializa en INTERVAL_NORMAL.
+  lastSentRainInterval = 'INTERVAL_NORMAL'
+
+  // Si las condiciones de ráfaga ya están dadas en este momento (según la última iluminancia conocida),
+  // forzamos al nodo a entrar a modo ráfaga de forma inmediata.
+  if (lastKnownLux !== null) {
+    const now = new Date()
+    const caracasHour = parseInt(
+      new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/Caracas',
+        hour: 'numeric',
+        hour12: false,
+      }).format(now),
+    )
+
+    if (caracasHour >= 8 && caracasHour < 16 && lastKnownLux <= 10000) {
+      lastSentRainInterval = 'INTERVAL_BURST'
+      Logger.rain(
+        `Nodo reconectado/reiniciado. Forzando intervalo de chequeo de lluvia a 1 minuto (Ráfaga) por iluminancia previa (${lastKnownLux.toFixed(0)} lx) a las ${caracasHour}h.`,
+      )
+      executeSystemCommand('INTERVAL_BURST', true)
+    }
+  }
+
   // Al arrancar (boot), nos aseguramos de limpiar cualquier temporizador previo
   if (isBoot) {
     if (climateSyncTimer) {
@@ -1218,12 +1251,62 @@ function startClimateSyncRetry() {
   )
 }
 
+/**
+ * Verifica si faltan estadísticas de telemetría para los últimos N días
+ * y las procesa de manera retroactiva de forma automática y silenciosa.
+ */
+async function checkAndRecoverMissingStats(daysToLookBack = 7) {
+  try {
+    const zones = [ZoneType.EXTERIOR, ZoneType.ZONA_A]
+    const today = new Date()
+
+    today.setHours(0, 0, 0, 0)
+
+    let processedCount = 0
+
+    for (let i = 1; i <= daysToLookBack; i++) {
+      const targetDate = new Date(today)
+
+      targetDate.setDate(today.getDate() - i)
+
+      for (const zone of zones) {
+        // Comprobamos si ya existe el registro único para esa fecha y zona
+        const exists = await prisma.dailyEnvironmentStat.findUnique({
+          where: {
+            date_zone: {
+              date: targetDate,
+              zone,
+            },
+          },
+        })
+
+        // Si no existe, recuperamos el procesamiento del día de forma silenciosa
+        if (!exists) {
+          await processDay(zone, targetDate)
+          processedCount++
+        }
+      }
+    }
+
+    if (processedCount > 0) {
+      Logger.info(
+        `🔍 Procesamiento retroactivo completado: se recuperaron ${processedCount} estadísticas faltantes.`,
+      )
+    }
+  } catch (error) {
+    Logger.error('Error durante la verificación retroactiva de estadísticas:', error)
+  }
+}
+
 // ---- Lógica de Rutinas (Crons) ----
 async function initScheduler() {
   await waitForPostgres()
 
   // 0. Limpieza de tareas interrumpidas (Solo al arrancar el scheduler)
   await resumeInterruptedTasks()
+
+  // 0.1. Verificación retroactiva de estadísticas diarias (últimos 7 días)
+  await checkAndRecoverMissingStats()
 
   // Verificación periódica de inactividad de nodos y eventos (cada 15s)
   setInterval(checkRainOrphanTimeout, 60_000)

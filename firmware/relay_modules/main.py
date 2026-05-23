@@ -17,18 +17,18 @@ from micropython import const
 
 # ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
-DEBUG = True
+DEBUG = False
 
 # ---- Configuración MQTT (const() para ahorro de RAM) ----
 # El broker esperará ~1.5x este valor antes de desconectar al cliente.
 MQTT_KEEPALIVE       = const(60) # ~1.5x = 90 seg
 # Intervalo para enviar pings de 'keepalive' al broker MQTT.
-MQTT_PING_INTERVAL   = const(29) # ~keepalive/2
+MQTT_PING_INTERVAL   = const(25) # seg (garantiza 3 pings en 90s con check de 5s)
 # Intervalo para revisar mensajes MQTT entrantes.
-MQTT_CHECK_INTERVAL  = const(1)  # seg
+MQTT_CHECK_INTERVAL  = const(10)  # seg
 # Timeout para operaciones normales (check_msg, ping, publish)
 # Optimizado para fallar rápido y reintentar.
-MQTT_SOCKET_TIMEOUT  = const(45) # seg (operación normal)
+MQTT_SOCKET_TIMEOUT  = const(45) # seg
 # tiempo máximo que el cliente esperará para que se complete un intercambio completo de mensajes MQTT(QoS) 1
 # [WDT Safety]: Debe ser MENOR que el Watchdog de Hardware (125s)
 MQTT_MESSAGE_TIMEOUT = const(90) # seg
@@ -1426,6 +1426,8 @@ async def mqtt_connector_task(client_id):
     
     # Contador de errores de conexiones consecutivas
     consecutive_mqtt_failures = 0
+    # Contador de errores de heartbeat consecutivos
+    heartbeat_failures = 0
 
     while True:
         # Esperamos a que el WiFi esté conectado
@@ -1615,22 +1617,17 @@ async def mqtt_connector_task(client_id):
                 # Solicitar reset de red asíncrono coordinado para evitar colisiones
                 wifi_reset_event.set()
 
-                # ---- Backoff Adaptativo ----
-                if consecutive_mqtt_failures >= 3:
-                    # Backoff progresivo: 30s, 60s, 120s (cap)
-                    wait_time = min(30 * (2 ** (consecutive_mqtt_failures - 3)), 120)
-                    if DEBUG:
-                        print(f"⚠️  {Colors.YELLOW}Backoff:{Colors.RESET} {consecutive_mqtt_failures} fallos seguidos.")
-                        print(f"    └─ Esperando {wait_time}s para liberar RAM y estabilizar red.")
-                    
-                    collect()
-                    await asyncio.sleep(wait_time)
-                    # Esperamos pasivamente a que wifi_coro restablezca la conexión
-                    while wlan is None or not wlan.isconnected():
-                        await asyncio.sleep(1)
-                else:
-                    # Backoff estándar (suficiente para que LwIP limpie TIME_WAIT)
-                    await asyncio.sleep(60)
+                # ---- Backoff Adaptativo Unificado ----
+                wait_time = min(30 * consecutive_mqtt_failures, 120)
+                if DEBUG:
+                    print(f"⚠️  {Colors.YELLOW}Backoff:{Colors.RESET} {consecutive_mqtt_failures} fallos de conexión seguidos.")
+                    print(f"    └─ Esperando {wait_time}s para liberar RAM y estabilizar red.")
+                
+                collect()
+                await asyncio.sleep(wait_time)
+                # Esperamos pasivamente a que wifi_coro restablezca la conexión
+                while wlan is None or not wlan.isconnected():
+                    await asyncio.sleep(1)
                 continue
 
         # 🔄 Gestionamos la Conexión Activa
@@ -1652,11 +1649,12 @@ async def mqtt_connector_task(client_id):
                         # [Escudo de Concurrencia]: Validamos objeto y socket tras la espera del lock.
                         # Otra tarea pudo llamar a force_disconnect_mqtt() mientras esperábamos.
                         if client and getattr(client, 'sock', None):
-                            # Revisamos si hay mensajes entrantes
-                            # Drenamos la cola MQTT (ráfaga de hasta 15 mensajes)
-                            # umqtt procesa 1 solo msj por llamada. Si se acumulan, PINGRESP se retrasan.
-                            for _ in range(15):
-                                client.check_msg()
+                            # Drenamos la cola MQTT (ráfaga de hasta 10 mensajes)
+                            for _ in range(10):
+                                # Si check_msg() devuelve None (socket vacío), rompemos el loop
+                                # Esto optimiza el uso de CPU activa de ~10ms a <1ms en reposo.
+                                if client.check_msg() is None:
+                                    break
                     finally:
                         mqtt_lock.release()
 
@@ -1670,17 +1668,48 @@ async def mqtt_connector_task(client_id):
                     async with mqtt_lock:
                         # [Escudo de Concurrencia]: Re-validación obligatoria post-await
                         if client and getattr(client, 'sock', None):
-                            client.ping()
-                            # Heartbeat integrado: publicamos "online" en el MISMO lock
-                            # que el ping para eliminar la contención que causaba heartbeat_task.
-                            # El frontend (useDeviceHeartbeat) necesita recibir "online" cada ~30s
-                            # para no declarar al dispositivo como zombie/offline.
-                            # qos=0: Fire-and-forget (idempotente, tolerante a pérdida)
-                            client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=0)
-                            if DEBUG: print(f"{Colors.BLUE}.{Colors.RESET}", end="")
-                            # Actualizar last_cpacket: si podemos ENVIAR, el socket está vivo
-                            client.last_cpacket = now_ms
-                            # Dejamos que check_msg() detecte el PINGRESP real del servidor.
+                            ping_ok = False
+                            publish_ok = False
+                            
+                            # 1. Cooldown inicial para despejar búfer de transmisiones previas
+                            await asyncio.sleep_ms(500)
+                            
+                            # Intento de Ping
+                            try:
+                                if client and getattr(client, 'sock', None):
+                                    client.ping()
+                                    ping_ok = True
+                            except (MQTTException, OSError) as e_ping:
+                                if DEBUG: print(f"\n⚠️  Fallo en Ping: {e_ping}")
+                                
+                            # 2. Cooldown intermedio para dar respiro entre escrituras
+                            await asyncio.sleep_ms(500)
+                            
+                            # Intento de Heartbeat
+                            try:
+                                if client and getattr(client, 'sock', None):
+                                    # Heartbeat integrado: publicamos "online" en el MISMO lock
+                                    # que el ping para eliminar la contención que causaba heartbeat_task.
+                                    # El frontend (useDeviceHeartbeat) necesita recibir "online" cada ~30s
+                                    # para no declarar al dispositivo como zombie/offline.
+                                    # qos=0: Fire-and-forget (idempotente, tolerante a pérdida)
+                                    client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=0)
+                                    if DEBUG: print(f"{Colors.BLUE}.{Colors.RESET}", end="")
+                                    publish_ok = True
+                            except (MQTTException, OSError) as e_pub:
+                                if DEBUG: print(f"\n⚠️  Fallo en Heartbeat: {e_pub}")
+                            
+                            # Si al menos una de las operaciones tuvo éxito, el canal sigue vivo
+                            if ping_ok or publish_ok:
+                                client.last_cpacket = now_ms
+                                heartbeat_failures = 0
+                            else:
+                                heartbeat_failures += 1
+                                # Escalamos al bucle externo tras 2 fallos consecutivos (~58s)
+                                if heartbeat_failures >= 2:
+                                    raise MQTTException("Ping y Heartbeat fallaron.")
+                                    
+                            # Actualizamos el cronómetro para evitar spam
                             last_manual_ping = now_ms
 
                 # Comprobamos si ha pasado demasiado tiempo desde que OÍMOS al broker
@@ -1688,8 +1717,6 @@ async def mqtt_connector_task(client_id):
                 if client and ticks_diff(now_ms, client.last_cpacket) > (MQTT_KEEPALIVE * 1500):
                     # Lanzamos excepción personalizada para ser capturada con prefijo [Zombie]
                     raise MQTTSessionZombie("Inactividad del broker MQTT excedida")
-                
-                await asyncio.sleep(MQTT_CHECK_INTERVAL)
 
             except (MQTTException, OSError) as e:
                 if DEBUG: log_mqtt_exception("Error en Operación MQTT", e)
@@ -1698,8 +1725,13 @@ async def mqtt_connector_task(client_id):
 
                 # Invalidamos el cliente MQTT forzando una reconexión completa.
                 force_disconnect_mqtt()
-                # Backoff mayor (10s) para dar respiro a la red
-                await asyncio.sleep(10)
+                
+                # Escalamos fallos consecutivos para el backoff
+                consecutive_mqtt_failures += 1
+                wait_time = min(30 * consecutive_mqtt_failures, 120)
+                if DEBUG:
+                    print(f"⚠️  Sesión MQTT perdida. Esperando {wait_time}s para liberar RAM y estabilizar red.")
+                await asyncio.sleep(wait_time)
                 continue
 
         # Cede el control al planificador de asyncio
