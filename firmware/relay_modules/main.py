@@ -76,8 +76,7 @@ MQTT_TOPIC_STATE          = const(b"PristinoPlant/Actuator_Controller/irrigation
 # [Rain State]: Estado binario en tiempo real (Raining / Dry) con histéresis.
 MQTT_TOPIC_RAIN_STATE     = const(b"PristinoPlant/Weather_Station/EXTERIOR/rain/state")
 
-# [Rain Measurement]: Envío de fin de evento. Incluye duración (segundos) e intensidad promedio (%).
-MQTT_TOPIC_RAIN_EVENT     = const(b"PristinoPlant/Weather_Station/EXTERIOR/rain/event")
+
 
 # [Exterior Metrics]: Batch de lecturas ambientales (lux, lluvia, etc).
 MQTT_TOPIC_EXTERIOR_METRICS = const(b"PristinoPlant/Weather_Station/EXTERIOR/readings")
@@ -156,11 +155,21 @@ client = None # Cliente  MQTT
 
 
 # ---- Globales de Telemetría & Recuperación ----
-last_rain_raw = None # 🚀 Inicializado en None
-current_rain_state = None # 🚀 Cache global del estado de lluvia para reconexiones MQTT
-RAIN_START_VALUE = const(2600)
-RAIN_STOP_VALUE = const(3200)
+# Frecuencia de monitoreo del sensor de lluvia
+INTERVAL_NORMAL = const(600) # 10 minutos
+INTERVAL_BURST  = const(60)  # 1 minuto
+
+# configuracion de inicio 
+RAIN_START_VALUE  = const(2600) # Mojado (Inicia evento)
+RAIN_STOP_VALUE   = const(3200) # Seco (Finaliza evento)
+RAW_INTENSITY_MIN = const(1700) # 100%
+
+# Oversampling toma 10 muestras cada 50ms = 500ms total
 RAIN_TARGET_SAMPLES = const(10)
+
+last_rain_raw = None # Inicializado en None
+current_rain_state = None # Cache global del estado de lluvia para reconexiones MQTT
+rain_current_interval = INTERVAL_NORMAL # Intervalo actual de chequeo de lluvia (segundos)
 
 # Flag de control para la sincronización del monitoreo de iluminancia (Día/Noche)
 # Si es False, se suspende el muestreo del sensor BH1750 para evitar registros de 0 lux.
@@ -1941,46 +1950,15 @@ async def rain_monitor_task():
     * Intervalos adaptativos: 10 minutos (Vigía) y 1 minuto (Ráfaga).
     * Maquina de Estados Finita con validación de histéresis.
     """
-    global last_rain_raw, current_rain_state
+    global last_rain_raw, current_rain_state, rain_current_interval
 
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
     from utime import time
     from umqtt.simple2 import MQTTException # type: ignore
 
-    RAW_INTENSITY_MIN = 1700 # 100%
-
-    # Tiempos de Configuración
-    INTERVAL_NORMAL = 600 # 10 minutos
-    INTERVAL_BURST  = 60  # 1 minuto
-
-    # [DETECCIÓN CORRECTA DE PARADA]
-    # Umbral mínimo de intensidad para considerar lluvia activa.
-    # Si la intensidad cae por debajo de este valor el sensor está secándose.
-    RAIN_ACTIVE_INTENSITY_THRESHOLD = 20  # < 20% = sensor secándose
-    # Número de ciclos consecutivos con intensidad baja para confirmar parada.
-    # Con INTERVAL_BURST=60s, 3 ciclos = 3 minutos sin lluvia antes de declarar Dry.
-    RAIN_STOP_CONSECUTIVE_LOW = 3
-
-    # [FALLBACK: TIMEOUT DE SEGURIDAD]
-    # Si la intensidad se estanca (sensor húmedo residual), forzamos Dry tras 30 min.
-    RAIN_STALE_TIMEOUT = 1800  # 30 minutos
-
-    # [HEARTBEAT DE SINCRONIZACIÓN]
-    # Republicamos el estado Raining cada 10 min para mantener el sistema sincronizado.
-    RAIN_HEARTBEAT_INTERVAL = 600  # 10 minutos
-
-    current_interval = INTERVAL_NORMAL
     rain_cycle_counter = 0
     rain_publish_failures = 0  # [Tolerancia MQTT-3]: Contador de fallos consecutivos
-
-    # [VARIABLES DE PARADA CORRECTA]
-    rain_consecutive_low = 0    # Ciclos consecutivos con intensidad baja
-    rain_last_intensity  = -1   # Última intensidad promedio registrada (para estabilización)
-
-    # [VARIABLES DE FALLBACK Y HEARTBEAT]
-    rain_stable_since    = 0    # Epoch cuando la intensidad se estancó (para timeout)
-    rain_last_heartbeat  = 0    # Epoch del último heartbeat publicado
 
     # [BANDERA DE REINTENTO]
     rain_state_dirty     = False  # True si hay un cambio de estado sin publicar exitosamente
@@ -1992,8 +1970,6 @@ async def rain_monitor_task():
 
     # ---- Primera Lectura Inmediata (Sincronización de Arranque) ----
     # Leemos el sensor para determinar el estado REAL de lluvia (interno de la FSM).
-    # [Boot Telemetry]: La publicación MQTT del estado de lluvia ya se realizó
-    # en mqtt_connector_task. Aquí solo configuramos el estado interno.
     if rain_sensor_analog is not None:
         try:
             raw = await fetch_rain_raw()
@@ -2005,12 +1981,12 @@ async def rain_monitor_task():
                 if raw < RAIN_START_VALUE:
                     # ---- Sensor confirma lluvia ----
                     current_rain_state = 'Raining'
-                    current_interval = INTERVAL_BURST
+                    rain_current_interval = INTERVAL_BURST
                     if DEBUG: print(f"    └─ Rain Monitor: {Colors.BLUE}Raining{Colors.RESET}")
                 else:
                     # ---- Sensor dice seco ----
                     current_rain_state = 'Dry'
-                    current_interval = INTERVAL_NORMAL
+                    rain_current_interval = INTERVAL_NORMAL
                     if DEBUG: print(f"    └─ Rain Monitor: {Colors.YELLOW}Dry{Colors.RESET}")
 
         except Exception as e:
@@ -2028,7 +2004,7 @@ async def rain_monitor_task():
 
             if raw is None:
                 if DEBUG: print(f"\n⚠️  Lluvia: No hay muestras válidas (0/{RAIN_TARGET_SAMPLES})")
-                await asyncio.sleep(current_interval)
+                await asyncio.sleep(rain_current_interval)
                 continue
 
             # Actualizamos caché para Auditoría (get_rain_sample)
@@ -2038,10 +2014,10 @@ async def rain_monitor_task():
             if current_rain_state is None:
                 if raw < RAIN_START_VALUE:
                     current_rain_state = 'Raining'
-                    current_interval = INTERVAL_BURST
+                    rain_current_interval = INTERVAL_BURST
                 else:
                     current_rain_state = 'Dry'
-                    current_interval = INTERVAL_NORMAL
+                    rain_current_interval = INTERVAL_NORMAL
 
             # Cálculo de Intensidad
             clamped_raw = max(RAW_INTENSITY_MIN, min(raw, RAIN_STOP_VALUE))
@@ -2051,7 +2027,7 @@ async def rain_monitor_task():
             # ---- ESTADO A: Inicia la lluvia ----
             if raw < RAIN_START_VALUE and current_rain_state == 'Dry':
                 current_rain_state = 'Raining'
-                current_interval = INTERVAL_BURST
+                rain_current_interval = INTERVAL_BURST
                 rain_cycle_counter = 0
 
                 # Publicar estado 'Raining' por MQTT para que Ingest y Scheduler lo sepan
@@ -2070,18 +2046,12 @@ async def rain_monitor_task():
 
                 if DEBUG: print(f"\n🌧️  Lluvia INICIADA (Raw: {raw}) | Modo Ráfaga: {INTERVAL_BURST}s")
 
-            # ---- ESTADO B: Lloviendo (Acumulando + Detección de Parada) ----
+            # ---- ESTADO B: Lloviendo (Acumulando + Envío de lotes intermedios) ----
             elif current_rain_state == 'Raining':
-                now_ts = time()
-
                 # Siempre acumulamos en el batch si el sensor detecta humedad
                 if raw <= RAIN_STOP_VALUE:
                     rain_Batch.append(intensity)
                     rain_cycle_counter += 1
-
-                # El heartbeat redundante ha sido eliminado.
-                # El Scheduler es ahora la autoridad para mantener el estado del evento.
-                pass
 
                 # [REINTENTO DE ESTADO SUCIO]
                 if rain_state_dirty and rain_dirty_payload:
@@ -2100,11 +2070,9 @@ async def rain_monitor_task():
                 if rain_cycle_counter > 0 and rain_cycle_counter % 10 == 0:
                     if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
                         try:
-                            # [Optimización RAM - Zero-Dict Manual JSON]: Construcción directa de JSON en string usando Generator Expression. Evita instanciar dicts o usar ujson.dumps, previniendo picos en el Heap.
                             data_str = ",".join('[%d,{"rain_intensity":%s}]' % (it[0], str(it[1])) for it in rain_Batch.get_all())
                             payload_batch = '{"data":[%s]}' % data_str
                             async with mqtt_lock:
-                                # [Escudo de Concurrencia]: Validación post-await
                                 if client and getattr(client, 'sock', None):
                                     client.publish(MQTT_TOPIC_EXTERIOR_METRICS, payload_batch, qos=0)
                                     rain_Batch.clear()
@@ -2114,91 +2082,50 @@ async def rain_monitor_task():
                             force_disconnect_mqtt()
                             await check_critical_mqtt_errors(e)
 
-                # ================================================================
-                # [LÓGICA DE DETECCIÓN DE PARADA - CORRECCIÓN PRINCIPAL]
-                # ================================================================
-                # MÉTODO 1 (PRIMARIO): El sensor ADC supera el umbral de seco (3200).
-                # Este es el caso ideal: la plataforma del sensor se secó completamente.
-                sensor_says_dry = raw > RAIN_STOP_VALUE
+            # ---- ESTADO C: Termina la lluvia ----
+            if raw > RAIN_STOP_VALUE and current_rain_state == 'Raining':
+                current_rain_state = 'Dry'
+                rain_current_interval = INTERVAL_NORMAL
+                rain_cycle_counter = 0
 
-                # MÉTODO 2 (INTENSIDAD BAJA): La intensidad cae bajo el umbral mínimo activo.
-                # Esto detecta cuando la lluvia se detiene pero el sensor aún está húmedo (< 20%).
-                # Requerimos RAIN_STOP_CONSECUTIVE_LOW ciclos consecutivos para evitar falsos positivos.
-                if intensity < RAIN_ACTIVE_INTENSITY_THRESHOLD:
-                    rain_consecutive_low += 1
-                else:
-                    # Si la intensidad sube de nuevo, resetear el contador
-                    rain_consecutive_low = 0
-                    rain_stable_since = 0  # Resetear también el timer de estabilización
+                # Sincronización MQTT con validación de socket
+                if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
+                    dry_success = False
+                    e_dry = None
+                    try:
+                        payload_dry = '{"state":"Dry","timestamp":%d}' % time()
+                        async with mqtt_lock:
+                            if client and getattr(client, 'sock', None):
+                                client.publish(MQTT_TOPIC_RAIN_STATE, payload_dry, retain=False, qos=0)
+                        dry_success = True
+                        rain_state_dirty = False
+                        rain_dirty_payload = None
+                    except Exception as e:
+                        if DEBUG: print(f"⚠️  Error publicando estado Dry: {e}")
+                        rain_state_dirty = True
+                        rain_dirty_payload = '{"state":"Dry","timestamp":%d}' % time()
+                        e_dry = e
 
-                intensity_says_dry = rain_consecutive_low >= RAIN_STOP_CONSECUTIVE_LOW
-
-                # MÉTODO 3 (FALLBACK): La intensidad se estanca durante más de RAIN_STALE_TIMEOUT.
-                # Detecta el caso del sensor húmedo por condensación (intensidad alta pero sin lluvia real).
-                # Solo se activa si la intensidad actual es similar a la del ciclo anterior (±10 pts).
-                if rain_last_intensity >= 0 and abs(intensity - rain_last_intensity) <= 10:
-                    if rain_stable_since == 0:
-                        rain_stable_since = now_ts
-                elif rain_stable_since > 0:
-                    rain_stable_since = 0  # Intensidad cambió, sensor aún activo
-
-                stale_timeout_triggered = (rain_stable_since > 0 and
-                                           now_ts - rain_stable_since >= RAIN_STALE_TIMEOUT)
-
-                rain_last_intensity = intensity  # Actualizamos para el próximo ciclo
-
-                # ---- ESTADO C: Termina la lluvia (cualquier método) ----
-                if sensor_says_dry or intensity_says_dry or stale_timeout_triggered:
-
-                    # Motivo de la transición (para debug)
-                    if DEBUG:
-                        if sensor_says_dry:
-                            stop_reason = f"ADC seco (raw:{raw} > {RAIN_STOP_VALUE})"
-                        elif intensity_says_dry:
-                            stop_reason = f"Intensidad baja {RAIN_STOP_CONSECUTIVE_LOW} ciclos ({intensity}%)"
-                        else:
-                            stale_min = (now_ts - rain_stable_since) // 60
-                            stop_reason = f"Timeout de estabilización ({stale_min} min sin variación)"
-
-                    current_rain_state = 'Dry'
-                    current_interval = INTERVAL_NORMAL
-                    rain_consecutive_low = 0
-                    rain_stable_since = 0
-                    rain_cycle_counter = 0
-
-                    # Sincronización MQTT con validación de socket
-                    if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
+                    data_items = rain_Batch.get_all()
+                    if data_items:
+                        await asyncio.sleep_ms(500)
                         try:
-                            data_items = rain_Batch.get_all()
-                            payload_batch = None
-                            if data_items:
-                                # [Optimización RAM - Zero-Dict Manual JSON]: Construcción directa de JSON en string usando Generator Expression. Evita instanciar dicts o usar ujson.dumps, previniendo picos en el Heap.
-                                data_str = ",".join('[%d,{"rain_intensity":%s}]' % (it[0], str(it[1])) for it in data_items)
-                                payload_batch = '{"data":[%s]}' % data_str
-                            
-                            # 🔒 Pedimos permiso para usar el socket
-                            payload_dry = '{"state":"Dry","timestamp":%d}' % time()
+                            data_str = ",".join('[%d,{"rain_intensity":%s}]' % (it[0], str(it[1])) for it in data_items)
+                            payload_batch = '{"data":[%s]}' % data_str
                             async with mqtt_lock:
-                                # [Escudo de Concurrencia]: Validación post-await
                                 if client and getattr(client, 'sock', None):
-                                    client.publish(MQTT_TOPIC_RAIN_STATE, payload_dry, retain=False, qos=0)
-                                    # Enviamos el último lote de ráfaga
-                                    if payload_batch:
-                                        await asyncio.sleep_ms(500)
-                                        client.publish(MQTT_TOPIC_EXTERIOR_METRICS, payload_batch, qos=0)
-
-                            rain_state_dirty = False
-                            rain_dirty_payload = None
+                                    client.publish(MQTT_TOPIC_EXTERIOR_METRICS, payload_batch, qos=0)
                             rain_Batch.clear()
                         except Exception as e:
-                            if DEBUG: print(f"⚠️  Error finalizando Lluvia: {e}")
-                            # [BANDERA DE REINTENTO]: Guardamos el estado para republicar
-                            rain_state_dirty = True
-                            rain_dirty_payload = '{"state":"Dry","timestamp":%d}' % time()
-                            force_disconnect_mqtt()
-                            await check_critical_mqtt_errors(e)
+                            if DEBUG: print(f"⚠️  Error publicando lote final de ráfaga: {e}")
+                            if e_dry is None:
+                                e_dry = e
 
-                    if DEBUG: print(f"\n⛅  Lluvia TERMINADA [{stop_reason}] | Modo Vigía: {INTERVAL_NORMAL}s")
+                    if not dry_success and e_dry is not None:
+                        force_disconnect_mqtt()
+                        await check_critical_mqtt_errors(e_dry)
+
+                if DEBUG: print(f"\n⛅  Lluvia TERMINADA | Modo Vigía: {rain_current_interval}s")
 
         except (MQTTException, OSError) as e:
             rain_publish_failures += 1
@@ -2213,7 +2140,7 @@ async def rain_monitor_task():
             if DEBUG: print(f"\n⚠️  Error en rain_monitor_task(): {e}")
         
         # Pausa pura de CPU (Sin spin-wait)
-        await asyncio.sleep(current_interval)
+        await asyncio.sleep(rain_current_interval)
 
 # ---- CORRUTINA: Gestión del Sensor de Iluminancia (BH1750) ----
 async def illuminance_monitor_task():

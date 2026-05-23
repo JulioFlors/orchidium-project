@@ -115,6 +115,11 @@ Formato: `[Emoji] [tipo] ([área]): [Título Conciso]`
        const localHour = (tDate.getUTCHours() - 4 + 24) % 24
        ```
 
+4. **Manejo de Epochs y Saneamiento de Timestamps (MicroPython vs Unix)**:
+   - **Diferencia de Épocas**: El framework MicroPython en microcontroladores (como el ESP32) calcula su tiempo epoch basado en el año **2000-01-01**, mientras que los sistemas backend y bases de datos usan el epoch Unix estándar de **1970-01-01**.
+   - **Corrección de Época**: Si un timestamp recibido del microcontrolador es menor a `1000000000` (1 millardo) de segundos, corresponde a la época MicroPython. Se debe sumar exactamente `946684800` segundos (30 años) para normalizarlo al epoch Unix antes de convertirlo a fecha o guardarlo en base de datos.
+   - **Validación de Desfases (Sanity Check)**: Todo timestamp obtenido del hardware debe ser validado contra la hora actual del servidor. Si el timestamp corregido es anterior al año 2025 o difiere del tiempo actual del servidor por más de 24 horas, se debe descartar y realizar un fallback automático a la hora actual del servidor (`new Date()`). Esto evita corromper registros históricos con fechas erróneas (como el año 1996 o 2000) debido a la desincronización de hardware o falta de NTP.
+
 ## Reglas de Base de Datos (Prisma) — La Biblia
 
 > [!CAUTION]

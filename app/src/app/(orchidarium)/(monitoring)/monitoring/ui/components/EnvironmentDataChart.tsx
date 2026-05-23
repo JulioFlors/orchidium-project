@@ -25,6 +25,7 @@ interface EnvironmentDataChartProps {
   range: string
   onRangeChange: (range: string) => void
   chartType?: 'area' | 'bar'
+  allowedRanges?: string[]
 }
 
 interface TooltipItem {
@@ -53,12 +54,14 @@ function getMonochromaticScale(hex: string): { light: string; mid: string; dark:
 
 /**
  * Formatea valor numérico con 1 decimal. Si >= 1000, usa formato "Xk".
+ * Si la unidad es 'min' y es un valor entero, evita mostrar decimales (.0).
  */
-function formatTooltipValue(val: unknown): string {
+function formatTooltipValue(val: unknown, unit?: string): string {
   const num = Number(val)
 
   if (isNaN(num)) return '--'
   if (num >= 1000) return `${(num / 1000).toFixed(1)}k`
+  if (unit === 'min' && Number.isInteger(num)) return num.toString()
 
   return num.toFixed(1)
 }
@@ -91,9 +94,9 @@ function CustomTooltip({
 
     // Intentamos obtener min/max si existen
     const hasStats = data[`min_${dataKey}`] !== undefined && data[`max_${dataKey}`] !== undefined
-    const avgValue = formatTooltipValue(data[dataKey])
-    const minValue = formatTooltipValue(data[`min_${dataKey}`])
-    const maxValue = formatTooltipValue(data[`max_${dataKey}`])
+    const avgValue = formatTooltipValue(data[dataKey], unit)
+    const minValue = formatTooltipValue(data[`min_${dataKey}`], unit)
+    const maxValue = formatTooltipValue(data[`max_${dataKey}`], unit)
 
     // Escala monocromática basada en el color de la métrica
     const scale = getMonochromaticScale(color)
@@ -174,7 +177,7 @@ function CustomTooltip({
           </div>
         ) : (
           <span className="font-semibold" style={{ color }}>
-            {title.replace('Histórico ', '')}: {formatTooltipValue(data[dataKey])} {unit}
+            {title.replace('Histórico ', '')}: {formatTooltipValue(data[dataKey], unit)} {unit}
           </span>
         )}
 
@@ -218,6 +221,7 @@ export function EnvironmentDataChart({
   range,
   onRangeChange,
   chartType = 'area',
+  allowedRanges,
 }: EnvironmentDataChartProps) {
   const getTimeFormatter = (r: string) => {
     const opts: Intl.DateTimeFormatOptions = { timeZone: 'America/Caracas' }
@@ -319,14 +323,16 @@ export function EnvironmentDataChart({
 
   const formatStat = (val: number) => {
     if (val >= 1000) return `${(val / 1000).toFixed(1)}k`
+    if (unit === 'min' && Number.isInteger(val)) return val.toString()
 
     return val.toFixed(1)
   }
 
   const rangeOptions =
-    dataKey === 'illuminance'
+    allowedRanges ||
+    (dataKey === 'illuminance'
       ? ['5-19h', '8-16h', '1D', '7d', '30d', 'all']
-      : ['12h', '24h', '7d', '30d', 'all']
+      : ['12h', '24h', '7d', '30d', 'all'])
 
   return (
     <div

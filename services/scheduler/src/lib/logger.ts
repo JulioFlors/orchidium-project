@@ -42,7 +42,7 @@ export const Logger = {
   // ---- Generales ----
 
   /** Información general del sistema. */
-  info: (msg: string) => console.log(formatLog('📡', 'INFO', colors.blue, msg)),
+  info: (msg: string, icon = '📡') => console.log(formatLog(icon, 'INFO', colors.blue, msg)),
 
   /** Operación completada exitosamente. */
   success: (msg: string) => console.log(formatLog('✅', 'DONE', colors.green, msg)),
@@ -91,16 +91,29 @@ export const Logger = {
 
   /**
    * Estado de conectividad del nodo actuador.
-   * @param status ONLINE | OFFLINE | REBOOT
+   * @param status ONLINE | OFFLINE | REBOOT o nombre de un nodo al conectarse.
    * @param origin Fuente del cambio de estado (BROKER, NODE, SCHEDULER)
    */
-  node: (status: 'ONLINE' | 'OFFLINE' | 'REBOOT', origin?: string) => {
-    const icon = status === 'ONLINE' ? '🟢' : status === 'REBOOT' ? '🔄' : '🔴'
-    const color =
-      status === 'ONLINE' ? colors.green : status === 'REBOOT' ? colors.blue : colors.red
-    const originStr = origin ? ` ${colors.dim}[${origin}]${colors.reset}` : ''
+  node: (status: string, origin?: string) => {
+    let icon = '📡'
+    let color = colors.blue
+    let msg = status
 
-    console.log(formatLog(icon, 'NODE', color, `${status}${originStr}`))
+    if (status === 'ONLINE') {
+      icon = '🟢'
+      color = colors.green
+      msg = `${status}${origin ? ` ${colors.dim}[${origin}]${colors.reset}` : ''}`
+    } else if (status === 'REBOOT') {
+      icon = '🔄'
+      color = colors.blue
+      msg = `${status}${origin ? ` ${colors.dim}[${origin}]${colors.reset}` : ''}`
+    } else if (status === 'OFFLINE') {
+      icon = '🔴'
+      color = colors.red
+      msg = `${status}${origin ? ` ${colors.dim}[${origin}]${colors.reset}` : ''}`
+    }
+
+    console.log(formatLog(icon, 'NODE', color, msg))
   },
 
   // ---- Dominio: MQTT ----

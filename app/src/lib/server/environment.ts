@@ -56,10 +56,48 @@ function formatTimeLabel(raw: unknown): string {
 }
 
 export async function getSensorDataInternal(range: string, zone: ZoneType, metric?: string | null) {
-  const availableFields = ZoneMetrics[zone as ZoneType] || ZoneMetrics[ZoneType.ZONA_A] || []
+  const botanicFields = ['dli', 'dif', 'vpd_avg', 'high_humidity_hours']
+  const availableFields = [
+    ...(ZoneMetrics[zone as ZoneType] || ZoneMetrics[ZoneType.ZONA_A] || []),
+    ...botanicFields,
+  ]
   const fieldsToQuery = metric ? availableFields.filter((f) => f === metric) : availableFields
 
   if (fieldsToQuery.length === 0 && metric) return []
+
+  if (range === 'yesterday') {
+    try {
+      const latestStat = await prisma.dailyEnvironmentStat.findFirst({
+        where: {
+          zone: zone as ZoneType,
+        },
+        orderBy: {
+          date: 'desc',
+        },
+      })
+
+      if (latestStat) {
+        const yesterdayKPIs = {
+          dli: latestStat.dli != null ? Number(latestStat.dli.toFixed(2)) : null,
+          vpdAvg: latestStat.vpdAvg != null ? Number(latestStat.vpdAvg.toFixed(3)) : null,
+          dif: latestStat.dif != null ? Number(latestStat.dif.toFixed(2)) : null,
+          highHumidityHours:
+            latestStat.highHumidityHours != null
+              ? Number(latestStat.highHumidityHours.toFixed(2))
+              : null,
+          isLive: false,
+        }
+
+        return { data: [], liveKPIs: yesterdayKPIs, lastRainState: null }
+      }
+
+      return { data: [], liveKPIs: null, lastRainState: null }
+    } catch (error) {
+      Logger.error(`Error al obtener estadísticas de ayer:`, error)
+
+      return { data: [], liveKPIs: null, lastRainState: null }
+    }
+  }
 
   const now = new Date()
   const VET_OFFSET = 4 * 3600000

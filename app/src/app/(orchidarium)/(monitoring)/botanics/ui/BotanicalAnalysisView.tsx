@@ -17,6 +17,7 @@ interface BotanicalDataResponse {
     dli: number | null
     vpdAvg: number | null
     dif: number | null
+    highHumidityHours?: number | null
     isLive: boolean
   } | null
 }
@@ -36,21 +37,23 @@ const fetcher = async (url: string) => {
 export function BotanicalAnalysisView() {
   const [zone, setZone] = useState<string>(ZoneType.EXTERIOR)
   const [selectedMetric, setSelectedMetric] = useState<BotanicalMetricType | null>(null)
-
-  // Rango estático para los datos del gráfico: 30d para análisis botánico.
-  const chartRange = '30d'
+  const [chartRange, setChartRange] = useState<string>('30d')
 
   const { error: notifyError } = useToast()
 
-  // 1. Consulta para "Current Status" / Tarjetas (Rango fijo 24h o 12h, usamos 24h para métricas diarias)
+  // 1. Consulta para "Current Status" / Tarjetas (Consumimos estadísticas procesadas del día anterior)
   const {
     data: statusResponse,
     error: statusError,
     isLoading: isStatusLoading,
-  } = useSWR<BotanicalDataResponse>(`/api/environment/history?range=24h&zone=${zone}`, fetcher, {
-    refreshInterval: 60000 * 60, // Refrescar cada hora, no cambia a menudo
-    revalidateOnFocus: false,
-  })
+  } = useSWR<BotanicalDataResponse>(
+    `/api/environment/history?range=yesterday&zone=${zone}`,
+    fetcher,
+    {
+      refreshInterval: 60000 * 60, // Refrescar cada hora, no cambia a menudo
+      revalidateOnFocus: false,
+    },
+  )
 
   const liveKPIs = statusResponse?.liveKPIs || null
 
@@ -60,7 +63,9 @@ export function BotanicalAnalysisView() {
     error: chartError,
     isLoading: isChartLoading,
   } = useSWR<{ data: Record<string, unknown>[] }>(
-    selectedMetric ? `/api/environment/history?range=${chartRange}&zone=${zone}` : null,
+    selectedMetric
+      ? `/api/environment/history?range=${chartRange}&zone=${zone}&metric=${selectedMetric}`
+      : null,
     fetcher,
     {
       revalidateOnFocus: false,
@@ -219,8 +224,8 @@ export function BotanicalAnalysisView() {
           />
 
           <EnvironmentCard
-            hasData
             color="red"
+            hasData={!!liveKPIs && liveKPIs.highHumidityHours !== null}
             icon={<Moon className="h-6 w-6" />}
             isActive={selectedMetric === 'high_humidity_hours'}
             isLoading={isStatusLoading}
@@ -229,7 +234,11 @@ export function BotanicalAnalysisView() {
             title="Humedad Crítica"
             trend="stable"
             unit="h (>85%)"
-            value="--" // Este dato no se incluye en liveKPIs por defecto, lo ajustaremos si es necesario o podemos poner '--' si no está en la API.
+            value={
+              liveKPIs?.highHumidityHours !== null && liveKPIs?.highHumidityHours !== undefined
+                ? liveKPIs.highHumidityHours.toFixed(1)
+                : '--'
+            }
             onClick={() => setSelectedMetric('high_humidity_hours')}
           />
         </div>
@@ -255,8 +264,9 @@ export function BotanicalAnalysisView() {
             <EnvironmentDataChart
               data={normalizedChartData}
               {...chartProps}
+              allowedRanges={['7d', '30d', 'all']}
               range={chartRange}
-              onRangeChange={() => {}} // No hacemos range change por ahora, fijo en 30d
+              onRangeChange={setChartRange}
             />
           ) : null}
         </div>

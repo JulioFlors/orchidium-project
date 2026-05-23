@@ -32,6 +32,7 @@ import { influxClient } from './lib/influx'
 // independientes (illuminance, temperature, humidity) que llegan como mensajes
 // separados al mismo tópico EXTERIOR/readings.
 interface BootTelemetryAccumulator {
+  nodeName: string
   lux: number | null
   temp: number | null
   hum: number | null
@@ -132,6 +133,7 @@ let isRainOverridden = false
 let rainStartedAt: number | null = null
 let lastVetoAt: number | null = null
 let isWaitingForBaselineFallback = false
+let lastSentRainInterval: 'INTERVAL_BURST' | 'INTERVAL_NORMAL' | null = null
 
 /**
  * Devuelve el estado actual de lluvia considerando el veto por humedad residual.
@@ -203,17 +205,14 @@ async function closeRainEvent(reason: string, endTime: Date = new Date()) {
     let peakIntensity: number | null = null
 
     try {
-      // Optimizamos la consulta:
-      // 1. Añadimos un límite razonable (no necesitamos 10,000 puntos para un promedio).
-      // 2. Especificamos que si el rango es enorme, Influx debe agrupar/muestrear.
+      // SQL de InfluxDB v3 (DataFusion) requiere AVG en lugar de MEAN.
+      // Calculamos agregación directa global para todo el rango del evento (sin GROUP BY).
       const intensityQuery = `
-        SELECT MEAN("rain_intensity") as avg_int, MAX("rain_intensity") as peak_int 
+        SELECT AVG("rain_intensity") as avg_int, MAX("rain_intensity") as peak_int 
         FROM "environment_metrics" 
         WHERE "zone" = 'EXTERIOR' 
           AND time >= '${event.startedAt.toISOString()}' 
           AND time <= '${endTime.toISOString()}'
-        GROUP BY time(1m) 
-        LIMIT 1000
       `
       const stream = influxClient.query(intensityQuery)
 
@@ -264,27 +263,42 @@ function flushBootLog() {
     clearTimeout(bootAccumulator.timer)
   }
 
-  // Determinar la línea de iluminancia de manera condicional según el muestreo nocturno
-  let luxLine: string
+  const nodeName = bootAccumulator.nodeName
+
+  // Imprimir conexión del nodo
+  Logger.node(nodeName)
+
+  // 1. Iluminancia
   if (bootAccumulator.lux !== null) {
-    luxLine = `                                        ├─ ☀️  Iluminancia: ${colors.yellow}${bootAccumulator.lux.toFixed(0)} lx${colors.reset}`
+    Logger.info(
+      `Iluminancia: ${colors.yellow}${bootAccumulator.lux.toFixed(0)} lx${colors.reset}`,
+      '☀️',
+    )
   } else if (!isLuxSamplingActive()) {
-    luxLine = `                                        ├─ 🌙  Iluminancia: ${colors.dim}Muestreo Suspendido (Anochecer)${colors.reset}`
+    Logger.info(`Iluminancia: ${colors.dim}Muestreo Suspendido (Anochecer)${colors.reset}`, '🌙')
   } else {
-    luxLine = `                                        ├─ ⚠️  Iluminancia: ${colors.red}No detectada en batch inicial${colors.reset}`
+    Logger.info(`Iluminancia: ${colors.red}No detectada en batch inicial${colors.reset}`, '⚠️')
   }
 
-  // Garantizar orden estricto: Iluminancia -> Clima -> Lluvia
-  const logLines = [
-    '📡 Weather Station Exterior (Batch Inicial Cargado):',
-    luxLine,
-    bootAccumulator.temp !== null && bootAccumulator.hum !== null
-      ? `                                        ├─ 🌡️  Clima: ${colors.yellow}${bootAccumulator.temp.toFixed(1)}°C${colors.reset} / ${colors.blue}${bootAccumulator.hum.toFixed(1)}%${colors.reset}`
-      : `                                        ├─ ⚠️  Clima: ${colors.red}Fallo de inicialización en hardware detectado${colors.reset}`,
-    `                                        └─ 🌧️  Sensor Lluvia: ${lastRainState === 'Raining' ? colors.blue : colors.yellow}${lastRainState}${colors.reset}`,
-  ]
+  // 2. Clima
+  if (bootAccumulator.temp !== null && bootAccumulator.hum !== null) {
+    Logger.info(
+      `Clima: ${colors.yellow}${bootAccumulator.temp.toFixed(1)}°C${colors.reset} / ${colors.blue}${bootAccumulator.hum.toFixed(1)}%${colors.reset}`,
+      '🌡️',
+    )
+  } else {
+    Logger.info(
+      `Clima: ${colors.red}Fallo de inicialización en hardware detectado${colors.reset}`,
+      '⚠️',
+    )
+  }
 
-  Logger.info(logLines.join('\n'))
+  // 3. Sensor de Lluvia
+  Logger.info(
+    `Sensor Lluvia: ${lastRainState === 'Raining' ? colors.blue : colors.yellow}${lastRainState}${colors.reset}`,
+    '🌧️',
+  )
+
   bootAccumulator = null
 
   if (!isSystemReady) {
@@ -382,6 +396,7 @@ function setupMqttHandlers() {
         isSystemReady = false
         if (bootAccumulator?.timer) clearTimeout(bootAccumulator.timer)
         bootAccumulator = {
+          nodeName: 'Weather Station Exterior',
           lux: null,
           temp: null,
           hum: null,
@@ -400,6 +415,7 @@ function setupMqttHandlers() {
       if (topic === 'PristinoPlant/Weather_Station/ZONA_A/status') {
         if (message === 'online') {
           emaManager.setStabilizing()
+          Logger.node('Weather Station Orquideario')
           // Registrar conexión en logs de dispositivo
           await prisma.deviceLog.create({
             data: {
@@ -412,6 +428,7 @@ function setupMqttHandlers() {
           syncNodeSampling()
         } else if (message === 'lwt_disconnect' || message === 'offline') {
           emaManager.setOffline()
+          Logger.node('OFFLINE', message === 'lwt_disconnect' ? 'BROKER' : 'NODE')
           await prisma.deviceLog.create({
             data: {
               device: 'Weather_Station_ZONA_A',
@@ -612,6 +629,37 @@ function setupMqttHandlers() {
             illuminancePresent = true
             illuminanceAlive = true
             lastLuxBatchAt = Date.now()
+
+            if (lux !== null) {
+              const now = new Date()
+              const caracasHour = parseInt(
+                new Intl.DateTimeFormat('en-US', {
+                  timeZone: 'America/Caracas',
+                  hour: 'numeric',
+                  hour12: false,
+                }).format(now),
+              )
+
+              let targetInterval: 'INTERVAL_BURST' | 'INTERVAL_NORMAL' = 'INTERVAL_NORMAL'
+
+              if (caracasHour >= 8 && caracasHour < 16) {
+                if (lux <= 10000) {
+                  targetInterval = 'INTERVAL_BURST' // Ráfaga a 1 min si está oscuro
+                } else {
+                  targetInterval = 'INTERVAL_NORMAL' // Restablecer a 10 min si está claro
+                }
+              } else {
+                targetInterval = 'INTERVAL_NORMAL' // Fuera de ventana 8am-4pm, siempre 10 min
+              }
+
+              if (lastSentRainInterval !== targetInterval) {
+                lastSentRainInterval = targetInterval
+                Logger.rain(
+                  `Ajustando intervalo de chequeo de lluvia a ${targetInterval === 'INTERVAL_BURST' ? '1 minuto (Ráfaga)' : '10 minutos (Vigía)'} por iluminancia (${lux.toFixed(0)} lx) a las ${caracasHour}h Caracas.`,
+                )
+                executeSystemCommand(targetInterval, true)
+              }
+            }
           }
 
           // 🚀 [PRESERVADO]: Mecanismo reactivo de acumulación post-boot.
@@ -744,10 +792,31 @@ function setupMqttHandlers() {
 
         if (message.startsWith('{')) {
           try {
-            const parsed = JSON.parse(message)
+            interface RainPayload {
+              state?: string
+              timestamp?: number
+            }
+            const parsed = JSON.parse(message) as RainPayload
 
             state = parsed.state || message
-            if (parsed.timestamp) rainTimestamp = new Date(parsed.timestamp * 1000)
+            if (parsed.timestamp) {
+              const rawTimestamp = Number(parsed.timestamp)
+              // Corrección de época: MicroPython (2000) vs Unix (1970)
+              const unixTimestamp =
+                rawTimestamp < 1000000000 ? rawTimestamp + 946684800 : rawTimestamp
+
+              const ts = unixTimestamp * 1000
+              const diffMs = Math.abs(Date.now() - ts)
+
+              // Si el timestamp corregido difiere por más de 24 horas o es anterior a 2025, se descarta.
+              if (diffMs < 24 * 60 * 60 * 1000 && unixTimestamp > 1735689600) {
+                rainTimestamp = new Date(ts)
+              } else {
+                Logger.warn(
+                  `Timestamp de lluvia desincronizado del firmware (${new Date(ts).toISOString()}). Usando hora del servidor.`,
+                )
+              }
+            }
           } catch {
             /* ignore */
           }
