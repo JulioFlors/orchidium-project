@@ -75,8 +75,8 @@ MQTT_TOPIC_STATE          = const(b"PristinoPlant/Actuator_Controller/irrigation
 # [Rain State]: Estado binario en tiempo real (Raining / Dry) con histéresis.
 MQTT_TOPIC_RAIN_STATE     = const(b"PristinoPlant/Weather_Station/EXTERIOR/rain/state")
 
-# [EXTERIOR Metrics]: Batch de lecturas ambientales (lux, lluvia, etc).
-MQTT_TOPIC_METRICS = const(b"PristinoPlant/Weather_Station/EXTERIOR/readings")
+# [Exterior Metrics]: Batch de lecturas ambientales (lux, lluvia, etc).
+MQTT_TOPIC_EXTERIOR_METRICS = const(b"PristinoPlant/Weather_Station/EXTERIOR/readings")
 
 # ---- Parámetros LWT (Last Will and Testament) ----
 LWT_TOPIC = MQTT_TOPIC_STATUS
@@ -144,6 +144,12 @@ wifi_reset_event = asyncio.Event()
 climate_wake_event = asyncio.Event()
 bh1750_wake_event = asyncio.Event()
 
+# Flag para controlar la estilización del log de la primera sincronización tras el arranque
+IS_BOOT_SYNCING = True
+
+# Control de primer arranque
+IS_BOOT_STATUS = True
+
 # Candado asíncrono para evitar colisiones en el socket SSL
 mqtt_lock = asyncio.Lock()
 
@@ -151,17 +157,6 @@ mqtt_lock = asyncio.Lock()
 wlan   = None # Conexión WiFi
 client = None # Cliente  MQTT
 
-# Flag para controlar la estilización del log de la primera sincronización tras el arranque
-IS_BOOT_SYNCING = True
-
-# Control del primer arranque
-IS_BOOT_STATUS = True
-
-# ---- Configuración del muestreo de Iluminancia ----
-# Flag de control para la sincronización del monitoreo de iluminancia (Día/Noche)
-# Si es False, se suspende el muestreo del sensor BH1750 para evitar registros de 0 lux.
-# (Se inicializa en OFF por defecto; el Scheduler sincronizará el estado real tras conectar)
-IS_SAMPLING_LUX = False
 
 # ---- Configuración del muestreo de lluvia ----
 # Frecuencia de monitoreo del sensor de lluvia
@@ -179,6 +174,12 @@ RAIN_TARGET_SAMPLES = const(10)
 last_rain_raw = None # Inicializado en None
 current_rain_state = None # Cache global del estado de lluvia para reconexiones MQTT
 rain_current_interval = INTERVAL_NORMAL # Intervalo actual de chequeo de lluvia (segundos)
+
+# ---- Configuración del muestreo de Iluminancia ----
+# Flag de control para la sincronización del monitoreo de iluminancia (Día/Noche)
+# Si es False, se suspende el muestreo del sensor BH1750 para evitar registros de 0 lux.
+# (Se inicializa en OFF por defecto; el Scheduler sincronizará el estado real tras conectar)
+IS_SAMPLING_LUX = False
 
 # ---- Colors for logs ----
 if DEBUG:
@@ -426,6 +427,7 @@ def log_ram_usage():
     except Exception as e:
         print(f"⚠️  RAM Stat Error: {e}")
 
+
 # ---- Excepciones Personalizadas ----
 class MQTTSessionZombie(OSError):
     """Excepción para identificar sesiones MQTT que han dejado de responder."""
@@ -576,7 +578,7 @@ def clean_dht_line():
     # Lazy Imports (Importación tardía)
     from machine import Pin
     from utime import sleep_ms
-    # Pin 23 es el estándar para el DHT22 en el Nodo Actuador
+    # Pin 23 es el estándar para el DHT22 en el Actuator Controller
     p = Pin(23, Pin.IN, Pin.PULL_UP)
     p.init(Pin.OUT)
     p.value(1)
@@ -632,7 +634,6 @@ def setup_bh1750_sync():
     except Exception as e:
         if DEBUG: print(f"    └─ ❌ Exception: {Colors.RED}[{e}]{Colors.RESET}")
         bh1750_sensor = None
-        i2c_bus = None
 
 # ---- Función Auxiliar: Inicializar y Restablecer Sensores ----
 async def setup_sensors(force_hard_reset=False):
@@ -643,7 +644,6 @@ async def setup_sensors(force_hard_reset=False):
     * Si es en el arranque (force_hard_reset=False) y el DHT22 falla, realiza de forma autónoma
       hasta 3 reintentos de rescate físico antes de desistir.
     """
-    # Gestión de variables globales
     global dht_sensor, rain_sensor_analog, bh1750_sensor, last_rain_raw, current_rain_state
 
     # Inicializamos variables globales de lluvia en None al inicio del setup
@@ -913,27 +913,6 @@ async def mqtt_processor_task():
                     sleep(3) # Pausa breve para flush de logs
                     safe_reset()
 
-                # 2. Control de Muestreo de Iluminancia (Día/Noche)
-                if m_low.startswith(b"lux_sampling:"):
-                    parts = m_low.split(b":")
-                    if len(parts) == 2:
-                        action = parts[1]
-                        global IS_SAMPLING_LUX
-                        
-                        if action == b"on":
-                            if DEBUG: print(f"    └─ Bh1750: {Colors.GREEN}ON{Colors.RESET}")
-                            IS_SAMPLING_LUX = True
-                            illuminance_wake_event.set()
-                        elif action == b"off":
-                            if DEBUG: print(f"    └─ Bh1750: {Colors.RED}OFF{Colors.RESET}")
-                            IS_SAMPLING_LUX = False
-                            illuminance_wake_event.clear()
-                            # Al apagar, limpiamos el buffer para no arrastrar basura de 0 lux
-                            illuminance_Batch.clear()
-                        
-                        del action
-                    del parts
-
                 # 3. Comandos de Auditoría (Prefix: audit_)
                 if m_low.startswith(b"audit_") and m_low.endswith((b"_on", b"_off")):
                     parts = m_low.split(b"_")
@@ -966,7 +945,28 @@ async def mqtt_processor_task():
                         del category, action
                     del parts
 
-                # 4. Comando: Sincronización de Clima (Scheduler → Firmware)
+                # 4. Muestreo Inteligente (Prefix: lux_sampling:)
+                if m_low.startswith(b"lux_sampling:"):
+                    parts = m_low.split(b":")
+                    if len(parts) == 2:
+                        action = parts[1]
+                        global IS_SAMPLING_LUX
+                        
+                        if action == b"on":
+                            if DEBUG: print(f"    └─ Bh1750: {Colors.GREEN}ON{Colors.RESET}")
+                            IS_SAMPLING_LUX = True
+                            illuminance_wake_event.set()
+                        elif action == b"off":
+                            if DEBUG: print(f"    └─ Bh1750: {Colors.RED}OFF{Colors.RESET}")
+                            IS_SAMPLING_LUX = False
+                            illuminance_wake_event.clear()
+                            # Al apagar, limpiamos el buffer para no arrastrar basura de 0 lux
+                            illuminance_Batch.clear()
+                        
+                        del action
+                    del parts
+
+                # 5. Comando: Sincronización de Clima (Scheduler → Firmware)
                 if m_low == b"sync_climate":
                     if DEBUG: print(f"    └─ Acción: {Colors.CYAN}Sync Climate (Re-Setup de Sensores){Colors.RESET}")
                     try:
@@ -1272,7 +1272,7 @@ def publish_single_batch(metric_name, ring_buffer):
         # [Optimización RAM - Zero-Dict Manual JSON]: Construcción directa de JSON en string usando Generator Expression. Evita instanciar diccionarios o usar ujson.dumps, previniendo picos en el Heap.
         data_str = ",".join('[%d,{"%s":%s}]' % (it[0], metric_name, str(it[1])) for it in ring_buffer.get_all())
         payload_batch = '{"data":[%s]}' % data_str
-        client.publish(MQTT_TOPIC_METRICS, payload_batch, qos=0)
+        client.publish(MQTT_TOPIC_EXTERIOR_METRICS, payload_batch, qos=0)
         ring_buffer.clear()
         return True
     return False
@@ -1964,7 +1964,7 @@ async def rain_monitor_task():
                         payload_batch = '{"data":[%s]}' % data_str
                         async with mqtt_lock:
                             if client and getattr(client, 'sock', None):
-                                client.publish(MQTT_TOPIC_METRICS, payload_batch, qos=0)
+                                client.publish(MQTT_TOPIC_EXTERIOR_METRICS, payload_batch, qos=0)
                         rain_Batch.clear()
                         if DEBUG: print(f"\n🌧️  Lote residual de lluvia enviado con éxito")
                     except Exception as e:
@@ -2008,7 +2008,7 @@ async def rain_monitor_task():
                             payload_batch = '{"data":[%s]}' % data_str
                             async with mqtt_lock:
                                 if client and getattr(client, 'sock', None):
-                                    client.publish(MQTT_TOPIC_METRICS, payload_batch, qos=0)
+                                    client.publish(MQTT_TOPIC_EXTERIOR_METRICS, payload_batch, qos=0)
                                     rain_Batch.clear()
                                     if DEBUG: print(f"\n🌧️  Enviando Batch de Lluvia Intermedio (5+ muestras)")
                         except Exception as e:
@@ -2044,7 +2044,7 @@ async def rain_monitor_task():
                             payload_batch = '{"data":[%s]}' % data_str
                             async with mqtt_lock:
                                 if client and getattr(client, 'sock', None):
-                                    client.publish(MQTT_TOPIC_METRICS, payload_batch, qos=0)
+                                    client.publish(MQTT_TOPIC_EXTERIOR_METRICS, payload_batch, qos=0)
                             rain_Batch.clear()
                         except Exception as e:
                             if DEBUG: print(f"⚠️  Error publicando lote final de ráfaga: {e}")
@@ -2151,7 +2151,7 @@ async def illuminance_monitor_task():
                                     data_str = ",".join('[%d,{"illuminance":%s}]' % (it[0], str(it[1])) for it in illuminance_Batch.get_all())
                                     payload_batch = '{"data":[%s]}' % data_str
                                     
-                                    client.publish(MQTT_TOPIC_METRICS, payload_batch, qos=0)
+                                    client.publish(MQTT_TOPIC_EXTERIOR_METRICS, payload_batch, qos=0)
                                     
                                     # ÉXITO: Reseteamos cronómetro y limpiamos buffer
                                     last_lux_publish = current_ts
@@ -2257,7 +2257,7 @@ async def climate_monitor_task():
                                 if client and getattr(client, 'sock', None):
                                     # [Optimización RAM - Zero-Dict Manual JSON]: Construcción directa de JSON en string usando Generator Expression.
                                     data_str = ",".join('[%d,{"temperature":%s}]' % (it[0], str(it[1])) for it in temperature_Batch.get_all())
-                                    client.publish(MQTT_TOPIC_METRICS, '{"data":[%s]}' % data_str, qos=0)
+                                    client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"data":[%s]}' % data_str, qos=0)
                                     temperature_Batch.clear()
 
                         # Offset de 2s entre publicaciones (FUERA del lock)
@@ -2271,7 +2271,7 @@ async def climate_monitor_task():
                                 if client and getattr(client, 'sock', None):
                                     # [Optimización RAM - Zero-Dict Manual JSON]: Construcción directa de JSON en string usando Generator Expression.
                                     data_str = ",".join('[%d,{"humidity":%s}]' % (it[0], str(it[1])) for it in humidity_Batch.get_all())
-                                    client.publish(MQTT_TOPIC_METRICS, '{"data":[%s]}' % data_str, qos=0)
+                                    client.publish(MQTT_TOPIC_EXTERIOR_METRICS, '{"data":[%s]}' % data_str, qos=0)
                                     humidity_Batch.clear()
 
                         if DEBUG: print(f"\n🌡️  DHT22: {Colors.YELLOW}Batches Temp + HRL Publicados{Colors.RESET}")

@@ -358,7 +358,11 @@ function setupMqttHandlers() {
   mqttClient.on('connect', onConnect)
   if (mqttClient.connected) onConnect()
 
-  mqttClient.on('message', async (topic, payload) => {
+  mqttClient.on('message', async (topic, payload, packet) => {
+    // Ignorar mensajes retenidos (retained).
+    // El scheduler solo procesa telemetría y comandos en tiempo real para evitar duplicados o estados falsos al arrancar.
+    if (packet && packet.retain) return
+
     try {
       const message = payload.toString().trim()
       const previousHeartbeat = lastFirmwareHeartbeat
