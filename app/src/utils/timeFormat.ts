@@ -8,22 +8,27 @@ export function formatTime12h(
 
   if (isNaN(date.getTime())) return '--:--'
 
-  let hours = date.getHours()
-  const minutes = date.getMinutes()
-  const seconds = date.getSeconds()
-  const ampm = hours >= 12 ? 'p. m.' : 'a. m.'
+  try {
+    const formatter = new Intl.DateTimeFormat('es-VE', {
+      timeZone: 'America/Caracas',
+      hour: 'numeric',
+      minute: '2-digit',
+      ...(includeSeconds ? { second: '2-digit' } : {}),
+      hour12: true,
+    })
 
-  hours = hours % 12
-  hours = hours || 12 // el 0 debe ser 12
+    let formatted = formatter.format(date).toLowerCase()
 
-  const minutesStr = minutes < 10 ? `0${minutes}` : minutes.toString()
-  const secondsStr = seconds < 10 ? `0${seconds}` : seconds.toString()
+    // Normalizar a minúsculas y añadir espacio si es necesario
+    if (formatted.includes('a.m.')) formatted = formatted.replace('a.m.', 'a. m.')
+    if (formatted.includes('p.m.')) formatted = formatted.replace('p.m.', 'p. m.')
+    if (formatted.includes('am')) formatted = formatted.replace('am', 'a. m.')
+    if (formatted.includes('pm')) formatted = formatted.replace('pm', 'p. m.')
 
-  if (includeSeconds) {
-    return `${hours}:${minutesStr}:${secondsStr} ${ampm}`
+    return formatted
+  } catch {
+    return '--:--'
   }
-
-  return `${hours}:${minutesStr} ${ampm}`
 }
 
 export function formatDateLong(dateValue: string | Date | number): string {

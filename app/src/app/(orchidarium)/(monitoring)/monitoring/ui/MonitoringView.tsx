@@ -12,7 +12,7 @@ import { ZoneType, ZoneMetrics, MetricLabels, MetricUnits } from '@/config/mappi
 import { Heading, DeviceStatus } from '@/components'
 import { useDeviceHeartbeat, useToast } from '@/hooks'
 import { useMqttStore } from '@/store/mqtt/mqtt.store'
-import { formatTime12h, formatDateLong } from '@/utils/timeFormat'
+import { formatTime12h, formatDateLong, getHourInCaracas } from '@/utils/timeFormat'
 
 type MetricType = 'temperature' | 'humidity' | 'illuminance' | 'rain_intensity' | 'rain_events'
 
@@ -474,7 +474,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
   const chartProps = getChartProps()
 
   const sysDate = now ? new Date(now) : new Date()
-  const sysHour = sysDate.getHours()
+  const sysHour = getHourInCaracas(sysDate)
   const sysMinutes = sysDate.getMinutes()
   const sysTimeInHours = sysHour + sysMinutes / 60
 

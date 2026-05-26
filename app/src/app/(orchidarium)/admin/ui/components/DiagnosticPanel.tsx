@@ -1075,7 +1075,7 @@ export function AuditConsoleCard({
           </div>
         </div>
       </div>
-      <div className="bg-surface flex flex-1 overflow-y-auto font-mono text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-300">
+      <div className="bg-surface flex flex-1 overflow-x-hidden overflow-y-auto font-mono text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-300">
         <div className="animate-in fade-in flex w-full flex-col duration-300">{content}</div>
       </div>
     </Card>

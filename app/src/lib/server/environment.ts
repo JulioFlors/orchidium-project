@@ -45,14 +45,27 @@ function safeTimeToISO(rawTime: unknown): string {
  * Formatea un timestamp para mostrar en tooltips (HH:mm a. m.)
  */
 function formatTimeLabel(raw: unknown): string {
-  const d = new Date(safeTimeToISO(raw))
-  const hours = d.getHours()
-  const minutes = d.getMinutes()
-  const ampm = hours >= 12 ? 'p. m.' : 'a. m.'
-  const h12 = hours % 12 || 12
-  const m = minutes < 10 ? `0${minutes}` : minutes
+  try {
+    const d = new Date(safeTimeToISO(raw))
+    const formatter = new Intl.DateTimeFormat('es-VE', {
+      timeZone: 'America/Caracas',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    })
 
-  return `${h12}:${m} ${ampm}`
+    let formatted = formatter.format(d).toLowerCase()
+
+    // Normalizar a minúsculas y añadir espacio si es necesario
+    if (formatted.includes('a.m.')) formatted = formatted.replace('a.m.', 'a. m.')
+    if (formatted.includes('p.m.')) formatted = formatted.replace('p.m.', 'p. m.')
+    if (formatted.includes('am')) formatted = formatted.replace('am', 'a. m.')
+    if (formatted.includes('pm')) formatted = formatted.replace('pm', 'p. m.')
+
+    return formatted
+  } catch {
+    return '--:--'
+  }
 }
 
 export async function getSensorDataInternal(range: string, zone: ZoneType, metric?: string | null) {

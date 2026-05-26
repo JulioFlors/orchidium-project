@@ -482,7 +482,7 @@ async function processZoneStateEvent(
     }
 
     await writeToInflux(point)
-    Logger.success(`[ ${eventType} ] ${source}/${zone} -> ${value}`)
+    Logger.rainState(`[ ${eventType} ] ${source}/${zone} -> ${value}`, value === 'Raining')
   } else {
     // Otros eventos de estado (Device_Status, etc.)
     // El estado del dispositivo SIEMPRE se persiste para permitir hidratación SSR

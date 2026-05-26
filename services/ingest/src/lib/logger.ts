@@ -75,6 +75,19 @@ export const Logger = {
     console.log(formatLog('🌧️', 'RAIN', colors.blue, msg))
   },
   /**
+   * Estado de lluvia en tiempo real: Raining/Dry
+   */
+  rainState: (msg: string, isRaining: boolean) => {
+    console.log(
+      formatLog(
+        isRaining ? '🌧️' : '☀️',
+        isRaining ? 'RAIN' : 'SUN',
+        isRaining ? colors.blue : colors.yellow,
+        msg,
+      ),
+    )
+  },
+  /**
    * Cambio de estado: Device_Status, Rain_State
    */
   state: (msg: string) => {

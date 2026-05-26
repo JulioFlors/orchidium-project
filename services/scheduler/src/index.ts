@@ -44,7 +44,6 @@ let isSystemReady = false // Solo true tras recibir la primera telemetría post-
 
 async function init() {
   console.log() // Espacio en blanco
-  Logger.info('🚀 Iniciando Servicio Scheduler (PristinoPlant)')
 
   const pgReady = await waitForPostgres()
 
@@ -297,7 +296,7 @@ function flushBootLog() {
   } else if (!isLuxSamplingActive()) {
     Logger.info(`Iluminancia: ${colors.dim}Muestreo Suspendido (Anochecer)${colors.reset}`, '🌙')
   } else {
-    Logger.info(`Iluminancia: ${colors.red}No detectada en batch inicial${colors.reset}`, '⚠️')
+    Logger.info(`Iluminancia: ${colors.red}No se detecto el sensor BH1750${colors.reset}`, '⚠️')
     hasInitFailure = true
   }
 
@@ -308,15 +307,11 @@ function flushBootLog() {
       '🌡️',
     )
   } else {
-    Logger.info(
-      `Clima: ${colors.red}Fallo de inicialización en hardware detectado${colors.reset}`,
-      '⚠️',
-    )
+    Logger.info(`Clima: ${colors.red}No se detecto el sensor DHT22${colors.reset}`, '⚠️')
     hasInitFailure = true
   }
 
   if (hasInitFailure) {
-    Logger.warn('Iniciando ciclo de recuperación de sensores ambientales (Hard Reset de arranque).')
     requestClimateSync()
     startClimateSyncRetry()
   }
@@ -376,7 +371,6 @@ function setupMqttHandlers() {
         if (message === 'ping') {
           lastFirmwareHeartbeat = Date.now()
           if (irrigationRetryManager.connectionState === 'offline') {
-            Logger.info('Heartbeat (ping) recibido de nodo Actuador anteriormente OFFLINE. Sincronizando...')
             await handleNodeSync(false, previousHeartbeat)
 
             if (!bootAccumulator) {
@@ -994,7 +988,7 @@ function checkSensorsHealth() {
     dht22Alive = false
     triggered = true
     Logger.warn(
-      `🌡️  Watchdog DHT22: Se detectó silencio de datos climáticos durante ${Math.round(timeSinceLastClimate / 60000)} minutos. Declarando sensor degradado.`,
+      `Watchdog DHT22: sin datos durante ${Math.round(timeSinceLastClimate / 60000)} minutos.`,
     )
   }
 
@@ -1002,12 +996,11 @@ function checkSensorsHealth() {
     illuminanceAlive = false
     triggered = true
     Logger.warn(
-      `☀️  Watchdog BH1750: Se detectó silencio de datos de iluminancia durante ${Math.round(timeSinceLastLux / 60000)} minutos. Declarando sensor degradado.`,
+      `Watchdog BH1750:sin datos durante ${Math.round(timeSinceLastLux / 60000)} minutos.`,
     )
   }
 
   if (triggered) {
-    Logger.warn('Iniciando ciclo de recuperación de sensores ambientales (Hard Reset).')
     requestClimateSync()
     startClimateSyncRetry()
   }
@@ -1137,7 +1130,7 @@ async function handleNodeSync(isBoot: boolean = false, previousHeartbeat: number
     Logger.node('ONLINE')
   }
 
-  if (irrigationRetryManager.connectionState !== 'online' || statusToSave === 'REBOOT') {
+  if (irrigationRetryManager.connectionState !== 'online' || statusToSave === 'REBOOT' || isBoot) {
     await prisma.deviceLog
       .create({
         data: {
@@ -1286,9 +1279,7 @@ function clearSyncTimerIfHealthy() {
       clearInterval(climateSyncTimer)
       climateSyncTimer = null
       if (climateSyncPhase !== 'idle') {
-        Logger.info(
-          `🌡️  Watchdog: Todos los sensores activos reportaron éxito. Sincronización recuperada desde fase ${climateSyncPhase} (${climateSyncAttempts} intentos).`,
-        )
+        Logger.info(`Watchdog: Sensores Sincronizados.`)
       }
     }
     climateSyncAttempts = 0

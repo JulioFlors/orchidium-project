@@ -48,8 +48,5 @@ echo " "
 echo "✅ $INFLUX_URL está listo."
 echo " "
 
-echo "🚀 Iniciando servicio de Rutinas de Riego Automatizadas (Scheduler)"
-echo " "
-
 # Ejecuta el comando del Dockerfile CMD ["node", "dist/bundle.mjs"]
 exec "$@"
