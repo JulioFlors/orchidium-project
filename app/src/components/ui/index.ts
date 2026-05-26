@@ -8,7 +8,7 @@ export * from './border-trail/BorderTrail'
 
 export * from './button/Button'
 
-export * from './card/Card'
+export * from './card'
 
 export * from './image-uploader/ImageUploader'
 

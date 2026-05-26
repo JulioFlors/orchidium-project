@@ -266,7 +266,6 @@ async function processEnvironmentPacket(
         if (h !== undefined) point.setFloatField('humidity', Number(h))
         if (l !== undefined) point.setFloatField('illuminance', Number(l))
         if (r !== undefined) point.setFloatField('rain_intensity', Number(r))
-        if (metrics.phase !== undefined) point.setStringField('phase', String(metrics.phase))
 
         await writeToInflux(point)
       }
@@ -290,7 +289,6 @@ async function processEnvironmentPacket(
     if (h !== undefined) point.setFloatField('humidity', Number(h))
     if (l !== undefined) point.setFloatField('illuminance', Number(l))
     if (r !== undefined) point.setFloatField('rain_intensity', Number(r))
-    if (data.phase !== undefined) point.setStringField('phase', String(data.phase))
 
     await writeToInflux(point)
   } catch (e) {
@@ -558,6 +556,7 @@ async function start() {
 
     const messageValue = payload.toString()
     const topicParts = topic.split('/')
+    const firmwareSource = topicParts[1]
 
     if (topic.endsWith('/status')) {
       if (messageValue === 'ping') {

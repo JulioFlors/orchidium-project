@@ -101,13 +101,6 @@ function CustomTooltip({
     // Escala monocromática basada en el color de la métrica
     const scale = getMonochromaticScale(color)
 
-    const phaseLabels: Record<string, string> = {
-      MAIN_WATER: 'Entrada de Agua',
-      BOMBA: 'Bomba Activa',
-      TRANSICION: 'Presurizando',
-    }
-    const displayPhase = data.phase ? phaseLabels[String(data.phase)] || String(data.phase) : null
-
     // Formateo seguro de fecha para el tooltip
     let formattedTime = ''
 
@@ -195,13 +188,6 @@ function CustomTooltip({
 
         {data.dateLabel && (
           <span className="text-primary mt-0.5 block font-semibold">{data.dateLabel}</span>
-        )}
-
-        {displayPhase && (
-          <span className="mt-2 inline-flex items-center gap-1.5 font-bold tracking-widest text-cyan-400 uppercase">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" />
-            Modo: {displayPhase}
-          </span>
         )}
       </div>
     )

@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { CloudRain, Droplets, Thermometer, Sun, Cloud, Moon } from 'lucide-react'
 import { FaChartLine } from 'react-icons/fa6'
+import { IoWaterOutline } from 'react-icons/io5'
 import useSWR from 'swr'
 
 import { EnvironmentCard, EnvironmentDataChart } from './components'
@@ -733,7 +734,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
 
             <EnvironmentCard
               color="blue"
-              icon={<Droplets className="h-6 w-6" />}
+              icon={<IoWaterOutline className="h-6 w-6" />}
               isActive={selectedMetric === 'humidity'}
               isLoading={isMqttLoading}
               title={MetricLabels.humidity}
@@ -778,7 +779,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
             <EnvironmentCard
               className="tds-sm:order-2 tds-lg:col-span-2"
               color="blue"
-              icon={<Droplets className="h-6 w-6" />}
+              icon={<IoWaterOutline className="h-6 w-6" />}
               isActive={selectedMetric === 'humidity'}
               isLoading={isMqttLoading}
               title={MetricLabels.humidity}
@@ -874,7 +875,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               <div className="bg-hover-overlay flex h-12 w-12 items-center justify-center rounded-full">
                 <FaChartLine className="text-primary h-6 w-6" />
               </div>
-              <p className="text-sm font-medium">Seleccione una card</p>
+              <p className="text-sm font-medium">Seleccione un parámetro</p>
             </div>
           </div>
         ) : chartProps ? (

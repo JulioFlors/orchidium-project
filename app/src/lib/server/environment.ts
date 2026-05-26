@@ -143,11 +143,8 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
       timeFilter = `AND time >= TIMESTAMP '${start.toISOString()}' AND time <= TIMESTAMP '${end.toISOString()}'`
     }
 
-    const physicalMetrics = ZoneMetrics[zone as ZoneType] || ZoneMetrics[ZoneType.ZONA_A] || []
-    const selectFields = ['time', 'phase', ...physicalMetrics].map((f) => `"${f}"`).join(', ')
-
     const query = `
-      SELECT ${selectFields}
+      SELECT *
       FROM environment_metrics 
       WHERE zone = '${zone}' 
       ${timeFilter}
@@ -183,7 +180,6 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
             entry[f] = Number(val)
           }
         })
-        if (row.phase) entry.phase = String(row.phase)
         data.push(entry)
 
         // ── Cálculo de Live KPIs (Solo para el día actual) ──
@@ -343,10 +339,7 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
     if (!pgData.some((d) => d.date.toISOString().startsWith(todayISO))) {
       const zoneFilter = `zone = '${zone}'`
 
-      const physicalMetrics = ZoneMetrics[zone as ZoneType] || ZoneMetrics[ZoneType.ZONA_A] || []
-      const selectFields = ['time', 'phase', ...physicalMetrics].map((f) => `"${f}"`).join(', ')
-
-      const todayQuery = `SELECT ${selectFields} FROM environment_metrics WHERE ${zoneFilter} AND time >= TIMESTAMP '${midnightVETInUTC.toISOString()}' ORDER BY time ASC`
+      const todayQuery = `SELECT * FROM environment_metrics WHERE ${zoneFilter} AND time >= TIMESTAMP '${midnightVETInUTC.toISOString()}' ORDER BY time ASC`
 
       try {
         const reader = influxClient.query(todayQuery)
@@ -422,27 +415,21 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
  * Se usa para la hidratación SSR del estado de conexión.
  */
 export async function getLastHeartbeat(source: string, zone?: ZoneType) {
-  let zoneFilter = ''
-
-  if (zone) {
-    zoneFilter = `AND zone = '${zone}'`
-  }
-
   const query = `
-    SELECT value, time 
+    SELECT * 
     FROM system_events 
     WHERE source = '${source}' 
     AND event_type = 'Device_Status' 
-    ${zoneFilter}
     AND time >= now() - interval '24 hours'
     ORDER BY time DESC
-    LIMIT 1
   `
 
   try {
     const reader = influxClient.query(query)
 
     for await (const row of reader as AsyncIterable<InfluxRow>) {
+      if (zone && row.zone !== zone) continue
+
       if (row.time) {
         return {
           timestamp: new Date(safeTimeToISO(row.time)).getTime(),

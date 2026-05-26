@@ -176,7 +176,7 @@ function ToolCard({ icon, label, colorKey, onClick, pending, active, disabled }:
         )}
       />
       {active && (
-        <div className="absolute top-4 right-4 h-1.5 w-1.5 rounded-full bg-current shadow-[0_0_8px_currentColor]" />
+        <div className="absolute top-4 right-4 aspect-square h-2 w-2 shrink-0 rounded-full bg-current shadow-[0_0_8px_currentColor] select-none" />
       )}
       <div className="relative z-1">
         <div

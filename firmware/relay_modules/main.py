@@ -1,9 +1,9 @@
 # -----------------------------------------------------------------------------
 # Relay Modules: Actuator Controller + Weather Station (Exterior)
 # Descripcion: Nodo Actuador (sistema de riego) + Nodo EMA (Meteorológia Exterior).
-# Fecha: 23-05-2026
-# Version: v0.15.1
-# notes_release: [Configuración MQTT]: se ajustaron los tiempo de configuracion mqtt para ser mas holdagos.
+# Fecha: 26-05-2026
+# Version: v0.15.2
+# notes_release: [Coordinación de Sensores]: recuperación de sensores por el Scheduler y suspensión de monitoreo mediante eventos si están desconectados.
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib.
@@ -139,6 +139,10 @@ mqtt_connected_event = asyncio.Event()
 
 # Evento asíncrono para solicitar reset de WiFi de forma coordinada
 wifi_reset_event = asyncio.Event()
+
+# Eventos asíncronos para despertar corrutinas si los sensores se recuperan remotamente
+climate_wake_event = asyncio.Event()
+bh1750_wake_event = asyncio.Event()
 
 # Flag para controlar la estilización del log de la primera sincronización tras el arranque
 IS_BOOT_SYNCING = True
@@ -385,8 +389,6 @@ async def publish_audit_state():
                 await asyncio.sleep_ms(500)
             except (MQTTException, OSError) as e:
                 if DEBUG: log_mqtt_exception("Fallo sincronización estado auditoría", e)
-                # Invalidamos el cliente para que el loop principal detecte el fallo
-                force_disconnect_mqtt()
                 await check_critical_mqtt_errors(e)
             except Exception as e:
                 if DEBUG: print(f"⚠️  Error inesperado en publish_audit_state: {e}")
@@ -600,8 +602,6 @@ def setup_bh1750_sync():
         if DEBUG: print(f"\n☀️  Verificando {Colors.YELLOW}BH1750{Colors.RESET}")
         for i, (bus_type, freq, timeout, label) in enumerate(BUS_CONFIGS):
             if sensor_connected: break
-            is_last = (i == len(BUS_CONFIGS) - 1)
-            prefix = "    └─" if is_last else "    ├─"
             try:
                 if bus_type == "soft":
                     i2c_bus = SoftI2C(scl=Pin(22), sda=Pin(21), freq=freq, timeout=timeout)
@@ -611,7 +611,7 @@ def setup_bh1750_sync():
                 i2c_bus.writeto(addr, b'')
                 try: from bh1750 import BH1750 # type: ignore
                 except ImportError:
-                    if DEBUG: print(f"{prefix} ❌ Error: no se encontró bh1750.py")
+                    if DEBUG: print(f"    ├─ ❌ Error: no se encontró bh1750.py")
                     return
                 bh1750_sensor = BH1750(bus=i2c_bus, addr=addr)
                 sleep_ms(200)
@@ -623,12 +623,14 @@ def setup_bh1750_sync():
                     print(f"    └─ 📊 Valor: {Colors.YELLOW}{lux_test} lux{Colors.RESET}")
                 sensor_connected = True
             except OSError:
-                if DEBUG: print(f"{prefix} ❌ {Colors.RED}No detectado{Colors.RESET} en [{label}]")
+                if DEBUG: print(f"    ├─ ❌ {Colors.RED}No detectado{Colors.RESET} en [{label}]")
                 continue
         if not sensor_connected:
             if DEBUG: print(f"    └─ ❌ {Colors.RED}Desconectado{Colors.RESET}")
             bh1750_sensor = None
             i2c_bus = None
+        else:
+            bh1750_wake_event.set()
     except Exception as e:
         if DEBUG: print(f"    └─ ❌ Exception: {Colors.RED}[{e}]{Colors.RESET}")
         bh1750_sensor = None
@@ -699,17 +701,17 @@ async def setup_sensors(force_hard_reset=False):
                     print(f"    ├─ 📊 Valor: {Colors.YELLOW}{temp:.1f} °C{Colors.RESET}")
                     print(f"    └─ 📊 Valor: {Colors.BLUE}{hum:.1f} %{Colors.RESET}")
             else:
-                if DEBUG: print(f"    └─ ⚠️ {Colors.YELLOW}Fuera de rango{Colors.RESET}")
+                if DEBUG: print(f"    ├─ ⚠️ {Colors.YELLOW}Fuera de rango en lectura inicial{Colors.RESET}")
         except Exception:
-            if DEBUG: print(f"    └─ ⚠️ {Colors.YELLOW}Sin respuesta en lectura inicial{Colors.RESET}")
+            if DEBUG: print(f"    ├─ ⚠️ {Colors.YELLOW}Sin respuesta en lectura inicial{Colors.RESET}")
     except Exception as e:
-        if DEBUG: print(f"    └─ ❌ Fallo inicialización DHT22: {e}")
+        if DEBUG: print(f"    ├─ ❌ Fallo inicialización DHT22: {e}")
         dht_sensor = None
 
     # [Plan B]: Rescate síncrono/asíncrono si la verificación inicial falló en boot (bucle de hasta 3 rescates)
     if not dht_boot_ok and not force_hard_reset:
         for attempt in range(1, 4):
-            if DEBUG: print(f"    └─ 🔄 {Colors.CYAN}Hard Reset Sensors (Intento {attempt}/3).{Colors.RESET}")
+            if DEBUG: print(f"    ├─ 🔄 {Colors.CYAN}Hard Reset Sensors (Intento {attempt}/3).{Colors.RESET}")
             
             # Invalida instancias
             dht_sensor = None
@@ -745,12 +747,13 @@ async def setup_sensors(force_hard_reset=False):
                         print(f"    └─ 📊 Valor: {Colors.BLUE}{hum:.1f} %{Colors.RESET}")
                     break
                 else:
-                    if DEBUG: print(f"    └─ ⚠️ {Colors.YELLOW}Fuera de rango tras reset (Intento {attempt}/3){Colors.RESET}")
+                    if DEBUG: print(f"    ├─ ⚠️ {Colors.YELLOW}Fuera de rango tras reset (Intento {attempt}/3){Colors.RESET}")
             except Exception:
-                if DEBUG: print(f"    └─ ⚠️ {Colors.YELLOW}Sin respuesta tras reset (Intento {attempt}/3){Colors.RESET}")
+                if DEBUG: print(f"    ├─ ⚠️ {Colors.YELLOW}Sin respuesta tras reset (Intento {attempt}/3){Colors.RESET}")
         
         if not dht_boot_ok:
             if DEBUG: print(f"    └─ ❌ {Colors.RED}No se pudo recuperar el DHT22 tras 3 intentos. El Scheduler sincronizará.{Colors.RESET}")
+            dht_sensor = None
 
     # 2. Inicializar el Sensor de Iluminancia (BH1750 / I2C)
     setup_bh1750_sync()
@@ -802,6 +805,14 @@ async def setup_sensors(force_hard_reset=False):
         rain_sensor_analog = None
         current_rain_state = 'Dry'
         last_rain_raw = None
+
+    # Seteo final de seguridad para el DHT22 si no está inicializado
+    if not dht_boot_ok:
+        dht_sensor = None
+        if force_hard_reset:
+            if DEBUG: print(f"    └─ ❌ {Colors.RED}Desconectado / Fallo tras restablecimiento síncrono{Colors.RESET}")
+    else:
+        climate_wake_event.set()
 
 # ---- Función Auxiliar: Callback de estado ----
 def sub_status_callback(pid, status):
@@ -885,7 +896,7 @@ async def mqtt_processor_task():
                             client.publish(MQTT_TOPIC_CMD_RECEIVED, msg, qos=0)
             except (MQTTException, OSError) as e:
                 if DEBUG: log_mqtt_exception("Fallo en el ACK del comando", e)
-                force_disconnect_mqtt()
+                await check_critical_mqtt_errors(e)
             except Exception: pass
 
             # ---- 🛡️ Lógica del Sistema de Comandos (/cmd) ----
@@ -968,7 +979,6 @@ async def mqtt_processor_task():
                             if DEBUG: print("    └─ ✅ Sync exitoso: publicado en canal estándar")
                     except (MQTTException, OSError) as e:
                         if DEBUG: log_mqtt_exception("Fallo en sync_climate", e)
-                        force_disconnect_mqtt()
                         await check_critical_mqtt_errors(e)
                     except Exception as e:
                         if DEBUG: print(f"    └─ ❌ Error en sync_climate: {e}")
@@ -1052,8 +1062,7 @@ async def mqtt_processor_task():
 
         except (MQTTException, OSError) as e:
             if DEBUG: log_mqtt_exception("Fallo en bucle principal MQTT (Processor)", e)
-            # El loop principal de conectividad se encargará del reset
-            await asyncio.sleep(5)
+            await check_critical_mqtt_errors(e)
         except Exception as e:
             if DEBUG: print(f"\n❌  Error en mqtt_processor_task: {Colors.RED}{e}{Colors.RESET}")
         
@@ -1284,10 +1293,9 @@ async def flush_telemetry_batches_async():
                     await asyncio.sleep_ms(500)
                 if publish_single_batch("humidity", humidity_Batch):
                     await asyncio.sleep_ms(500)
-    except Exception as _e:
-        if DEBUG: print(f"⚠️ Fallo en flush_telemetry_batches_async: {_e}")
-        force_disconnect_mqtt()
-        await check_critical_mqtt_errors(_e)
+    except Exception as e:
+        if DEBUG: print(f"⚠️ Fallo en flush_telemetry_batches_async: {e}")
+        await check_critical_mqtt_errors(e)
 
 # ---- Utilidades de Telemetría: Publica de manera sincrona todos los batches ----
 def flush_telemetry_batches():
@@ -1516,7 +1524,6 @@ async def mqtt_connector_task(client_id):
 
             except (MQTTException, OSError) as e:
                 if DEBUG: log_mqtt_exception("Fallo la Conexión MQTT", e)
-                
                 await check_critical_mqtt_errors(e)
                 consecutive_mqtt_failures += 1
 
@@ -1577,19 +1584,15 @@ async def mqtt_connector_task(client_id):
                     async with mqtt_lock:
                         # [Escudo de Concurrencia]: Re-validación obligatoria post-await
                         if client and getattr(client, 'sock', None):
-                            # 1. Cooldown inicial para despejar búfer de transmisiones previas
-                            await asyncio.sleep_ms(500)
-                            
                             try:
-                                if client and getattr(client, 'sock', None):
-                                    # Heartbeat integrado: publicamos "ping" en el tópico de status
-                                    # El frontend (useDeviceHeartbeat) necesita recibir "ping" cada ~30s
-                                    # para no declarar al dispositivo como zombie/offline.
-                                    # qos=0: Fire-and-forget (idempotente, tolerante a pérdida)
-                                    client.publish(MQTT_TOPIC_STATUS, b"ping", retain=True, qos=0)
-                                    if DEBUG: print(f"{Colors.BLUE}.{Colors.RESET}", end="")
-                                    client.last_cpacket = now_ms
-                                    heartbeat_failures = 0
+                                # Heartbeat integrado: publicamos "ping" en el tópico de status
+                                # El frontend (useDeviceHeartbeat) necesita recibir "ping" cada ~30s
+                                # para no declarar al dispositivo como zombie/offline.
+                                # qos=0: Fire-and-forget (idempotente, tolerante a pérdida)
+                                client.publish(MQTT_TOPIC_STATUS, b"ping", retain=True, qos=0)
+                                if DEBUG: print(f"{Colors.BLUE}.{Colors.RESET}", end="")
+                                client.last_cpacket = now_ms
+                                heartbeat_failures = 0
                             except (MQTTException, OSError) as e_pub:
                                 if DEBUG: print(f"\n⚠️  Fallo en Heartbeat: {e_pub}")
                                 heartbeat_failures += 1
@@ -1608,7 +1611,6 @@ async def mqtt_connector_task(client_id):
 
             except (MQTTException, OSError) as e:
                 if DEBUG: log_mqtt_exception("Error en Operación MQTT", e)
-
                 await check_critical_mqtt_errors(e)
 
                 # Invalidamos el cliente MQTT forzando una reconexión completa.
@@ -1618,7 +1620,7 @@ async def mqtt_connector_task(client_id):
                 consecutive_mqtt_failures += 1
                 wait_time = min(30 * consecutive_mqtt_failures, 120)
                 if DEBUG:
-                    print(f"⚠️  Sesión MQTT perdida. Esperando {wait_time}s para liberar RAM y estabilizar red.")
+                    print(f"⚠️  Sesión MQTT perdida. Esperando {wait_time}s.")
                 await asyncio.sleep(wait_time)
                 continue
 
@@ -1822,7 +1824,7 @@ async def state_publisher_task():
                 if client and getattr(client, 'sock', None):
                     # Publicamos SOLO al tópico Unificado (/state)
                     # El frontend (ControlPanel) y the scheduler ya consumen exclusivamente este tópico.
-                    client.publish(MQTT_TOPIC_STATE, payload, retain=True, qos=0)
+                    client.publish(MQTT_TOPIC_STATE, payload, retain=True, qos=1)
 
             # Liberamos el payload de la RAM
             del payload
@@ -1854,11 +1856,7 @@ async def state_publisher_task():
 
         except (MQTTException, OSError) as e:
             if DEBUG: log_mqtt_exception("Fallo al publicar el Snapshot de los Relays", e)
-            # Invalidamos el cliente inmediatamente.
-            # Si el snapshot falló (MQTT-3), el socket ya no es confiable.
-            force_disconnect_mqtt()
             await check_critical_mqtt_errors(e)
-            await asyncio.sleep(5)
         except Exception as e:
             if DEBUG: print(f"    ⚠️  Error general en Sincronización Relay: {e}")
 
@@ -2057,7 +2055,6 @@ async def rain_monitor_task():
             rain_publish_failures += 1
             if DEBUG: log_mqtt_exception("Error de red en rain_monitor_task()", e)
             await check_critical_mqtt_errors(e)
-            await asyncio.sleep(5)
         except Exception as e:
             if DEBUG: print(f"\n⚠️  Error en rain_monitor_task(): {e}")
         
@@ -2111,6 +2108,14 @@ async def illuminance_monitor_task():
             
             current_ts = time()
 
+            if bh1750_sensor is None:
+                if DEBUG and current_ts - last_lux_publish >= 600:
+                    print("⚠️  BH1750: Sensor no disponible (None).")
+                    last_lux_publish = current_ts
+                bh1750_wake_event.clear()
+                await bh1750_wake_event.wait()
+                continue
+
             lux_ok = False
             if bh1750_sensor is not None:
                 try:
@@ -2163,7 +2168,6 @@ async def illuminance_monitor_task():
             lux_publish_failures += 1
             if DEBUG: log_mqtt_exception("Error de red en illuminance_monitor_task()", e)
             await check_critical_mqtt_errors(e)
-            await asyncio.sleep(5)
         except Exception as e:
             if DEBUG: print(f"\n⚠️  Error en illuminance_monitor_task(): {e}")
         
@@ -2197,6 +2201,14 @@ async def climate_monitor_task():
             current_time = time()
             current_ts   = current_time
             has_temp, has_hum = False, False
+
+            if dht_sensor is None:
+                if DEBUG and current_ts - last_dht_publish >= 600:
+                    print("⚠️  DHT22: Sensor no disponible (None).")
+                    last_dht_publish = current_ts
+                climate_wake_event.clear()
+                await climate_wake_event.wait()
+                continue
 
             # 2. Lectura Normal (Siempre con Atomic Fix por seguridad de línea)
             if dht_sensor is not None:
@@ -2267,6 +2279,7 @@ async def climate_monitor_task():
                         last_dht_publish = current_ts # Solo actualizamos el temporizador tras éxito
                     except (MQTTException, OSError) as e:
                         if DEBUG: log_mqtt_exception("Fallo publicando Batch DHT22", e)
+                        await check_critical_mqtt_errors(e)
                         # No reseteamos el temporizador ni borramos buffers
                 else:
                     # Buffer vacío: Reseteamos timer
@@ -2276,7 +2289,6 @@ async def climate_monitor_task():
             dht_publish_failures += 1
             if DEBUG: log_mqtt_exception("Error de red en climate_monitor_task()", e)
             await check_critical_mqtt_errors(e)
-            await asyncio.sleep(5)
         except Exception as e:
             if DEBUG: print(f"\n⚠️  Error en climate_monitor_task(): {e}")
         
@@ -2368,6 +2380,7 @@ async def unified_audit_task():
                             client.publish(MQTT_TOPIC_AUDIT, payload, qos=0)
                 except Exception as e:
                     if DEBUG: log_mqtt_exception("Fallo publicación Batch de Auditoría", e)
+                    await check_critical_mqtt_errors(e)
 
                 # Liberamos memoria de los fragmentos inmediatamente
                 del fragments, payload

@@ -1,11 +1,11 @@
 'use client'
 
-import { IoFlaskOutline, IoWaterOutline, IoInformationCircleOutline } from 'react-icons/io5'
+import { IoFlaskOutline, IoWaterOutline } from 'react-icons/io5'
 import { MdDewPoint } from 'react-icons/md'
 import { PiSprayBottle } from 'react-icons/pi'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { ActuatorCard, FertigationModal } from './components'
+import { FertigationModal } from './components'
 
 import { ZoneType } from '@/config/mappings'
 import {
@@ -17,7 +17,7 @@ import {
 import { useMqttStore } from '@/store'
 import { IrrigationCommand } from '@/interfaces'
 import { useDeviceHeartbeat, useToast } from '@/hooks'
-import { Heading, DeviceStatus } from '@/components'
+import { Heading, DeviceStatus, GlowCard } from '@/components'
 
 // Definición de Tópicos
 const TOPIC_PREFIX = 'PristinoPlant/Actuator_Controller'
@@ -63,6 +63,13 @@ export function ControlView() {
   // Referencias para Timeouts de Comandos (120s)
   // Usamos ref para no provocar re-renders y poder limpiarlos imperativamente
   const commandTimeouts = useRef<Record<string, NodeJS.Timeout>>({})
+
+  // Ref para comandos pendientes que deben reintentarse al reconectar
+  // Estructura: { [circuit]: payload MQTT a reenviar }
+  const pendingRetry = useRef<Record<string, IrrigationCommand>>({})
+
+  // Referencias para Estados Objetivo (Target States)
+  const targetStates = useRef<Record<string, boolean>>({})
 
   // --- 1. Conexión & Suscripción ---
   useEffect(() => {
@@ -133,32 +140,31 @@ export function ControlView() {
     fertigation: isActuatorActive('fertigation') && isAgroOn, // Aquí Ferti + Agro (No Main)
   }
 
-  // --- 3. Monitoreo de Resiliencia (Limpieza de Timeouts) ---
+  // --- 3. Handlers Estables (useCallback) — deben declararse antes de los useEffects que los usan ---
 
-  // A) Si el dispositivo se desconecta -> Limpieza TOTAL
-  useEffect(() => {
-    if (!isDeviceOnline) {
-      // Limpiar todos los timers pendientes
-      Object.keys(commandTimeouts.current).forEach((key) => {
-        clearTimeout(commandTimeouts.current[key])
-        delete commandTimeouts.current[key]
-      })
-
-      // Desbloquear UI inmediatamente (Async para evitar linter warning)
-      setTimeout(() => {
-        setLoadingCircuits({})
-        // No notificamos error aquí porque el desconectado ya se maneja visualmente
-      }, 0)
+  // Timeout Handler (Fallo): libera el loading de un circuito cuando no hay confirmación
+  const handleCommandTimeout = useCallback((circuit: string) => {
+    if (commandTimeouts.current[circuit]) {
+      clearTimeout(commandTimeouts.current[circuit])
+      delete commandTimeouts.current[circuit]
     }
-  }, [isDeviceOnline, isReady])
+    delete targetStates.current[circuit]
+    setLoadingCircuits((prev) => {
+      const next = { ...prev }
 
-  // Stable stopLoading function
+      delete next[circuit]
+
+      return next
+    })
+  }, []) // commandTimeouts es ref (estable), setLoadingCircuits es estable
+
+  // stopLoading: limpia el timeout y el estado loading de un circuito
   const stopLoading = useCallback((circuit: string) => {
     if (commandTimeouts.current[circuit]) {
       clearTimeout(commandTimeouts.current[circuit])
       delete commandTimeouts.current[circuit]
     }
-    // Async update
+    delete targetStates.current[circuit]
     setTimeout(() => {
       setLoadingCircuits((prev) => {
         const next = { ...prev }
@@ -170,53 +176,103 @@ export function ControlView() {
     }, 0)
   }, []) // Empty deps is fine as ref and setState are stable
 
-  // B) Si el estado cambia a lo esperado -> ÉXITO (Limpiar Timeout)
-  // Usamos useEffect para analizar cambios. Si activeCircuits cambia,
-  // verificamos si estábamos esperando ese circuito (timeout activo).
+  // --- 4. Monitoreo de Resiliencia (Limpieza de Timeouts) ---
+
+  // A) Si el dispositivo se desconecta → guardar comandos pendientes para reintento
   useEffect(() => {
-    if (commandTimeouts.current['irrigation']) {
+    if (!isDeviceOnline) {
+      // Limpiar timers de seguridad (el reintento se gestionará al reconectar)
+      Object.keys(commandTimeouts.current).forEach((key) => {
+        clearTimeout(commandTimeouts.current[key])
+        delete commandTimeouts.current[key]
+      })
+      // NO limpiamos loadingCircuits: la card permanece en estado pending
+      // hasta que el nodo confirme o el usuario la cancele manualmente
+    }
+  }, [isDeviceOnline])
+
+  // B) Al reconectar → reenviar todos los comandos que quedaron pendientes
+  useEffect(() => {
+    if (!isDeviceOnline) return
+
+    const retries = pendingRetry.current
+    const circuits = Object.keys(retries)
+
+    if (circuits.length === 0) return
+
+    circuits.forEach((circuit) => {
+      const payload = retries[circuit]
+
+      publish(TOPIC_COMMAND, payload)
+
+      // Reiniciar timeout de seguridad (120s) tras el reenvío
+      commandTimeouts.current[circuit] = setTimeout(() => {
+        handleCommandTimeout(circuit)
+      }, 120000)
+    })
+
+    pendingRetry.current = {}
+  }, [isDeviceOnline, publish, handleCommandTimeout])
+
+  // Stable stopLoading function — ahora definido arriba
+
+  // C) Si el estado cambia a lo esperado → ÉXITO (Limpiar Timeout + pending retry)
+  // Al recibir confirmación del nodo, eliminamos el comando del registro de reintento
+  useEffect(() => {
+    const isTargetStateReached = activeCircuits.irrigation === targetStates.current['irrigation']
+
+    if (
+      isTargetStateReached &&
+      (commandTimeouts.current['irrigation'] || loadingCircuits['irrigation'])
+    ) {
+      delete pendingRetry.current['irrigation']
       setTimeout(() => stopLoading('irrigation'), 0)
     }
-  }, [activeCircuits.irrigation, stopLoading])
+  }, [activeCircuits.irrigation, stopLoading, loadingCircuits])
 
   useEffect(() => {
-    if (commandTimeouts.current['humidification']) {
+    const isTargetStateReached =
+      activeCircuits.humidification === targetStates.current['humidification']
+
+    if (
+      isTargetStateReached &&
+      (commandTimeouts.current['humidification'] || loadingCircuits['humidification'])
+    ) {
+      delete pendingRetry.current['humidification']
       setTimeout(() => stopLoading('humidification'), 0)
     }
-  }, [activeCircuits.humidification, stopLoading])
+  }, [activeCircuits.humidification, stopLoading, loadingCircuits])
 
   useEffect(() => {
-    if (commandTimeouts.current['soilWet']) {
+    const isTargetStateReached = activeCircuits.soilWet === targetStates.current['soilWet']
+
+    if (
+      isTargetStateReached &&
+      (commandTimeouts.current['soilWet'] || loadingCircuits['soilWet'])
+    ) {
+      delete pendingRetry.current['soilWet']
       setTimeout(() => stopLoading('soilWet'), 0)
     }
-  }, [activeCircuits.soilWet, stopLoading])
+  }, [activeCircuits.soilWet, stopLoading, loadingCircuits])
 
   useEffect(() => {
-    if (commandTimeouts.current['fertigation']) {
+    const isTargetStateReached = activeCircuits.fertigation === targetStates.current['fertigation']
+
+    if (
+      isTargetStateReached &&
+      (commandTimeouts.current['fertigation'] || loadingCircuits['fertigation'])
+    ) {
+      delete pendingRetry.current['fertigation']
       setTimeout(() => stopLoading('fertigation'), 0)
     }
-  }, [activeCircuits.fertigation, stopLoading])
+  }, [activeCircuits.fertigation, stopLoading, loadingCircuits])
 
-  // --- 4. Timeout Handler (Fallo) ---
-  const handleCommandTimeout = (circuit: string) => {
-    // 1. Limpiar ref por si acaso
-    if (commandTimeouts.current[circuit]) {
-      delete commandTimeouts.current[circuit]
-    }
+  // --- 5. Timeout Handler (Fallo) — ya definido arriba como useCallback ---
 
-    // 2. Quitar loading (Desbloquear UI)
-    setLoadingCircuits((prev) => {
-      const next = { ...prev }
-
-      delete next[circuit]
-
-      return next
-    })
-  }
-
-  // Mutua Exclusión (Si hay loading o offline)
+  // Mutua Exclusión: el sistema está ocupado si algún circuito está activo
+  // o si algún circuito está en proceso de carga (pending)
   const isSystemBusy =
-    Object.values(activeCircuits).some(Boolean) || Object.keys(loadingCircuits).length > 0
+    Object.values(activeCircuits).some(Boolean) || Object.values(loadingCircuits).some(Boolean)
 
   // Action Handler — Envía un solo JSON con circuit al ESP32
   const toggleCircuit = async (circuit: keyof typeof activeCircuits) => {
@@ -264,6 +320,9 @@ export function ControlView() {
     circuit: keyof typeof activeCircuits,
     isTurningOn: boolean,
   ) => {
+    // Registrar el estado objetivo para la sincronización del loader
+    targetStates.current[circuit] = isTurningOn
+
     // 1. Set Loading
     setLoadingCircuits((prev) => ({ ...prev, [circuit]: true }))
 
@@ -320,6 +379,9 @@ export function ControlView() {
       ...(taskId && { task_id: taskId }),
     }
 
+    // Guardar payload para reintento en caso de desconexión
+    pendingRetry.current[circuit] = payload
+
     publish(TOPIC_COMMAND, payload)
   }
 
@@ -342,9 +404,10 @@ export function ControlView() {
     setIsModalOpen(false)
   }
 
-  // Estado Visual
-  const isConnecting = !isReady || connectionState === 'unknown'
-  const isOffline = connectionState === 'offline'
+  // Estado Visual — isOffline es verdadero en cualquier estado que no sea 'online'
+  // Cubre: 'offline', 'zombie', 'sleep', 'unknown' y cualquier estado futuro
+  const isConnecting = !isReady
+  const isOffline = connectionState !== 'online'
 
   return (
     <div className="flex flex-col gap-6">
@@ -358,82 +421,75 @@ export function ControlView() {
             zones={[ZoneType.ZONA_A]}
           />
         }
-        description="Acciona manualmente los circuitos de riego para regular las condiciones ambientales del orquideario."
+        description={
+          <p className="text-secondary text-sm leading-relaxed">
+            Acciona manualmente los circuitos de riego por{' '}
+            <span className="text-black-and-white shrink-0 rounded bg-zinc-200/50 px-1.5 py-0.5 text-[13px] font-bold tracking-widest dark:bg-zinc-800/80">
+              5 minutos
+            </span>
+          </p>
+        }
         title="Centro de Control"
       />
 
       {/* Grid de Control */}
       <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-4 grid grid-cols-1 gap-4">
-        <ActuatorCard
+        {/* disabled: offline/connecting O sistema ocupado por OTRO circuito activo (no el propio) */}
+        <GlowCard
+          active={activeCircuits.irrigation}
           color="blue"
+          disabled={
+            isConnecting ||
+            isOffline ||
+            (isSystemBusy && !activeCircuits.irrigation && !loadingCircuits['irrigation'])
+          }
           icon={<IoWaterOutline />}
-          isActive={activeCircuits.irrigation}
-          isDeviceOnline={isDeviceOnline}
-          isDisabled={isConnecting || isOffline || (isSystemBusy && !activeCircuits.irrigation)}
-          isLoading={loadingCircuits['irrigation']}
-          title="Riego por Aspersión"
-          onToggle={() => toggleCircuit('irrigation')}
+          label="Riego por Aspersión"
+          pending={loadingCircuits['irrigation']}
+          onClick={() => toggleCircuit('irrigation')}
         />
 
-        <ActuatorCard
-          color="purple"
-          icon={<PiSprayBottle />}
-          isActive={activeCircuits.humidification}
-          isDeviceOnline={isDeviceOnline}
-          isDisabled={isConnecting || isOffline || (isSystemBusy && !activeCircuits.humidification)}
-          isLoading={loadingCircuits['humidification']}
-          title="Nebulización"
-          onToggle={() => toggleCircuit('humidification')}
-        />
-
-        <ActuatorCard
+        <GlowCard
+          active={activeCircuits.humidification}
           color="cyan"
+          disabled={
+            isConnecting ||
+            isOffline ||
+            (isSystemBusy && !activeCircuits.humidification && !loadingCircuits['humidification'])
+          }
+          icon={<PiSprayBottle />}
+          label="Nebulización"
+          pending={loadingCircuits['humidification']}
+          onClick={() => toggleCircuit('humidification')}
+        />
+
+        <GlowCard
+          active={activeCircuits.soilWet}
+          color="purple"
+          disabled={
+            isConnecting ||
+            isOffline ||
+            (isSystemBusy && !activeCircuits.soilWet && !loadingCircuits['soilWet'])
+          }
           icon={<MdDewPoint />}
-          isActive={activeCircuits.soilWet}
-          isDeviceOnline={isDeviceOnline}
-          isDisabled={isConnecting || isOffline || (isSystemBusy && !activeCircuits.soilWet)}
-          isLoading={loadingCircuits['soilWet']}
-          title="Humectación del Suelo"
-          onToggle={() => toggleCircuit('soilWet')}
+          label="Humectación del Suelo"
+          pending={loadingCircuits['soilWet']}
+          onClick={() => toggleCircuit('soilWet')}
         />
 
-        <ActuatorCard
+        <GlowCard
+          active={activeCircuits.fertigation}
           color="amber"
+          disabled={
+            isConnecting ||
+            isOffline ||
+            (isSystemBusy && !activeCircuits.fertigation && !loadingCircuits['fertigation'])
+          }
           icon={<IoFlaskOutline />}
-          isActive={activeCircuits.fertigation}
-          isDeviceOnline={isDeviceOnline}
-          isDisabled={isConnecting || isOffline || (isSystemBusy && !activeCircuits.fertigation)}
-          isLoading={loadingCircuits['fertigation']}
-          title="Fertirriego"
-          onToggle={() => toggleCircuit('fertigation')}
+          label="Fertirriego"
+          pending={loadingCircuits['fertigation']}
+          onClick={() => toggleCircuit('fertigation')}
         />
-
-        {/* Nota Estática de Seguridad (Spotlight & Gradient Border styling) */}
-        <div className="tds-sm:col-span-2 group relative col-span-1 overflow-hidden rounded-md p-px shadow-sm transition-all duration-300 hover:shadow-md">
-          {/* Border Gradient Line (Actúa como borde luminoso diagonal en la esquina superior derecha) */}
-          <div className="via-action/5 to-action/50 pointer-events-none absolute inset-0 bg-linear-to-tr from-transparent" />
-
-          {/* Background Card Color (Tapa el centro para dejar solo el borde de 1px) */}
-          <div className="bg-surface relative flex h-full w-full flex-col gap-2 rounded-md p-3">
-            {/* Inner Soft Glow (Spotlight efecto de expansión de luz en esquina) */}
-            <div className="bg-action/10 group-hover:bg-action/20 pointer-events-none absolute -top-12 -right-12 h-32 w-32 rounded-full blur-2xl transition-all duration-500 group-hover:blur-3xl" />
-
-            {/* Header: Title and Icon */}
-            <div className="relative z-10 flex items-center justify-start">
-              <h3 className="text-primary mr-2 text-sm font-semibold tracking-wide">Nota</h3>
-
-              <div className="bg-action/10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full">
-                <IoInformationCircleOutline className="text-action text-lg" />
-              </div>
-            </div>
-
-            {/* Body */}
-            <p className="text-secondary relative z-10 text-sm leading-relaxed">
-              El sistema se desactivará automáticamente tras{' '}
-              <strong className="text-primary font-semibold">5 minutos</strong> por seguridad.
-            </p>
-          </div>
-        </div>
       </div>
 
       <FertigationModal

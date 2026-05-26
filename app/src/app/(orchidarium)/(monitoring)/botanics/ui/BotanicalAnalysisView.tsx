@@ -1,7 +1,10 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Droplets, Sun, Thermometer, ChevronDown, ChevronUp, Info } from 'lucide-react'
+import { Sun, Thermometer, ChevronDown, ChevronUp, Info, Wind } from 'lucide-react'
+import { IoWaterOutline } from 'react-icons/io5'
+import { FaChartLine } from 'react-icons/fa6'
+import { BsThermometerSun } from 'react-icons/bs'
 import useSWR from 'swr'
 
 import { EnvironmentCard, EnvironmentDataChart } from '../../monitoring/ui/components'
@@ -131,11 +134,11 @@ export function BotanicalAnalysisView() {
 
     Object.values(ZoneType).forEach((z) => {
       initial[z] = {
-        dli: '30d',
-        vpd_avg: '30d',
-        dif: '30d',
-        high_humidity_hours: '30d',
-        deficit_hidrico: '30d',
+        dli: '7d',
+        vpd_avg: '7d',
+        dif: '7d',
+        high_humidity_hours: '7d',
+        deficit_hidrico: '7d',
       }
     })
 
@@ -147,7 +150,7 @@ export function BotanicalAnalysisView() {
   const { error: notifyError } = useToast()
 
   const currentRange =
-    selectedMetric && metricRanges[zone] ? metricRanges[zone][selectedMetric] : '30d'
+    selectedMetric && metricRanges[zone] ? metricRanges[zone][selectedMetric] : '7d'
 
   const handleRangeChange = (newRange: string) => {
     if (selectedMetric && zone) {
@@ -242,7 +245,7 @@ export function BotanicalAnalysisView() {
           color: '#22d3ee',
           unit: 'kPa',
           title: 'VPD',
-          icon: <Droplets className="h-4 w-4" />,
+          icon: <Wind className="h-4 w-4" />,
         }
       case 'dif':
         return {
@@ -259,7 +262,7 @@ export function BotanicalAnalysisView() {
           color: '#3b82f6',
           unit: 'h',
           title: 'Saturación Hídrica',
-          icon: <Droplets className="h-4 w-4" />,
+          icon: <IoWaterOutline className="h-4 w-4" />,
           chartType: 'bar' as const,
         }
       case 'deficit_hidrico':
@@ -268,7 +271,7 @@ export function BotanicalAnalysisView() {
           color: '#ef4444',
           unit: 'h',
           title: 'Déficit Hídrico',
-          icon: <Droplets className="h-4 w-4" />,
+          icon: <BsThermometerSun className="h-4 w-4" />,
           chartType: 'bar' as const,
         }
       default:
@@ -294,14 +297,15 @@ export function BotanicalAnalysisView() {
               }}
             />
           }
-          description="Análisis de métricas procesadas en ciclos de 24h, para su evaluación agronómica."
+          description="Métricas procesadas en ciclos de 24h, para su evaluación agronómica."
           title="Análisis Botánico"
         />
 
         {/* Grid estructurado de cards botánicas */}
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          {/* Fila 1: DLI y VPD */}
+        <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-6 grid grid-cols-1 gap-5">
+          {/* Fila 1 (Desktop) / Fila 1 & 2 (Intermedio): DLI, VPD y DIF Térmico */}
           <EnvironmentCard
+            className="tds-sm:col-span-1 tds-lg:col-span-2"
             color="yellow"
             description={getInterpretation('dli', liveKPIs?.dli, zone)}
             icon={<Sun className="h-6 w-6" />}
@@ -317,9 +321,10 @@ export function BotanicalAnalysisView() {
           />
 
           <EnvironmentCard
+            className="tds-sm:col-span-1 tds-lg:col-span-2"
             color="cyan"
             description={getInterpretation('vpd_avg', liveKPIs?.vpdAvg, zone)}
-            icon={<Droplets className="h-6 w-6" />}
+            icon={<Wind className="h-6 w-6" />}
             isActive={selectedMetric === 'vpd_avg'}
             isLoading={isStatusLoading}
             title="VPD"
@@ -333,9 +338,8 @@ export function BotanicalAnalysisView() {
             onClick={() => setSelectedMetric('vpd_avg')}
           />
 
-          {/* Fila 2: DIF Térmico (Ocupa las 2 columnas) */}
           <EnvironmentCard
-            className="md:col-span-2"
+            className="tds-sm:col-span-2 tds-lg:col-span-2"
             color="orange"
             description={getInterpretation('dif', liveKPIs?.dif, zone)}
             icon={<Thermometer className="h-6 w-6" />}
@@ -350,15 +354,16 @@ export function BotanicalAnalysisView() {
             onClick={() => setSelectedMetric('dif')}
           />
 
-          {/* Fila 3: Saturación Hídrica y Déficit Hídrico */}
+          {/* Fila 2 (Desktop) / Fila 3 (Intermedio): Saturación Hídrica y Déficit Hídrico */}
           <EnvironmentCard
+            className="tds-sm:col-span-1 tds-lg:col-span-3"
             color="blue"
             description={getInterpretation(
               'high_humidity_hours',
               liveKPIs?.highHumidityHours,
               zone,
             )}
-            icon={<Droplets className="h-6 w-6" />}
+            icon={<IoWaterOutline className="h-6 w-6" />}
             isActive={selectedMetric === 'high_humidity_hours'}
             isLoading={isStatusLoading}
             title="Saturación Hídrica"
@@ -373,9 +378,10 @@ export function BotanicalAnalysisView() {
           />
 
           <EnvironmentCard
+            className="tds-sm:col-span-1 tds-lg:col-span-3"
             color="red"
             description={getInterpretation('deficit_hidrico', liveKPIs?.deficitHidricoHours, zone)}
-            icon={<Droplets className="h-6 w-6" />}
+            icon={<BsThermometerSun className="h-6 w-6" />}
             isActive={selectedMetric === 'deficit_hidrico'}
             isLoading={isStatusLoading}
             title="Déficit Hídrico"
@@ -402,9 +408,9 @@ export function BotanicalAnalysisView() {
             <div className="bg-surface/50 border-input-outline flex h-[400px] w-full items-center justify-center rounded-md border border-dashed">
               <div className="text-secondary flex flex-col items-center gap-3">
                 <div className="bg-hover-overlay flex h-12 w-12 items-center justify-center rounded-full">
-                  <Sun className="text-primary h-6 w-6" />
+                  <FaChartLine className="text-primary h-6 w-6" />
                 </div>
-                <p className="text-sm font-medium">Seleccione una métrica para ver el historial</p>
+                <p className="text-sm font-medium">Seleccione una métrica</p>
               </div>
             </div>
           ) : chartProps ? (
@@ -463,7 +469,7 @@ export function BotanicalAnalysisView() {
                     </div>
                     <div>
                       <span className="text-primary block font-semibold">
-                        🌵 Exterior (Cactus/Rosas)
+                        🌵 Exterior (Cactus & Suc)
                       </span>
                       <ul className="mt-1 flex list-inside list-disc flex-col gap-0.5 opacity-85">
                         <li>Óptimo: 10.0 - 22.0 mol/m²/d</li>
@@ -476,7 +482,7 @@ export function BotanicalAnalysisView() {
                 {/* VPD */}
                 <div className="bg-surface/50 border-input-outline flex flex-col gap-3 rounded-lg border p-5">
                   <h4 className="text-primary flex items-center gap-2 text-sm font-bold uppercase">
-                    <Droplets className="h-4 w-4 text-cyan-400" /> VPD (Vapor Pressure Deficit)
+                    <Wind className="h-4 w-4 text-cyan-400" /> VPD (Vapor Pressure Deficit)
                   </h4>
                   <p className="text-xs">
                     Déficit de Presión de Vapor. Mide la diferencia de humedad entre el interior de
@@ -496,7 +502,7 @@ export function BotanicalAnalysisView() {
                     </div>
                     <div>
                       <span className="text-primary block font-semibold">
-                        🌵 Exterior (Cactus/Rosas)
+                        🌵 Exterior (Cactus & Suc)
                       </span>
                       <ul className="mt-1 flex list-inside list-disc flex-col gap-0.5 opacity-85">
                         <li>Óptimo: 0.5 - 1.8 kPa</li>
@@ -530,7 +536,7 @@ export function BotanicalAnalysisView() {
                     </div>
                     <div>
                       <span className="text-primary block font-semibold">
-                        🌵 Exterior (Cactus/Rosas)
+                        🌵 Exterior (Cactus & Suc)
                       </span>
                       <ul className="mt-1 flex list-inside list-disc flex-col gap-0.5 opacity-85">
                         <li>Óptimo: &gt; 8.0 °C</li>
@@ -543,7 +549,7 @@ export function BotanicalAnalysisView() {
                 {/* Saturación Hídrica */}
                 <div className="bg-surface/50 border-input-outline flex flex-col gap-3 rounded-lg border p-5">
                   <h4 className="text-primary flex items-center gap-2 text-sm font-bold uppercase">
-                    <Droplets className="h-4 w-4 text-blue-400" /> Saturación Hídrica
+                    <IoWaterOutline className="h-4 w-4 text-blue-400" /> Saturación Hídrica
                   </h4>
                   <p className="text-xs">
                     Tiempo acumulado diario con humedad relativa superior al umbral crítico (HR
@@ -563,7 +569,7 @@ export function BotanicalAnalysisView() {
                     </div>
                     <div>
                       <span className="text-primary block font-semibold">
-                        🌵 Exterior (Cactus/Rosas)
+                        🌵 Exterior (Cactus & Suc)
                       </span>
                       <ul className="mt-1 flex list-inside list-disc flex-col gap-0.5 opacity-85">
                         <li>Límite Seguro: &lt;= 2 horas</li>
@@ -576,7 +582,7 @@ export function BotanicalAnalysisView() {
                 {/* Déficit Hídrico */}
                 <div className="bg-surface/50 border-input-outline flex flex-col gap-3 rounded-lg border p-5">
                   <h4 className="text-primary flex items-center gap-2 text-sm font-bold uppercase">
-                    <Droplets className="h-4 w-4 text-red-400" /> Déficit Hídrico
+                    <BsThermometerSun className="h-4 w-4 text-red-400" /> Déficit Hídrico
                   </h4>
                   <p className="text-xs">
                     Tiempo acumulado diario con sequedad extrema (HR &lt; 50% en Orquideario, &lt;=
@@ -596,7 +602,7 @@ export function BotanicalAnalysisView() {
                     </div>
                     <div>
                       <span className="text-primary block font-semibold">
-                        🌵 Exterior (Cactus/Rosas)
+                        🌵 Exterior (Cactus & Suc)
                       </span>
                       <ul className="mt-1 flex list-inside list-disc flex-col gap-0.5 opacity-85">
                         <li>Umbral Seco: HR &lt;= 45%</li>

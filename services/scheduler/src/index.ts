@@ -286,6 +286,8 @@ function flushBootLog() {
   // Imprimir conexión del nodo
   Logger.node(nodeName)
 
+  let hasInitFailure = false
+
   // 1. Iluminancia
   if (bootAccumulator.lux !== null) {
     Logger.info(
@@ -296,6 +298,7 @@ function flushBootLog() {
     Logger.info(`Iluminancia: ${colors.dim}Muestreo Suspendido (Anochecer)${colors.reset}`, '🌙')
   } else {
     Logger.info(`Iluminancia: ${colors.red}No detectada en batch inicial${colors.reset}`, '⚠️')
+    hasInitFailure = true
   }
 
   // 2. Clima
@@ -309,6 +312,13 @@ function flushBootLog() {
       `Clima: ${colors.red}Fallo de inicialización en hardware detectado${colors.reset}`,
       '⚠️',
     )
+    hasInitFailure = true
+  }
+
+  if (hasInitFailure) {
+    Logger.warn('Iniciando ciclo de recuperación de sensores ambientales (Hard Reset de arranque).')
+    requestClimateSync()
+    startClimateSyncRetry()
   }
 
   // 3. Sensor de Lluvia
@@ -1283,10 +1293,10 @@ function startClimateSyncRetry() {
         if (climateSyncTimer) clearInterval(climateSyncTimer)
         climateSyncPhase = 'passive'
         Logger.warn(
-          `🌡️  DHT22: Fase agresiva agotada (${CLIMATE_SYNC_AGGRESSIVE_RETRIES} intentos). Entrando en modo pasivo (cada 15min).`,
+          `${colors.yellow}DHT22${colors.reset}: Fase agresiva agotada (${CLIMATE_SYNC_AGGRESSIVE_RETRIES} intentos). Entrando en modo pasivo (cada 15min).`,
         )
         climateSyncTimer = setInterval(() => {
-          Logger.info('🌡️  DHT22: Reintento pasivo de sincronización.')
+          Logger.info(`${colors.yellow}DHT22${colors.reset}: Reintento pasivo de sincronización.`)
           requestClimateSync()
         }, CLIMATE_SYNC_PASSIVE_INTERVAL_MS)
 
@@ -1294,7 +1304,7 @@ function startClimateSyncRetry() {
       }
 
       Logger.info(
-        `🌡️  DHT22: Reintento agresivo (${climateSyncAttempts}/${CLIMATE_SYNC_AGGRESSIVE_RETRIES})`,
+        `${colors.yellow}DHT22${colors.reset}: Reintento agresivo (${climateSyncAttempts}/${CLIMATE_SYNC_AGGRESSIVE_RETRIES})`,
       )
       requestClimateSync()
     },

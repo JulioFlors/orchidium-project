@@ -9,7 +9,7 @@ import { ZoneType } from '@/config/mappings'
 
 export const metadata: Metadata = {
   title: 'Análisis Botánico',
-  description: 'Análisis de métricas procesadas en ciclos de 24h, para su evaluación agronómica.',
+  description: 'Métricas procesadas en ciclos de 24h, para su evaluación agronómica.',
 }
 
 export default async function Page() {

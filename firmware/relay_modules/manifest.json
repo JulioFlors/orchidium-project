@@ -1,9 +1,9 @@
 {
   "name": "Relay Modules",
   "description": "Nodo Actuador (sistema de riego) + Nodo EMA (Meteorológia Exterior).",
-  "version": "0.15.1",
-  "date": "23-05-2026",
-  "notes_release": "[Configuración MQTT]: se ajustaron los tiempo de configuracion mqtt para ser mas holdagos.",
+  "version": "0.15.2",
+  "date": "26-05-2026",
+  "notes_release": "[Coordinación de Sensores]: recuperación de sensores por el Scheduler y suspensión de monitoreo mediante eventos si están desconectados.",
   "files": [
     "app.mpy",
     "boot.py",
