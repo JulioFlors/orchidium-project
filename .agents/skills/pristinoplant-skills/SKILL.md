@@ -158,33 +158,55 @@ Formato: `[Emoji] [tipo] ([área]): [Título Conciso]`
 Antes de realizar cualquier cambio destructivo de esquema, actualización o un reset completo de la base de datos, es mandatorio realizar una copia de seguridad de las tablas analíticas procesadas (como `DailyEnvironmentStat`, `RainEvent`) que no pueden regenerarse desde Ingest o InfluxDB.
 
 #### 1. Ubicación y Persistencia del Backup
+
 Los archivos de respaldo `.dump` generados dentro de `/var/lib/postgresql/data/` en el contenedor se guardan físicamente en la carpeta `./infrastructure/postgres/data/` (o `./infrastructure/postgres-local/data/` en desarrollo local) del host del VPS. Esta ubicación es un volumen Docker persistente que no se destruye al actualizar o recrear los contenedores.
 
 #### 2. Generación del Backup (VPS por SSH)
+
 Para respaldar tablas analíticas consolidadas de forma binaria estructurada (preservando constraints y tipos):
+
 ```bash
-# Cambiar las variables por las reales ($DB_USER, $DB_NAME) o cargarlas del .env
-docker exec postgres pg_dump -U $DB_USER -d $DB_NAME \
+# Opción 1: Recomendada (portable, usa variables internas del contenedor)
+docker exec postgres sh -c 'pg_dump -U $POSTGRES_USER -d $POSTGRES_DB \
+  -t "\"DailyEnvironmentStat\"" \
+  -t "\"RainEvent\"" \
+  -F c -b -v -f /var/lib/postgresql/data/processed_metrics_backup.dump'
+
+# Opción 2: Cargando el archivo .env del host antes de ejecutar
+export $(grep -v '^#' .env | xargs) && docker exec postgres pg_dump -U $DB_USER -d $DB_NAME \
+  -t '"DailyEnvironmentStat"' \
+  -t '"RainEvent"' \
+  -F c -b -v -f /var/lib/postgresql/data/processed_metrics_backup.dump
+
+# Opción 3: Explícita (valores quemados)
+docker exec postgres pg_dump -U julioflores -d pristinoplant \
   -t '"DailyEnvironmentStat"' \
   -t '"RainEvent"' \
   -F c -b -v -f /var/lib/postgresql/data/processed_metrics_backup.dump
 ```
+
 *(Nota: Especificar cada tabla con `-t '"NombreTabla"'` respetando las comillas dobles internas para nombres con mayúsculas y minúsculas de Prisma).*
 
 #### 3. Inspección y Comprobación del Backup
+
 Como el archivo se genera en formato binario personalizado (`-F c`), no se puede leer directamente con `cat`. Usa los siguientes comandos para verificar su integridad:
 
 - **Listar tablas y catálogo contenidos**:
+
   ```bash
   docker exec postgres pg_restore -l /var/lib/postgresql/data/processed_metrics_backup.dump
   ```
+
 - **Ver SQL e instrucciones de datos en texto plano**:
+
   ```bash
   docker exec postgres pg_restore -f - /var/lib/postgresql/data/processed_metrics_backup.dump | head -n 150
   ```
 
 #### 4. Descarga del Backup (PC Local)
+
 Puedes descargar la copia a tu máquina local para almacenamiento secundario de seguridad usando SCP:
+
 ```bash
 scp root@vps.sisparrow.com:/var/lib/docker/volumes/pristinoplant_postgres_data/_data/processed_metrics_backup.dump ./processed_metrics_backup.dump
 # O usando la ruta física montada donde esté el repositorio en el VPS:
@@ -192,29 +214,46 @@ scp root@vps.sisparrow.com:/ruta-del-proyecto/infrastructure/postgres/data/proce
 ```
 
 #### 5. Flujo de Mantenimiento y Restauración Post-Seed (PC Local a VPS)
+
 Para realizar un reset de la base de datos conservando las tablas históricas intactas tras la población inicial del sistema:
 
 1. **Borrado y Regeneración de Esquema**: Ejecutar el reset desde tu PC local para limpiar la base de datos de producción y aplicar las migraciones de esquema limpias:
+
    ```bash
    pnpm db:reset
    ```
+
 2. **Población Base**: Correr el seed desde la PC local para insertar los usuarios administrativos, cuentas y parámetros del sistema iniciales:
+
    ```bash
    pnpm db:seed
    ```
+
 3. **Restauración de Históricos (Data-Only)**: Conectarse al VPS por SSH y ejecutar la restauración sobre las tablas históricas analíticas. Dado que estas tablas no son afectadas por el seed, no habrá duplicidad de claves primarias:
-   ```bash
-   docker exec postgres pg_restore -U $DB_USER -d $DB_NAME \
-     -a -v --disable-triggers \
-     /var/lib/postgresql/data/processed_metrics_backup.dump
-   ```
+
+    ```bash
+    # Opción 1: Recomendada (portable, usa variables internas del contenedor)
+    docker exec postgres sh -c 'pg_restore -U $POSTGRES_USER -d $POSTGRES_DB \
+      -a -v --disable-triggers \
+      /var/lib/postgresql/data/processed_metrics_backup.dump'
+
+    # Opción 2: Cargando el archivo .env del host antes de ejecutar
+    export $(grep -v '^#' .env | xargs) && docker exec postgres pg_restore -U $DB_USER -d $DB_NAME \
+      -a -v --disable-triggers \
+      /var/lib/postgresql/data/processed_metrics_backup.dump
+
+    # Opción 3: Explícita (valores quemados)
+    docker exec postgres pg_restore -U julioflores -d pristinoplant \
+      -a -v --disable-triggers \
+      /var/lib/postgresql/data/processed_metrics_backup.dump
+    ```
+
    *(El flag `-a` o `--data-only` le indica a PostgreSQL que inserte únicamente las filas de datos sobre las tablas ya creadas por las migraciones de Prisma. El flag `--disable-triggers` suspende los triggers del sistema durante la inserción masiva).*
 
 > [!WARNING]
 > **Comportamiento ante Claves Duplicadas (Unique Constraints)**:
 > La restauración es una **inserción directa (agregación)** y no un reemplazo o fusión (*upsert*). Si intentas restaurar registros sobre una tabla que ya tiene datos, cualquier fila en el archivo `.dump` que comparta una clave primaria (`id`) o restricción única (como `@@unique([date, zone])` en `DailyEnvironmentStat`) fallará con un error de `duplicate key value violates unique constraint`.
 > Para restaurar sin errores, la tabla destino debe estar vacía o se deben purgar previamente de la base de datos activa los días/registros que entren en conflicto con el backup.
-
 
 ---
 
@@ -225,17 +264,20 @@ Debido a que InfluxDB v3 no admite la eliminación granular de registros a trav�
 El procedimiento estándar de mantenimiento de series de tiempo para borrar o depurar datos selectivamente en InfluxDB es el siguiente:
 
 1. **Exportación Histórica (Backup)**: Realizar una consulta SQL completa desde un script temporal (o usando la API de InfluxDB) para extraer todos los registros históricos existentes de la tabla a un archivo temporal (JSON o CSV):
+
    ```sql
    SELECT * FROM "environment_metrics"
    ```
+
 2. **Filtrado Masivo**: Procesar los registros leídos en memoria o mediante un script para poner en `null` o eliminar únicamente el campo no deseado (como `rain_intensity`), preservando el resto de las variables climáticas (`temperature`, `humidity`, `illuminance`, `time`).
 3. **Purgado de Tabla original**: Ejecutar la API HTTP de configuración de InfluxDB para vaciar los datos de la tabla de forma segura:
+
    ```bash
    curl -X DELETE "http://localhost:8181/api/v3/configure/table?db=telemetry&table=environment_metrics" \
      --header "Authorization: Bearer INFLUX_TOKEN"
    ```
-4. **Restauración Vectorial (Restore)**: Volver a reescribir por lotes (write batch) los puntos modificados a InfluxDB manteniendo sus marcas de tiempo originales intactas.
 
+4. **Restauración Vectorial (Restore)**: Volver a reescribir por lotes (write batch) los puntos modificados a InfluxDB manteniendo sus marcas de tiempo originales intactas.
 
 ### Protocolo de Reset Completo (Nuclear)
 

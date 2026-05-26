@@ -37,7 +37,7 @@ import { influxClient } from '../lib/influx'
 import { processDay } from '../lib/telemetry-processor'
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const BACKFILL_DAYS = parseInt(process.env.BACKFILL_DAYS || '90', 10)
+const BACKFILL_DAYS = parseInt(process.env.BACKFILL_DAYS || '30', 10)
 const BACKFILL_ZONE = process.env.BACKFILL_ZONE as ZoneType | undefined
 const DRY_RUN = process.env.BACKFILL_DRY_RUN === 'true'
 

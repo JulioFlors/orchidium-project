@@ -22,7 +22,7 @@ import { prisma, ZoneType } from '@package/database'
 import { influxClient } from '../lib/influx'
 import { Logger } from '../lib/logger'
 
-const BACKFILL_DAYS = parseInt(process.env.BACKFILL_DAYS || '90', 10)
+const BACKFILL_DAYS = parseInt(process.env.BACKFILL_DAYS || '30', 10)
 const DRY_RUN = process.env.BACKFILL_DRY_RUN === 'true'
 const COOLDOWN_MS = 15 * 60 * 1000 // 15 minutos sin lluvia para cerrar evento
 

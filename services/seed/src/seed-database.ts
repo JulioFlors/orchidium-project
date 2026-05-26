@@ -367,10 +367,11 @@ async function main() {
 }
 
 main()
-  .catch((e) => {
-    Logger.error('❌ Ha ocurrio un Error al ejecutar el Seed:', e)
-    process.exit(1)
-  })
-  .finally(async () => {
+  .then(async () => {
     await prisma.$disconnect()
+  })
+  .catch(async (e) => {
+    Logger.error('❌ Ha ocurrio un Error al ejecutar el Seed:', e)
+    await prisma.$disconnect()
+    process.exit(1)
   })

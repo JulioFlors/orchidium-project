@@ -375,6 +375,21 @@ function setupMqttHandlers() {
       if (topic === 'PristinoPlant/Actuator_Controller/status') {
         if (message === 'ping') {
           lastFirmwareHeartbeat = Date.now()
+          if (irrigationRetryManager.connectionState === 'offline') {
+            Logger.info('Heartbeat (ping) recibido de nodo Actuador anteriormente OFFLINE. Sincronizando...')
+            await handleNodeSync(false, previousHeartbeat)
+
+            if (!bootAccumulator) {
+              bootAccumulator = {
+                nodeName: 'Weather Station Exterior',
+                lux: null,
+                temp: null,
+                hum: null,
+                bootAt: Date.now(),
+                timer: setTimeout(() => flushBootLog(), 30000), // Ventana de 30s
+              }
+            }
+          }
 
           return
         }
@@ -416,6 +431,17 @@ function setupMqttHandlers() {
           }
 
           await handleNodeSync(false, previousHeartbeat)
+
+          if (!bootAccumulator) {
+            bootAccumulator = {
+              nodeName: 'Weather Station Exterior',
+              lux: null,
+              temp: null,
+              hum: null,
+              bootAt: Date.now(),
+              timer: setTimeout(() => flushBootLog(), 30000), // Ventana de 30s
+            }
+          }
         } else if (
           (message === 'lwt_disconnect' || message === 'offline') &&
           irrigationRetryManager.connectionState !== 'offline'
