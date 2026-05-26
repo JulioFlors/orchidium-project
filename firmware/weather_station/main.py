@@ -2,8 +2,8 @@
 # Weather Station: Environmental Monitoring Firmware.
 # Descripción: Nodo de Monitoreo Ambiental del Orquideario (ZONA_A).
 # Fecha: 23-05-2026
-# Version: v0.9.0
-# notes_release: Robustecimiento del nodo EMA del Orquideario. Conectividad resiliente, ahorro de batería con apagado de radio y medidas de seguridad avanzadas.
+# Version: v0.10.0
+# notes_release: Actualizado con el nodo actuador v0.15.1
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib. 
@@ -56,18 +56,44 @@ MQTT_TOPIC_CMD_RECEIVED     = const(b"PristinoPlant/Weather_Station/ZONA_A/cmd/r
 LWT_TOPIC = MQTT_TOPIC_STATUS
 LWT_MESSAGE = const(b"lwt_disconnect")
 
-# ---- Colors for logs ----
-if DEBUG:
-    class Colors:
-        RESET   = '\x1b[0m'
-        DIM     = '\x1b[90m'
-        RED     = '\x1b[91m'
-        GREEN   = '\x1b[92m'
-        YELLOW  = '\x1b[93m'
-        BLUE    = '\x1b[94m'
-        MAGENTA = '\x1b[95m'
-        CYAN    = '\x1b[96m'
-        WHITE   = '\x1b[97m'
+# ---- Hardware: Sensores ----
+dht_sensor    = None # DHT22 (Temp + Humedad)
+bh1750_sensor = None # BH1750 (I2C)
+i2c_bus       = None # Bus I2C global para diagnóstico
+
+# ---- Variables Globales de Estado ----
+# Variables de control
+wlan   = None # Conexión WiFi
+client = None # Cliente  MQTT
+
+# Control de ahorro de energía (True = Radio encendida)
+CONNECTED_ALLOWED = True 
+
+# Flag de control para la sincronización del monitoreo de iluminancia (Día/Noche)
+# Si es False, se suspende el muestreo del sensor BH1750 para evitar registros de 0 lux.
+# (Se inicializa en OFF por defecto; el Scheduler sincronizará el estado real tras conectar)
+IS_SAMPLING_LUX = False
+
+# Control de primer arranque
+IS_BOOT_STATUS = True
+
+# Evento asíncrono para esperar comandos de sincronización
+sync_event = asyncio.Event()
+
+# Buffer de mensajes MQTT para el patrón Productor-Consumidor
+mqtt_message_buffer = []
+
+# Candado asíncrono para evitar colisiones en el socket MQTT
+mqtt_lock = asyncio.Lock()
+
+# Evento asíncrono para despertar a la tarea de procesamiento de mensajes MQTT
+mqtt_msg_event = asyncio.Event()
+
+# Evento asíncrono para indicar que la conexión MQTT está establecida y lista
+mqtt_connected_event = asyncio.Event()
+
+# Evento maestro para despertar al Ticker Unificado de Auditoría
+audit_master_event = asyncio.Event()
 
 # ---- Utilidades de Telemetría (RingBuffer) ----
 class RingBuffer:
@@ -114,53 +140,6 @@ illuminance_Batch = RingBuffer(BATCH_SIZE)
 temperature_Batch = RingBuffer(BATCH_SIZE)
 humidity_Batch    = RingBuffer(BATCH_SIZE)
 
-# ---- Hardware Global ----
-dht_sensor    = None # DHT22 (Temp + Humedad)
-bh1750_sensor = None # BH1750 (I2C)
-i2c_bus       = None # Bus I2C global para diagnóstico
-
-# ---- Variables Globales de Estado ----
-wlan    = None # Conexión WiFi
-client  = None # Cliente MQTT
-CONNECTED_ALLOWED = False # Control de ahorro de energía (True = Radio encendida)
-IS_SAMPLING_LUX = True   # Control de muestreo BH1750 (Día/Noche)
-
-# Candado asíncrono para evitar colisiones en el socket MQTT
-mqtt_lock = asyncio.Lock()
-
-# Buffer de mensajes MQTT para el patrón Productor-Consumidor
-mqtt_message_buffer = []
-
-# Eventos de control asíncronos
-mqtt_msg_event = asyncio.Event()
-mqtt_connected_event = asyncio.Event()
-audit_master_event = asyncio.Event()
-
-# Diccionario de Sincronización para Auditorías
-audit_events = {
-    "lux":  asyncio.Event(),
-    "wifi": asyncio.Event(),
-    "ram":  asyncio.Event(),
-    "temp": asyncio.Event(),
-    "hum":  asyncio.Event()
-}
-
-AUDIT_MODE = {
-    "lux":  False,
-    "wifi": False,
-    "ram":  False,
-    "temp": False,
-    "hum":  False
-}
-
-AUDIT_COUNTERS = {
-    "lux":  0,
-    "wifi": 0,
-    "ram":  0,
-    "temp": 0,
-    "hum":  0
-}
-
 # ---- Funciones de Muestreo de Auditoría ----
 def get_lux_sample():
     if bh1750_sensor is not None:
@@ -199,11 +178,50 @@ AUDIT_SAMPLE_FNS = {
     "hum":  get_dht_sample
 }
 
+AUDIT_MODE = {
+    "lux":  False,
+    "wifi": False,
+    "ram":  False,
+    "temp": False,
+    "hum":  False
+}
+
+AUDIT_COUNTERS = {
+    "lux":  0,
+    "wifi": 0,
+    "ram":  0,
+    "temp": 0,
+    "hum":  0
+}
+
+# ---- Colors for logs ----
+if DEBUG:
+    class Colors:
+        RESET   = '\x1b[0m'
+        DIM     = '\x1b[90m'
+        RED     = '\x1b[91m'
+        GREEN   = '\x1b[92m'
+        YELLOW  = '\x1b[93m'
+        BLUE    = '\x1b[94m'
+        MAGENTA = '\x1b[95m'
+        CYAN    = '\x1b[96m'
+        WHITE   = '\x1b[97m'
+
+# ---- Importar configuración desde lib/secrets de forma segura ---- #
+try:
+    from secrets import WIFI_SSID, WIFI_PASS, MQTT_SERVER, MQTT_USER, MQTT_PASS, MQTT_PORT, MQTT_SSL, MQTT_SSL_PARAMS
+except ImportError:
+    if DEBUG:
+        print(f"\n\n❌  Error: {Colors.RED}No se encontró{Colors.RESET} lib/secrets")
+    WIFI_SSID, WIFI_PASS = "", ""
+    MQTT_SERVER, MQTT_USER, MQTT_PASS, MQTT_PORT, MQTT_SSL, MQTT_SSL_PARAMS = "", "", "", 1883, False, {}
+
 # ---- Función Auxiliar: Uso del disco ----
 def log_disk_usage():
-    import os
     if not DEBUG: return
+
     try:
+        import os
         fs_stat = os.statvfs('/')
         block_size = fs_stat[0]
         total_blocks = fs_stat[2]
@@ -218,9 +236,10 @@ def log_disk_usage():
 
 # ---- Función Auxiliar: Uso de la memoria RAM ----
 def log_ram_usage():
-    from gc import mem_free, mem_alloc
     if not DEBUG: return
+
     try:
+        from gc import mem_free, mem_alloc
         free = mem_free()
         alloc = mem_alloc()
         total = free + alloc
@@ -229,15 +248,6 @@ def log_ram_usage():
         print(f"🧠  RAM Usage: {used/1024:.1f}KB / {total/1024:.1f}KB ({p:.1f}%) | Free: {free/1024:.1f}KB")
     except Exception as e:
         print(f"⚠️  RAM Stat Error: {e}")
-
-# ---- Importar configuración desde lib/secrets de forma segura ---- #
-try:
-    from secrets import WIFI_SSID, WIFI_PASS, MQTT_SERVER, MQTT_USER, MQTT_PASS, MQTT_PORT, MQTT_SSL, MQTT_SSL_PARAMS
-except ImportError:
-    if DEBUG:
-        print(f"\n\n❌  Error: {Colors.RED}No se encontró{Colors.RESET} lib/secrets")
-    WIFI_SSID, WIFI_PASS = "", ""
-    MQTT_SERVER, MQTT_USER, MQTT_PASS, MQTT_PORT, MQTT_SSL, MQTT_SSL_PARAMS = "", "", "", 1883, False, {}
 
 # ---- Excepciones Personalizadas ----
 class MQTTSessionZombie(OSError):
@@ -491,11 +501,13 @@ def sub_callback(topic, msg, retained, dup):
 def force_disconnect_mqtt(silent=True):
     global client
     from gc import collect
+    from utime import sleep_ms
 
     if client is not None:
         try:
             if wlan and wlan.isconnected():
                 client.disconnect()
+                sleep_ms(500)
         except: pass
 
         try:
@@ -519,41 +531,6 @@ def force_disconnect_mqtt(silent=True):
 
         if DEBUG and not silent:
             print(f"📡  Cliente  {Colors.GREEN}Desconectado{Colors.RESET}")
-
-# ---- FUNCIÓN AUXILIAR: Gestión de desconexión (Graceful Shutdown) ----
-def shutdown():
-    from utime import sleep_ms
-    """
-    **Apagado Controlado (Weather Station)**
-    * Publica `offline` explícitamente con QoS 1.
-    * Flush de batches de telemetría acumulados de forma síncrona.
-    * Desconecta MQTT y WiFi para ahorrar energía.
-    """
-
-    if client and hasattr(client, 'sock') and client.sock and wlan and wlan.isconnected():
-        try:
-            flush_telemetry_batches()
-        except Exception as e:
-            if DEBUG:
-                print(f"⚠️  Error en flush_telemetry_batches en shutdown: {e}")
-        sleep_ms(500)
-
-        try:
-            client.publish(MQTT_TOPIC_STATUS, b"offline", retain=True, qos=1)
-        except Exception as e:
-            if DEBUG:
-                print(f"⚠️  Error publicando offline en shutdown: {e}")
-        sleep_ms(500)
-
-    force_disconnect_mqtt(silent=False)
-
-    if wlan and wlan.isconnected():
-        try:
-            wlan.disconnect()
-            wlan.active(False)
-            if DEBUG: print(f"📡  WiFi     {Colors.GREEN}Desconectado{Colors.RESET}\n")
-        except Exception:
-            pass
 
 # ---- CORUTINA: Gestión de Conexión WiFi ----
 async def wifi_coro():
@@ -754,8 +731,28 @@ async def mqtt_connector_task(client_id):
 
                 mqtt_disconnect_start = None
                 if DEBUG: print(f"📡  Conexión MQTT {Colors.GREEN}Establecida{Colors.RESET}")
-                client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=1)
-                client.subscribe(MQTT_TOPIC_CMD, qos=1)
+                
+                try:
+                    global IS_BOOT_STATUS
+                    async with mqtt_lock:
+                        if client and getattr(client, 'sock', None):
+                            if IS_BOOT_STATUS:
+                                client.publish(MQTT_TOPIC_STATUS, b"reboot", retain=True, qos=0)
+                                IS_BOOT_STATUS = False
+                                if DEBUG: print(f"\n📡  NODO {Colors.GREEN}Reboot{Colors.RESET}", end="\n")
+                            else:
+                                client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=0)
+                                if DEBUG: print(f"\n📡  NODO {Colors.GREEN}Online{Colors.RESET}", end="\n")
+                except Exception as _e:
+                    if DEBUG: print(f"⚠️ Fallo publicando estado inicial: {_e}")
+
+                try:
+                    async with mqtt_lock:
+                        if client and getattr(client, 'sock', None):
+                            client.subscribe(MQTT_TOPIC_CMD, qos=1)
+                except Exception as _e:
+                    if DEBUG: print(f"⚠️ Fallo en suscripción inicial: {_e}")
+                    raise _e
                 
                 # Reseteamos el contador tras conexión exitosa
                 consecutive_mqtt_failures = 0
@@ -788,26 +785,23 @@ async def mqtt_connector_task(client_id):
                 if ticks_diff(now_ms, last_manual_ping) > (MQTT_PING_INTERVAL * 1000):
                     async with mqtt_lock:
                         if client and getattr(client, 'sock', None):
+                            # 1. Cooldown inicial para despejar búfer de transmisiones previas
+                            await asyncio.sleep_ms(500)
+
                             try:
-                                # 1. Cooldown inicial para despejar búfer de transmisiones previas
-                                await asyncio.sleep_ms(500)
-                                
                                 if client and getattr(client, 'sock', None):
-                                    client.ping()
-                                    if DEBUG: print(f"📡  MQTT: {Colors.CYAN}Ping de vida enviado{Colors.RESET}")
-                                    # Solo declaramos el socket vivo (last_cpacket) si el ping pasó
+                                    client.publish(MQTT_TOPIC_STATUS, b"ping", retain=True, qos=0)
                                     client.last_cpacket = now_ms
                                     heartbeat_failures = 0
-                            except (MQTTException, OSError) as e_ping:
-                                if DEBUG:
-                                    print(f"\n⚠️  {Colors.YELLOW}Advertencia: Fallo en Ping/Heartbeat:{Colors.RESET} {e_ping}")
+                            except (MQTTException, OSError) as e_pub:
+                                if DEBUG: print(f"\n⚠️  Fallo en Heartbeat: {e_pub}")
                                 heartbeat_failures += 1
-                                # Toleramos 1 fallo transitorio. Al 2do fallo consecutivo (~58s), escalamos para forzar reconexión.
+                                # Escalamos al bucle externo tras 2 fallos consecutivos (~58s)
                                 if heartbeat_failures >= 2:
-                                    raise e_ping
-                            finally:
-                                # Evitamos spam actualizando el cronómetro del ping incluso si falló
-                                last_manual_ping = now_ms
+                                    raise MQTTException("Heartbeat falló de forma persistente.")
+                                    
+                            # Actualizamos el cronómetro para evitar spam
+                            last_manual_ping = now_ms
 
                 # Control de sesión Zombie (1.5x keepalive)
                 elif ticks_diff(now_ms, client.last_cpacket) > (MQTT_KEEPALIVE * 1500):
@@ -924,8 +918,8 @@ def flush_telemetry_batches():
         if DEBUG: print(f"⚠️ Fallo general en flush_telemetry_batches: {_e}")
 
 # ---- CORUTINA: Consumidor de Comandos MQTT ----
-async def command_processor_task():
-    global IS_SAMPLING_LUX, CONNECTED_ALLOWED
+async def mqtt_processor_task():
+    global IS_SAMPLING_LUX, CONNECTED_ALLOWED, sync_event
     from gc import collect
     from machine import reset
     from utime import sleep
@@ -965,22 +959,11 @@ async def command_processor_task():
             except Exception: pass
 
             if topic == MQTT_TOPIC_CMD:
+                sync_event.set()
                 # 1. Reset
                 if m_low == b"reset":
                     if DEBUG: print(f"    └─ Cmd: reset")
-                    try:
-                        if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
-                            try:
-                                async with mqtt_lock:
-                                    if client and getattr(client, 'sock', None):
-                                        client.publish(MQTT_TOPIC_STATUS, b"rebooting", retain=True, qos=0)
-                            except (MQTTException, OSError) as e:
-                                if DEBUG: log_mqtt_exception("Fallo publicación estado reinicio", e)
-                                force_disconnect_mqtt()
-                                await check_critical_mqtt_errors(e)
-                        collect()
-                    except Exception: pass
-                    
+                    collect()
                     sleep(2)
                     reset()
 
@@ -1000,28 +983,30 @@ async def command_processor_task():
                 elif m_low.startswith(b"audit_") and m_low.endswith((b"_on", b"_off")):
                     parts = m_low.split(b"_")
                     if len(parts) == 3:
+                        # [Lazy Decoding]: Decodificamos solo la categoría para el diccionario
                         category = parts[1].decode('utf-8')
                         action   = parts[2]
 
                         if category in AUDIT_MODE:
                             if action == b"on":
+                                # [Idempotencia]: Solo actuamos si no está ya encendido
                                 if not AUDIT_MODE.get(category):
                                     was_asleep = not any(AUDIT_MODE.values())
                                     AUDIT_MODE[category] = True
                                     AUDIT_COUNTERS[category] = 0
-                                    if category in audit_events:
-                                        audit_events[category].set()
                                     if was_asleep:
                                         audit_master_event.set()
                                         CONNECTED_ALLOWED = True # Forzar radio encendida
                                     if DEBUG: print(f"    └─ AUDIT {category.upper()}: ON")
                             elif action == b"off":
                                 AUDIT_MODE[category] = False
-                                if category in audit_events:
-                                    audit_events[category].clear()
+                                collect()
                                 if DEBUG: print(f"    └─ AUDIT {category.upper()}: OFF")
 
                             await publish_audit_state()
+
+                        del category, action
+                    del parts
 
                 # 4. Sincronización de Clima (Scheduler → Firmware)
                 elif m_low == b"sync_climate":
@@ -1048,92 +1033,9 @@ async def command_processor_task():
             if DEBUG: print(f"⚠️  Error en command_processor: {e}")
             await asyncio.sleep(1)
 
-# ---- CORUTINA: Trabajador Unificado de Auditoría ----
-async def unified_audit_task():
-    from gc import collect
-
-    while True:
-        try:
-            active_keys = [k for k, v in AUDIT_MODE.items() if v]
-
-            if not active_keys:
-                await audit_master_event.wait()
-                audit_master_event.clear()
-                await asyncio.sleep(1)
-                active_keys = [k for k, v in AUDIT_MODE.items() if v]
-
-            if not active_keys: continue
-
-            fragments = []
-            dirty = False
-            dht_data = None
-
-            for category in active_keys:
-                sample_fn = AUDIT_SAMPLE_FNS.get(category)
-                if not sample_fn: continue
-
-                try:
-                    if category in ("temp", "hum"):
-                        if dht_data is None:
-                            dht_data = get_dht_sample()
-                        val = dht_data
-                    else:
-                        res = sample_fn()
-                        if type(res).__name__ == 'generator':
-                            val = await res
-                        else:
-                            val = res
-                except Exception as e:
-                    if DEBUG: print(f"⚠️ Error muestreando {category}: {e}")
-                    val = None
-
-                if val is not None:
-                    if category == "wifi":
-                        fragments.append('"%s":{"rssi":%d,"ip":"%s"}' % (category, val[0], val[1]))
-                    elif category == "ram":
-                        fragments.append('"%s":{"f":%d,"a":%d}' % (category, val[0], val[1]))
-                    elif category == "temp":
-                        fragments.append('"temperature":%s' % (str(val[0])))
-                    elif category == "hum":
-                        fragments.append('"humidity":%s' % (str(val[1])))
-                    elif category == "lux":
-                        fragments.append('"illuminance":%s' % (str(val)))
-
-                    AUDIT_COUNTERS[category] += 1
-                    dirty = True
-
-                    if DEBUG: print(f"\n🔍  [Batch] {category.upper()} #{AUDIT_COUNTERS[category]}: {val}")
-
-                    if AUDIT_COUNTERS[category] >= 10:
-                        AUDIT_MODE[category] = False
-                        AUDIT_COUNTERS[category] = 0
-                        if category in audit_events:
-                            audit_events[category].clear()
-                        if DEBUG: print(f"\n📡  Auto-OFF: {category.upper()}")
-                        await publish_audit_state()
-
-            if dirty and client and getattr(client, 'sock', None):
-                payload = "{" + ",".join(fragments) + "}"
-                try:
-                    async with mqtt_lock:
-                        if client and getattr(client, 'sock', None):
-                            client.publish(MQTT_TOPIC_AUDIT, payload, qos=0)
-                except Exception as e:
-                    if DEBUG: log_mqtt_exception("Fallo publicación Batch de Auditoría", e)
-                    force_disconnect_mqtt()
-                    await check_critical_mqtt_errors(e)
-                del fragments, payload
-                collect()
-
-            await asyncio.sleep(60)
-
-        except Exception as e:
-            if DEBUG: print(f"⚠️ Error en unified_audit: {e}")
-            await asyncio.sleep(10)
-
 # ---- CORUTINA: Muestreo Periódico de Sensores y Ahorro de Energía ----
 async def sensor_publish_task():
-    global CONNECTED_ALLOWED
+    global CONNECTED_ALLOWED, sync_event
     from gc import collect
 
     dht_read_failures = 0
@@ -1141,7 +1043,39 @@ async def sensor_publish_task():
 
     await asyncio.sleep(5)
 
+    # === Fase de Arranque Inicial ===
+    if DEBUG: print("📡 Fase de arranque: esperando conexión para reporte inicial...")
+    ready = False
+    for _ in range(45):
+        if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
+            ready = True
+            break
+        await asyncio.sleep(1)
+
+    if ready:
+        if DEBUG: print("🚀 Conexión establecida. Publicando reporte inicial...")
+        await flush_telemetry_batches_async()
+        sync_event.clear()
+        if DEBUG: print("🕒 Esperando comandos del Scheduler (hasta 80s)...")
+        try:
+            await asyncio.wait_for(sync_event.wait(), 80)
+            if DEBUG: print("📬 Sincronización recibida de forma síncrona.")
+        except asyncio.TimeoutError:
+            if DEBUG: print("⚠️ Timeout de sincronización con el Scheduler.")
+        
+        if not any(AUDIT_MODE.values()):
+            CONNECTED_ALLOWED = False
+            shutdown(status=b"sleep")
+    else:
+        if DEBUG: print("⚠️ No se pudo establecer conexión en arranque. Durmiendo...")
+        if not any(AUDIT_MODE.values()):
+            CONNECTED_ALLOWED = False
+            shutdown(status=b"sleep")
+
+    # === Bucle de Muestreo Periódico ===
     while True:
+        await asyncio.sleep(60)
+
         temp, hum, lux = None, None, None
 
         # 1. DHT22
@@ -1161,7 +1095,7 @@ async def sensor_publish_task():
             dht_read_failures += 1
             if DEBUG: print(f"⚠️  DHT22: Fallo de lectura transitorio. Fallos: {dht_read_failures}")
 
-        # 2. BH1750
+        # 2. BH1750 (solo si IS_SAMPLING_LUX es True)
         lux_ok = False
         if IS_SAMPLING_LUX and bh1750_sensor is not None:
             try:
@@ -1195,12 +1129,12 @@ async def sensor_publish_task():
             print(f"📝 Muestreo ({c}/{BATCH_SIZE}): Temp={temp}°C, Hum={hum}%, Lux={lux}")
 
         # 4. Transmitir si se completa el lote
-        if temperature_Batch.count >= BATCH_SIZE or illuminance_Batch.count >= BATCH_SIZE:
-            if DEBUG: print(f"🚀 Lote de telemetría completo ({BATCH_SIZE}). Activando radio WiFi...")
+        if temperature_Batch.count >= BATCH_SIZE or (IS_SAMPLING_LUX and illuminance_Batch.count >= BATCH_SIZE):
+            if DEBUG: print(f"🚀 Lote de telemetría completo. Activando radio WiFi...")
             CONNECTED_ALLOWED = True
 
             ready = False
-            for _ in range(60):
+            for _ in range(45):
                 if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
                     ready = True
                     break
@@ -1208,20 +1142,123 @@ async def sensor_publish_task():
 
             if ready:
                 await flush_telemetry_batches_async()
+                sync_event.clear()
+                if DEBUG: print("🕒 Esperando comandos del Scheduler (hasta 80s)...")
+                try:
+                    await asyncio.wait_for(sync_event.wait(), 80)
+                    if DEBUG: print("📬 Sincronización recibida de forma síncrona.")
+                except asyncio.TimeoutError:
+                    if DEBUG: print("⚠️ Timeout de sincronización con el Scheduler.")
             else:
                 if DEBUG: print("⚠️ No se pudo conectar para transmitir el lote. Se reintentará luego.")
 
             # Apagar radio tras el intento si no hay auditorías activas
             if not any(AUDIT_MODE.values()):
                 CONNECTED_ALLOWED = False
-                shutdown()
+                shutdown(status=b"sleep")
         else:
             # Apagar si el WiFi quedó encendido por una auditoría que ya terminó
             if CONNECTED_ALLOWED and not any(AUDIT_MODE.values()):
                 CONNECTED_ALLOWED = False
-                shutdown()
+                shutdown(status=b"sleep")
 
         await asyncio.sleep(60)
+
+# ---- CORRUTINA: Sincronización y Batching de Auditorías ----
+async def unified_audit_task():
+    """
+    Gestiona todas las auditorías activas en un solo ciclo sincronizado de 60s,
+    publicando un único paquete MQTT con todos los datos recolectados.
+    """
+    from gc import collect
+
+    while True:
+        try:
+            # Verificamos si hay alguna auditoría activa
+            active_keys = [k for k, v in AUDIT_MODE.items() if v]
+
+            if not active_keys:
+                # Si no hay nada que auditar, dormimos hasta que un comando nos despierte
+                await audit_master_event.wait()
+                audit_master_event.clear()
+                # Pequeño delay de cortesía para dejar que se procesen otros comandos
+                await asyncio.sleep(1)
+                active_keys = [k for k, v in AUDIT_MODE.items() if v]
+
+            if not active_keys: continue
+
+            fragments = []
+            dirty = False
+            dht_data = None # Cache temporal para evitar doble lectura del sensor en el mismo ciclo
+
+            for category in active_keys:
+                sample_fn = AUDIT_SAMPLE_FNS.get(category)
+                if not sample_fn: continue
+
+                try:
+                    # Optimización DHT: Si es temp o hum, usamos la caché del ciclo o leemos una vez
+                    if category in ("temp", "hum"):
+                        if dht_data is None:
+                            dht_data = get_dht_sample()
+                        val = dht_data
+                    else:
+                        res = sample_fn()
+                        # En MicroPython, las corrutinas (async def) retornan un generador.
+                        # Esta es la forma más ligera y compatible de detectarlas sin romper la RAM.
+                        if type(res).__name__ == 'generator':
+                            val = await res
+                        else:
+                            val = res
+                except Exception as e:
+                    if DEBUG: print(f"⚠️ Error muestreando {category}: {e}")
+                    val = None
+
+                if val is not None:
+                    # Construcción manual de la categoría en JSON PLANO (Snapshot)
+                    if category == "wifi":
+                        fragments.append('"%s":{"rssi":%d,"ip":"%s"}' % (category, val[0], val[1]))
+                    elif category == "ram":
+                        fragments.append('"%s":{"f":%d,"a":%d}' % (category, val[0], val[1]))
+                    elif category == "temp":
+                        fragments.append('"temperature":%s' % (str(val[0])))
+                    elif category == "hum":
+                        fragments.append('"humidity":%s' % (str(val[1])))
+                    elif category == "lux":
+                        fragments.append('"illuminance":%s' % (str(val)))
+
+                    AUDIT_COUNTERS[category] += 1
+                    dirty = True
+                    
+                    if DEBUG: print(f"\n🔍  [Batch] {category.upper()} Nro. {AUDIT_COUNTERS[category]}: {val}")
+
+                    # Lógica de Auto-Off (10 muestras)
+                    if AUDIT_COUNTERS[category] >= 10:
+                        AUDIT_MODE[category] = False
+                        AUDIT_COUNTERS[category] = 0
+                        if DEBUG: print(f"\n📡  Auto-OFF: {category.upper()}")
+                        await publish_audit_state()
+
+            # Publicación Única (Minimiza contención de Lock y overhead de red)
+            if dirty and client and getattr(client, 'sock', None):
+                # Construcción manual de JSON para el bundle de auditoría
+                payload = "{" + ",".join(fragments) + "}"
+                try:
+                    async with mqtt_lock:
+                        if client and getattr(client, 'sock', None):
+                            client.publish(MQTT_TOPIC_AUDIT, payload, qos=0)
+                except Exception as e:
+                    if DEBUG: log_mqtt_exception("Fallo publicación Batch de Auditoría", e)
+
+                # Liberamos memoria de los fragmentos inmediatamente
+                del fragments, payload
+                collect()
+
+            # ---- Ciclo de 60s (sin interrupciones) ----
+            # Cuando ya hay auditorías activas, las nuevas se suman al flujo natural sin romper la cadencia de publicación.
+            await asyncio.sleep(60)
+
+        except Exception as e:
+            if DEBUG: print(f"⚠️ Error en unified_audit: {e}")
 
 # ---- CORUTINA: Programa Principal ----
 async def main():
@@ -1230,58 +1267,79 @@ async def main():
     from network   import STA_IF, WLAN
     from ubinascii import hexlify
 
-    # Identificación única
+    # ---- Identificación unica del ESP32 ----
+    # Obtenemos la MAC del dispositivo
     mac_address = hexlify(WLAN(STA_IF).config('mac')).decode()
-    client_id = f"ESP32-Environmental-Monitor-ZONA_A-{mac_address}"
+    # Construye el client_id único
+    client_id = f"NODO_EMA_ZONA_A_{mac_address}"
 
-    # Inicialización del Hardware (Logical)
-    await setup_sensors()
-
-    # Tareas Asíncronas
-    asyncio.create_task(wifi_coro())
-    asyncio.create_task(mqtt_connector_task(client_id))
-    asyncio.create_task(command_processor_task())
-    asyncio.create_task(sensor_publish_task())
-    asyncio.create_task(unified_audit_task())
-
-    # Watchdog Timer
+    # ---- Watchdog Timer ----
+    # Seguridad de hardware: Si el bucle principal se congela, el dispositivo se reinicia.
     try:
         wdt = WDT(timeout=WDT_TIMEOUT_MS)
         if DEBUG:
-            print(f"🐕  Watchdog Activado: {Colors.MAGENTA}{WDT_TIMEOUT_MS//1000} segundos{Colors.RESET}")
+            print(f"\n🐕  Watchdog: {Colors.YELLOW}{WDT_TIMEOUT_MS//1000} segundos{Colors.RESET}")
     except Exception as e:
         if DEBUG:
             print(f"⚠️  No se pudo iniciar el Watchdog: {e}")
         wdt = None
 
+    # ---- Tareas Asíncronas de Red ----
+    # (Re)conexión WiFi
+    asyncio.create_task(wifi_coro())
+
+    # ---- Inicialización del Hardware ----
+    await setup_sensors()
+
+    # ---- Resto de Tareas Asíncronas ----
+    # Reconexión MQTT (Depende de WiFi)
+    asyncio.create_task(mqtt_connector_task(client_id))
+    # Consumidor de mensajes MQTT (Patrón Productor-Consumidor)
+    asyncio.create_task(mqtt_processor_task())
+    # Gestiona la lectura y publicacion de los sensores
+    asyncio.create_task(sensor_publish_task())
+    # Gestion de Auditorías
+    asyncio.create_task(unified_audit_task())
+
+    # ---- Bucle de Supervisión y Recolección de Basura ----
     while True:
         if wdt: wdt.feed()
         collect()
-        await asyncio.sleep(13)
+        await asyncio.sleep(20)
 
-# ---- Detención local de Emergencia ----
+# ---- Función Auxiliar: Detener Programa (Ctrl+C) ----
 def stopped_program():
+    """
+    #### Detener el programa desde la terminal (Ctrl+C)
+    * Log de parada.
+    * Apaga físicamente todos los relés.
+    * Publica 'offline' explícitamente para evitar latencias de LWT.
+    """
     from utime import sleep_ms
+
     if DEBUG:
         print(f"\n\n📡  Programa {Colors.GREEN}Detenido{Colors.RESET}")
 
     if client and hasattr(client, 'sock') and client.sock and wlan and wlan.isconnected():
         try:
             flush_telemetry_batches()
+            sleep_ms(500)
         except Exception as e:
             if DEBUG:
                 print(f"⚠️  Error en flush_telemetry_batches en stopped_program: {e}")
-        sleep_ms(500)
 
         try:
+            # retain=True para que el estado persista en el broker tras el DISCONNECT.
             client.publish(MQTT_TOPIC_STATUS, b"offline", retain=True, qos=1)
+            sleep_ms(500)
         except Exception as e:
             if DEBUG:
                 print(f"⚠️  Error publicando offline en stopped_program: {e}")
-        sleep_ms(500)
 
+    # Invalidamos el cliente MQTT
     force_disconnect_mqtt(silent=False)
 
+    # Desconectamos el WiFi.
     if wlan and wlan.isconnected():
         try:
             wlan.disconnect()
@@ -1290,10 +1348,52 @@ def stopped_program():
         except Exception:
             pass
 
-# ---- safe_reset ----
+# ---- FUNCIÓN AUXILIAR: Gestión de desconexión (Nodo EMA) ----
+def shutdown(status=b"offline"):
+    """
+    **Desconexion Controlada**
+    * Publica `status` explícitamente con QoS 0.
+    * Flush de telemetría acumulada de forma síncrona.
+    * Desconecta MQTT y WiFi.
+    """
+    from utime import sleep_ms
+
+    # Publicamos en MQTT (Solo si hay conexión)
+    if client and hasattr(client, 'sock') and client.sock and wlan and wlan.isconnected():
+        try:
+            flush_telemetry_batches()
+            sleep_ms(500)
+        except Exception as e:
+            if DEBUG:
+                print(f"⚠️  Error en flush_telemetry_batches en shutdown: {e}")
+
+        try:
+            client.publish(MQTT_TOPIC_STATUS, status, retain=True, qos=0)
+            sleep_ms(500)
+        except Exception as e:
+            if DEBUG:
+                print(f"⚠️  Error publicando {status.decode() if hasattr(status, 'decode') else status} en shutdown: {e}")
+
+    # Invalidamos el cliente MQTT 
+    force_disconnect_mqtt(silent=False)
+
+    # Desconectamos el WiFi.
+    if wlan and wlan.isconnected():
+        try:
+            wlan.disconnect()
+            wlan.active(False)
+            if DEBUG: print(f"📡  WiFi     {Colors.GREEN}Desconectado{Colors.RESET}\n")
+        except Exception:
+            pass
+
+# ---- Función Auxiliar: Safe Reset (Reinicio Seguro) ----
 def safe_reset():
+    """
+    Cierra conexiones de red y reinicia el dispositivo.
+    """
     from machine import reset
     from utime   import sleep_ms
+
     try:
         shutdown()
     except: pass
@@ -1307,8 +1407,7 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         stopped_program()
     except Exception as e:
-        if DEBUG:
-            print(f"\n\n❌  Error fatal no capturado: {Colors.RED}{e}{Colors.RESET}\n\n")
+        if DEBUG: print(f"\n\n❌  Error fatal no capturado: {Colors.RED}{e}{Colors.RESET}\n\n")
         try:
             safe_reset()
         except:

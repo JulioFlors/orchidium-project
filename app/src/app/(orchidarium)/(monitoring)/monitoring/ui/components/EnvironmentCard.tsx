@@ -11,18 +11,13 @@ export interface EnvironmentCardProps {
   value: string | number
   unit: string
   icon: React.ReactNode
-  status?: 'optimal' | 'warning' | 'critical'
   trend?: 'up' | 'down' | 'stable'
   isActive?: boolean
   onClick?: () => void
   className?: string
   description?: React.ReactNode
   color?: 'orange' | 'blue' | 'yellow' | 'cyan' | 'purple' | 'green' | 'red'
-  isOffline?: boolean
   isLoading?: boolean
-  hasData?: boolean
-  statusLabel?: string
-  timestamp?: string
 }
 
 export function EnvironmentCard({
@@ -30,16 +25,11 @@ export function EnvironmentCard({
   value,
   unit,
   icon,
-  status = 'optimal',
   className,
   description,
   color = 'purple',
   isActive = false,
-  isOffline = false,
   isLoading = false,
-  hasData = true,
-  statusLabel,
-  timestamp,
   onClick,
   trend: _trend,
 }: EnvironmentCardProps) {
@@ -53,12 +43,6 @@ export function EnvironmentCard({
 
     mouseX.set(clientX - left)
     mouseY.set(clientY - top)
-  }
-
-  const statusColors = {
-    optimal: 'text-green-500',
-    warning: 'text-yellow-500',
-    critical: 'text-red-400',
   }
 
   const colorStyles = {
@@ -192,39 +176,6 @@ export function EnvironmentCard({
               )}
             </div>
           </div>
-
-          <div className="flex shrink-0 items-center pt-0.5">
-            {isLoading ? (
-              <div className="bg-primary/10 h-5 w-16 animate-pulse rounded-full" />
-            ) : (
-              <div className="flex items-center gap-2">
-                {isOffline ? (
-                  <div className="border-input-outline bg-surface text-secondary rounded-full border px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase shadow-sm">
-                    Offline
-                  </div>
-                ) : !hasData ? (
-                  <div className="border-input-outline bg-surface text-secondary rounded-full border px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase shadow-sm">
-                    Sin Datos
-                  </div>
-                ) : description === 'Muestreo suspendido' || description === 'Muestreo detenido' ? (
-                  <div className="border-input-outline bg-surface text-secondary rounded-full border px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase shadow-sm">
-                    Suspendido
-                  </div>
-                ) : (
-                  (timestamp || statusLabel) && (
-                    <div
-                      className={clsx(
-                        'border-input-outline bg-surface rounded-full border px-2.5 py-0.5 text-[10px] font-bold tracking-wider uppercase shadow-sm',
-                        statusLabel ? statusColors[status] : 'text-primary',
-                      )}
-                    >
-                      {statusLabel || timestamp}
-                    </div>
-                  )
-                )}
-              </div>
-            )}
-          </div>
         </div>
 
         <div className="mt-5 flex items-baseline gap-1.5">
@@ -232,9 +183,7 @@ export function EnvironmentCard({
             <div className="bg-primary/10 h-10 w-24 animate-pulse rounded-md" />
           ) : (
             <>
-              <span className="text-primary text-4xl font-extrabold tracking-tight">
-                {isOffline || !hasData ? '--' : value}
-              </span>
+              <span className="text-primary text-4xl font-extrabold tracking-tight">{value}</span>
               <span className="text-secondary text-sm font-semibold">{unit}</span>
             </>
           )}

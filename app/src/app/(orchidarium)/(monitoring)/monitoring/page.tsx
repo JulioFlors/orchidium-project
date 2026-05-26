@@ -19,7 +19,7 @@ export default async function Page() {
   // Pre-cargamos los datos para las tarjetas por defecto (EXTERIOR, 24h)
   const [historyRes, rainRes, hbExterior, hbZonaA] = await Promise.all([
     getSensorData('24h', ZoneType.EXTERIOR),
-    getRainData(ZoneType.EXTERIOR),
+    getRainData('today', ZoneType.EXTERIOR),
     getLastHeartbeat('Actuator_Controller'),
     getLastHeartbeat('Weather_Station', ZoneType.ZONA_A),
   ])
@@ -41,7 +41,7 @@ export default async function Page() {
   }
 
   if (rainRes.success) {
-    fallback[`/api/environment/rain?range=12h&zone=${ZoneType.EXTERIOR}`] = rainRes.data
+    fallback[`/api/environment/rain?range=today&zone=${ZoneType.EXTERIOR}`] = rainRes.data
   }
 
   return (

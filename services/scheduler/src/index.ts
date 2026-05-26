@@ -106,6 +106,7 @@ async function waitForMosquitto(retries = 15) {
 // ---- Gestión de Estado Local ----
 let lastRainState: 'Raining' | 'Dry' = 'Dry'
 let lastFirmwareHeartbeat: number = Date.now()
+let isEmaSleeping = false
 let lastSyncTimestamp: number = 0
 let openRainEventId: string | null = null // ID del RainEvent abierto en Postgres
 
@@ -143,32 +144,41 @@ export function isCurrentlyRaining(): boolean {
   return lastRainState === 'Raining' && !isRainOverridden
 }
 
+let rainEventMutex = Promise.resolve()
+
 /**
  * Abre un nuevo evento de lluvia en PostgreSQL o reanuda uno existente.
  */
 async function openRainEvent(timestamp: Date = new Date()) {
-  if (!openRainEventId) {
-    try {
-      const existing = await prisma.rainEvent.findFirst({
-        where: { zone: 'EXTERIOR', endedAt: null },
-        orderBy: { startedAt: 'desc' },
-      })
+  rainEventMutex = rainEventMutex
+    .then(async () => {
+      if (!openRainEventId) {
+        try {
+          const existing = await prisma.rainEvent.findFirst({
+            where: { zone: 'EXTERIOR', endedAt: null },
+            orderBy: { startedAt: 'desc' },
+          })
 
-      if (existing) {
-        openRainEventId = existing.id
-        Logger.rain(`Evento de lluvia reanudado (ID: ${existing.id.slice(0, 8)})`)
-      } else {
-        const newEvent = await prisma.rainEvent.create({
-          data: { startedAt: timestamp, zone: 'EXTERIOR' },
-        })
+          if (existing) {
+            openRainEventId = existing.id
+            Logger.rain(`Evento de lluvia reanudado (ID: ${existing.id.slice(0, 8)})`)
+          } else {
+            const newEvent = await prisma.rainEvent.create({
+              data: { startedAt: timestamp, zone: 'EXTERIOR' },
+            })
 
-        openRainEventId = newEvent.id
-        Logger.rain(`Evento de lluvia abierto (ID: ${newEvent.id.slice(0, 8)})`)
+            openRainEventId = newEvent.id
+            Logger.rain(`Evento de lluvia abierto (ID: ${newEvent.id.slice(0, 8)})`)
+          }
+        } catch (err) {
+          Logger.error('Error abriendo RainEvent en Postgres:', err)
+        }
       }
-    } catch (err) {
-      Logger.error('Error abriendo RainEvent en Postgres:', err)
-    }
-  }
+    })
+    .catch((err) => {
+      Logger.error('Error en Mutex de openRainEvent:', err)
+    })
+  await rainEventMutex
 }
 
 /**
@@ -177,77 +187,84 @@ async function openRainEvent(timestamp: Date = new Date()) {
  * @param endTime Timestamp de cierre (por defecto: ahora)
  */
 async function closeRainEvent(reason: string, endTime: Date = new Date()) {
-  if (!openRainEventId) {
-    // Buscar en DB por si el Scheduler se reinició con un evento huérfano
-    const existing = await prisma.rainEvent
-      .findFirst({
-        where: { zone: 'EXTERIOR', endedAt: null },
-        orderBy: { startedAt: 'desc' },
-      })
-      .catch(() => null)
+  rainEventMutex = rainEventMutex
+    .then(async () => {
+      if (!openRainEventId) {
+        // Buscar en DB por si el Scheduler se reinició con un evento huérfano
+        const existing = await prisma.rainEvent
+          .findFirst({
+            where: { zone: 'EXTERIOR', endedAt: null },
+            orderBy: { startedAt: 'desc' },
+          })
+          .catch(() => null)
 
-    if (!existing) return
-    openRainEventId = existing.id
-  }
-
-  try {
-    const event = await prisma.rainEvent.findUnique({ where: { id: openRainEventId } })
-
-    if (!event || event.endedAt) {
-      openRainEventId = null
-
-      return
-    }
-
-    const durationSeconds = Math.round((endTime.getTime() - event.startedAt.getTime()) / 1000)
-
-    // Consultar intensidad en InfluxDB
-    let avgIntensity: number | null = null
-    let peakIntensity: number | null = null
-
-    try {
-      // SQL de InfluxDB v3 (DataFusion) requiere AVG en lugar de MEAN.
-      // Calculamos agregación directa global para todo el rango del evento (sin GROUP BY).
-      const intensityQuery = `
-        SELECT AVG("rain_intensity") as avg_int, MAX("rain_intensity") as peak_int 
-        FROM "environment_metrics" 
-        WHERE "zone" = 'EXTERIOR' 
-          AND time >= '${event.startedAt.toISOString()}' 
-          AND time <= '${endTime.toISOString()}'
-      `
-      const stream = influxClient.query(intensityQuery)
-
-      for await (const row of stream) {
-        if (row.avg_int != null) avgIntensity = Number(row.avg_int)
-        if (row.peak_int != null) peakIntensity = Number(row.peak_int)
+        if (!existing) return
+        openRainEventId = existing.id
       }
-    } catch (err) {
-      Logger.warn('No se pudo recuperar la intensidad de lluvia de InfluxDB:', err)
-    }
 
-    if (!openRainEventId) return
+      try {
+        const event = await prisma.rainEvent.findUnique({ where: { id: openRainEventId } })
 
-    await prisma.rainEvent.update({
-      where: { id: openRainEventId },
-      data: {
-        endedAt: endTime,
-        durationSeconds,
-        closedBy: reason,
-        avgIntensity,
-        peakIntensity,
-      },
+        if (!event || event.endedAt) {
+          openRainEventId = null
+
+          return
+        }
+
+        const durationSeconds = Math.round((endTime.getTime() - event.startedAt.getTime()) / 1000)
+
+        // Consultar intensidad en InfluxDB
+        let avgIntensity: number | null = null
+        let peakIntensity: number | null = null
+
+        try {
+          // SQL de InfluxDB v3 (DataFusion) requiere AVG en lugar de MEAN.
+          // Calculamos agregación directa global para todo el rango del evento (sin GROUP BY).
+          const intensityQuery = `
+          SELECT AVG("rain_intensity") as avg_int, MAX("rain_intensity") as peak_int 
+          FROM "environment_metrics" 
+          WHERE "zone" = 'EXTERIOR' 
+            AND time >= '${event.startedAt.toISOString()}' 
+            AND time <= '${endTime.toISOString()}'
+        `
+          const stream = influxClient.query(intensityQuery)
+
+          for await (const row of stream) {
+            if (row.avg_int != null) avgIntensity = Number(row.avg_int)
+            if (row.peak_int != null) peakIntensity = Number(row.peak_int)
+          }
+        } catch (err) {
+          Logger.warn('No se pudo recuperar la intensidad de lluvia de InfluxDB:', err)
+        }
+
+        if (!openRainEventId) return
+
+        await prisma.rainEvent.update({
+          where: { id: openRainEventId },
+          data: {
+            endedAt: endTime,
+            durationSeconds,
+            closedBy: reason,
+            avgIntensity,
+            peakIntensity,
+          },
+        })
+
+        const intensityLog = avgIntensity ? ` | Int. Promedio: ${Math.round(avgIntensity)}%` : ''
+
+        Logger.rain(
+          `Evento de lluvia cerrado (${reason}) — Duración: ${Math.round(durationSeconds / 60)} min${intensityLog} (ID: ${openRainEventId.slice(0, 8)})`,
+        )
+      } catch (err) {
+        Logger.error('Error cerrando RainEvent en Postgres:', err)
+      } finally {
+        openRainEventId = null
+      }
     })
-
-    const intensityLog = avgIntensity ? ` | Int. Promedio: ${Math.round(avgIntensity)}%` : ''
-
-    Logger.rain(
-      `Evento de lluvia cerrado (${reason}) — Duración: ${Math.round(durationSeconds / 60)} min${intensityLog} (ID: ${openRainEventId.slice(0, 8)})`,
-    )
-  } catch (err) {
-    Logger.error('Error cerrando RainEvent en Postgres:', err)
-  } finally {
-    openRainEventId = null
-  }
+    .catch((err) => {
+      Logger.error('Error en Mutex de closeRainEvent:', err)
+    })
+  await rainEventMutex
 }
 
 // Timeout para eventos de lluvia huérfanos (10 minutos sin señales de vida)
@@ -314,7 +331,6 @@ function setupMqttHandlers() {
         'PristinoPlant/Actuator_Controller/cmd/received',
         'PristinoPlant/Actuator_Controller/irrigation/state',
         'PristinoPlant/Actuator_Controller/status',
-        'PristinoPlant/Actuator_Controller/status/boot',
         'PristinoPlant/Weather_Station/EXTERIOR/readings',
         'PristinoPlant/Weather_Station/EXTERIOR/rain/state',
         'PristinoPlant/Weather_Station/ZONA_A/status',
@@ -347,6 +363,41 @@ function setupMqttHandlers() {
 
       // 1. Monitoreo de Conexión del Nodo Actuador
       if (topic === 'PristinoPlant/Actuator_Controller/status') {
+        if (message === 'ping') {
+          lastFirmwareHeartbeat = Date.now()
+
+          return
+        }
+
+        if (message === 'reboot') {
+          irrigationRetryManager.setStabilizing()
+          systemRetryManager.setStabilizing()
+
+          // Inicializamos presencia y salud como falsos al reiniciar.
+          dht22Present = false
+          dht22Alive = false
+          illuminancePresent = false
+          illuminanceAlive = false
+          lastClimateBatchAt = Date.now()
+          lastLuxBatchAt = Date.now()
+
+          // 🚀 INICIALIZACIÓN SÍNCRONA PRE-AWAIT (Evita condición de carrera)
+          isSystemReady = false
+          if (bootAccumulator?.timer) clearTimeout(bootAccumulator.timer)
+          bootAccumulator = {
+            nodeName: 'Weather Station Exterior',
+            lux: null,
+            temp: null,
+            hum: null,
+            bootAt: Date.now(),
+            timer: setTimeout(() => flushBootLog(), 30000), // Ajustado a 30s
+          }
+
+          await handleNodeSync(true, previousHeartbeat)
+
+          return
+        }
+
         if (message === 'online') {
           if (irrigationRetryManager.connectionState === 'online') {
             lastFirmwareHeartbeat = Date.now()
@@ -356,90 +407,69 @@ function setupMqttHandlers() {
 
           await handleNodeSync(false, previousHeartbeat)
         } else if (
-          message === 'lwt_disconnect' &&
+          (message === 'lwt_disconnect' || message === 'offline') &&
           irrigationRetryManager.connectionState !== 'offline'
         ) {
-          // LWT automático del broker: el nodo desapareció sin avisar
+          // LWT automático del broker o desconexión limpia del nodo
           await handleNodeOffline(
-            'El dispositivo se desconectó inesperadamente (Fallo de red o energía).',
-            'BROKER',
+            message === 'lwt_disconnect' ? 'Desconexión inesperada' : 'Desconexión voluntaria',
+            message === 'lwt_disconnect' ? 'BROKER' : 'NODE',
           )
-        } else if (message === 'offline' && irrigationRetryManager.connectionState !== 'offline') {
-          // Desconexión limpia publicada por shutdown() en el firmware
-          await handleNodeOffline(
-            'Dispositivo desconectado limpiamente (Reinicio seguro solicitado).',
-            'NODE',
-          )
-        } else if (message === 'rebooting') {
-          await handleNodeOffline('Reinicio seguro solicitado por el sistema o el usuario.', 'NODE')
         }
-
-        return
-      }
-
-      // 1.5 Detección de Reinicio del Nodo Actuador
-      if (topic === 'PristinoPlant/Actuator_Controller/status/boot') {
-        irrigationRetryManager.setStabilizing()
-        systemRetryManager.setStabilizing()
-        // Nota: lastFirmwareHeartbeat ya actualizó el timestamp de este mensaje.
-
-        // Inicializamos presencia y salud como falsos al reiniciar.
-        // La presencia real de cada sensor se confirmará cuando lleguen los primeros
-        // batches al tópico EXTERIOR/readings (publicados justo después del /boot).
-        dht22Present = false
-        dht22Alive = false
-        illuminancePresent = false
-        illuminanceAlive = false
-        lastClimateBatchAt = Date.now()
-        lastLuxBatchAt = Date.now()
-
-        // 🚀 INICIALIZACIÓN SÍNCRONA PRE-AWAIT (Evita condición de carrera)
-        isSystemReady = false
-        if (bootAccumulator?.timer) clearTimeout(bootAccumulator.timer)
-        bootAccumulator = {
-          nodeName: 'Weather Station Exterior',
-          lux: null,
-          temp: null,
-          hum: null,
-          bootAt: Date.now(),
-          timer: setTimeout(() => flushBootLog(), 30000), // Ajustado a 30s
-        }
-
-        // No forzamos un offline previo, saltamos directamente al sync
-        // para que evalúe si es un REBOOT o una sesión nueva.
-        await handleNodeSync(true, previousHeartbeat)
 
         return
       }
 
       // 1.9 Nodo EMA (Weather Station ZONA_A) — Heartbeat de conectividad
       if (topic === 'PristinoPlant/Weather_Station/ZONA_A/status') {
+        if (message === 'ping') {
+          return
+        }
+
+        if (message === 'reboot') {
+          await handleEmaSync(true)
+
+          return
+        }
+
         if (message === 'online') {
-          emaManager.setStabilizing()
-          Logger.node('Weather Station Orquideario')
-          // Registrar conexión en logs de dispositivo
-          await prisma.deviceLog.create({
-            data: {
-              device: 'Weather_Station_ZONA_A',
-              status: 'ONLINE',
-              notes: 'Estación EMA: Conexión establecida.',
-            },
-          })
-          // Sincronizar muestreo (Amanecer/Anochecer)
-          syncNodeSampling()
+          if (emaManager.connectionState === 'online' && !isEmaSleeping) {
+            return
+          }
+
+          await handleEmaSync(false)
+        } else if (message === 'sleep') {
+          Logger.node('SLEEP', 'Weather Station Orquideario')
+          isEmaSleeping = true
+          emaManager.setOffline()
+          await prisma.deviceLog
+            .create({
+              data: {
+                device: 'Weather_Station_ZONA_A',
+                status: 'SLEEP',
+                notes: 'Suspendido',
+              },
+            })
+            .catch((err) => Logger.error('Fallo persistiendo deviceLog (SLEEP)', err))
         } else if (message === 'lwt_disconnect' || message === 'offline') {
+          if (isEmaSleeping) {
+            // Ignorar señales de desconexión lwt si el nodo se durmió limpiamente
+            return
+          }
           emaManager.setOffline()
           Logger.node('OFFLINE', message === 'lwt_disconnect' ? 'BROKER' : 'NODE')
-          await prisma.deviceLog.create({
-            data: {
-              device: 'Weather_Station_ZONA_A',
-              status: 'OFFLINE',
-              notes:
-                message === 'lwt_disconnect'
-                  ? 'Estación EMA: Desconexión inesperada.'
-                  : 'Estación EMA: Desconexión limpia.',
-            },
-          })
+          await prisma.deviceLog
+            .create({
+              data: {
+                device: 'Weather_Station_ZONA_A',
+                status: 'OFFLINE',
+                notes:
+                  message === 'lwt_disconnect'
+                    ? 'Desconexión inesperada'
+                    : 'Desconexión voluntaria',
+              },
+            })
+            .catch((err) => Logger.error('Fallo persistiendo deviceLog (OFFLINE)', err))
         }
 
         return
@@ -664,7 +694,7 @@ function setupMqttHandlers() {
                     : `iluminancia recuperada (${lux.toFixed(0)} lx)`
 
                   Logger.rain(
-                    `Restableciendo intervalo de chequeo de lluvia a 10 minutos (Vigía) por ${reason}.`,
+                    `Restableciendo intervalo de chequeo de lluvia a 5 minutos (Vigía) por ${reason}.`,
                   )
                   executeSystemCommand('INTERVAL_NORMAL', true)
                 }
@@ -879,10 +909,7 @@ function setupMqttHandlers() {
       }
 
       // Actualizar el latido al final del procesamiento exitoso
-      if (
-        topic.startsWith('PristinoPlant/Actuator_Controller/') ||
-        topic.startsWith('PristinoPlant/Weather_Station/')
-      ) {
+      if (topic.startsWith('PristinoPlant/Actuator_Controller/') || topic.includes('/EXTERIOR/')) {
         lastFirmwareHeartbeat = Date.now()
       }
     } catch (error: Error | unknown) {
@@ -967,7 +994,7 @@ async function handleNodeOffline(reason: string, origin: 'BROKER' | 'NODE' | 'SC
       data: {
         device: 'Actuator_Controller',
         status: 'OFFLINE',
-        notes: `[${origin}] ${reason}`,
+        notes: reason,
       },
     })
     .catch((err) => Logger.error('Fallo persistiendo deviceLog (OFFLINE)', err))
@@ -1046,7 +1073,7 @@ async function handleNodeSync(isBoot: boolean = false, previousHeartbeat: number
   }
 
   // Determinamos la semántica del mensaje ONLINE
-  let notes = 'Dispositivo conectado / Heartbeat recuperado.'
+  let notes = 'Conectado'
   let statusToSave: DeviceStatus = 'ONLINE'
 
   if (isBoot) {
@@ -1057,10 +1084,10 @@ async function handleNodeSync(isBoot: boolean = false, previousHeartbeat: number
     // asumimos que el dispositivo estuvo apagado (o en ciclo de reconexión fallida)
     // y es una sesión nueva — se registra como ONLINE, no como REBOOT.
     if (timeSinceLastHeartbeat > 15 * 60 * 1000) {
-      notes = 'Controlador Conectado (Sesión nueva tras inactividad prolongada).'
+      notes = 'Nueva sesión'
       statusToSave = 'ONLINE'
     } else {
-      notes = 'Reinicio del controlador.'
+      notes = 'Reinicio'
       statusToSave = 'REBOOT'
     }
   }
@@ -1183,6 +1210,32 @@ async function handleNodeSync(isBoot: boolean = false, previousHeartbeat: number
   }
 
   await processPostponedTasks()
+}
+
+/**
+ * Orquesta la sincronización completa de la Estación EMA tras reconexión o reinicio.
+ */
+async function handleEmaSync(isBoot: boolean = false) {
+  isEmaSleeping = false
+  emaManager.setStabilizing()
+
+  const statusToSave: DeviceStatus = isBoot ? 'REBOOT' : 'ONLINE'
+  const notes = isBoot ? 'Reinicio' : 'Conectado'
+
+  Logger.node(statusToSave, 'Weather Station Orquideario')
+
+  await prisma.deviceLog
+    .create({
+      data: {
+        device: 'Weather_Station_ZONA_A',
+        status: statusToSave,
+        notes: notes,
+      },
+    })
+    .catch((err) => Logger.error('Fallo persistiendo deviceLog para EMA', err))
+
+  // Sincronizar muestreo (Amanecer/Anochecer) de iluminancia
+  syncNodeSampling(undefined, true)
 }
 
 /**
@@ -1398,7 +1451,15 @@ async function runTask(scheduleId: string) {
       where: { id: scheduleId },
     })
 
-    if (!schedule || !schedule.isEnabled) return
+    if (!schedule) {
+      Logger.error(
+        `Rutina con ID ${scheduleId} no encontrada en la base de datos (desincronización de memoria del scheduler).`,
+      )
+
+      return
+    }
+
+    if (!schedule.isEnabled) return
 
     if (!isSystemReady) {
       Logger.cron(`Rutina POSTERGADA: ${schedule.name}. Motivo: Nodo Actuador inicializándose.`)

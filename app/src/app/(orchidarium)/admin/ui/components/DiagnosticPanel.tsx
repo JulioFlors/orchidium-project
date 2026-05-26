@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react'
 import {
-  IoHeartOutline,
   IoInformationCircleOutline,
   IoPlayCircleOutline,
   IoPulseOutline,
@@ -29,9 +28,9 @@ import {
 } from 'recharts'
 import clsx from 'clsx'
 
-import { ActionMenu, Card, StatusCircleIcon } from '@/components'
+import { ActionMenu, Card } from '@/components'
 import { authClient, clearAuditData } from '@/lib'
-import { formatRelativeHeartbeat, formatSmartDateTime } from '@/utils'
+import { formatSmartDateTime } from '@/utils'
 import { getAuditHistory, clearAuditHistory } from '@/actions'
 
 // ---- Interfaces de Auditoría ----
@@ -87,13 +86,6 @@ const TOOL_COLORS: Record<
     border: 'border-blue-500/30',
     icon: 'text-blue-500',
     pulse: 'bg-blue-400',
-  },
-  heartbeat: {
-    bg: 'from-red-500/30 to-red-500/10',
-    ring: 'ring-red-500/15',
-    border: 'border-red-500/30',
-    icon: 'text-red-500',
-    pulse: 'bg-red-400',
   },
   ram: {
     bg: 'from-indigo-500/30 to-indigo-500/10',
@@ -267,18 +259,7 @@ export function ToolboxGrid({
           label={hardwarePresence.rain === false ? 'Rain (Off)' : 'Rain Audit'}
           onClick={() => onCommand('audit_rain_on', 'rain')}
         />
-        <ToolCard
-          active={activeAudits.includes('heartbeat')}
-          colorKey="heartbeat"
-          icon={
-            <IoHeartOutline
-              className={clsx(!activeAudits.includes('heartbeat') && TOOL_COLORS.heartbeat.icon)}
-              size={24}
-            />
-          }
-          label="Heartbeat"
-          onClick={() => onCommand('ui_heartbeat', 'heartbeat')}
-        />
+
         <ToolCard
           active={activeAudits.includes('ram')}
           colorKey="ram"
@@ -1096,36 +1077,6 @@ export function AuditConsoleCard({
       </div>
       <div className="bg-surface flex flex-1 overflow-y-auto font-mono text-[11px] leading-relaxed text-zinc-600 dark:text-zinc-300">
         <div className="animate-in fade-in flex w-full flex-col duration-300">{content}</div>
-      </div>
-    </Card>
-  )
-}
-
-// --- Card 3: Heartbeat Monitor ---
-interface HeartbeatCardProps {
-  lastSeen?: number
-}
-
-export function HeartbeatCard({ lastSeen }: HeartbeatCardProps) {
-  const hasSeen = Boolean(lastSeen)
-
-  return (
-    <Card className="bg-surface border-input-outline group hover:bg-hover-overlay tds-sm:flex-row tds-sm:items-center relative flex flex-col gap-4 rounded-xl border p-4 shadow-sm transition-all">
-      <div className="flex flex-1 flex-row items-center gap-4">
-        <StatusCircleIcon
-          colorClassName={hasSeen ? 'text-red-500' : 'text-secondary/30'}
-          icon={<IoHeartOutline className={clsx(hasSeen && 'animate-pulse')} size={18} />}
-          variant="overlay"
-        />
-
-        <div className="flex flex-col gap-y-0.5 overflow-hidden text-left">
-          <h3 className="text-primary text-[15px] leading-tight font-bold">Señal de vida</h3>
-          <div className="text-secondary flex items-center gap-2 text-[11px] font-medium opacity-60">
-            <span className="font-mono tracking-tight">
-              {hasSeen ? formatRelativeHeartbeat(lastSeen!) : 'Esperando señal del nodo...'}
-            </span>
-          </div>
-        </div>
       </div>
     </Card>
   )

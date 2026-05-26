@@ -1,18 +1,7 @@
 import { Logger } from './lib/logger'
 import { initialData, SeedFertilizationCycle, SeedPhytosanitaryCycle } from './seed-data'
 import { prisma, ZoneType, TableType, PotSize, PlantStatus, PlantType } from '@package/database'
-import { betterAuth } from 'better-auth'
-import { prismaAdapter } from 'better-auth/adapters/prisma'
-
-const auth = betterAuth({
-  database: prismaAdapter(prisma, {
-    provider: 'postgresql',
-  }),
-  emailAndPassword: {
-    enabled: true,
-    minPasswordLength: 8,
-  },
-})
+import { hashPassword } from 'better-auth/crypto'
 
 // ---- Interfaz auxiliar ----
 interface ProductCycleConnect {
@@ -138,43 +127,28 @@ async function main() {
   Logger.info('🌱  Insertando nuevos datos')
 
   // ---- Insertar Users ----
-
   for (const user of users) {
-    let targetUserId: string | undefined
-
     try {
-      // Intentamos crearlo
-      const res = await auth.api.signUpEmail({
-        body: {
+      const createdUser = await prisma.user.create({
+        data: {
           email: user.email,
-          password: user.password,
           name: user.name,
+          role: user.role,
+          emailVerified: true,
         },
       })
-      if (res?.user) targetUserId = res.user.id
-    } catch (error: any) {
-      // Si el correo ya existía en BD (por ejemplo, remanentes no borrados), lo buscamos
-      if (error?.message?.includes('already exists') || error?.status === 400 || error?.status === 409) {
-         const existingUser = await prisma.user.findUnique({ where: { email: user.email } })
-         if (existingUser) targetUserId = existingUser.id
-      } else {
-        Logger.error(`Error creando usuario ${user.email}:`, error)
-      }
-    }
 
-    // Forzar el ROL requerido por Prisma (Superpone a BetterAuth)
-    if (targetUserId) {
-      try {
-        await prisma.user.update({
-          where: { id: targetUserId },
-          data: {
-            role: user.role, // Forzamos el Rol exacto que dice seed-data.ts (ADMIN/USER)
-            emailVerified: true
-          },
-        })
-      } catch (err) {
-        Logger.error(`Error forzando rol al usuario ${user.email}:`, err)
-      }
+      const hashedPassword = await hashPassword(user.password)
+      await prisma.account.create({
+        data: {
+          userId: createdUser.id,
+          accountId: createdUser.id,
+          providerId: 'credential',
+          password: hashedPassword,
+        },
+      })
+    } catch (err) {
+      Logger.error(`Error creando usuario ${user.email}:`, err)
     }
   }
 
@@ -374,6 +348,7 @@ async function main() {
 
     await prisma.automationSchedule.create({
       data: {
+        id: schedule.id,
         name: schedule.name,
         description: schedule.description,
         purpose: schedule.purpose,

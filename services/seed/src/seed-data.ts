@@ -89,6 +89,7 @@ interface SeedPhytosanitaryProgram {
 
 // ---- Automatización de las Rutinas ----
 interface SeedAutomationSchedule {
+  id?: string
   name: string
   description?: string
   purpose: TaskPurpose
@@ -893,6 +894,7 @@ export const initialData: SeedData = {
   automationSchedules: [
     // ---- RIEGOS DIARIOS/INTERDIARIOS (Agua) ----
     {
+      id: 'd56dcc42-9301-47a0-85d1-c0ade3415a98',
       name: 'Riego Interdiario (6:00)',
       description: 'Riego con aspersores los Lunes, Miércoles y Viernes a las 6:00 AM',
       purpose: 'IRRIGATION',
@@ -903,6 +905,7 @@ export const initialData: SeedData = {
       isEnabled: true
     },
     {
+      id: '8b293e03-eec4-4bde-99d3-7a8dfa623f7a',
       name: 'Nebulización Dominical (6:00)',
       description: 'Nebulización matutina los Domingos a las 6:00 AM',
       purpose: 'HUMIDIFICATION',
@@ -913,6 +916,7 @@ export const initialData: SeedData = {
       isEnabled: true
     },
     {
+      id: '201671eb-85a4-42d8-a239-4ae86765b8c0',
       name: 'Nebulización (16:00)',
       description: 'Mantener humedad relativa',
       purpose: 'HUMIDIFICATION',
@@ -923,6 +927,7 @@ export const initialData: SeedData = {
       isEnabled: true
     },
     {
+      id: 'd860a2da-bafa-44b2-ab66-34646499a7b8',
       name: 'Humidificación del Suelo (11:00)',
       description: 'Mantener humedad relativa',
       purpose: 'SOIL_WETTING',
@@ -933,6 +938,7 @@ export const initialData: SeedData = {
       isEnabled: true
     },
     {
+      id: '9d106389-9861-4c2c-b433-7fecc938d7f3',
       name: 'Humidificación del Suelo (15:00)',
       description: 'Mantener humedad relativa',
       purpose: 'SOIL_WETTING',
@@ -944,6 +950,7 @@ export const initialData: SeedData = {
     },
     // ---- Fertirriego ----
     {
+      id: '6726a82d-1e12-493c-ad27-ac1548bb647e',
       name: 'Fertirriego Desarrollo Solucat (Lunes)',
       description: 'Aplicación del plan de desarrollo semanal.',
       purpose: 'FERTIGATION',
@@ -955,6 +962,7 @@ export const initialData: SeedData = {
       fertilizationProgramName: 'Desarrollo Solucat (Mensual)',
     },
     {
+      id: '9ab7405c-fa8e-4aae-898c-a1f710c2bc70',
       name: 'Control Fungicida (Viernes)',
       description: 'Aplicación preventiva quincenal/mensual.',
       purpose: 'FUMIGATION',

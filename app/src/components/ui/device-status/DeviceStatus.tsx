@@ -20,7 +20,7 @@ interface DeviceStatusProps {
   /** Callback al cambiar de zona */
   onZoneChanged?: (newZone: string) => void
   /** Estado de conexión del dispositivo */
-  connectionState?: 'online' | 'offline' | 'unknown' | 'zombie'
+  connectionState?: 'online' | 'offline' | 'unknown' | 'zombie' | 'sleep'
   /** Indica si se está consultando el estado actualmente */
   isLoadingStatus?: boolean
   /** Clases adicionales para el contenedor */
@@ -147,6 +147,15 @@ export function DeviceStatus({
           glow: 'bg-green-500/5 group-hover:bg-green-500/20',
           pipe: 'bg-green-500/30',
           text: 'text-green-500',
+        }
+      case 'sleep':
+        return {
+          label: 'Sleep',
+          dot: 'bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.6)]',
+          gradientBorder: 'via-indigo-500/10 to-indigo-500/50',
+          glow: 'bg-indigo-500/5 group-hover:bg-indigo-500/20',
+          pipe: 'bg-indigo-500/30',
+          text: 'text-indigo-400',
         }
       case 'zombie':
         return {

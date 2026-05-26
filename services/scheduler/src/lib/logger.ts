@@ -107,6 +107,10 @@ export const Logger = {
       icon = '🔄'
       color = colors.blue
       msg = `${status}${origin ? ` ${colors.dim}[${origin}]${colors.reset}` : ''}`
+    } else if (status === 'SLEEP') {
+      icon = '💤'
+      color = colors.cyan
+      msg = `${status}${origin ? ` ${colors.dim}[${origin}]${colors.reset}` : ''}`
     } else if (status === 'OFFLINE') {
       icon = '🔴'
       color = colors.red

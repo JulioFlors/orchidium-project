@@ -226,7 +226,7 @@ export function EnvironmentDataChart({
   const getTimeFormatter = (r: string) => {
     const opts: Intl.DateTimeFormatOptions = { timeZone: 'America/Caracas' }
 
-    if (r === '24h' || r === '5-19h' || r === '8-16h') {
+    if (r === '24h' || r === '5-19h' || r === '8-16h' || r === 'today') {
       opts.hour = 'numeric'
       opts.minute = '2-digit'
       opts.hour12 = true
@@ -321,11 +321,32 @@ export function EnvironmentDataChart({
 
   const { isMacro, count, min, max, avg } = stats
 
+  const totalRainAccumulated = useMemo(() => {
+    if (dataKey !== 'duration') return 0
+
+    return chartDataFiltered.reduce((sum, d) => sum + Number(d.duration || 0), 0)
+  }, [chartDataFiltered, dataKey])
+
   const formatStat = (val: number) => {
     if (val >= 1000) return `${(val / 1000).toFixed(1)}k`
     if (unit === 'min' && Number.isInteger(val)) return val.toString()
 
     return val.toFixed(1)
+  }
+
+  const getRangeLabel = (r: string) => {
+    if (dataKey === 'duration') {
+      if (r === 'today') return 'HOY'
+      if (r === 'yesterday') return '1D'
+      if (r === '7d') return '7D'
+      if (r === '30d') return '30'
+      if (r === 'all') return 'TODO'
+    }
+    if (r === 'all') return 'Todo'
+    if (r === '5-19h') return '14h'
+    if (r === '8-16h') return '8h'
+
+    return r
   }
 
   const rangeOptions =
@@ -383,7 +404,7 @@ export function EnvironmentDataChart({
                 onRangeChange(r)
               }}
             >
-              {r === 'all' ? 'Todo' : r === '5-19h' ? '14h' : r === '8-16h' ? '8h' : r}
+              {getRangeLabel(r)}
             </button>
           ))}
         </div>
@@ -506,7 +527,12 @@ export function EnvironmentDataChart({
 
       <hr className="border-input-outline my-2 w-full" />
 
-      <div className="tds-sm:grid-cols-4 grid grid-cols-2 gap-3 pt-1">
+      <div
+        className={clsx(
+          'grid grid-cols-2 gap-3 pt-1',
+          dataKey === 'duration' ? 'tds-sm:grid-cols-5' : 'tds-sm:grid-cols-4',
+        )}
+      >
         <div className="bg-hover-overlay/50 flex flex-col items-center justify-center rounded-md py-3">
           <span className="text-secondary text-[10px] font-bold tracking-wider uppercase">
             Mínimo
@@ -533,10 +559,20 @@ export function EnvironmentDataChart({
         </div>
         <div className="bg-hover-overlay/50 flex flex-col items-center justify-center rounded-md py-3">
           <span className="text-secondary text-[10px] font-bold tracking-wider uppercase">
-            Registros
+            {dataKey === 'duration' ? 'Eventos' : 'Registros'}
           </span>
           <span className="text-primary mt-1 text-sm font-semibold">{count}</span>
         </div>
+        {dataKey === 'duration' && (
+          <div className="bg-hover-overlay/50 flex flex-col items-center justify-center rounded-md py-3">
+            <span className="text-secondary text-[10px] font-bold tracking-wider uppercase">
+              Lluvia Acumulada
+            </span>
+            <span className="text-primary mt-1 text-sm font-semibold">
+              {totalRainAccumulated} min
+            </span>
+          </div>
+        )}
       </div>
     </div>
   )

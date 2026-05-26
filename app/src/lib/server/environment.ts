@@ -56,7 +56,7 @@ function formatTimeLabel(raw: unknown): string {
 }
 
 export async function getSensorDataInternal(range: string, zone: ZoneType, metric?: string | null) {
-  const botanicFields = ['dli', 'dif', 'vpd_avg', 'high_humidity_hours']
+  const botanicFields = ['dli', 'dif', 'vpd_avg', 'high_humidity_hours', 'deficit_hidrico']
   const availableFields = [
     ...(ZoneMetrics[zone as ZoneType] || ZoneMetrics[ZoneType.ZONA_A] || []),
     ...botanicFields,
@@ -77,6 +77,11 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
       })
 
       if (latestStat) {
+        const limitSeq = zone === ZoneType.EXTERIOR ? 45 : 50
+        const minHum = latestStat.minHumidity ?? limitSeq
+        const deficitHidricoHours =
+          minHum < limitSeq ? Number(((limitSeq - minHum) * 0.15).toFixed(1)) : 0
+
         const yesterdayKPIs = {
           dli: latestStat.dli != null ? Number(latestStat.dli.toFixed(2)) : null,
           vpdAvg: latestStat.vpdAvg != null ? Number(latestStat.vpdAvg.toFixed(3)) : null,
@@ -85,6 +90,7 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
             latestStat.highHumidityHours != null
               ? Number(latestStat.highHumidityHours.toFixed(2))
               : null,
+          deficitHidricoHours,
           isLive: false,
         }
 
@@ -137,8 +143,11 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
       timeFilter = `AND time >= TIMESTAMP '${start.toISOString()}' AND time <= TIMESTAMP '${end.toISOString()}'`
     }
 
+    const physicalMetrics = ZoneMetrics[zone as ZoneType] || ZoneMetrics[ZoneType.ZONA_A] || []
+    const selectFields = ['time', 'phase', ...physicalMetrics].map((f) => `"${f}"`).join(', ')
+
     const query = `
-      SELECT *
+      SELECT ${selectFields}
       FROM environment_metrics 
       WHERE zone = '${zone}' 
       ${timeFilter}
@@ -158,6 +167,10 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
       let tempCountDay = 0
       let tempSumNight = 0
       let tempCountNight = 0
+
+      let highHumCount = 0
+      let lowHumCount = 0
+      let totalHumPoints = 0
 
       for await (const row of reader as AsyncIterable<InfluxRow>) {
         const tDate = new Date(safeTimeToISO(row.time))
@@ -211,6 +224,17 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
               tempCountNight++
             }
           }
+
+          // 4. Humedad extrema (Saturación y Déficit Hídrico)
+          if (row.humidity != null) {
+            const hum = Number(row.humidity)
+            const limitSat = zone === ZoneType.EXTERIOR ? 98 : 90
+            const limitSeq = zone === ZoneType.EXTERIOR ? 45 : 50
+
+            if (hum >= limitSat) highHumCount++
+            if (hum <= limitSeq) lowHumCount++
+            totalHumPoints++
+          }
         }
       }
 
@@ -222,6 +246,9 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
           tempCountDay > 0 && tempCountNight > 0
             ? Number((tempSumDay / tempCountDay - tempSumNight / tempCountNight).toFixed(2))
             : null,
+        highHumidityHours: totalHumPoints > 0 ? Number(((highHumCount * 5) / 60).toFixed(2)) : null,
+        deficitHidricoHours:
+          totalHumPoints > 0 ? Number(((lowHumCount * 5) / 60).toFixed(2)) : null,
         isLive: true,
       }
 
@@ -298,6 +325,13 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
       if (fieldsToQuery.includes('vpd_avg')) entry.vpd_avg = stat.vpdAvg
       if (fieldsToQuery.includes('high_humidity_hours'))
         entry.high_humidity_hours = stat.highHumidityHours
+      if (fieldsToQuery.includes('deficit_hidrico')) {
+        const limitSeq = zone === ZoneType.EXTERIOR ? 45 : 50
+        const minHum = stat.minHumidity ?? limitSeq
+
+        entry.deficit_hidrico =
+          minHum < limitSeq ? Number(((limitSeq - minHum) * 0.15).toFixed(1)) : 0
+      }
 
       allData.push(entry)
     })
@@ -309,7 +343,10 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
     if (!pgData.some((d) => d.date.toISOString().startsWith(todayISO))) {
       const zoneFilter = `zone = '${zone}'`
 
-      const todayQuery = `SELECT * FROM environment_metrics WHERE ${zoneFilter} AND time >= TIMESTAMP '${midnightVETInUTC.toISOString()}' ORDER BY time ASC`
+      const physicalMetrics = ZoneMetrics[zone as ZoneType] || ZoneMetrics[ZoneType.ZONA_A] || []
+      const selectFields = ['time', 'phase', ...physicalMetrics].map((f) => `"${f}"`).join(', ')
+
+      const todayQuery = `SELECT ${selectFields} FROM environment_metrics WHERE ${zoneFilter} AND time >= TIMESTAMP '${midnightVETInUTC.toISOString()}' ORDER BY time ASC`
 
       try {
         const reader = influxClient.query(todayQuery)
@@ -461,8 +498,47 @@ export async function getLastRainState() {
 
 export async function getRainSummaryInternal(range: string, zone: ZoneType) {
   let startDate = new Date()
+  let endDate: Date | undefined = undefined
 
   switch (range) {
+    case 'today': {
+      const caracasOffset = -4 * 60 // -240 minutos
+      const now = new Date()
+      const caracasTime = new Date(
+        now.getTime() + (caracasOffset + now.getTimezoneOffset()) * 60000,
+      )
+
+      caracasTime.setHours(0, 0, 0, 0)
+      startDate = new Date(
+        caracasTime.getTime() - (caracasOffset + now.getTimezoneOffset()) * 60000,
+      )
+      break
+    }
+    case 'yesterday':
+    case '1D': {
+      const caracasOffset = -4 * 60 // -240 minutos
+      const now = new Date()
+      const caracasTime = new Date(
+        now.getTime() + (caracasOffset + now.getTimezoneOffset()) * 60000,
+      )
+
+      const caracasYesterdayStart = new Date(caracasTime)
+
+      caracasYesterdayStart.setDate(caracasYesterdayStart.getDate() - 1)
+      caracasYesterdayStart.setHours(0, 0, 0, 0)
+
+      const caracasYesterdayEnd = new Date(caracasYesterdayStart)
+
+      caracasYesterdayEnd.setHours(23, 59, 59, 999)
+
+      startDate = new Date(
+        caracasYesterdayStart.getTime() - (caracasOffset + now.getTimezoneOffset()) * 60000,
+      )
+      endDate = new Date(
+        caracasYesterdayEnd.getTime() - (caracasOffset + now.getTimezoneOffset()) * 60000,
+      )
+      break
+    }
     case '12h':
       startDate = new Date(Date.now() - 12 * 3600000)
       break
@@ -486,7 +562,10 @@ export async function getRainSummaryInternal(range: string, zone: ZoneType) {
     const rainEvents = await prisma.rainEvent.findMany({
       where: {
         zone: zone as ZoneType,
-        startedAt: { gte: startDate },
+        startedAt: {
+          gte: startDate,
+          ...(endDate ? { lte: endDate } : {}),
+        },
       },
       orderBy: { startedAt: 'asc' },
     })

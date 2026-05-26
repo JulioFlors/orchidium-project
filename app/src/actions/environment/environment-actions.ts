@@ -42,7 +42,7 @@ export async function getSensorData(
 /**
  * Obtiene eventos de lluvia recientes.
  */
-export async function getRainData(range: string = '12h', zone: ZoneType = ZoneType.EXTERIOR) {
+export async function getRainData(range: string = 'today', zone: ZoneType = ZoneType.EXTERIOR) {
   try {
     const data = await getRainSummaryInternal(range, zone)
 

@@ -32,6 +32,9 @@
 		"editor.formatOnSave": true
 	},
 
+	// Sticky Scroll (Desplazamiento Adherido)
+	"editor.stickyScroll.enabled": true,
+
 	// ── Iconos del proyecto ───────────────────────────────────
 	"workbench.iconTheme": "material-icon-theme",
 	"material-icon-theme.activeIconPack": "react",

@@ -6,7 +6,7 @@ import { redirect } from 'next/navigation'
 import { OrchidariumView } from './ui'
 
 import { auth } from '@/lib/server'
-import { getAllLatestBotanicalInsights, getLatestOracleForecast } from '@/actions'
+import { getLatestOracleForecast } from '@/actions'
 
 export const metadata: Metadata = {
   title: 'Centro de Inteligencia Agronómica',
@@ -22,17 +22,13 @@ export default async function OrchidariumDashboardPage() {
     redirect('/auth/login?callbackUrl=/orchidarium')
   }
 
-  // Obtenemos de forma paralela los insights de todas las zonas y el pronóstico satelital
-  const [insightsRes, oracleRes] = await Promise.all([
-    getAllLatestBotanicalInsights(),
-    getLatestOracleForecast(),
-  ])
+  // Obtenemos el pronóstico satelital
+  const oracleRes = await getLatestOracleForecast()
 
   return (
     <OrchidariumView
-      error={insightsRes.error}
+      error={oracleRes.success ? undefined : oracleRes.error}
       forecast={oracleRes.success ? oracleRes.data : undefined}
-      insights={insightsRes.success ? insightsRes.data || null : null}
     />
   )
 }

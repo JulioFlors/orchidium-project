@@ -559,123 +559,75 @@ async function start() {
     const messageValue = payload.toString()
     const topicParts = topic.split('/')
 
-    if (topicParts.length <= 2) return
-    const firmwareSource = topicParts[1]
+    if (topic.endsWith('/status')) {
+      if (messageValue === 'ping') {
+        return // Omitir latidos periódicos para no inundar InfluxDB/logs
+      }
 
-    if (firmwareSource === 'Actuator_Controller') {
-      // Manejo de Reinicio Físico (Boot)
-      if (topic.endsWith('/status/boot')) {
-        Logger.node('REBOOT', firmwareSource)
+      const zoneSlug = firmwareSource === 'Weather_Station' ? topicParts[2] : undefined
+      const zone = zoneSlug ? mapZoneSlugToZoneType(zoneSlug) : undefined
+      const deviceLabel = zoneSlug ? `${firmwareSource}/${zoneSlug}` : firmwareSource
 
-        // Limpiar solo las claves de este nodo (no nuclear)
+      if (messageValue === 'reboot') {
+        Logger.node('REBOOT', deviceLabel)
+
+        // Limpiar caché de estados para este nodo para forzar publicación fresca
+        const cachePrefix = zoneSlug ? `${firmwareSource}:${zoneSlug}:` : `${firmwareSource}:`
+
         for (const key of stateCache.keys()) {
-          if (key.startsWith(`${firmwareSource}:`)) {
+          if (key.startsWith(cachePrefix)) {
             stateCache.delete(key)
           }
         }
-
-        // Persistir el BOOT como un latido 'online' para hidratación SSR
-        const point = Point.measurement('system_events')
-          .setTag('source', firmwareSource)
-          .setTag('context', 'status')
-          .setTag('event_type', 'Device_Status')
-          .setStringField('value', 'online')
-
-        await writeToInflux(point)
-
-        return
+      } else if (messageValue === 'sleep') {
+        Logger.node('SLEEP', deviceLabel)
+      } else if (messageValue === 'offline') {
+        Logger.node('OFFLINE', deviceLabel, 'BROKER')
+      } else if (messageValue === 'online') {
+        Logger.node('ONLINE', deviceLabel, 'NODE')
       }
 
-      if (topic.endsWith('/status')) {
-        // Persistimos siempre el status para Actuator_Controller para permitir hidratación SSR
-        const isDeviceStatus = true
+      // Persistir el estado actual (Device_Status) en InfluxDB
+      const point = Point.measurement('system_events')
+        .setTag('source', firmwareSource)
+        .setTag('context', 'status')
+        .setTag('event_type', 'Device_Status')
+        .setStringField('value', messageValue)
 
-        if (
-          isDeviceStatus ||
-          hasStateChanged(firmwareSource, undefined, 'Device_Status', messageValue)
-        ) {
-          const point = Point.measurement('system_events')
-            .setTag('source', firmwareSource)
-            .setTag('context', 'status')
-            .setTag('event_type', 'Device_Status')
-            .setStringField('value', messageValue)
-
-          await writeToInflux(point)
-
-          // LWT: registramos la desconexión del nodo `offline`.
-          if (messageValue === 'offline') {
-            Logger.node('OFFLINE', firmwareSource, 'BROKER')
-          }
-        }
-
-        // 🔒 [SOLUCIÓN CONTROL DE FLUJO]: Detiene el flujo para que el tópico /status
-        // muera aquí y no continúe evaluando las rutas de telemetría inferiores.
-        return
+      if (zone) {
+        point.setTag('zone', zone)
       }
 
-      // --- LA LÓGICA PRESERVADA QUE INTRODUCE LOS PROCESADORES DE TELEMETRÍA/AUDITORÍA ---
-      const hasSensorData = Object.keys(TOPIC_ROUTES).some((suffix) => topic.endsWith(suffix))
+      await writeToInflux(point)
 
-      if (!hasSensorData) return
+      return
+    }
 
-      // Procesar rutas de tópicos para Actuator_Controller (e.g., /audit)
-      const matchingSuffix = Object.keys(TOPIC_ROUTES).find((suffix) => topic.endsWith(suffix))
+    // --- LA LÓGICA PRESERVADA QUE INTRODUCE LOS PROCESADORES DE TELEMETRÍA/AUDITORÍA ---
+    const isActuator = firmwareSource === 'Actuator_Controller'
+    const zone = isActuator ? ZoneType.EXTERIOR : mapZoneSlugToZoneType(topicParts[2])
 
-      if (matchingSuffix) {
-        const processor = TOPIC_ROUTES[matchingSuffix]
-        const context = matchingSuffix.replace(/^\//, '')
-
-        await processor(firmwareSource, ZoneType.EXTERIOR, context, messageValue)
-      } else {
-        Logger.warn(`No hay ruta definida para el tópico: ${topic}`)
+    if (!zone) {
+      if (firmwareSource === 'Weather_Station') {
+        Logger.warn(`Zona desconocida: ${topicParts[2]}`)
       }
 
       return
     }
 
-    if (firmwareSource === 'Weather_Station') {
-      const zoneSlug = topicParts[2]
-      const zone = mapZoneSlugToZoneType(zoneSlug)
+    const hasSensorData = Object.keys(TOPIC_ROUTES).some((suffix) => topic.endsWith(suffix))
 
-      if (!zone) {
-        Logger.warn(`Zona desconocida: ${zoneSlug}`)
+    if (!hasSensorData) return
 
-        return
-      }
+    const matchingSuffix = Object.keys(TOPIC_ROUTES).find((suffix) => topic.endsWith(suffix))
 
-      // Manejo de BOOT para sensores
-      if (topic.endsWith('/status/boot')) {
-        Logger.node('REBOOT', `${firmwareSource}/${zoneSlug}`)
+    if (matchingSuffix) {
+      const processor = TOPIC_ROUTES[matchingSuffix]
+      const context = matchingSuffix.replace(/^\//, '')
 
-        // Limpiar solo las claves de este nodo (no nuclear)
-        for (const key of stateCache.keys()) {
-          if (key.startsWith(`${firmwareSource}:`)) {
-            stateCache.delete(key)
-          }
-        }
-
-        const point = Point.measurement('system_events')
-          .setTag('source', firmwareSource)
-          .setTag('zone', zone)
-          .setTag('context', 'status')
-          .setTag('event_type', 'Device_Status')
-          .setStringField('value', 'online')
-
-        await writeToInflux(point)
-
-        return
-      }
-
-      const matchingSuffix = Object.keys(TOPIC_ROUTES).find((suffix) => topic.endsWith(suffix))
-
-      if (matchingSuffix) {
-        const processor = TOPIC_ROUTES[matchingSuffix]
-        const context = matchingSuffix.replace(/^\//, '')
-
-        await processor(firmwareSource, zone, context, messageValue)
-      } else {
-        Logger.warn(`No hay ruta definida para el tópico: ${topic}`)
-      }
+      await processor(firmwareSource, zone, context, messageValue)
+    } else {
+      Logger.warn(`No hay ruta definida para el tópico: ${topic}`)
     }
   })
 

@@ -46,7 +46,10 @@ def log_step(step, detail=""):
 def clean_build_target(target_build_path):
     if target_build_path.exists():
         log_step("Limpiando  build anterior", f"({target_build_path.name})")
-        shutil.rmtree(target_build_path)
+        try:
+            shutil.rmtree(target_build_path)
+        except Exception as e:
+            log_step("Aviso de bloqueo", f"Sobrescribiendo build ({e})")
     
     log_step("Preparando directorios", "Creando estructura")
     target_build_path.parent.mkdir(parents=True, exist_ok=True)

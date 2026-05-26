@@ -7,7 +7,7 @@ import useSWR from 'swr'
 
 import { EnvironmentCard, EnvironmentDataChart } from './components'
 
-import { ZoneType, ZoneMetrics, MetricLabels, MetricUnits, ZoneTypeLabels } from '@/config/mappings'
+import { ZoneType, ZoneMetrics, MetricLabels, MetricUnits } from '@/config/mappings'
 import { Heading, DeviceStatus } from '@/components'
 import { useDeviceHeartbeat, useToast } from '@/hooks'
 import { useMqttStore } from '@/store/mqtt/mqtt.store'
@@ -77,7 +77,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
       })
       // Agregar métricas especiales que no están en ZoneMetrics pero se muestran en la UI
       if (z === ZoneType.EXTERIOR) {
-        initial[z]['rain_events'] = '12h'
+        initial[z]['rain_events'] = 'today'
       }
     })
 
@@ -213,8 +213,8 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     // mientras esperamos telemetría viva. Esto evita el "vacío" tras reinicios.
     if (cardStatusData.length > 0) return false
 
-    // Si el dispositivo está offline, no tiene sentido mostrar "Cargando..." infinitamente
-    if (connectionState === 'offline') return false
+    // Si el dispositivo está offline o en modo sleep, no tiene sentido mostrar "Cargando..." infinitamente
+    if (connectionState === 'offline' || connectionState === 'sleep') return false
 
     const readingsTopic = `PristinoPlant/Weather_Station/${zone}/readings`
 
@@ -302,9 +302,9 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
       return isNaN(num) ? null : num
     }
 
-    // Buscamos el último valor no nulo y verificamos que no sea antiguo (> 20 min)
+    // Buscamos el último valor no nulo y verificamos que no sea antiguo (> 25 min)
     const getLastValid = (key: string) => {
-      const STALE_THRESHOLD = 20 * 60 * 1000 // 20 minutos
+      const STALE_THRESHOLD = 25 * 60 * 1000 // 25 minutos
       const nowMs = now
 
       for (let i = cardStatusData.length - 1; i >= 0; i--) {
@@ -389,24 +389,6 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     })
   }, [chartData])
 
-  // Determinar si una métrica tiene datos recientes (menos de 20 min)
-  const isMetricFresh = (val: string | number | null) => {
-    if (val == null || !current.time) return false
-
-    const sampleTime = new Date(String(current.time)).getTime()
-
-    return now - sampleTime < 20 * 60 * 1000
-  }
-
-  const formatDuration = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600)
-    const minutes = Math.floor((seconds % 3600) / 60)
-
-    if (hours > 0) return `${hours}h ${minutes} min`
-
-    return `${minutes} min`
-  }
-
   const calculateTrend = (key: 'temperature' | 'humidity' | 'illuminance') => {
     // Filtramos los datos que realmente tienen esta métrica poblada (no nulos)
     const validData = cardStatusData.filter((d) => d[key] != null)
@@ -448,7 +430,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
           dataKey: 'illuminance',
           color: '#eab308',
           unit: MetricUnits.illuminance,
-          title: `${MetricLabels.illuminance} ${ZoneTypeLabels[zone as ZoneType]}`,
+          title: `${MetricLabels.illuminance}`,
           icon: <Sun className="h-4 w-4" />,
         }
       case 'rain_intensity':
@@ -742,8 +724,6 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               icon={<Thermometer className="h-6 w-6" />}
               isActive={selectedMetric === 'temperature'}
               isLoading={isMqttLoading}
-              isOffline={connectionState === 'offline'}
-              status="optimal"
               title={MetricLabels.temperature}
               trend={calculateTrend('temperature')}
               unit={MetricUnits.temperature}
@@ -756,8 +736,6 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               icon={<Droplets className="h-6 w-6" />}
               isActive={selectedMetric === 'humidity'}
               isLoading={isMqttLoading}
-              isOffline={connectionState === 'offline'}
-              status="optimal"
               title={MetricLabels.humidity}
               trend={calculateTrend('humidity')}
               unit={MetricUnits.humidity}
@@ -771,9 +749,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               icon={<Sun className="h-6 w-6" />}
               isActive={selectedMetric === 'illuminance'}
               isLoading={isMqttLoading}
-              isOffline={connectionState === 'offline'}
-              status="optimal"
-              title={`${MetricLabels.illuminance} ${ZoneTypeLabels[zone as ZoneType]}`}
+              title={`${MetricLabels.illuminance}`}
               trend={calculateTrend('illuminance')}
               unit={MetricUnits.illuminance}
               value={
@@ -792,8 +768,6 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               icon={<Thermometer className="h-6 w-6" />}
               isActive={selectedMetric === 'temperature'}
               isLoading={isMqttLoading}
-              isOffline={connectionState === 'offline' && !isMetricFresh(current.temperature)}
-              status="optimal"
               title={MetricLabels.temperature}
               trend={calculateTrend('temperature')}
               unit={MetricUnits.temperature}
@@ -807,8 +781,6 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               icon={<Droplets className="h-6 w-6" />}
               isActive={selectedMetric === 'humidity'}
               isLoading={isMqttLoading}
-              isOffline={connectionState === 'offline' && !isMetricFresh(current.humidity)}
-              status="optimal"
               title={MetricLabels.humidity}
               trend={calculateTrend('humidity')}
               unit={MetricUnits.humidity}
@@ -825,9 +797,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               icon={<Sun className="h-6 w-6" />}
               isActive={selectedMetric === 'illuminance'}
               isLoading={isMqttLoading}
-              isOffline={connectionState === 'offline' && !isMetricFresh(current.illuminance)}
-              status="optimal"
-              title={`${MetricLabels.illuminance} ${ZoneTypeLabels[zone as ZoneType]}`}
+              title={`${MetricLabels.illuminance}`}
               trend={calculateTrend('illuminance')}
               unit={MetricUnits.illuminance}
               value={current.illuminance !== null ? Number(current.illuminance).toFixed(1) : '--'}
@@ -843,9 +813,23 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
                     {rainData.isActive && (
                       <span className="flex h-2 w-2 animate-pulse rounded-full bg-blue-500" />
                     )}
-                    <span className="font-semibold">{rainData.eventCount} eventos</span>
+                    <span className="font-semibold">
+                      {(() => {
+                        const r = metricRanges[zone]?.['rain_events']
+
+                        if (r === 'today') return 'HOY'
+                        if (r === 'yesterday') return '1D'
+                        if (r === '7d') return '7D'
+                        if (r === '30d') return '30D'
+                        if (r === 'all') return 'TODO'
+
+                        return 'HOY'
+                      })()}
+                    </span>
                     <span className="text-primary/20">|</span>
-                    <span className="font-semibold">Prom: {rainData.averageIntensity}%</span>
+                    <span className="font-semibold">
+                      {Math.round(rainData.totalDurationSeconds / 60)} min
+                    </span>
                   </div>
                 ) : (
                   'Sin registros'
@@ -854,30 +838,19 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               icon={<FaChartLine className="h-6 w-6" />}
               isActive={selectedMetric === 'rain_events'}
               isLoading={isRainLoading}
-              isOffline={false}
-              status={rainData?.isActive ? 'warning' : 'optimal'}
               title={MetricLabels.rain_events}
-              unit={metricRanges[zone]?.['rain_events'] === '12h' ? '' : 'Eventos'}
-              value={
-                !rainData
-                  ? '--'
-                  : metricRanges[zone]?.['rain_events'] === '12h'
-                    ? formatDuration(rainData.totalDurationSeconds)
-                    : rainData.eventCount
-              }
+              unit="Eventos"
+              value={!rainData ? '--' : rainData.eventCount}
               onClick={() => setSelectedMetric('rain_events')}
             />
 
             <EnvironmentCard
-              hasData
               className="tds-sm:col-span-2 tds-sm:order-5 tds-lg:col-span-3"
               color={climate.color}
               description={climate.description}
               icon={climate.icon}
               isActive={false}
               isLoading={isMqttLoading}
-              isOffline={connectionState === 'offline'}
-              status={climate.status}
               title="Estado del Clima"
               unit=""
               value={climate.label}
@@ -906,6 +879,11 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
           </div>
         ) : chartProps ? (
           <EnvironmentDataChart
+            allowedRanges={
+              selectedMetric === 'rain_events'
+                ? ['today', 'yesterday', '7d', '30d', 'all']
+                : undefined
+            }
             chartType={chartProps.chartType as 'area' | 'bar'}
             color={chartProps.color}
             data={chartProps.customData || normalizedChartData}

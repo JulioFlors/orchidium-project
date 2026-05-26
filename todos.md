@@ -33,6 +33,7 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
 
 * [x] **Refuerzo de Protocolos:** Implementar regla MANDATORIA en `SKILL.md` para actualización proactiva de `todos.md` y `ROADMAP.md` por parte de agentes.
 * [x] **Guía de Scripts de Utilidad:** Documentación técnica para estandarización de la creación de herramientas locales (Postgres/InfluxDB) con soporte para batching.
+* [x] **Script de Backfill de Lluvia (`backfill-rain-events.ts`):** Reconstrucción y agrupación de eventos históricos de lluvia desde InfluxDB hacia Postgres con saneamiento de época y truncamiento de anomalías de sensor.
 * [x] **Documentación Botánica Avanzada:** Formalización de DIF, DLI, VPD y Riesgo Fúngico en las especificaciones del orquideario (docs/specs).
 * [ ] **Estandarización de Tópicos MQTT:**
   * [x] Cambiar tópico base de sensores: `Environmental_Monitoring` -> `Weather_Station` (v0.12.0).

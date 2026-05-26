@@ -87,10 +87,17 @@ export const Logger = {
   /**
    * Estado de conectividad de un nodo (estilo Scheduler).
    */
-  node: (status: 'ONLINE' | 'OFFLINE' | 'REBOOT', nodeName: string, origin?: string) => {
-    const icon = status === 'ONLINE' ? '🟢' : status === 'REBOOT' ? '🔄' : '🔴'
+  node: (status: 'ONLINE' | 'OFFLINE' | 'REBOOT' | 'SLEEP', nodeName: string, origin?: string) => {
+    const icon =
+      status === 'ONLINE' ? '🟢' : status === 'REBOOT' ? '🔄' : status === 'SLEEP' ? '💤' : '🔴'
     const color =
-      status === 'ONLINE' ? colors.green : status === 'REBOOT' ? colors.blue : colors.red
+      status === 'ONLINE'
+        ? colors.green
+        : status === 'REBOOT'
+          ? colors.blue
+          : status === 'SLEEP'
+            ? colors.cyan
+            : colors.red
     const originStr = origin ? ` ${colors.dim}[${origin}]${colors.reset}` : ''
 
     console.log(formatLog(icon, 'NODE', color, `${status} -> ${nodeName}${originStr}`))

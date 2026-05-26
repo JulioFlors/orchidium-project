@@ -329,6 +329,7 @@ model RainEvent {
   /// Motivo de cierre: "Dry" (normal), "ORPHAN_TIMEOUT" (sin señal 10min), "REBOOT" (boot con Dry)
   closedBy        String?
 
+  @@unique([zone, startedAt])
   @@index([startedAt])
   @@index([zone])
   @@index([endedAt])
@@ -423,6 +424,7 @@ enum DeviceStatus {
   ONLINE
   OFFLINE
   REBOOT
+  SLEEP
 }
 
 enum Role {

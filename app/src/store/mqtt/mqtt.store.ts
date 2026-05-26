@@ -45,7 +45,7 @@ const IS_CONFIG_VALID = Boolean(MQTT_BROKER && MQTT_PORT)
 const BROKER_URL = IS_CONFIG_VALID ? `${MQTT_PROTOCOL}://${MQTT_BROKER}:${MQTT_PORT}` : ''
 
 const OPTIONS: IClientOptions = {
-  keepalive: 60,
+  keepalive: 90,
   clientId: `Orchidarium-Web-${Math.random().toString(16).substring(2, 8)}`,
   protocolId: 'MQTT',
   protocolVersion: 5,
@@ -179,8 +179,12 @@ export const useMqttStore = create<MqttState>()(
         })
 
         mqttClient.on('error', (err: Error) => {
-          Logger.error('❌ [MQTT] Error:', err)
-          set({ status: 'error' })
+          if (err.message === 'Keepalive timeout') {
+            Logger.warn('⚠️ [MQTT] Keepalive timeout. Reconectando...')
+          } else {
+            Logger.error('❌ [MQTT] Error:', err)
+            set({ status: 'error' })
+          }
         })
 
         mqttClient.on('offline', () => {

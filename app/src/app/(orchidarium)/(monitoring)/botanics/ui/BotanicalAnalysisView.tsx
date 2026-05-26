@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { Droplets, Sun, Moon, Thermometer } from 'lucide-react'
+import { Droplets, Sun, Thermometer, ChevronDown, ChevronUp, Info } from 'lucide-react'
 import useSWR from 'swr'
 
 import { EnvironmentCard, EnvironmentDataChart } from '../../monitoring/ui/components'
@@ -10,7 +10,7 @@ import { ZoneType } from '@/config/mappings'
 import { Heading, DeviceStatus } from '@/components'
 import { useToast } from '@/hooks'
 
-type BotanicalMetricType = 'dli' | 'vpd_avg' | 'dif' | 'high_humidity_hours'
+type BotanicalMetricType = 'dli' | 'vpd_avg' | 'dif' | 'high_humidity_hours' | 'deficit_hidrico'
 
 interface BotanicalDataResponse {
   liveKPIs: {
@@ -18,6 +18,7 @@ interface BotanicalDataResponse {
     vpdAvg: number | null
     dif: number | null
     highHumidityHours?: number | null
+    deficitHidricoHours?: number | null
     isLive: boolean
   } | null
 }
@@ -34,12 +35,131 @@ const fetcher = async (url: string) => {
   return res.json()
 }
 
+const formatHoursToHhMm = (value: number | null | undefined): string => {
+  if (value === null || value === undefined) return '--'
+  const hoursInt = Math.floor(value)
+  const mins = Math.round((value - hoursInt) * 60)
+
+  if (hoursInt === 0) return `${mins}min`
+  if (mins === 0) return `${hoursInt}h`
+
+  return `${hoursInt}h ${mins}min`
+}
+
+const getInterpretation = (
+  metric: BotanicalMetricType,
+  value: number | null | undefined,
+  zone: string,
+): string => {
+  if (value === null || value === undefined) return 'Esperando datos'
+
+  if (zone === ZoneType.ZONA_A) {
+    // Orquideario (Cattleyas)
+    switch (metric) {
+      case 'dli':
+        if (value < 4.0) return 'Luz insuficiente para floración'
+        if (value <= 12.0) return 'Luz diaria óptima para Cattleyas'
+        if (value <= 18.0) return 'Luz alta (monitorear estrés)'
+
+        return 'Exceso (riesgo de quemaduras)'
+      case 'vpd_avg':
+        if (value < 0.4) return 'Muy húmedo (planta no transpira)'
+        if (value <= 1.2) return 'Transpiración óptima'
+        if (value <= 1.6) return 'Aire seco (transpira rápido)'
+
+        return 'Estrés hídrico (estomas cerrados)'
+      case 'dif':
+        if (value < 6.0) return 'Bajo (dificulta floración)'
+        if (value <= 12.0) return 'Diferencial térmico óptimo'
+
+        return 'Diferencial amplio (estrés)'
+      case 'high_humidity_hours':
+        if (value > 3.0) return 'Alerta: Aire saturado (riesgo pudrición)'
+        if (value > 0) return 'Saturación temporal (normal)'
+
+        return 'Sin saturación (óptimo)'
+      case 'deficit_hidrico':
+        if (value > 4.0) return 'Sequía: Pérdida de agua (sin fotosíntesis)'
+        if (value > 0) return 'Déficit moderado'
+
+        return 'Humedad óptima'
+      default:
+        return ''
+    }
+  } else {
+    // Exterior (Cactus, suculentas, rosas del desierto)
+    switch (metric) {
+      case 'dli':
+        if (value < 10.0) return 'Luz baja para sol directo'
+        if (value <= 22.0) return 'Luz óptima para suculentas'
+
+        return 'Excelente radiación solar'
+      case 'vpd_avg':
+        if (value < 0.5) return 'Demasiado húmedo para cactus'
+        if (value <= 1.8) return 'Transpiración y clima óptimo'
+
+        return 'Ambiente árido y seco'
+      case 'dif':
+        if (value < 8.0) return 'Salto térmico moderado'
+
+        return 'Diferencial óptimo para cactus'
+      case 'high_humidity_hours':
+        if (value > 2.0) return 'Alerta: Saturación crítica para exterior'
+        if (value > 0) return 'Humedad alta'
+
+        return 'Seco / Óptimo'
+      case 'deficit_hidrico':
+        if (value > 4.0) return 'Alerta: Sequía prolongada en exterior'
+        if (value > 0) return 'Ambiente seco'
+
+        return 'Humedad óptima'
+      default:
+        return ''
+    }
+  }
+}
+
 export function BotanicalAnalysisView() {
   const [zone, setZone] = useState<string>(ZoneType.EXTERIOR)
   const [selectedMetric, setSelectedMetric] = useState<BotanicalMetricType | null>(null)
-  const [chartRange, setChartRange] = useState<string>('30d')
+
+  // Rangos de gráfica independientes por zona y por métrica
+  const [metricRanges, setMetricRanges] = useState<
+    Record<string, Record<BotanicalMetricType, string>>
+  >(() => {
+    const initial: Record<string, Record<BotanicalMetricType, string>> = {}
+
+    Object.values(ZoneType).forEach((z) => {
+      initial[z] = {
+        dli: '30d',
+        vpd_avg: '30d',
+        dif: '30d',
+        high_humidity_hours: '30d',
+        deficit_hidrico: '30d',
+      }
+    })
+
+    return initial
+  })
+
+  const [isInfoOpen, setIsInfoOpen] = useState(false)
 
   const { error: notifyError } = useToast()
+
+  const currentRange =
+    selectedMetric && metricRanges[zone] ? metricRanges[zone][selectedMetric] : '30d'
+
+  const handleRangeChange = (newRange: string) => {
+    if (selectedMetric && zone) {
+      setMetricRanges((prev) => ({
+        ...prev,
+        [zone]: {
+          ...(prev[zone] || {}),
+          [selectedMetric]: newRange,
+        },
+      }))
+    }
+  }
 
   // 1. Consulta para "Current Status" / Tarjetas (Consumimos estadísticas procesadas del día anterior)
   const {
@@ -64,7 +184,7 @@ export function BotanicalAnalysisView() {
     isLoading: isChartLoading,
   } = useSWR<{ data: Record<string, unknown>[] }>(
     selectedMetric
-      ? `/api/environment/history?range=${chartRange}&zone=${zone}&metric=${selectedMetric}`
+      ? `/api/environment/history?range=${currentRange}&zone=${zone}&metric=${selectedMetric}`
       : null,
     fetcher,
     {
@@ -110,18 +230,18 @@ export function BotanicalAnalysisView() {
       case 'dli':
         return {
           dataKey: 'dli',
-          color: '#a855f7',
+          color: '#facc15',
           unit: 'mol/m²/d',
-          title: 'Integral de Luz Diaria (DLI)',
+          title: 'DLI',
           icon: <Sun className="h-4 w-4" />,
           chartType: 'bar' as const,
         }
       case 'vpd_avg':
         return {
           dataKey: 'vpd_avg',
-          color: '#06b6d4',
+          color: '#22d3ee',
           unit: 'kPa',
-          title: 'VPD Promedio',
+          title: 'VPD',
           icon: <Droplets className="h-4 w-4" />,
         }
       case 'dif':
@@ -129,17 +249,26 @@ export function BotanicalAnalysisView() {
           dataKey: 'dif',
           color: '#f97316',
           unit: '°C',
-          title: 'Diferencial Térmico (DIF)',
+          title: 'DIF Térmico',
           icon: <Thermometer className="h-4 w-4" />,
           chartType: 'bar' as const,
         }
       case 'high_humidity_hours':
         return {
           dataKey: 'high_humidity_hours',
+          color: '#3b82f6',
+          unit: 'h',
+          title: 'Saturación Hídrica',
+          icon: <Droplets className="h-4 w-4" />,
+          chartType: 'bar' as const,
+        }
+      case 'deficit_hidrico':
+        return {
+          dataKey: 'deficit_hidrico',
           color: '#ef4444',
           unit: 'h',
-          title: 'Horas Humedad > 85%',
-          icon: <Moon className="h-4 w-4" />,
+          title: 'Déficit Hídrico',
+          icon: <Droplets className="h-4 w-4" />,
           chartType: 'bar' as const,
         }
       default:
@@ -165,20 +294,20 @@ export function BotanicalAnalysisView() {
               }}
             />
           }
-          description="Análisis de métricas procesadas (ciclos de 24h) para evaluación biológica."
+          description="Análisis de métricas procesadas en ciclos de 24h, para su evaluación agronómica."
           title="Análisis Botánico"
         />
 
-        <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-4 tds-xl:gap-6 grid grid-cols-1 gap-5">
+        {/* Grid estructurado de cards botánicas */}
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          {/* Fila 1: DLI y VPD */}
           <EnvironmentCard
-            color="purple"
-            hasData={!!liveKPIs && liveKPIs.dli !== null}
+            color="yellow"
+            description={getInterpretation('dli', liveKPIs?.dli, zone)}
             icon={<Sun className="h-6 w-6" />}
             isActive={selectedMetric === 'dli'}
             isLoading={isStatusLoading}
-            isOffline={false}
-            status="optimal"
-            title="DLI (Luz Diaria)"
+            title="DLI"
             trend="stable"
             unit="mol/m²/d"
             value={
@@ -189,13 +318,11 @@ export function BotanicalAnalysisView() {
 
           <EnvironmentCard
             color="cyan"
-            hasData={!!liveKPIs && liveKPIs.vpdAvg !== null}
+            description={getInterpretation('vpd_avg', liveKPIs?.vpdAvg, zone)}
             icon={<Droplets className="h-6 w-6" />}
             isActive={selectedMetric === 'vpd_avg'}
             isLoading={isStatusLoading}
-            isOffline={false}
-            status="optimal"
-            title="VPD Promedio"
+            title="VPD"
             trend="stable"
             unit="kPa"
             value={
@@ -206,14 +333,14 @@ export function BotanicalAnalysisView() {
             onClick={() => setSelectedMetric('vpd_avg')}
           />
 
+          {/* Fila 2: DIF Térmico (Ocupa las 2 columnas) */}
           <EnvironmentCard
+            className="md:col-span-2"
             color="orange"
-            hasData={!!liveKPIs && liveKPIs.dif !== null}
+            description={getInterpretation('dif', liveKPIs?.dif, zone)}
             icon={<Thermometer className="h-6 w-6" />}
             isActive={selectedMetric === 'dif'}
             isLoading={isStatusLoading}
-            isOffline={false}
-            status="optimal"
             title="DIF Térmico"
             trend="stable"
             unit="°C"
@@ -223,23 +350,43 @@ export function BotanicalAnalysisView() {
             onClick={() => setSelectedMetric('dif')}
           />
 
+          {/* Fila 3: Saturación Hídrica y Déficit Hídrico */}
           <EnvironmentCard
-            color="red"
-            hasData={!!liveKPIs && liveKPIs.highHumidityHours !== null}
-            icon={<Moon className="h-6 w-6" />}
+            color="blue"
+            description={getInterpretation(
+              'high_humidity_hours',
+              liveKPIs?.highHumidityHours,
+              zone,
+            )}
+            icon={<Droplets className="h-6 w-6" />}
             isActive={selectedMetric === 'high_humidity_hours'}
             isLoading={isStatusLoading}
-            isOffline={false}
-            status="optimal"
-            title="Humedad Crítica"
+            title="Saturación Hídrica"
             trend="stable"
-            unit="h (>85%)"
+            unit=""
             value={
               liveKPIs?.highHumidityHours !== null && liveKPIs?.highHumidityHours !== undefined
-                ? liveKPIs.highHumidityHours.toFixed(1)
+                ? formatHoursToHhMm(liveKPIs.highHumidityHours)
                 : '--'
             }
             onClick={() => setSelectedMetric('high_humidity_hours')}
+          />
+
+          <EnvironmentCard
+            color="red"
+            description={getInterpretation('deficit_hidrico', liveKPIs?.deficitHidricoHours, zone)}
+            icon={<Droplets className="h-6 w-6" />}
+            isActive={selectedMetric === 'deficit_hidrico'}
+            isLoading={isStatusLoading}
+            title="Déficit Hídrico"
+            trend="stable"
+            unit=""
+            value={
+              liveKPIs?.deficitHidricoHours !== null && liveKPIs?.deficitHidricoHours !== undefined
+                ? formatHoursToHhMm(liveKPIs.deficitHidricoHours)
+                : '--'
+            }
+            onClick={() => setSelectedMetric('deficit_hidrico')}
           />
         </div>
 
@@ -265,10 +412,202 @@ export function BotanicalAnalysisView() {
               data={normalizedChartData}
               {...chartProps}
               allowedRanges={['7d', '30d', 'all']}
-              range={chartRange}
-              onRangeChange={setChartRange}
+              range={currentRange}
+              onRangeChange={handleRangeChange}
             />
           ) : null}
+        </div>
+
+        {/* Guía de consulta botánica colapsable */}
+        <div className="border-input-outline bg-surface mt-6 overflow-hidden rounded-xl border transition-all duration-300">
+          <button
+            className="hover:bg-hover-overlay focus-visible:bg-hover-overlay focus-visible:ring-primary/50 flex w-full cursor-pointer items-center justify-between rounded-t-xl p-5 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+            type="button"
+            onClick={() => setIsInfoOpen(!isInfoOpen)}
+          >
+            <div className="flex items-center gap-3">
+              <Info className="text-primary h-5 w-5" />
+              <span className="text-primary text-base font-semibold">
+                Guía de Interpretación Botánica
+              </span>
+            </div>
+            {isInfoOpen ? (
+              <ChevronUp className="text-secondary h-5 w-5" />
+            ) : (
+              <ChevronDown className="text-secondary h-5 w-5" />
+            )}
+          </button>
+
+          {isInfoOpen && (
+            <div className="border-input-outline text-secondary bg-surface/30 rounded-b-xl border-t p-6 text-sm leading-relaxed">
+              <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+                {/* DLI */}
+                <div className="bg-surface/50 border-input-outline flex flex-col gap-3 rounded-lg border p-5">
+                  <h4 className="text-primary flex items-center gap-2 text-sm font-bold uppercase">
+                    <Sun className="h-4 w-4 text-yellow-400" /> DLI (Daily Light Integral)
+                  </h4>
+                  <p className="text-xs">
+                    Mide la cantidad total de luz útil (moles de fotones) recibida en 1 m² durante
+                    un día completo (24h). Es el &quot;litraje&quot; diario de sol acumulado.
+                  </p>
+                  <div className="mt-2 grid grid-cols-2 gap-4 border-t border-white/5 pt-2 text-xs">
+                    <div>
+                      <span className="text-primary block font-semibold">
+                        🌿 Orquideario (Cattleyas)
+                      </span>
+                      <ul className="mt-1 flex list-inside list-disc flex-col gap-0.5 opacity-85">
+                        <li>Óptimo: 4.0 - 12.0 mol/m²/d</li>
+                        <li>Bajo (&lt; 4): Afecta floración</li>
+                        <li>Alto (&gt; 18): Riesgo quemaduras</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <span className="text-primary block font-semibold">
+                        🌵 Exterior (Cactus/Rosas)
+                      </span>
+                      <ul className="mt-1 flex list-inside list-disc flex-col gap-0.5 opacity-85">
+                        <li>Óptimo: 10.0 - 22.0 mol/m²/d</li>
+                        <li>Soportan &gt; 22 mol/m²/d</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* VPD */}
+                <div className="bg-surface/50 border-input-outline flex flex-col gap-3 rounded-lg border p-5">
+                  <h4 className="text-primary flex items-center gap-2 text-sm font-bold uppercase">
+                    <Droplets className="h-4 w-4 text-cyan-400" /> VPD (Vapor Pressure Deficit)
+                  </h4>
+                  <p className="text-xs">
+                    Déficit de Presión de Vapor. Mide la diferencia de humedad entre el interior de
+                    la hoja y el aire exterior. Indica la fuerza con que el aire succiona el agua de
+                    la planta para hacerla transpirar.
+                  </p>
+                  <div className="mt-2 grid grid-cols-2 gap-4 border-t border-white/5 pt-2 text-xs">
+                    <div>
+                      <span className="text-primary block font-semibold">
+                        🌿 Orquideario (Cattleyas)
+                      </span>
+                      <ul className="mt-1 flex list-inside list-disc flex-col gap-0.5 opacity-85">
+                        <li>Óptimo: 0.4 - 1.2 kPa</li>
+                        <li>Bajo (&lt; 0.4): Hongo/no transpira</li>
+                        <li>Alto (&gt; 1.6): Estrés hídrico</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <span className="text-primary block font-semibold">
+                        🌵 Exterior (Cactus/Rosas)
+                      </span>
+                      <ul className="mt-1 flex list-inside list-disc flex-col gap-0.5 opacity-85">
+                        <li>Óptimo: 0.5 - 1.8 kPa</li>
+                        <li>Seco (&gt; 1.8): Clima árido</li>
+                        <li>Húmedo (&lt; 0.5): Riesgo pudrición</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* DIF */}
+                <div className="bg-surface/50 border-input-outline flex flex-col gap-3 rounded-lg border p-5">
+                  <h4 className="text-primary flex items-center gap-2 text-sm font-bold uppercase">
+                    <Thermometer className="h-4 w-4 text-orange-400" /> DIF Térmico (Día/Noche)
+                  </h4>
+                  <p className="text-xs">
+                    Diferencia de temperatura promedio entre el día y la noche. Un diferencial de
+                    temperatura pronunciado es el estímulo natural que activa la floración en
+                    Cattleyas.
+                  </p>
+                  <div className="mt-2 grid grid-cols-2 gap-4 border-t border-white/5 pt-2 text-xs">
+                    <div>
+                      <span className="text-primary block font-semibold">
+                        🌿 Orquideario (Cattleyas)
+                      </span>
+                      <ul className="mt-1 flex list-inside list-disc flex-col gap-0.5 opacity-85">
+                        <li>Óptimo: 6.0 - 12.0 °C</li>
+                        <li>Bajo (&lt; 6.0): Poca inducción floral</li>
+                        <li>Alto (&gt; 12.0): Estrés térmico</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <span className="text-primary block font-semibold">
+                        🌵 Exterior (Cactus/Rosas)
+                      </span>
+                      <ul className="mt-1 flex list-inside list-disc flex-col gap-0.5 opacity-85">
+                        <li>Óptimo: &gt; 8.0 °C</li>
+                        <li>Excelente para desarrollo</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Saturación Hídrica */}
+                <div className="bg-surface/50 border-input-outline flex flex-col gap-3 rounded-lg border p-5">
+                  <h4 className="text-primary flex items-center gap-2 text-sm font-bold uppercase">
+                    <Droplets className="h-4 w-4 text-blue-400" /> Saturación Hídrica
+                  </h4>
+                  <p className="text-xs">
+                    Tiempo acumulado diario con humedad relativa superior al umbral crítico (HR
+                    &gt;= 90% en Orquideario, &gt;= 98% en Exterior). Si se prolonga más del umbral
+                    seguro (3h en Orquideario, 2h en Exterior), activa una alerta ya que las raíces
+                    no pueden respirar y se favorece la pudrición.
+                  </p>
+                  <div className="mt-2 grid grid-cols-2 gap-4 border-t border-white/5 pt-2 text-xs">
+                    <div>
+                      <span className="text-primary block font-semibold">
+                        🌿 Orquideario (Cattleyas)
+                      </span>
+                      <ul className="mt-1 flex list-inside list-disc flex-col gap-0.5 opacity-85">
+                        <li>Límite Seguro: &lt;= 3 horas</li>
+                        <li>Crítico (&gt; 3h): Alerta fúngica activa</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <span className="text-primary block font-semibold">
+                        🌵 Exterior (Cactus/Rosas)
+                      </span>
+                      <ul className="mt-1 flex list-inside list-disc flex-col gap-0.5 opacity-85">
+                        <li>Límite Seguro: &lt;= 2 horas</li>
+                        <li>Crítico (&gt; 2h): Riesgo de pudrición</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Déficit Hídrico */}
+                <div className="bg-surface/50 border-input-outline flex flex-col gap-3 rounded-lg border p-5">
+                  <h4 className="text-primary flex items-center gap-2 text-sm font-bold uppercase">
+                    <Droplets className="h-4 w-4 text-red-400" /> Déficit Hídrico
+                  </h4>
+                  <p className="text-xs">
+                    Tiempo acumulado diario con sequedad extrema (HR &lt; 50% en Orquideario, &lt;=
+                    45% en Exterior). Si supera las 4 horas continuas, la Cattleya pierde agua a
+                    través de las hojas demasiado rápido y detiene su fotosíntesis para no
+                    deshidratarse.
+                  </p>
+                  <div className="mt-2 grid grid-cols-2 gap-4 border-t border-white/5 pt-2 text-xs">
+                    <div>
+                      <span className="text-primary block font-semibold">
+                        🌿 Orquideario (Cattleyas)
+                      </span>
+                      <ul className="mt-1 flex list-inside list-disc flex-col gap-0.5 opacity-85">
+                        <li>Umbral Seco: HR &lt; 50%</li>
+                        <li>Límite Seguro: &lt;= 4 horas</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <span className="text-primary block font-semibold">
+                        🌵 Exterior (Cactus/Rosas)
+                      </span>
+                      <ul className="mt-1 flex list-inside list-disc flex-col gap-0.5 opacity-85">
+                        <li>Umbral Seco: HR &lt;= 45%</li>
+                        <li>Límite Seguro: &lt;= 4 horas</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

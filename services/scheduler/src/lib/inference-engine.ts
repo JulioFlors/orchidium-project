@@ -1,4 +1,4 @@
-import { prisma, TaskStatus, AutomationSchedule, ZoneType } from '@package/database'
+import { prisma, TaskStatus, AutomationSchedule, ZoneType, TaskSource } from '@package/database'
 
 import { isCurrentlyRaining } from '../index'
 
@@ -118,6 +118,7 @@ export class InferenceEngine {
         where: {
           scheduleId: schedule.id,
           status: TaskStatus.CANCELLED,
+          source: TaskSource.MANUAL,
           scheduledAt: { gte: fiveMinAgo, lte: fiveMinFromNow },
         },
         orderBy: { scheduledAt: 'desc' },

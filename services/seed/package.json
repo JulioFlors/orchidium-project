@@ -4,7 +4,7 @@
   "private": true,
   "description": "Script para poblar la base de datos con datos iniciales",
   "scripts": {
-    "start": "dotenv -e ../../.env -- tsx src/seed-database.ts"
+    "start": "dotenv -e ../../.env -- tsx src/seed-database.ts && dotenv -e ../../.env -- tsx ../scheduler/src/scripts/backfill-rain-events.ts && dotenv -e ../../.env -- tsx ../scheduler/src/scripts/backfill-history.ts"
   },
   "dependencies": {
     "@package/database": "workspace:*",

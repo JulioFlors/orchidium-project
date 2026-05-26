@@ -2,11 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { useMqttStore } from '@/store/mqtt/mqtt.store'
 
-export type DeviceConnectionState = 'online' | 'offline' | 'zombie' | 'unknown'
-
-const ZOMBIE_THRESHOLD_MS = 70000 // (30s x 2 latidos) + 10s de gracia
-const OFFLINE_THRESHOLD_MS = 100000 // (30s x 3 latidos) + 10s de gracia
-const INITIAL_SEARCH_THRESHOLD_MS = 30000 // Tiempo máximo para esperar el primer latido antes de marcar offline
+export type DeviceConnectionState = 'online' | 'offline' | 'zombie' | 'unknown' | 'sleep'
 
 export const useDeviceHeartbeat = (
   topic: string = 'PristinoPlant/Actuator_Controller/status',
@@ -41,35 +37,43 @@ export const useDeviceHeartbeat = (
   const currentHeartbeat = statusData?.receivedAt || initialHeartbeat
   const rawStatus = statusData ? String(statusData.payload).trim() : initialStatus.trim()
 
-  // Normalizar los posibles payloads de desconexión a un estado unificado
-  // 'lwt_disconnect' = broker detectó fallo de red (LWT automático)
-  // 'offline'        = firmware publicó antes de desconectarse limpiamente
-  // Ambos son semánticamente equivalentes para el frontend
+  const isEmaTopic = topic.includes('Weather_Station')
+  const zombieThreshold = isEmaTopic ? 12 * 60 * 1000 : 75000 // 12 min para EMA, 75s para Actuador
+  const offlineThreshold = isEmaTopic ? 15 * 60 * 1000 : 145000 // 15 min para EMA, 145s para Actuador
+  const initialSearchThreshold = 30000
+
+  // Normalizar los posibles payloads de desconexión y vida a un estado unificado
   const normalizedStatus =
-    rawStatus === 'lwt_disconnect' || rawStatus === 'offline' ? 'offline' : rawStatus
+    rawStatus === 'lwt_disconnect' || rawStatus === 'offline'
+      ? 'offline'
+      : ['online', 'ping', 'reboot'].includes(rawStatus)
+        ? 'online'
+        : rawStatus
 
   // Lógica de Estado Efectivo:
-  // Si el mensaje es 'online' (o viene del servidor), verificamos su frescura
+  // Si el mensaje es 'online' o 'sleep', verificamos su frescura
   const lastKnownHeartbeat = currentHeartbeat
   const isCacheFresh =
-    lastKnownHeartbeat && now > 0 ? now - lastKnownHeartbeat < OFFLINE_THRESHOLD_MS : true
+    lastKnownHeartbeat && now > 0 ? now - lastKnownHeartbeat < offlineThreshold : true
 
   const effectiveStatus =
-    normalizedStatus === 'online' && !isCacheFresh ? 'unknown' : normalizedStatus
+    (normalizedStatus === 'online' || normalizedStatus === 'sleep') && !isCacheFresh
+      ? 'unknown'
+      : normalizedStatus
 
   // Cálculo de Zombie y Dead
   const lastHeartbeat = lastKnownHeartbeat
   const isZombie =
     lastHeartbeat !== null &&
-    effectiveStatus === 'online' &&
+    (effectiveStatus === 'online' || effectiveStatus === 'sleep') &&
     now > 0 &&
-    now - lastHeartbeat > ZOMBIE_THRESHOLD_MS
+    now - lastHeartbeat > zombieThreshold
 
   const isDead =
     lastHeartbeat !== null &&
-    effectiveStatus === 'online' &&
+    (effectiveStatus === 'online' || effectiveStatus === 'sleep') &&
     now > 0 &&
-    now - lastHeartbeat > OFFLINE_THRESHOLD_MS
+    now - lastHeartbeat > offlineThreshold
 
   // 4. Calcular Estado Final
   let connectionState: DeviceConnectionState = 'offline'
@@ -78,8 +82,8 @@ export const useDeviceHeartbeat = (
     if (now > 0 && startedAt > 0) {
       const searchDuration = now - startedAt
 
-      if (searchDuration > OFFLINE_THRESHOLD_MS) connectionState = 'offline'
-      else if (searchDuration > INITIAL_SEARCH_THRESHOLD_MS) connectionState = 'zombie'
+      if (searchDuration > offlineThreshold) connectionState = 'offline'
+      else if (searchDuration > initialSearchThreshold) connectionState = 'zombie'
       else connectionState = 'unknown'
     } else {
       connectionState = 'unknown'
@@ -88,6 +92,10 @@ export const useDeviceHeartbeat = (
     if (isDead) connectionState = 'offline'
     else if (isZombie) connectionState = 'zombie'
     else connectionState = 'online'
+  } else if (effectiveStatus === 'sleep') {
+    if (isDead) connectionState = 'offline'
+    else if (isZombie) connectionState = 'zombie'
+    else connectionState = 'sleep'
   }
 
   return {
