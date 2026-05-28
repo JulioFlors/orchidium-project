@@ -1136,10 +1136,10 @@ async def mqtt_connector_task(client_id):
                             if IS_BOOT_STATUS:
                                 client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=1)
                                 IS_BOOT_STATUS = False
-                                if DEBUG: print(f"\n📡  NODO {Colors.GREEN}Online{Colors.RESET}", end="\n")
+                                if DEBUG: print(f"\n📡  NODO {Colors.GREEN}Online{Colors.RESET}", end="\n\n")
                             else:
                                 client.publish(MQTT_TOPIC_STATUS, b"reboot", retain=True, qos=1)
-                                if DEBUG: print(f"\n📡  NODO {Colors.GREEN}Reboot{Colors.RESET}", end="\n")
+                                if DEBUG: print(f"\n📡  NODO {Colors.GREEN}Reboot{Colors.RESET}", end="\n\n")
                     await asyncio.sleep_ms(500)
                 except Exception as _e:
                     if DEBUG: print(f"⚠️ Fallo publicando estado: {_e}")
@@ -1358,7 +1358,7 @@ async def sensor_publish_task():
 
         if DEBUG:
             c = max(temperature_Batch.count, illuminance_Batch.count)
-            print(f"\n📊 Data ({c}/{BATCH_SIZE}): Temperature: {Colors.MAGENTA}{temp}°C{Colors.RESET}  Humidity: {Colors.BLUE}{hum}%{Colors.RESET}  Illuminance: {Colors.YELLOW}{lux} lux{Colors.RESET}")
+            print(f"📊 Data ({c}/{BATCH_SIZE}): Temperature: {Colors.MAGENTA}{temp}°C{Colors.RESET}  Humidity: {Colors.BLUE}{hum}%{Colors.RESET}  Illuminance: {Colors.YELLOW}{lux} lux{Colors.RESET}")
 
         # 4. Transmitir si se completa el lote
         if temperature_Batch.count >= BATCH_SIZE or (IS_SAMPLING_LUX and illuminance_Batch.count >= BATCH_SIZE):

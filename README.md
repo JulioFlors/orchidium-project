@@ -730,42 +730,113 @@ systemctl restart fail2ban
 
 #### 8. Sincronización hacia Producción (`main`)
 
-Para que estos cambios (y cualquier código nuevo) lleguen al servidor, debes completar el ciclo de integración hacia la rama principal:
+Para que los cambios de desarrollo lleguen al servidor de producción, se debe completar el ciclo de integración hacia la rama principal. Puedes realizar esto de forma manual o utilizando un comando personalizado automatizado en PowerShell.
+
+##### Opción A: Flujo Manual
+
+Ejecuta secuencialmente los siguientes comandos en tu terminal:
 
 ```bash
-# 1. Verificar que estamos en Dev
+# 1. Asegurar estar en Dev y agregar los cambios
 git checkout Dev
-# 2. Preparar el commit
 git add .
-# 3. Cargar el commit desde un archivo
+
+# 2. Hacer commit usando el archivo de mensaje efímero
 git commit -F commit.txt
-# 4. Eliminar el archivo
 rm commit.txt
-# 5. Subir los cambios a la rama Dev
+
+# 3. Subir la rama de desarrollo
 git push
-# 6. Cambiar a la rama de producción
+
+# 4. Cambiar a main y actualizar la copia local
 git checkout main
-# 7. Actualizar para evitar conflictos
 git pull origin main
-# 8. Fusionar los cambios desde Dev
+
+# 5. Fusionar los cambios e integrar
 git merge Dev
-# 9. Subir la versión final a GitHub
 git push origin main
-# 10. Volver al entorno de desarrollo
+
+# 6. Volver a la rama de desarrollo para continuar trabajando
 git checkout Dev
-# Ciclo de git completado
 ```
 
-```bash
-git checkout Dev
-git add .
-git commit -F commit.txt
-rm commit.txt
-git push
-git checkout main
-git pull origin main
-git merge Dev
-git push origin main
-git checkout Dev
-# Ciclo de git completado
-```
+##### Opción B: Automatización con PowerShell (`git-merge-push` / `gmp`)
+
+Si utilizas Windows y PowerShell, puedes automatizar todo el flujo agregando esta función en tu perfil de usuario.
+
+1. Abre tu perfil de PowerShell en el editor de texto:
+
+   ```powershell
+   notepad $PROFILE
+   ```
+
+2. Agrega el siguiente bloque de código al final del archivo:
+
+   ```powershell
+   function git-merge-push {
+       # 🛡️ Validar la existencia de commit.txt antes de iniciar
+       $CommitFile = "commit.txt"
+       if (-not (Test-Path $CommitFile)) {
+           Write-Host "`n❌ Error: No se encontró '$CommitFile' en el directorio actual." -ForegroundColor Red
+           Write-Host "   Crea '$CommitFile' con el mensaje de commit antes de continuar.`n" -ForegroundColor Gray
+           return
+       }
+
+       Write-Host "`n🚀 Iniciando flujo de sincronización..." -ForegroundColor Cyan
+
+       # 1. Preparar Dev
+       Write-Host "`n┌── 🌿 Preparando rama Dev..." -ForegroundColor Gray
+       git checkout Dev
+       if ($LASTEXITCODE -ne 0) { return }
+       git add .
+
+       # 2. Commit y limpieza
+       Write-Host "├── 📝 Aplicando commit desde $CommitFile..." -ForegroundColor Gray
+       git commit -F $CommitFile
+       if ($LASTEXITCODE -ne 0) { return }
+       Remove-Item $CommitFile -Force
+
+       # 3. Push Dev
+       Write-Host "├── 📤 Subiendo cambios de Dev..." -ForegroundColor Gray
+       git push
+       if ($LASTEXITCODE -ne 0) { return }
+
+       # 4. Actualizar main
+       Write-Host "├── 🔀 Actualizando main..." -ForegroundColor Gray
+       git checkout main
+       if ($LASTEXITCODE -ne 0) { return }
+       git pull origin main
+       if ($LASTEXITCODE -ne 0) { return }
+
+       # 5. Fusionar y Push main
+       Write-Host "├── 🤝 Fusionando Dev en main..." -ForegroundColor Gray
+       git merge Dev
+       if ($LASTEXITCODE -ne 0) {
+           git merge --abort 2>$null
+           git checkout Dev
+           return
+       }
+       Write-Host "├── 📤 Subiendo main..." -ForegroundColor Gray
+       git push origin main
+       if ($LASTEXITCODE -ne 0) {
+           git checkout Dev
+           return
+       }
+
+       # 6. Retorno
+       Write-Host "└── 🌿 Volviendo a la rama Dev..." -ForegroundColor Gray
+       git checkout Dev
+
+       Write-Host "`n✅ Sincronización completada con éxito.`n" -ForegroundColor Green
+   }
+
+   Set-Alias -Name gmp -Value git-merge-push
+   ```
+
+3. Guarda y cierra el perfil de PowerShell. Reinicia tu terminal de comando para cargar los cambios. Ahora podrás ejecutar la sincronización mediante cualquiera de los siguientes comandos:
+
+   ```powershell
+   gmp
+   # o también
+   git-merge-push
+   ```

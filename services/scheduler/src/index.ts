@@ -801,7 +801,9 @@ function setupMqttHandlers() {
         }
 
         if (!isActuator) {
-          checkAndSleepEma()
+          if (message !== 'sleep') {
+            checkAndSleepEma()
+          }
         }
 
         return
@@ -1231,13 +1233,14 @@ async function checkRainOrphanTimeout() {
  * ni auditorías solicitadas o activas pendientes, evitando mantener la radio encendida.
  */
 function checkAndSleepEma() {
+  if (isEmaSleeping || emaManager.connectionState === 'offline') return
+
   const pendingCount = emaManager.getPendingCommandsCount()
   const hasRequestedAudits = Object.values(emaAuditState.requested).some((v) => v === true)
   const hasActiveAudits = Object.values(emaAuditState.active).some((v) => v === true)
   const isBooting = bootAccumulators.has('Weather Station Orquideario')
 
   if (pendingCount === 0 && !hasRequestedAudits && !hasActiveAudits && !isBooting) {
-    Logger.info('Apagando radio del Nodo EMA por inactividad de tareas/auditorías.', '💤')
     executeEmaCommand('sleep', true)
   }
 }
@@ -1437,7 +1440,7 @@ async function handleNodeSync(
 
   if (message === 'online') {
     statusToSave = 'ONLINE'
-    notes = 'Conectado (Boot)'
+    notes = 'Conectado'
   } else if (message === 'reboot') {
     if (isFreshSession) {
       statusToSave = 'ONLINE'

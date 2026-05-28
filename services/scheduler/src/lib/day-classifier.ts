@@ -148,6 +148,7 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
       FROM "environment_metrics"
       WHERE time >= '${startISO}' AND time <= '${endISO}'
       AND source = 'Weather_Station'
+      AND zone = 'EXTERIOR'
     `
     const avgStream = influxClient.query(avgQuery)
     let avgLux = 0
@@ -184,6 +185,7 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
       WHERE time <= '${endISO}'
       AND time >= '${startISO}'
       AND source = 'Weather_Station'
+      AND zone = 'EXTERIOR'
       ORDER BY time DESC
       LIMIT 1
     `
@@ -201,6 +203,7 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
       FROM "environment_metrics"
       WHERE time >= now() - interval '120 minutes'
       AND source = 'Weather_Station'
+      AND zone = 'EXTERIOR'
       ORDER BY time DESC
     `
     const overcastStream = influxClient.query(overcastQuery)
