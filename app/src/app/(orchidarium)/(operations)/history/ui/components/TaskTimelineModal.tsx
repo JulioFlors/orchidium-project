@@ -115,7 +115,25 @@ export function TaskTimelineModal({
                   </span>
                 </div>
                 <p className="text-secondary text-xs leading-relaxed whitespace-pre-wrap">
-                  {event.notes || 'Cambio de estado automático.'}
+                  {event.notes
+                    ? event.notes.includes('\n')
+                      ? event.notes.split('\n').map((part, index) => {
+                          const lineKey = `${event.id}_line_${index}`
+
+                          return (
+                            <span key={lineKey}>
+                              {index > 0 && (
+                                <>
+                                  <br className="tds-sm:inline hidden" />
+                                  <span className="tds-sm:hidden"> </span>
+                                </>
+                              )}
+                              {part}
+                            </span>
+                          )
+                        })
+                      : event.notes
+                    : 'Cambio de estado automático.'}
                 </p>
               </div>
             </motion.div>

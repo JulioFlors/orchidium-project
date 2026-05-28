@@ -133,6 +133,7 @@ function formatPointSummary(point: Point): string {
   // Formato: [ Origen ] [ Zona ] -> Valor
   if (measurement === 'system_events') {
     const val = fields.value?.replace(/"/g, '') || '?'
+
     return `[ ${source} ]${zonePart} -> ${val}`
   }
 
@@ -559,7 +560,7 @@ async function start() {
     // Guardar timestamp de latido para determinar si es sesión fresca (>15min de inactividad)
     const now = Date.now()
     const lastHeartbeat = lastNodeHeartbeats.get(deviceLabel)
-    const isFreshSession = !lastHeartbeat || (now - lastHeartbeat > 15 * 60 * 1000)
+    const isFreshSession = !lastHeartbeat || now - lastHeartbeat > 15 * 60 * 1000
 
     if (messageValue !== 'ping') {
       lastNodeHeartbeats.set(deviceLabel, now)
@@ -568,8 +569,14 @@ async function start() {
     if (topic.endsWith('/status')) {
       let finalMessage = messageValue
 
-      if (messageValue === 'reboot' && isFreshSession) {
+      if (messageValue === 'online') {
         finalMessage = 'online'
+      } else if (messageValue === 'reboot') {
+        if (isFreshSession) {
+          finalMessage = 'online'
+        } else {
+          finalMessage = 'reboot'
+        }
       }
 
       if (finalMessage === 'ping') {

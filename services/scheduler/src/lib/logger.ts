@@ -99,8 +99,10 @@ export const Logger = {
     let color = colors.blue
 
     let nodeLabel = '[Actuador]'
+
     if (origin) {
       const lower = origin.toLowerCase()
+
       if (lower.includes('orquideario') || lower.includes('ema') || lower.includes('zona_a')) {
         nodeLabel = '[EMA]'
       }
@@ -121,6 +123,7 @@ export const Logger = {
     }
 
     let detail = ''
+
     if (origin) {
       if (origin.includes('Watchdog')) {
         detail = ` ${colors.dim}[Watchdog]${colors.reset}`
@@ -133,24 +136,16 @@ export const Logger = {
       }
     }
 
-    const msg = `${status} ${colors.bold}${nodeLabel}${colors.reset}${detail}`
+    const msg = `${status} ${colors.dim}${nodeLabel}${colors.reset}${detail}`
+
     console.log(formatLog(icon, 'NODE', color, msg))
   },
 
   // ---- Dominio: MQTT ----
 
   /** Comando MQTT enviado o recibido. */
-  mqtt: (msg: string, node?: string) => {
-    let nodeLabel = ''
-    if (node) {
-      const lower = node.toLowerCase()
-      if (lower.includes('ema')) {
-        nodeLabel = `[EMA] `
-      } else if (lower.includes('actuador')) {
-        nodeLabel = `[Actuador] `
-      }
-    }
-    console.log(formatLog('📡', 'MQTT', colors.magenta, `${nodeLabel}${msg}`))
+  mqtt: (msg: string, _node?: string) => {
+    console.log(formatLog('📡', 'MQTT', colors.magenta, msg))
   },
 
   /** ACK recibido del nodo. */

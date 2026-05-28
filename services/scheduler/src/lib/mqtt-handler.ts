@@ -61,7 +61,7 @@ interface PendingCommand {
 class CommandSequencer {
   private queue: PendingCommand[] = []
   private currentCommand: PendingCommand | null = null
-  private state: 'OFFLINE' | 'STABILIZING' | 'READY' = 'OFFLINE'
+  private state: 'UNKNOWN' | 'OFFLINE' | 'STABILIZING' | 'READY' = 'UNKNOWN'
   private stabilizationTimer: NodeJS.Timeout | null = null
   private retryTimer: NodeJS.Timeout | null = null
   private throttleTimer: NodeJS.Timeout | null = null
@@ -69,6 +69,8 @@ class CommandSequencer {
   constructor(public readonly nodeTarget: string = 'Nodo') {}
 
   public get connectionState() {
+    if (this.state === 'UNKNOWN') return 'none'
+
     return this.state === 'OFFLINE' ? 'offline' : 'online'
   }
 
@@ -97,7 +99,6 @@ class CommandSequencer {
    * Limpia cualquier cola previa.
    */
   setReady() {
-    this.clearAll()
     this.state = 'READY'
     this.processNext()
   }
@@ -203,7 +204,7 @@ class CommandSequencer {
     if (!isPersistent && ageMs > maxWindowMin * 60 * 1000) {
       Logger.mqtt(
         `Ventana de oportunidad cerrada (${maxWindowMin} min) para la tarea ${taskId.slice(0, 8)}.`,
-        this.nodeTarget
+        this.nodeTarget,
       )
       if (onFailure) {
         onFailure(taskId, `Ventana de oportunidad cerrada (${maxWindowMin} min expirados).`).catch(
@@ -220,12 +221,18 @@ class CommandSequencer {
     // [🔄 Gestión de Persistencia]: Registro en DB al intento 3 para feedback visual
     if (attempts === 3) {
       if (onFailure) {
-        Logger.mqtt(`Nodo Actuador no responde tras 3 intentos. Sincronizando estado FAILED en DB.`, this.nodeTarget)
+        Logger.mqtt(
+          `Nodo Actuador no responde tras 3 intentos. Sincronizando estado FAILED en DB.`,
+          this.nodeTarget,
+        )
         onFailure(taskId, 'Sin respuesta del Nodo Actuador.').catch((err) =>
           Logger.error(`Error en callback de persistencia para ${taskId.slice(0, 8)}:`, err),
         )
       } else {
-        Logger.mqtt(`Nodo Actuador no responde tras 3 intentos al comando de sistema.`, this.nodeTarget)
+        Logger.mqtt(
+          `Nodo Actuador no responde tras 3 intentos al comando de sistema.`,
+          this.nodeTarget,
+        )
       }
     }
 
@@ -378,7 +385,7 @@ export function executeSequence(
 
   Logger.mqtt(
     `Despachando Circuito: ${purpose} (${remainingMinutes} min / ${durationSec}s) [Task: ${taskId.slice(0, 8)}]`,
-    'Nodo Actuador'
+    'Nodo Actuador',
   )
 }
 
@@ -399,7 +406,10 @@ export function stopSequence(purpose: TaskPurpose, taskId: string) {
   // Limpiamos reintentos de ON si existían para esta tarea
   irrigationRetryManager.confirmByTaskId(taskId)
 
-  Logger.mqtt(`Enviando PARADA (OFF) para: ${purpose} [Task: ${taskId.slice(0, 8)}]`, 'Nodo Actuador')
+  Logger.mqtt(
+    `Enviando PARADA (OFF) para: ${purpose} [Task: ${taskId.slice(0, 8)}]`,
+    'Nodo Actuador',
+  )
 }
 
 /**
@@ -420,7 +430,10 @@ export function executeSystemCommand(
 
   // Para comandos no persistentes, verificamos si el nodo está online
   if (targetManager.connectionState === 'offline' && !isPersistent) {
-    Logger.mqtt(`Comando: ${colors.magenta}${command}${colors.reset} (Descartado — Nodo Offline)`, targetManager.nodeTarget)
+    Logger.mqtt(
+      `Comando: ${colors.magenta}${command}${colors.reset} (Descartado — Nodo Offline)`,
+      targetManager.nodeTarget,
+    )
 
     return
   }
@@ -487,7 +500,8 @@ export function syncNodeSampling(
     if (!targetNode || targetNode === 'actuator') executeSystemCommand('lux_sampling:on', true)
     if (!targetNode || targetNode === 'ema') executeEmaCommand('lux_sampling:on', true)
   } else {
-    if (!forcePublish && !targetNode) Logger.info('🌙  Suspendiendo muestreo de iluminancia (Anochecer)')
+    if (!forcePublish && !targetNode)
+      Logger.info('🌙  Suspendiendo muestreo de iluminancia (Anochecer)')
     if (!targetNode || targetNode === 'actuator') executeSystemCommand('lux_sampling:off', true)
     if (!targetNode || targetNode === 'ema') executeEmaCommand('lux_sampling:off', true)
   }

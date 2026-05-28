@@ -938,9 +938,14 @@ async def check_critical_mqtt_errors(e):
 def publish_single_batch(metric_name, ring_buffer):
     """Construye y publica un lote de telemetría de forma síncrona."""
     if ring_buffer.count > 0:
+        count = ring_buffer.count
         data_str = ",".join('[%d,{"%s":%s}]' % (it[0], metric_name, str(it[1])) for it in ring_buffer.get_all())
         payload_batch = '{"data":[%s]}' % data_str
         client.publish(MQTT_TOPIC_METRICS, payload_batch, qos=0)
+        
+        if DEBUG:
+            print(f"📊  [Batch] {metric_name.capitalize()} enviado con éxito ({count} muestras)")
+            
         ring_buffer.clear()
         return True
     return False
@@ -1095,12 +1100,12 @@ async def mqtt_connector_task(client_id):
                     async with mqtt_lock:
                         if client and getattr(client, 'sock', None):
                             if IS_BOOT_STATUS:
-                                client.publish(MQTT_TOPIC_STATUS, b"reboot", retain=True, qos=1)
-                                IS_BOOT_STATUS = False
-                                if DEBUG: print(f"\n📡  NODO {Colors.GREEN}Reboot{Colors.RESET}", end="\n")
-                            else:
                                 client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=1)
+                                IS_BOOT_STATUS = False
                                 if DEBUG: print(f"\n📡  NODO {Colors.GREEN}Online{Colors.RESET}", end="\n")
+                            else:
+                                client.publish(MQTT_TOPIC_STATUS, b"reboot", retain=True, qos=1)
+                                if DEBUG: print(f"\n📡  NODO {Colors.GREEN}Reboot{Colors.RESET}", end="\n")
                     await asyncio.sleep_ms(500)
                 except Exception as _e:
                     if DEBUG: print(f"⚠️ Fallo publicando estado: {_e}")
@@ -1213,10 +1218,10 @@ async def transmit_and_sync():
         # Conexión exitosa: Publicar lotes acumulados
         await flush_telemetry_batches_async()
         
-        # Ventana de sincronización de 30s
+        # Ventana de sincronización de 60s
         sync_event.clear()
         start_time = ticks_ms()
-        timeout_ms = const(30000)
+        timeout_ms = const(60000)
 
         while not sleep_received:
             elapsed = ticks_diff(ticks_ms(), start_time)
@@ -1235,7 +1240,7 @@ async def transmit_and_sync():
             except Exception as e:
                 if DEBUG: print(f"⚠️  Error esperando comandos: {e}")
                 break
-            
+
     except asyncio.TimeoutError:
         if DEBUG: print("\n⚠️  No se pudo establecer conexión (Timeout 45s)")
     except Exception as e:

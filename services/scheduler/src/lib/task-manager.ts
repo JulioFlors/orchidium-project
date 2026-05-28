@@ -9,6 +9,20 @@ import { InferenceEngine } from './inference-engine'
 
 const recentEvents = new Map<string, number>()
 
+const STATUS_PRECEDENCE: Record<TaskStatus, number> = {
+  [TaskStatus.PENDING]: 1,
+  [TaskStatus.WAITING_CONFIRMATION]: 1,
+  [TaskStatus.AUTHORIZED]: 2,
+  [TaskStatus.DISPATCHED]: 3,
+  [TaskStatus.ACKNOWLEDGED]: 4,
+  [TaskStatus.CONFIRMED]: 4,
+  [TaskStatus.IN_PROGRESS]: 5,
+  [TaskStatus.COMPLETED]: 6,
+  [TaskStatus.CANCELLED]: 6,
+  [TaskStatus.FAILED]: 6,
+  [TaskStatus.EXPIRED]: 6,
+}
+
 /**
  * Registra un evento de cambio de estado de forma atómica en TaskLog y TaskEventLog.
  */
@@ -36,6 +50,14 @@ export async function recordTaskEvent(
       if (!currentTask) {
         Logger.warn(`Se recibió evento ${status} para tarea inexistente: ${taskId.slice(0, 8)}`)
 
+        return null
+      }
+
+      const currentPrecedence = STATUS_PRECEDENCE[currentTask.status] || 0
+      const newPrecedence = STATUS_PRECEDENCE[status] || 0
+
+      // No permitir retroceder en la jerarquía de estados
+      if (newPrecedence < currentPrecedence) {
         return null
       }
 

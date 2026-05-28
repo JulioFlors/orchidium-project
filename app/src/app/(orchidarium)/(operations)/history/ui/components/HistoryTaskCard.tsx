@@ -159,7 +159,7 @@ export function HistoryTaskCard({
           {task.notes && (
             <div className="tds-sm:hidden border-black-and-white/5 mt-1 border-t border-dashed pt-2">
               <p className="text-secondary text-[11px] leading-relaxed italic opacity-60">
-                {task.notes}
+                {task.notes.replace(/\n/g, ' ')}
               </p>
             </div>
           )}

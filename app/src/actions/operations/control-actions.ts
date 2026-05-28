@@ -164,6 +164,8 @@ export async function confirmWaitingTasks(taskIds: string[]) {
  */
 export async function cancelManualTask(taskId: string, notes?: string) {
   try {
+    const session = await auth.api.getSession({ headers: await headers() })
+    const adminName = session?.user?.name || 'El Admin'
     let wasModified = false
 
     await prisma.$transaction(async (tx) => {
@@ -188,7 +190,7 @@ export async function cancelManualTask(taskId: string, notes?: string) {
         const elapsedSec = Math.floor((elapsedMs % 60000) / 1000)
         const remainingMin = Math.max(0, currentTask.duration - elapsedMin)
 
-        timeInfo = ` Tiempo efectivo: ${elapsedMin}m ${elapsedSec}s | Restante: ${remainingMin} min.`
+        timeInfo = `Tiempo efectivo: ${elapsedMin}m ${elapsedSec}s | Restante: ${remainingMin} min.`
       }
 
       // 1. Marcar como cancelada
@@ -197,8 +199,8 @@ export async function cancelManualTask(taskId: string, notes?: string) {
       const finalNotes =
         notes ||
         (currentTask.status === 'IN_PROGRESS'
-          ? `El Admin cerró el circuito desde el Centro de Control.${timeInfo}`
-          : 'Tarea Cancelada por el Admin antes de iniciar')
+          ? `${adminName} cerró el circuito desde el Centro de Control.${timeInfo ? `\n${timeInfo}` : ''}`
+          : `Tarea Cancelada por ${adminName === 'El Admin' ? 'el Admin' : adminName} antes de iniciar`)
 
       await tx.taskLog.update({
         data: {

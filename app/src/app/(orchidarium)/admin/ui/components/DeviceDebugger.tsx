@@ -30,7 +30,7 @@ interface DeviceConfig {
 const DEVICES: DeviceConfig[] = [
   {
     id: 'Actuator_Controller',
-    name: 'Nodo Actuador',
+    name: 'Actuador',
     description: 'Nodo Actuador + Estación Meteorológica Exterior',
     baseTopic: 'PristinoPlant/Actuator_Controller',
     heartbeatTimeoutMs: 60000,
@@ -39,7 +39,7 @@ const DEVICES: DeviceConfig[] = [
   },
   {
     id: 'Weather_Station_ZONA_A',
-    name: 'Nodo EMA',
+    name: 'EMA',
     description: `Estación Meteorológica ${ZoneTypeLabels[ZoneType.ZONA_A]}`,
     baseTopic: `PristinoPlant/Weather_Station/ZONA_A`,
     heartbeatTimeoutMs: 60000,
@@ -100,7 +100,7 @@ export function DeviceDebugger() {
   // ---- Seguridad de Reintentos ----
   // Si el dispositivo se desconecta, cancelamos cualquier reintento pendiente hacia él
   useEffect(() => {
-    if (connectionState !== 'online' && connectionState !== 'unknown') {
+    if (connectionState === 'offline') {
       clearAcksForTopic(selectedDevice.baseTopic)
     }
   }, [connectionState, selectedDevice.baseTopic, clearAcksForTopic])
@@ -159,9 +159,11 @@ export function DeviceDebugger() {
 
   const auditStatePayload = useMemo<AuditStatePayload | null>(() => {
     const msg = messages[auditStateTopic]
+
     if (!msg) return null
     try {
       const payload = msg.payload
+
       return (
         typeof payload === 'object' ? payload : JSON.parse(String(payload))
       ) as AuditStatePayload
@@ -406,12 +408,18 @@ export function DeviceDebugger() {
                     activeAudit={auditId}
                     currentPayload={payload}
                     deviceId={selectedDevice.id}
-                    isActive={isEma ? Boolean(auditStatePayload?.active?.[auditId]) : hardwareAudits.includes(auditId)}
+                    isActive={
+                      isEma
+                        ? Boolean(auditStatePayload?.active?.[auditId])
+                        : hardwareAudits.includes(auditId)
+                    }
                     isOnline={connectionState === 'online' || connectionState === 'sleep'}
                     isPending={
                       isEma
-                        ? Boolean(auditStatePayload?.requested?.[auditId]) && !Boolean(auditStatePayload?.active?.[auditId])
-                        : Boolean(pendingAcks[`audit_${auditId}_on`]) || Boolean(pendingAcks[`audit_${auditId}_off`])
+                        ? Boolean(auditStatePayload?.requested?.[auditId]) &&
+                          !Boolean(auditStatePayload?.active?.[auditId])
+                        : Boolean(pendingAcks[`audit_${auditId}_on`]) ||
+                          Boolean(pendingAcks[`audit_${auditId}_off`])
                     }
                     isStale={false}
                     onClear={() => {

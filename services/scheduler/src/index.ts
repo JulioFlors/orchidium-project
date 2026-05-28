@@ -306,7 +306,7 @@ function flushBootLog(nodeSource: string) {
   }
 
   // Imprimir conexión del nodo
-  Logger.node(nodeSource)
+  Logger.node(nodeSource, nodeSource)
 
   let hasInitFailure = false
 
@@ -316,8 +316,6 @@ function flushBootLog(nodeSource: string) {
       `Iluminancia: ${colors.yellow}${accumulator.lux.toFixed(0)} lx${colors.reset}`,
       '☀️',
     )
-  } else if (!isLuxSamplingActive()) {
-    Logger.info(`Iluminancia: ${colors.dim}Muestreo Suspendido (Anochecer)${colors.reset}`, '🌙')
   } else {
     Logger.info(`Iluminancia: ${colors.red}No se detecto el sensor BH1750${colors.reset}`, '⚠️')
     hasInitFailure = true
@@ -425,39 +423,38 @@ function setupMqttHandlers() {
         if (message === 'ping') {
           lastFirmwareHeartbeat = Date.now()
           if (irrigationRetryManager.connectionState === 'offline') {
-            await handleNodeSync(false, previousHeartbeat)
-
-            if (!bootAccumulators.has('Weather Station Exterior')) {
-              bootAccumulators.set('Weather Station Exterior', {
-                nodeName: 'Weather Station Exterior',
-                lux: null,
-                temp: null,
-                hum: null,
-                bootAt: Date.now(),
-                timer: setTimeout(() => flushBootLog('Weather Station Exterior'), 30000), // Ventana de 30s
-              })
-            }
+            await handleNodeSync('ping', previousHeartbeat)
+          } else if (irrigationRetryManager.connectionState === 'none') {
+            // El scheduler acaba de iniciar y el nodo ya estaba operando.
+            // Transicionamos a READY de inmediato sin estabilización ni sincronización redundante.
+            irrigationRetryManager.setReady()
+            systemRetryManager.setReady()
+            await handleNodeSync('ping', previousHeartbeat)
           }
 
           return
         }
 
-        if (message === 'reboot') {
-          irrigationRetryManager.setStabilizing()
-          systemRetryManager.setStabilizing()
+        if (message === 'online' || message === 'reboot') {
+          const timeSinceLastHeartbeat = Date.now() - previousHeartbeat
+          const isFreshSession = previousHeartbeat === 0 || timeSinceLastHeartbeat > 15 * 60 * 1000
 
-          // Inicializamos presencia y salud como falsos al reiniciar.
-          dht22Present = false
-          dht22Alive = false
-          illuminancePresent = false
-          illuminanceAlive = false
+          if (message === 'online' || isFreshSession) {
+            dht22Present = false
+            dht22Alive = false
+            illuminancePresent = false
+            illuminanceAlive = false
+          }
           lastClimateBatchAt = Date.now()
           lastLuxBatchAt = Date.now()
 
-          // 🚀 INICIALIZACIÓN SÍNCRONA PRE-AWAIT (Evita condición de carrera)
-          isSystemReady = false
-          const prev = bootAccumulators.get('Weather Station Exterior')
+          if (message === 'online') {
+            irrigationRetryManager.setStabilizing()
+            systemRetryManager.setStabilizing()
+            isSystemReady = false
+          }
 
+          const prev = bootAccumulators.get('Weather Station Exterior')
           if (prev?.timer) clearTimeout(prev.timer)
           bootAccumulators.set('Weather Station Exterior', {
             nodeName: 'Weather Station Exterior',
@@ -465,33 +462,30 @@ function setupMqttHandlers() {
             temp: null,
             hum: null,
             bootAt: Date.now(),
-            timer: setTimeout(() => flushBootLog('Weather Station Exterior'), 30000), // Ajustado a 30s
+            timer: setTimeout(() => flushBootLog('Weather Station Exterior'), 30000), // Preservado a 30s
           })
 
-          await handleNodeSync(true, previousHeartbeat)
-
-          return
-        }
-
-        if (message === 'online') {
-          if (irrigationRetryManager.connectionState === 'online') {
-            lastFirmwareHeartbeat = Date.now()
-
+          if (message === 'online') {
+            await handleNodeSync('online', previousHeartbeat)
             return
           }
 
-          await handleNodeSync(false, previousHeartbeat)
-
-          if (!bootAccumulators.has('Weather Station Exterior')) {
-            bootAccumulators.set('Weather Station Exterior', {
-              nodeName: 'Weather Station Exterior',
-              lux: null,
-              temp: null,
-              hum: null,
-              bootAt: Date.now(),
-              timer: setTimeout(() => flushBootLog('Weather Station Exterior'), 30000), // Ventana de 30s
-            })
+          // Para reboot
+          if (!isFreshSession && irrigationRetryManager.connectionState === 'online') {
+            lastFirmwareHeartbeat = Date.now()
           }
+
+          if (irrigationRetryManager.connectionState === 'none') {
+            if (!isFreshSession) {
+              irrigationRetryManager.setReady()
+              systemRetryManager.setReady()
+            } else {
+              irrigationRetryManager.setStabilizing()
+              systemRetryManager.setStabilizing()
+            }
+          }
+
+          await handleNodeSync('reboot', previousHeartbeat)
         } else if (
           (message === 'lwt_disconnect' || message === 'offline') &&
           irrigationRetryManager.connectionState !== 'offline'
@@ -513,19 +507,30 @@ function setupMqttHandlers() {
         lastEmaHeartbeat = Date.now()
 
         if (message === 'ping') {
+          if (emaManager.connectionState === 'offline') {
+            await handleEmaSync('ONLINE')
+          } else if (emaManager.connectionState === 'none') {
+            emaManager.setReady()
+            await handleEmaSync('ONLINE')
+          }
+
           return
         }
 
         if (message === 'reboot' || message === 'online') {
           const timeSinceLastHeartbeat = Date.now() - previousEmaHeartbeat
-          const isFreshSession = timeSinceLastHeartbeat > 15 * 60 * 1000
+          const isFreshSession = previousEmaHeartbeat === 0 || timeSinceLastHeartbeat > 15 * 60 * 1000
 
-          let isBootEvent = message === 'reboot'
+          let statusToSave: DeviceStatus
 
-          // Si el nodo reporta reboot pero pasó más de 15 minutos en silencio,
-          // se considera una "Nueva sesión" (ONLINE) en vez de un reboot en caliente
-          if (isBootEvent && isFreshSession) {
-            isBootEvent = false
+          if (message === 'online') {
+            statusToSave = 'ONLINE'
+          } else { // reboot
+            if (isFreshSession) {
+              statusToSave = 'ONLINE'
+            } else {
+              statusToSave = 'REBOOT'
+            }
           }
 
           // Reiniciamos el estado físico active del EMA en memoria al conectar, pero PRESERVAMOS requested
@@ -541,13 +546,32 @@ function setupMqttHandlers() {
             { retain: true, qos: 1 },
           )
 
-          if (message === 'online' && emaManager.connectionState === 'online' && !isEmaSleeping) {
+          if (statusToSave === 'REBOOT' && emaManager.connectionState === 'online' && !isEmaSleeping) {
+            // Si es un reboot en caliente, de todas formas inicializamos el bootAccumulator
+            // para evaluar que tras la reconexión MQTT los sensores funcionen correctamente.
+            const prev = bootAccumulators.get('Weather Station Orquideario')
+            if (prev?.timer) clearTimeout(prev.timer)
+            bootAccumulators.set('Weather Station Orquideario', {
+              nodeName: 'Weather Station Orquideario',
+              lux: null,
+              temp: null,
+              hum: null,
+              bootAt: Date.now(),
+              timer: setTimeout(() => flushBootLog('Weather Station Orquideario'), 30000), // Ventana de 30s
+            })
             return
           }
 
-          // Inicializar presencia en boot del EMA
-          const prev = bootAccumulators.get('Weather Station Orquideario')
+          if (emaManager.connectionState === 'none') {
+            if (statusToSave === 'REBOOT') {
+              emaManager.setReady()
+            } else {
+              emaManager.setStabilizing()
+            }
+          }
 
+          // Inicializar presencia en boot o reconexión del EMA
+          const prev = bootAccumulators.get('Weather Station Orquideario')
           if (prev?.timer) clearTimeout(prev.timer)
           bootAccumulators.set('Weather Station Orquideario', {
             nodeName: 'Weather Station Orquideario',
@@ -558,7 +582,7 @@ function setupMqttHandlers() {
             timer: setTimeout(() => flushBootLog('Weather Station Orquideario'), 30000), // Ventana de 30s
           })
 
-          await handleEmaSync(isBootEvent)
+          await handleEmaSync(statusToSave)
         } else if (message === 'sleep') {
           Logger.node('SLEEP', 'Weather Station Orquideario')
           isEmaSleeping = true
@@ -592,7 +616,10 @@ function setupMqttHandlers() {
             return
           }
           emaManager.setOffline()
-          Logger.node('OFFLINE', `Weather Station Orquideario (${message === 'lwt_disconnect' ? 'BROKER' : 'NODE'})`)
+          Logger.node(
+            'OFFLINE',
+            `Weather Station Orquideario (${message === 'lwt_disconnect' ? 'BROKER' : 'NODE'})`,
+          )
 
           // Limpiar todo el estado de auditorías al quedar offline
           for (const key of Object.keys(emaAuditState.requested) as Array<
@@ -628,20 +655,18 @@ function setupMqttHandlers() {
       if (topic === 'PristinoPlant/Weather_Station/ZONA_A/cmd/request') {
         const cmdStr = message.trim()
 
+        Logger.mqtt(`Petición de comando desde UI: ${cmdStr}`, 'Nodo EMA')
+
         // Proxy ACK inmediato a la UI
-        mqttClient.publish(
-          'PristinoPlant/Weather_Station/ZONA_A/cmd/received',
-          cmdStr,
-          { qos: 1 }
-        )
+        mqttClient.publish('PristinoPlant/Weather_Station/ZONA_A/cmd/received', cmdStr, { qos: 1 })
 
         if (cmdStr.startsWith('audit_')) {
           const isOn = cmdStr.endsWith('_on')
           const isOff = cmdStr.endsWith('_off')
-          const category = isOn 
-            ? cmdStr.slice(6, -3) as keyof typeof emaAuditState.requested
-            : isOff 
-              ? cmdStr.slice(6, -4) as keyof typeof emaAuditState.requested
+          const category = isOn
+            ? (cmdStr.slice(6, -3) as keyof typeof emaAuditState.requested)
+            : isOff
+              ? (cmdStr.slice(6, -4) as keyof typeof emaAuditState.requested)
               : null
 
           if (category && category in emaAuditState.requested) {
@@ -650,7 +675,7 @@ function setupMqttHandlers() {
               mqttClient.publish(
                 'PristinoPlant/Weather_Station/ZONA_A/audit/state',
                 JSON.stringify(emaAuditState),
-                { retain: true, qos: 1 }
+                { retain: true, qos: 1 },
               )
               executeEmaCommand(cmdStr, true)
             } else if (isOff) {
@@ -658,7 +683,7 @@ function setupMqttHandlers() {
               mqttClient.publish(
                 'PristinoPlant/Weather_Station/ZONA_A/audit/state',
                 JSON.stringify(emaAuditState),
-                { retain: true, qos: 1 }
+                { retain: true, qos: 1 },
               )
               emaManager.removeByTaskId(`audit_${category}_on`)
               executeEmaCommand(cmdStr, true)
@@ -667,6 +692,7 @@ function setupMqttHandlers() {
         } else {
           executeEmaCommand(cmdStr, true)
         }
+
         return
       }
 
@@ -674,10 +700,12 @@ function setupMqttHandlers() {
       if (topic === 'PristinoPlant/Weather_Station/ZONA_A/audit/state') {
         try {
           const parsed = JSON.parse(message)
+
           if (parsed.requested || parsed.active) return
 
           for (const key of ['lux', 'wifi', 'ram', 'temp', 'hum'] as const) {
             const isPhysicallyActive = parsed[key] === true
+
             emaAuditState.active[key] = isPhysicallyActive
             if (!isPhysicallyActive) {
               emaAuditState.requested[key] = false
@@ -692,13 +720,14 @@ function setupMqttHandlers() {
           mqttClient.publish(
             'PristinoPlant/Weather_Station/ZONA_A/audit/state',
             JSON.stringify(emaAuditState),
-            { retain: true, qos: 1 }
+            { retain: true, qos: 1 },
           )
 
           checkAndSleepEma()
         } catch (err) {
           Logger.error('Error parseando audit/state de EMA:', err)
         }
+
         return
       }
 
@@ -707,11 +736,12 @@ function setupMqttHandlers() {
         topic === 'PristinoPlant/Actuator_Controller/cmd/received' ||
         topic === 'PristinoPlant/Weather_Station/ZONA_A/cmd/received'
       ) {
+        const isActuator = topic.includes('Actuator')
+        const nodeName = isActuator ? 'Nodo Actuador' : 'Nodo EMA'
+
         try {
           const parsed = JSON.parse(message)
           const taskId = parsed.task_id
-          const isActuator = topic.includes('Actuator')
-          const nodeName = isActuator ? 'Nodo Actuador' : 'Nodo EMA'
 
           if (taskId) {
             const task = await recordTaskEvent(
@@ -751,12 +781,16 @@ function setupMqttHandlers() {
             }
           }
         } catch {
-          if (topic.includes('Actuator')) {
+          if (isActuator) {
             irrigationRetryManager.confirmByTaskId(message)
             systemRetryManager.confirm(message)
           } else {
             emaManager.confirm(message)
           }
+        }
+
+        if (!isActuator) {
+          checkAndSleepEma()
         }
 
         return
@@ -952,9 +986,8 @@ function setupMqttHandlers() {
             if (hasHum && hum !== null) accumulator.hum = hum
 
             // Si ya recolectamos las métricas requeridas, flusheamos el log inmediatamente sin esperar el timeout
-            const isLuxRequired = isLuxSamplingActive()
             const allPresent =
-              (!isLuxRequired || accumulator.lux !== null) &&
+              accumulator.lux !== null &&
               accumulator.temp !== null &&
               accumulator.hum !== null
 
@@ -1369,37 +1402,42 @@ async function handleNodeOffline(reason: string, origin: 'BROKER' | 'NODE' | 'SC
  * Orquesta la sincronización completa del nodo tras una reconexión o reinicio.
  * Implementa un bloqueo de 5 segundos para evitar ráfagas redundantes.
  */
-async function handleNodeSync(isBoot: boolean = false, previousHeartbeat: number = Date.now()) {
+async function handleNodeSync(
+  message: 'online' | 'reboot' | 'ping',
+  previousHeartbeat: number = 0,
+) {
   const now = Date.now()
   const timeSinceLastSync = now - lastSyncTimestamp
 
   // Si ya sincronizamos hace menos de 5 segundos, ignoramos la redundancia
   if (timeSinceLastSync < 5000) {
-    if (isBoot) {
+    if (message !== 'ping') {
       Logger.debug('Boot redundante detectado. Ignorando sincronización duplicada.')
     }
 
     return
   }
 
-  // Determinamos la semántica del mensaje ONLINE
+  const timeSinceLastHeartbeat = now - previousHeartbeat
+  const isFreshSession = previousHeartbeat === 0 || timeSinceLastHeartbeat > 15 * 60 * 1000
+
   let notes = 'Conectado'
-  let statusToSave: DeviceStatus = 'ONLINE'
+  let statusToSave: DeviceStatus
 
-  if (isBoot) {
-    // Usamos el latido previo capturado al inicio del mensaje para la validación
-    const timeSinceLastHeartbeat = now - previousHeartbeat
-
-    // Si ha pasado más de 15 minutos desde el último heartbeat exitoso,
-    // asumimos que el dispositivo estuvo apagado (o en ciclo de reconexión fallida)
-    // y es una sesión nueva — se registra como ONLINE, no como REBOOT.
-    if (timeSinceLastHeartbeat > 15 * 60 * 1000) {
-      notes = 'Nueva sesión'
+  if (message === 'online') {
+    statusToSave = 'ONLINE'
+    notes = 'Conectado (Boot)'
+  } else if (message === 'reboot') {
+    if (isFreshSession) {
       statusToSave = 'ONLINE'
+      notes = 'Nueva sesión'
     } else {
-      notes = 'Reinicio'
       statusToSave = 'REBOOT'
+      notes = 'Reinicio'
     }
+  } else { // ping
+    statusToSave = 'ONLINE'
+    notes = 'Conectado (Ping)'
   }
 
   lastSyncTimestamp = now
@@ -1411,7 +1449,7 @@ async function handleNodeSync(isBoot: boolean = false, previousHeartbeat: number
     Logger.node('ONLINE', 'Actuator_Controller')
   }
 
-  if (irrigationRetryManager.connectionState !== 'online' || statusToSave === 'REBOOT' || isBoot) {
+  if (irrigationRetryManager.connectionState !== 'online' || statusToSave === 'REBOOT' || message !== 'ping') {
     await prisma.deviceLog
       .create({
         data: {
@@ -1426,8 +1464,13 @@ async function handleNodeSync(isBoot: boolean = false, previousHeartbeat: number
   // Asegurar que el secuenciador transicione a modo estabilización (online)
   // Esto evita que latidos posteriores disparen eventos ONLINE duplicados.
   if (irrigationRetryManager.connectionState === 'offline') {
-    irrigationRetryManager.setStabilizing()
-    systemRetryManager.setStabilizing()
+    if (statusToSave === 'ONLINE') {
+      irrigationRetryManager.setStabilizing()
+      systemRetryManager.setStabilizing()
+    } else {
+      irrigationRetryManager.setReady()
+      systemRetryManager.setReady()
+    }
   }
 
   // Si es un REBOOT en caliente, el hardware apagó los pines.
@@ -1481,7 +1524,7 @@ async function handleNodeSync(isBoot: boolean = false, previousHeartbeat: number
     }
   }
 
-  const shouldSync = isBoot || previousHeartbeat !== 0
+  const shouldSync = statusToSave === 'ONLINE'
 
   if (shouldSync) {
     // El secuenciador ya está en modo STABILIZING (60s) gracias al caller de boot
@@ -1514,7 +1557,7 @@ async function handleNodeSync(isBoot: boolean = false, previousHeartbeat: number
   }
 
   // Al arrancar (boot), nos aseguramos de limpiar cualquier temporizador previo
-  if (isBoot) {
+  if (message === 'online' || (message === 'reboot' && isFreshSession)) {
     if (climateSyncTimer) {
       clearInterval(climateSyncTimer)
       climateSyncTimer = null
@@ -1529,12 +1572,11 @@ async function handleNodeSync(isBoot: boolean = false, previousHeartbeat: number
 /**
  * Orquesta la sincronización completa de la Estación EMA tras reconexión o reinicio.
  */
-async function handleEmaSync(isBoot: boolean = false) {
+async function handleEmaSync(statusToSave: DeviceStatus) {
   isEmaSleeping = false
   emaManager.setReady()
 
-  const statusToSave: DeviceStatus = isBoot ? 'REBOOT' : 'ONLINE'
-  const notes = isBoot ? 'Reinicio' : 'Conectado'
+  const notes = statusToSave === 'REBOOT' ? 'Reinicio' : 'Conectado'
 
   Logger.node(statusToSave, 'Weather Station Orquideario')
 

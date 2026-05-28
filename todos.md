@@ -208,6 +208,7 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
   * [ ] Garantizar que el evento de cancelación espere el ACK del nodo sobre el cierre del circuito antes de marcar la tarea como `Cancelada`.
   * [ ] Asegurar despacho del comando de cierre físico al cancelar desde la cola.
 * [ ] **Fix Estético Z-Index:** Ajustar `StatusCircleIcon.tsx` para que el icono no levite por encima del header (z-index issue).
+* [x] **Corrección de Logs y Condición de Carrera:** Recuperar nombre real del administrador de la sesión actual en cancelación manual, formatear notas con salto de línea responsive en timeline y prevenir regresión de estados en el scheduler (condición de carrera).
 
 ---
 

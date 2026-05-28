@@ -136,6 +136,11 @@ Interfaz para crear/editar/eliminar rutinas de automatización (`AutomationSched
 
 - **Harden DHT22:** Implementación de limpieza atómica de línea (Atomic Fix) pre-lectura y mecanismo de recuperación automática para eliminar el estado "OFF" permanente por ruido eléctrico o desconexiones físicas en el nodo actuador.
 
+### v0.14.3 - Corrección de Logs & Transiciones de Estado (Mayo 2026)
+
+- **Corrección de Logs:** Recuperar nombre real del administrador en logs de cancelación e implementar visualización responsiva (salto de línea en desktop, espacio en mobile).
+- **Consistencia de Estados:** Implementar mapa de precedencia en transiciones de estados del scheduler para eliminar duplicados causados por condiciones de carrera MQTT.
+
 ### v0.8.0 - Resiliencia y Fidelidad (Abril 2026)
 
 - **Fidelidad Absoluta:** Eliminación definitiva de filtros de telemetría y fallbacks de APIs externas (Open-Meteo). El sistema ahora opera exclusivamente con sensores físicos.
