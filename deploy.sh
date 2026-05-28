@@ -79,11 +79,11 @@ echo -e "${GREEN}✅ Servicios levantados${RESET}"
 echo ""
 echo -e "${YELLOW}🧹 [4/4] Limpiando imágenes y caché antigua${RESET}"
 
-# Borra imágenes colgantes
-docker image prune -f
+# Borra imágenes inactivas que no estén en uso por ningún contenedor
+docker image prune -a -f
 
-# Borra SOLO la caché de construcción que tenga más de 7 días de antigüedad (168 horas)
-docker builder prune -f --filter "until=168h"
+# Borra toda la caché de construcción que no esté activa
+docker builder prune -f
 
 echo ""
 echo -e "${GREEN}✅ Deploy Finalizado${RESET}"

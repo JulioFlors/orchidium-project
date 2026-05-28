@@ -459,19 +459,10 @@ export function AuditConsoleCard({
   }, [isActive, onStop])
 
   useEffect(() => {
-    // Capturamos la referencia al objeto actual para el cleanup.
-    // Al usar un objeto mutable, los cambios en sus propiedades (como isManualStopping)
-    // serán visibles en la función de cleanup incluso si el componente ya se desmontó.
-    const cleanupRef = unmountRef.current
-
-    return () => {
-      // SOLO enviamos parada si el componente se desmonta de forma "huérfana"
-      // (ej. el usuario cambia de pestaña del admin) y NO si fue un stop manual.
-      // También verificamos que siga activo según la última actualización del ref.
-      if (cleanupRef.isActive && cleanupRef.onStop && !cleanupRef.isManualStopping) {
-        cleanupRef.onStop()
-      }
-    }
+    // Al ser auditorías autónomas con ciclos finitos (10 muestras) gestionados en el firmware,
+    // no interrumpimos el flujo en el dispositivo IoT si el componente se desmonta (refrescos de página,
+    // navegación o cierres de pestaña). La detención explícita es gestionada manualmente con el botón "Cancelar".
+    return () => {}
   }, [])
 
   useEffect(() => {

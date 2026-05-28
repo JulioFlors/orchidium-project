@@ -1,5 +1,4 @@
-# -----------------------------------------------------------------------------
-# Weather Station: Environmental Monitoring Firmware (ZONA_A)
+# -----------------------------------------------------------------------------# # Weather Station: Environmental Monitoring Firmware (ZONA_A)
 # Descripción: Nodo de Monitoreo Ambiental del Orquideario (ZONA_A).
 # Fecha: 26-05-2026
 # Versión: v0.10.0
@@ -95,6 +94,9 @@ wifi_reset_event = asyncio.Event()
 
 # Evento asíncrono para esperar comandos de sincronización
 sync_event = asyncio.Event()
+
+# Variable de estado para indicar que el Scheduler ha solicitado suspender la radio
+sleep_received = False
 
 # Candado asíncrono para evitar colisiones en el socket SSL
 mqtt_lock = asyncio.Lock()
@@ -560,7 +562,7 @@ def sub_status_callback(pid, status):
 async def mqtt_processor_task():
     """**CONSUMIDOR MQTT: Procesa mensajes fuera del hilo del socket (Event-Driven).**"""
     # Gestión de variables globales
-    global mqtt_message_buffer, AUDIT_MODE, bh1750_sensor, CONNECTED_ALLOWED, IS_SAMPLING_LUX, sync_event
+    global mqtt_message_buffer, AUDIT_MODE, bh1750_sensor, CONNECTED_ALLOWED, IS_SAMPLING_LUX, sync_event, sleep_received
 
     # (Optimización de memoria RAM)
     # Lazy Imports (Importación tardía)
@@ -630,7 +632,17 @@ async def mqtt_processor_task():
                     sleep(3) # Pausa breve para flush de logs
                     safe_reset()
 
-                # 2. Control de Muestreo de Iluminancia (Día/Noche)
+                # 2. Comando: SLEEP
+                elif m_low == b"sleep":
+                    if DEBUG: print("    └─ Acción: Apagar radio por orden del Scheduler")
+                    sleep_received = True
+                    # Apagamos todas las auditorías locales para consistencia
+                    for cat in AUDIT_MODE:
+                        AUDIT_MODE[cat] = False
+                        AUDIT_COUNTERS[cat] = 0
+                    sync_event.set()
+
+                # 3. Control de Muestreo de Iluminancia (Día/Noche)
                 elif m_low.startswith(b"lux_sampling:"):
                     action = m_low.split(b":")[1]
                     if action == b"on":
@@ -1045,8 +1057,15 @@ async def mqtt_connector_task(client_id):
                 last_manual_ping = ticks_ms()
                 consecutive_mqtt_failures = 0
 
-                await publish_audit_state()
-                await asyncio.sleep_ms(500)
+                # Suscripción inmediata a cmd (QoS 1) para evitar perder el primer comando de sincronización
+                try:
+                    async with mqtt_lock:
+                        if client and getattr(client, 'sock', None):
+                            client.subscribe(MQTT_TOPIC_CMD, qos=1)
+                    await asyncio.sleep_ms(500)
+                except Exception as sub_err:
+                    if DEBUG: print(f"⚠️ Error en suscripciones: {sub_err}")
+                    raise sub_err
 
                 # 📡 Señalizamos el estado al Scheduler.
                 try:
@@ -1054,28 +1073,19 @@ async def mqtt_connector_task(client_id):
                     async with mqtt_lock:
                         if client and getattr(client, 'sock', None):
                             if IS_BOOT_STATUS:
-                                client.publish(MQTT_TOPIC_STATUS, b"reboot", retain=True, qos=0)
+                                client.publish(MQTT_TOPIC_STATUS, b"reboot", retain=True, qos=1)
                                 IS_BOOT_STATUS = False
                                 if DEBUG: print(f"\n📡  NODO {Colors.GREEN}Reboot{Colors.RESET}", end="\n")
                             else:
-                                client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=0)
+                                client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=1)
                                 if DEBUG: print(f"\n📡  NODO {Colors.GREEN}Online{Colors.RESET}", end="\n")
+                    await asyncio.sleep_ms(500)
                 except Exception as _e:
                     if DEBUG: print(f"⚠️ Fallo publicando estado: {_e}")
-                await asyncio.sleep_ms(500)
 
                 # Métricas Ambientales (Batches): Vaciamos los RingBuffers
                 await flush_telemetry_batches_async()
                 await asyncio.sleep_ms(500)
-
-                # Suscripción a cmd
-                try:
-                    async with mqtt_lock:
-                        if client and getattr(client, 'sock', None):
-                            client.subscribe(MQTT_TOPIC_CMD, qos=1)
-                except Exception as sub_err:
-                    if DEBUG: print(f"⚠️ Error en suscripciones: {sub_err}")
-                    raise sub_err
 
                 mqtt_connected_event.set()
 
@@ -1152,51 +1162,76 @@ async def mqtt_connector_task(client_id):
 
         await asyncio.sleep(MQTT_CHECK_INTERVAL)
 
+# ---- CORUTINA AUXILIAR: Transmisión y Sincronización ----
+async def transmit_and_sync():
+    """
+    Gestiona la conexión por evento, publica telemetrías acumuladas,
+    espera comandos del Scheduler (30s) y desconecta la radio WiFi.
+    """
+    global CONNECTED_ALLOWED, sync_event, sleep_received
+    from utime import ticks_ms, ticks_diff
+    
+    if DEBUG: print(f"\n📡  Activando {Colors.BLUE}radio WiFi{Colors.RESET}")
+
+    CONNECTED_ALLOWED = True
+    sleep_received = False
+
+    try:
+        # Espera asíncrona limpia mediante evento (Máximo 45 segundos)
+        await asyncio.wait_for(mqtt_connected_event.wait(), 45)
+        
+        # Conexión exitosa: Publicar lotes acumulados
+        await flush_telemetry_batches_async()
+        
+        # Ventana de sincronización de 30s
+        sync_event.clear()
+        start_time = ticks_ms()
+        timeout_ms = const(30000)
+
+        while not sleep_received:
+            elapsed = ticks_diff(ticks_ms(), start_time)
+            remaining_ms = timeout_ms - elapsed
+            if remaining_ms <= 0:
+                if DEBUG: print("\n⚠️  Timeout de sincronización con el Scheduler (30s)")
+                break
+                
+            sync_event.clear()
+            try:
+                # Esperamos al evento en segundos
+                await asyncio.wait_for(sync_event.wait(), remaining_ms / 1000.0)
+            except asyncio.TimeoutError:
+                if DEBUG: print("\n⚠️  Timeout de sincronización con el Scheduler")
+                break
+            except Exception as e:
+                if DEBUG: print(f"⚠️  Error esperando comandos: {e}")
+                break
+            
+    except asyncio.TimeoutError:
+        if DEBUG: print("\n⚠️  No se pudo establecer conexión (Timeout 45s)")
+    except Exception as e:
+        if DEBUG: print(f"\n⚠️ Error en transmisión/sincronización: {e}")
+    finally:
+        # Apagar radio tras el intento si no hay auditorías activas
+        if not any(AUDIT_MODE.values()):
+            CONNECTED_ALLOWED = False
+            shutdown(status=b"sleep")
+
 # ---- CORUTINA: Muestreo Periódico de Sensores y Ahorro de Energía ----
 async def sensor_publish_task():
     """
-    #### Coordinación de Lectura y Transmisión con Ahorro de Energía
-    * Realiza el muestreo local de DHT22 y BH1750 cada 60s.
-    * Almacena localmente en RingBuffers para evitar encendidos erráticos de radio.
-    * Cada BATCH_SIZE (10 muestras), activa el WiFi, publica todo el lote, 
-      espera 80s comandos de sincronización y finalmente vuelve a apagar la radio.
+    Muestreo offline del DHT22 y BH1750 cada 60s.
+    Acumula en RingBuffers y gatilla transmisión al completar el lote.
     """
-    global CONNECTED_ALLOWED, sync_event
-    from gc import collect
-
+    global CONNECTED_ALLOWED
     dht_read_failures = 0
     lux_read_failures = 0
 
+    # Retardo inicial para estabilidad del regulador de voltaje (LDO)
     await asyncio.sleep(5)
 
     # === Fase de Arranque Inicial ===
-    if DEBUG: print("📡 Fase de arranque: esperando conexión para reporte inicial...")
-    ready = False
-    for _ in range(45):
-        if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
-            ready = True
-            break
-        await asyncio.sleep(1)
-
-    if ready:
-        if DEBUG: print("🚀 Conexión establecida. Publicando reporte inicial...")
-        await flush_telemetry_batches_async()
-        sync_event.clear()
-        if DEBUG: print("🕒 Esperando comandos del Scheduler (hasta 80s)...")
-        try:
-            await asyncio.wait_for(sync_event.wait(), 80)
-            if DEBUG: print("📬 Sincronización recibida de forma síncrona.")
-        except asyncio.TimeoutError:
-            if DEBUG: print("⚠️ Timeout de sincronización con el Scheduler.")
-        
-        if not any(AUDIT_MODE.values()):
-            CONNECTED_ALLOWED = False
-            shutdown(status=b"sleep")
-    else:
-        if DEBUG: print("⚠️ No se pudo establecer conexión en arranque. Durmiendo...")
-        if not any(AUDIT_MODE.values()):
-            CONNECTED_ALLOWED = False
-            shutdown(status=b"sleep")
+    # Publica reportes pendientes al encenderse
+    await transmit_and_sync()
 
     # === Bucle de Muestreo Periódico ===
     while True:
@@ -1219,7 +1254,7 @@ async def sensor_publish_task():
 
         if not dht_ok:
             dht_read_failures += 1
-            if DEBUG: print(f"⚠️  DHT22: Fallo de lectura transitorio. Fallos: {dht_read_failures}")
+            if DEBUG: print(f"⚠️  DHT22: Fallo de lectura. Fallos: {dht_read_failures}")
 
         # 2. Lectura BH1750 (Solo si IS_SAMPLING_LUX es True)
         lux_ok = False
@@ -1232,63 +1267,38 @@ async def sensor_publish_task():
                     lux_read_failures = 0
             except: pass
         else:
-            lux_ok = True # No es fallo si no estamos muestreando lux
+            lux_ok = True 
 
         if not lux_ok:
             lux_read_failures += 1
-            if DEBUG: print(f"⚠️  BH1750: Fallo de lectura transitorio. Fallos: {lux_read_failures}")
+            if DEBUG: print(f"⚠️  BH1750: Fallo de lectura. Fallos: {lux_read_failures}")
 
-        # 2.1 Re-setup si hay fallos repetidos
-        if dht_read_failures >= 5 or lux_read_failures >= 5:
-            if DEBUG: print(f"⚠️  Sensores: 5 Fallos consecutivos en lectura. Re-inicializando...")
+        # 2.1 Re-setup si hay fallos repetidos (Reducido a 3 fallos)
+        if dht_read_failures >= 3 or lux_read_failures >= 3:
+            if DEBUG:
+                    print(f"\n⚠️  Se detecto un {Colors.YELLOW}FALLO{Colors.RESET} en los Sensores\n\n")
+                    print(f"\n🔄  {Colors.BLUE}Re-inicializando Sensores{Colors.RESET}\n\n")
             await setup_sensors()
             dht_read_failures = 0
             lux_read_failures = 0
 
-        # 3. Acumulación en buffers
+        # 3. Acumulación en RingBuffers
         if temp is not None: temperature_Batch.append(temp)
         if hum is not None:  humidity_Batch.append(hum)
         if lux is not None:  illuminance_Batch.append(lux)
 
         if DEBUG:
             c = max(temperature_Batch.count, illuminance_Batch.count)
-            print(f"📝 Muestreo ({c}/{BATCH_SIZE}): Temp={temp}°C, Hum={hum}%, Lux={lux}")
+            print(f"\n📊 Data ({c}/{BATCH_SIZE}): Temperature: {Colors.MAGENTA}{temp}°C{Colors.RESET}  Humidity: {Colors.BLUE}{hum}%{Colors.RESET}  Illuminance: {Colors.YELLOW}{lux}lux{Colors.RESET}")
 
         # 4. Transmitir si se completa el lote
         if temperature_Batch.count >= BATCH_SIZE or (IS_SAMPLING_LUX and illuminance_Batch.count >= BATCH_SIZE):
-            if DEBUG: print(f"🚀 Lote de telemetría completo. Activando radio WiFi...")
-            CONNECTED_ALLOWED = True
-
-            ready = False
-            for _ in range(45):
-                if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
-                    ready = True
-                    break
-                await asyncio.sleep(1)
-
-            if ready:
-                await flush_telemetry_batches_async()
-                sync_event.clear()
-                if DEBUG: print("🕒 Esperando comandos del Scheduler (hasta 80s)...")
-                try:
-                    await asyncio.wait_for(sync_event.wait(), 80)
-                    if DEBUG: print("📬 Sincronización recibida de forma síncrona.")
-                except asyncio.TimeoutError:
-                    if DEBUG: print("⚠️ Timeout de sincronización con el Scheduler.")
-            else:
-                if DEBUG: print("⚠️ No se pudo conectar para transmitir el lote. Se reintentará luego.")
-
-            # Apagar radio tras el intento si no hay auditorías activas
-            if not any(AUDIT_MODE.values()):
-                CONNECTED_ALLOWED = False
-                shutdown(status=b"sleep")
+            await transmit_and_sync()
         else:
-            # Apagar si el WiFi quedó encendido por una auditoría que ya terminó
+            # Apagar si la radio quedó encendida por una auditoría que terminó
             if CONNECTED_ALLOWED and not any(AUDIT_MODE.values()):
                 CONNECTED_ALLOWED = False
                 shutdown(status=b"sleep")
-
-        await asyncio.sleep(60)
 
 # ---- CORRUTINA: Sincronización y Batching de Auditorías ----
 async def unified_audit_task():
@@ -1484,7 +1494,6 @@ def shutdown(status=b"offline"):
     * Desconecta MQTT y WiFi.
     """
     from utime import sleep_ms
-
     # Publicamos en MQTT (Solo si hay conexión)
     if client and hasattr(client, 'sock') and client.sock and wlan and wlan.isconnected():
         try:
@@ -1493,17 +1502,14 @@ def shutdown(status=b"offline"):
         except Exception as e:
             if DEBUG:
                 print(f"⚠️  Error en flush_telemetry_batches en shutdown: {e}")
-
         try:
-            client.publish(MQTT_TOPIC_STATUS, status, retain=True, qos=0)
+            client.publish(MQTT_TOPIC_STATUS, status, retain=True, qos=1)
             sleep_ms(500)
         except Exception as e:
             if DEBUG:
                 print(f"⚠️  Error publicando {status.decode() if hasattr(status, 'decode') else status} en shutdown: {e}")
-
     # Invalidamos el cliente MQTT
     force_disconnect_mqtt(silent=False)
-
     # Desconectamos el WiFi.
     if wlan and wlan.isconnected():
         try:
@@ -1512,7 +1518,6 @@ def shutdown(status=b"offline"):
             if DEBUG: print(f"📡  WiFi     {Colors.GREEN}Desconectado{Colors.RESET}\n")
         except Exception:
             pass
-
 # ---- Función Auxiliar: Safe Reset (Reinicio Seguro) ----
 def safe_reset():
     """
@@ -1520,13 +1525,11 @@ def safe_reset():
     """
     from machine import reset
     from utime   import sleep_ms
-
     try:
         shutdown()
     except: pass
     sleep_ms(1000)
     reset()
-
 # ---- Punto de Entrada ----
 if __name__ == '__main__':
     try:

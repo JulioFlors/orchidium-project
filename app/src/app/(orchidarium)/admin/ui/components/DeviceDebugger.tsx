@@ -81,7 +81,12 @@ export function DeviceDebugger() {
 
   const selectedDevice = DEVICES.find((d) => d.id === selectedDeviceId) || DEVICES[0]
   const statusTopic = `${selectedDevice.baseTopic}/status`
-  const topicCmd = `${selectedDevice.baseTopic}/cmd`
+
+  const isEma = selectedDeviceId === 'Weather_Station_ZONA_A'
+  const topicCmd = isEma
+    ? 'PristinoPlant/Weather_Station/ZONA_A/cmd/request'
+    : `${selectedDevice.baseTopic}/cmd`
+
   const topicReceived = `${selectedDevice.baseTopic}/cmd/received`
 
   const unifiedAuditTopic = `${selectedDevice.baseTopic}/audit`
@@ -144,10 +149,28 @@ export function DeviceDebugger() {
     }
   }, [status, subscribe, statusTopic, topicReceived, unifiedAuditTopic, auditStateTopic])
 
+  interface AuditStatePayload {
+    requested?: Record<string, boolean>
+    active?: Record<string, boolean>
+  }
+
+  const auditStatePayload = useMemo<AuditStatePayload | null>(() => {
+    const msg = messages[auditStateTopic]
+    if (!msg) return null
+    try {
+      const payload = msg.payload
+      return (
+        typeof payload === 'object' ? payload : JSON.parse(String(payload))
+      ) as AuditStatePayload
+    } catch {
+      return null
+    }
+  }, [messages, auditStateTopic])
+
   // Lista de widgets activos combinando hardware y UI local (para el grid de tools)
   const hardwareAudits = useMemo(() => {
-    // Si el dispositivo no está online, no hay auditorías físicas activas
-    if (connectionState !== 'online') return []
+    // Si el dispositivo no está online ni en sleep, no hay auditorías físicas activas
+    if (connectionState !== 'online' && connectionState !== 'sleep') return []
 
     const msg = messages[auditStateTopic]
 
@@ -157,10 +180,12 @@ export function DeviceDebugger() {
       const payload = msg.payload
       const hwState = (
         typeof payload === 'object' ? payload : JSON.parse(String(payload))
-      ) as Record<string, boolean>
+      ) as Record<string, unknown>
 
-      return Object.entries(hwState)
-        .filter(([key, active]) => active && !key.endsWith('_hw'))
+      const activeMap = (hwState.active || hwState) as Record<string, boolean>
+
+      return Object.entries(activeMap)
+        .filter(([key, active]) => active && !key.endsWith('_hw') && key !== 'requested')
         .map(([key]) => key)
     } catch {
       return []
@@ -235,7 +260,7 @@ export function DeviceDebugger() {
       <ToolboxGrid
         activeAudits={activeDisplayWidgets}
         hardwarePresence={hardwarePresence}
-        isOnline={connectionState === 'online'}
+        isOnline={connectionState === 'online' || connectionState === 'sleep'}
         showTimeline={showTimeline}
         onCommand={handleCommand}
         onToggleTimeline={() => {
@@ -377,11 +402,12 @@ export function DeviceDebugger() {
                     activeAudit={auditId}
                     currentPayload={payload}
                     deviceId={selectedDevice.id}
-                    isActive={hardwareAudits.includes(auditId)}
-                    isOnline={connectionState === 'online'}
+                    isActive={isEma ? Boolean(auditStatePayload?.active?.[auditId]) : hardwareAudits.includes(auditId)}
+                    isOnline={connectionState === 'online' || connectionState === 'sleep'}
                     isPending={
-                      Boolean(pendingAcks[`audit_${auditId}_on`]) ||
-                      Boolean(pendingAcks[`audit_${auditId}_off`])
+                      isEma
+                        ? Boolean(auditStatePayload?.requested?.[auditId]) && !Boolean(auditStatePayload?.active?.[auditId])
+                        : Boolean(pendingAcks[`audit_${auditId}_on`]) || Boolean(pendingAcks[`audit_${auditId}_off`])
                     }
                     isStale={false}
                     onClear={() => {

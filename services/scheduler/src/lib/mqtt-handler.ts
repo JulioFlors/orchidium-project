@@ -66,6 +66,8 @@ class CommandSequencer {
   private retryTimer: NodeJS.Timeout | null = null
   private throttleTimer: NodeJS.Timeout | null = null
 
+  constructor(private nodeName: string = 'Nodo') {}
+
   public get connectionState() {
     return this.state === 'OFFLINE' ? 'offline' : 'online'
   }
@@ -88,6 +90,16 @@ class CommandSequencer {
       this.state = 'READY'
       this.processNext()
     }, 60000)
+  }
+
+  /**
+   * Pone al secuenciador en modo READY instantáneamente.
+   * Limpia cualquier cola previa.
+   */
+  setReady() {
+    this.clearAll()
+    this.state = 'READY'
+    this.processNext()
   }
 
   /**
@@ -252,7 +264,7 @@ class CommandSequencer {
 
       const attemptsStr = result.attempts > 1 ? ` (en ${result.attempts} intentos)` : ''
 
-      Logger.ack(`Nodo confirmó ACK${attemptsStr} para tarea (ID: ${taskId.slice(0, 8)})`)
+      Logger.ack(`${this.nodeName} confirmó ACK${attemptsStr} para el comando: ${taskId}`)
 
       // Eliminar de la cola
       this.queue.shift()
@@ -268,6 +280,25 @@ class CommandSequencer {
     }
 
     return null
+  }
+
+  /**
+   * Elimina un comando de la cola de despacho por su taskId.
+   */
+  removeByTaskId(taskId: string) {
+    this.queue = this.queue.filter((c) => c.taskId !== taskId)
+    if (this.currentCommand && this.currentCommand.taskId === taskId) {
+      if (this.retryTimer) clearTimeout(this.retryTimer)
+      this.currentCommand = null
+      this.processNext()
+    }
+  }
+
+  /**
+   * Obtiene la cantidad de comandos pendientes en la cola de despacho.
+   */
+  getPendingCommandsCount(): number {
+    return this.queue.length + (this.currentCommand ? 1 : 0)
   }
 
   /**
@@ -305,11 +336,11 @@ class CommandSequencer {
   }
 }
 
-export const irrigationRetryManager = new CommandSequencer()
+export const irrigationRetryManager = new CommandSequencer('Nodo Actuador')
 
-export const systemRetryManager = new CommandSequencer()
+export const systemRetryManager = new CommandSequencer('Nodo Actuador')
 
-export const emaManager = new CommandSequencer()
+export const emaManager = new CommandSequencer('Estación EMA')
 
 /**
  * Envía un comando de circuito al Nodo Actuador.
@@ -416,7 +447,11 @@ export function resetSamplingState() {
  * Sincroniza el estado del monitoreo del nodo basado en la hora actual.
  * Asegura que el nodo tenga el estado de muestreo correcto (Amanecer/Anochecer).
  */
-export function syncNodeSampling(forcedState?: 'on' | 'off', forcePublish: boolean = false) {
+export function syncNodeSampling(
+  forcedState?: 'on' | 'off',
+  forcePublish: boolean = false,
+  targetNode?: 'actuator' | 'ema',
+) {
   let targetState: 'on' | 'off'
 
   if (forcedState) {
@@ -438,17 +473,20 @@ export function syncNodeSampling(forcedState?: 'on' | 'off', forcePublish: boole
   }
 
   // Evitar duplicados si el estado no ha cambiado (y no se está forzando publicación)
-  if (lastSamplingState === targetState && !forcedState && !forcePublish) return
+  if (lastSamplingState === targetState && !forcedState && !forcePublish && !targetNode) return
 
-  lastSamplingState = targetState
+  // Solo actualizamos el estado global si no está dirigido a un nodo en particular
+  if (!targetNode) {
+    lastSamplingState = targetState
+  }
 
   if (targetState === 'on') {
-    if (!forcePublish) Logger.info('☀  Iniciando muestreo de iluminancia (Amanecer)')
-    executeSystemCommand('lux_sampling:on', true)
-    executeEmaCommand('lux_sampling:on', true)
+    if (!forcePublish && !targetNode) Logger.info('☀  Iniciando muestreo de iluminancia (Amanecer)')
+    if (!targetNode || targetNode === 'actuator') executeSystemCommand('lux_sampling:on', true)
+    if (!targetNode || targetNode === 'ema') executeEmaCommand('lux_sampling:on', true)
   } else {
-    if (!forcePublish) Logger.info('🌙  Suspendiendo muestreo de iluminancia (Anochecer)')
-    executeSystemCommand('lux_sampling:off', true)
-    executeEmaCommand('lux_sampling:off', true)
+    if (!forcePublish && !targetNode) Logger.info('🌙  Suspendiendo muestreo de iluminancia (Anochecer)')
+    if (!targetNode || targetNode === 'actuator') executeSystemCommand('lux_sampling:off', true)
+    if (!targetNode || targetNode === 'ema') executeEmaCommand('lux_sampling:off', true)
   }
 }

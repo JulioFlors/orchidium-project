@@ -41,3 +41,43 @@ La gestión es **manual** y requiere un paso de encriptación dentro del contene
 * `config/passwd`: Archivo de usuarios y contraseñas (Generado/Ignorado).
 * `data/`: Persistencia de mensajes y estado (Ignorado).
 * `log/`: Logs del broker.
+
+## 📊 Monitoreo, QoS y Ajuste de Logs
+
+Para diagnosticar problemas de conexión o verificar la calidad de servicio (QoS) de los mensajes publicados por tus nodos IoT:
+
+### 1. Cambiar los Niveles de Log
+Edita `config/mosquitto.conf` y configura la directiva `log_type` según tus necesidades:
+*   **Depuración (`debug`):** Registra el tráfico detallado de red y paquetes MQTT.
+    ```conf
+    log_type debug
+    ```
+*   **Producción (`error` / `none`):** Minimiza el uso de disco registrando únicamente errores críticos o nada en absoluto.
+    ```conf
+    log_type error
+    ```
+
+*Recuerda reiniciar el broker tras cualquier cambio:*
+```bash
+docker compose restart mosquitto
+```
+
+### 2. Monitorear en Tiempo Real
+Puedes ver la salida en tiempo real usando Docker desde el directorio del proyecto en el VPS:
+```bash
+# Ver todas las transacciones de red (requiere log_type debug)
+docker logs -f mosquitto
+
+# Filtrar solo publicaciones de mensajes (para validar QoS)
+docker logs -f mosquitto | grep -i "PUBLISH"
+```
+**Interpretación de la salida:**
+`Received PUBLISH from NODO_Actuador (d0, q1, r0, m3, 'PristinoPlant/status')`
+*   `q1`: Mensaje enviado con **QoS = 1** (requiere confirmación).
+*   `q0`: Mensaje enviado con **QoS = 0** (fuego y olvido).
+
+### 3. Limpieza de Logs
+Si el archivo de logs físicos crece demasiado, puedes vaciarlo a 0 bytes sin detener el servicio ejecutando en la raíz de la infraestructura:
+```bash
+sudo truncate -s 0 ./log/mosquitto.log
+```

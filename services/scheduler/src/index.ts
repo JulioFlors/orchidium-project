@@ -11,6 +11,7 @@ import {
   syncNodeSampling,
   resetSamplingState,
   executeSystemCommand,
+  executeEmaCommand,
   MQTT_BROKER_URL,
   isLuxSamplingActive,
 } from './lib/mqtt-handler'
@@ -30,7 +31,7 @@ import { influxClient } from './lib/influx'
 
 // Acumulador de telemetría post-boot: recoge las métricas de los 3 batches
 // independientes (illuminance, temperature, humidity) que llegan como mensajes
-// separados al mismo tópico EXTERIOR/readings.
+// separados al mismo tópico de readings.
 interface BootTelemetryAccumulator {
   nodeName: string
   lux: number | null
@@ -39,8 +40,30 @@ interface BootTelemetryAccumulator {
   bootAt: number // Timestamp del boot para ventana temporal
   timer: NodeJS.Timeout | null // Timer de fallback (loguea aunque falten métricas)
 }
-let bootAccumulator: BootTelemetryAccumulator | null = null
+const bootAccumulators = new Map<string, BootTelemetryAccumulator>()
 let isSystemReady = false // Solo true tras recibir la primera telemetría post-boot
+let lastEmaHeartbeat: number = Date.now()
+
+const emaAuditState = {
+  requested: {
+    lux: false,
+    wifi: false,
+    ram: false,
+    temp: false,
+    hum: false
+  },
+  active: {
+    lux: false,
+    wifi: false,
+    ram: false,
+    temp: false,
+    hum: false
+  },
+  lux_hw: true,
+  temp_hw: true,
+  hum_hw: true,
+  rain_hw: false
+}
 
 async function init() {
   console.log() // Espacio en blanco
@@ -273,14 +296,13 @@ const RAIN_ORPHAN_TIMEOUT_MS = 10 * 60 * 1000
  * Loguea el snapshot de arranque con los datos acumulados de los batches post-boot.
  * Se invoca cuando se reciben todas las métricas o cuando expira la ventana de 5s.
  */
-function flushBootLog() {
-  if (!bootAccumulator) return
+function flushBootLog(nodeName: string) {
+  const accumulator = bootAccumulators.get(nodeName)
+  if (!accumulator) return
 
-  if (bootAccumulator.timer) {
-    clearTimeout(bootAccumulator.timer)
+  if (accumulator.timer) {
+    clearTimeout(accumulator.timer)
   }
-
-  const nodeName = bootAccumulator.nodeName
 
   // Imprimir conexión del nodo
   Logger.node(nodeName)
@@ -288,9 +310,9 @@ function flushBootLog() {
   let hasInitFailure = false
 
   // 1. Iluminancia
-  if (bootAccumulator.lux !== null) {
+  if (accumulator.lux !== null) {
     Logger.info(
-      `Iluminancia: ${colors.yellow}${bootAccumulator.lux.toFixed(0)} lx${colors.reset}`,
+      `Iluminancia: ${colors.yellow}${accumulator.lux.toFixed(0)} lx${colors.reset}`,
       '☀️',
     )
   } else if (!isLuxSamplingActive()) {
@@ -301,9 +323,9 @@ function flushBootLog() {
   }
 
   // 2. Clima
-  if (bootAccumulator.temp !== null && bootAccumulator.hum !== null) {
+  if (accumulator.temp !== null && accumulator.hum !== null) {
     Logger.info(
-      `Clima: ${colors.yellow}${bootAccumulator.temp.toFixed(1)}°C${colors.reset} / ${colors.blue}${bootAccumulator.hum.toFixed(1)}%${colors.reset}`,
+      `Clima: ${colors.yellow}${accumulator.temp.toFixed(1)}°C${colors.reset} / ${colors.blue}${accumulator.hum.toFixed(1)}%${colors.reset}`,
       '🌡️',
     )
   } else {
@@ -312,17 +334,39 @@ function flushBootLog() {
   }
 
   if (hasInitFailure) {
-    requestClimateSync()
-    startClimateSyncRetry()
+    if (nodeName === 'Weather Station Orquideario') {
+      executeEmaCommand('sync_climate')
+    } else {
+      requestClimateSync()
+      startClimateSyncRetry()
+    }
   }
 
-  // 3. Sensor de Lluvia
-  Logger.info(
-    `Sensor Lluvia: ${lastRainState === 'Raining' ? colors.blue : colors.yellow}${lastRainState}${colors.reset}`,
-    '🌧️',
-  )
+  // 3. Sensor de Lluvia (excluido en el EMA)
+  if (nodeName !== 'Weather Station Orquideario') {
+    Logger.info(
+      `Sensor Lluvia: ${lastRainState === 'Raining' ? colors.blue : colors.yellow}${lastRainState}${colors.reset}`,
+      '🌧️',
+    )
+  }
 
-  bootAccumulator = null
+  // Sincronizar muestreo (Amanecer/Anochecer) de iluminancia al finalizar el flush del boot
+  // Garantiza que el Nodo EMA ya esté escuchando comandos tras vaciar sus telemetrías
+  if (nodeName === 'Weather Station Orquideario') {
+    syncNodeSampling(undefined, true, 'ema')
+
+    // Sincronizar auditorías solicitadas que aún no están activas en el nodo
+    for (const key of Object.keys(emaAuditState.requested) as Array<keyof typeof emaAuditState.requested>) {
+      if (emaAuditState.requested[key] === true && emaAuditState.active[key] === false) {
+        Logger.info(`Sincronizando auditoría pendiente '${key}' tras boot del EMA`, '⚡')
+        executeEmaCommand(`audit_${key}_on`, true)
+      }
+    }
+
+    checkAndSleepEma()
+  }
+
+  bootAccumulators.delete(nodeName)
 
   if (!isSystemReady) {
     isSystemReady = true
@@ -341,6 +385,9 @@ function setupMqttHandlers() {
         'PristinoPlant/Weather_Station/ZONA_A/status',
         'PristinoPlant/Weather_Station/ZONA_A/readings',
         'PristinoPlant/Weather_Station/ZONA_A/cmd/received',
+        'PristinoPlant/Weather_Station/ZONA_A/cmd/request',
+        'PristinoPlant/Weather_Station/ZONA_A/audit/state',
+        'PristinoPlant/Weather_Station/ZONA_A/audit/end',
       ],
       { qos: 1 },
     )
@@ -377,15 +424,15 @@ function setupMqttHandlers() {
           if (irrigationRetryManager.connectionState === 'offline') {
             await handleNodeSync(false, previousHeartbeat)
 
-            if (!bootAccumulator) {
-              bootAccumulator = {
+            if (!bootAccumulators.has('Weather Station Exterior')) {
+              bootAccumulators.set('Weather Station Exterior', {
                 nodeName: 'Weather Station Exterior',
                 lux: null,
                 temp: null,
                 hum: null,
                 bootAt: Date.now(),
-                timer: setTimeout(() => flushBootLog(), 30000), // Ventana de 30s
-              }
+                timer: setTimeout(() => flushBootLog('Weather Station Exterior'), 30000), // Ventana de 30s
+              })
             }
           }
 
@@ -406,15 +453,16 @@ function setupMqttHandlers() {
 
           // 🚀 INICIALIZACIÓN SÍNCRONA PRE-AWAIT (Evita condición de carrera)
           isSystemReady = false
-          if (bootAccumulator?.timer) clearTimeout(bootAccumulator.timer)
-          bootAccumulator = {
+          const prev = bootAccumulators.get('Weather Station Exterior')
+          if (prev?.timer) clearTimeout(prev.timer)
+          bootAccumulators.set('Weather Station Exterior', {
             nodeName: 'Weather Station Exterior',
             lux: null,
             temp: null,
             hum: null,
             bootAt: Date.now(),
-            timer: setTimeout(() => flushBootLog(), 30000), // Ajustado a 30s
-          }
+            timer: setTimeout(() => flushBootLog('Weather Station Exterior'), 30000), // Ajustado a 30s
+          })
 
           await handleNodeSync(true, previousHeartbeat)
 
@@ -430,15 +478,15 @@ function setupMqttHandlers() {
 
           await handleNodeSync(false, previousHeartbeat)
 
-          if (!bootAccumulator) {
-            bootAccumulator = {
+          if (!bootAccumulators.has('Weather Station Exterior')) {
+            bootAccumulators.set('Weather Station Exterior', {
               nodeName: 'Weather Station Exterior',
               lux: null,
               temp: null,
               hum: null,
               bootAt: Date.now(),
-              timer: setTimeout(() => flushBootLog(), 30000), // Ventana de 30s
-            }
+              timer: setTimeout(() => flushBootLog('Weather Station Exterior'), 30000), // Ventana de 30s
+            })
           }
         } else if (
           (message === 'lwt_disconnect' || message === 'offline') &&
@@ -456,26 +504,68 @@ function setupMqttHandlers() {
 
       // 1.9 Nodo EMA (Weather Station ZONA_A) — Heartbeat de conectividad
       if (topic === 'PristinoPlant/Weather_Station/ZONA_A/status') {
+        const previousEmaHeartbeat = lastEmaHeartbeat
+        lastEmaHeartbeat = Date.now()
+
         if (message === 'ping') {
           return
         }
 
-        if (message === 'reboot') {
-          await handleEmaSync(true)
+        if (message === 'reboot' || message === 'online') {
+          const timeSinceLastHeartbeat = Date.now() - previousEmaHeartbeat
+          const isFreshSession = timeSinceLastHeartbeat > 15 * 60 * 1000
 
-          return
-        }
+          let isBootEvent = message === 'reboot'
+          // Si el nodo reporta reboot pero pasó más de 15 minutos en silencio,
+          // se considera una "Nueva sesión" (ONLINE) en vez de un reboot en caliente
+          if (isBootEvent && isFreshSession) {
+            isBootEvent = false
+          }
 
-        if (message === 'online') {
-          if (emaManager.connectionState === 'online' && !isEmaSleeping) {
+          // Reiniciamos el estado físico active del EMA en memoria al conectar, pero PRESERVAMOS requested
+          for (const key of Object.keys(emaAuditState.active) as Array<keyof typeof emaAuditState.active>) {
+            emaAuditState.active[key] = false
+          }
+          // Publicamos el estado inicial en MQTT
+          mqttClient.publish(
+            'PristinoPlant/Weather_Station/ZONA_A/audit/state',
+            JSON.stringify(emaAuditState),
+            { retain: true, qos: 1 }
+          )
+
+          if (message === 'online' && emaManager.connectionState === 'online' && !isEmaSleeping) {
             return
           }
 
-          await handleEmaSync(false)
+          // Inicializar presencia en boot del EMA
+          const prev = bootAccumulators.get('Weather Station Orquideario')
+          if (prev?.timer) clearTimeout(prev.timer)
+          bootAccumulators.set('Weather Station Orquideario', {
+            nodeName: 'Weather Station Orquideario',
+            lux: null,
+            temp: null,
+            hum: null,
+            bootAt: Date.now(),
+            timer: setTimeout(() => flushBootLog('Weather Station Orquideario'), 30000), // Ventana de 30s
+          })
+
+          await handleEmaSync(isBootEvent)
         } else if (message === 'sleep') {
           Logger.node('SLEEP', 'Weather Station Orquideario')
           isEmaSleeping = true
           emaManager.setOffline()
+
+          // Limpiar todo el estado de auditorías al entrar en sleep
+          for (const key of Object.keys(emaAuditState.requested) as Array<keyof typeof emaAuditState.requested>) {
+            emaAuditState.requested[key] = false
+            emaAuditState.active[key] = false
+          }
+          mqttClient.publish(
+            'PristinoPlant/Weather_Station/ZONA_A/audit/state',
+            JSON.stringify(emaAuditState),
+            { retain: true, qos: 1 }
+          )
+
           await prisma.deviceLog
             .create({
               data: {
@@ -492,6 +582,18 @@ function setupMqttHandlers() {
           }
           emaManager.setOffline()
           Logger.node('OFFLINE', message === 'lwt_disconnect' ? 'BROKER' : 'NODE')
+
+          // Limpiar todo el estado de auditorías al quedar offline
+          for (const key of Object.keys(emaAuditState.requested) as Array<keyof typeof emaAuditState.requested>) {
+            emaAuditState.requested[key] = false
+            emaAuditState.active[key] = false
+          }
+          mqttClient.publish(
+            'PristinoPlant/Weather_Station/ZONA_A/audit/state',
+            JSON.stringify(emaAuditState),
+            { retain: true, qos: 1 }
+          )
+
           await prisma.deviceLog
             .create({
               data: {
@@ -631,7 +733,17 @@ function setupMqttHandlers() {
       }
 
       // 3.5 Lecturas Ambientales (Validación de Lluvia / Humedad Residual - Soporte Batch + Accumulator Nnativo)
-      if (topic === 'PristinoPlant/Weather_Station/EXTERIOR/readings') {
+      if (
+        topic === 'PristinoPlant/Weather_Station/EXTERIOR/readings' ||
+        topic === 'PristinoPlant/Weather_Station/ZONA_A/readings'
+      ) {
+        const isEma = topic === 'PristinoPlant/Weather_Station/ZONA_A/readings'
+        const nodeName = isEma ? 'Weather Station Orquideario' : 'Weather Station Exterior'
+
+        if (isEma) {
+          lastEmaHeartbeat = Date.now()
+        }
+
         try {
           const data = JSON.parse(message) as {
             data?: [number, { temperature?: number; humidity?: number; illuminance?: number }][]
@@ -683,54 +795,57 @@ function setupMqttHandlers() {
             }
           }
 
-          // Activamos la presencia real en el Watchdog basados en los campos extraídos del lote
-          if (hasTemp || hasHum) {
-            dht22Present = true
-            dht22Alive = true
-            lastClimateBatchAt = Date.now()
-          }
+          // Lógica específica para el Nodo Exterior (Validación de Lluvia / Watchdog)
+          if (!isEma) {
+            // Activamos la presencia real en el Watchdog basados en los campos extraídos del lote
+            if (hasTemp || hasHum) {
+              dht22Present = true
+              dht22Alive = true
+              lastClimateBatchAt = Date.now()
+            }
 
-          if (hasLux) {
-            illuminancePresent = true
-            illuminanceAlive = true
-            lastLuxBatchAt = Date.now()
+            if (hasLux) {
+              illuminancePresent = true
+              illuminanceAlive = true
+              lastLuxBatchAt = Date.now()
 
-            if (lux !== null) {
-              lastKnownLux = lux // Guardar último valor conocido
+              if (lux !== null) {
+                lastKnownLux = lux // Guardar último valor conocido
 
-              const now = new Date()
-              const caracasHour = parseInt(
-                new Intl.DateTimeFormat('en-US', {
-                  timeZone: 'America/Caracas',
-                  hour: 'numeric',
-                  hour12: false,
-                }).format(now),
-              )
+                const now = new Date()
+                const caracasHour = parseInt(
+                  new Intl.DateTimeFormat('en-US', {
+                    timeZone: 'America/Caracas',
+                    hour: 'numeric',
+                    hour12: false,
+                  }).format(now),
+                )
 
-              const isInBurstWindow = caracasHour >= 8 && caracasHour < 16
-              const isBurstLux = lux <= 10000
+                const isInBurstWindow = caracasHour >= 8 && caracasHour < 16
+                const isBurstLux = lux <= 10000
 
-              if (isInBurstWindow && isBurstLux) {
-                // Debe ir a ráfaga
-                if (lastSentRainInterval !== 'INTERVAL_BURST') {
-                  lastSentRainInterval = 'INTERVAL_BURST'
-                  Logger.rain(
-                    `Ajustando intervalo de chequeo de lluvia a 1 minuto (Ráfaga) por iluminancia (${lux.toFixed(0)} lx) a las ${caracasHour}h.`,
-                  )
-                  executeSystemCommand('INTERVAL_BURST', true)
-                }
-              } else {
-                // Debe ir a normal, pero ÚNICAMENTE si previamente lo habíamos cambiado a BURST
-                if (lastSentRainInterval === 'INTERVAL_BURST') {
-                  lastSentRainInterval = 'INTERVAL_NORMAL'
-                  const reason = !isInBurstWindow
-                    ? `fin de ventana horaria (hora: ${caracasHour}h)`
-                    : `iluminancia recuperada (${lux.toFixed(0)} lx)`
+                if (isInBurstWindow && isBurstLux) {
+                  // Debe ir a ráfaga
+                  if (lastSentRainInterval !== 'INTERVAL_BURST') {
+                    lastSentRainInterval = 'INTERVAL_BURST'
+                    Logger.rain(
+                      `Ajustando intervalo de chequeo de lluvia a 1 minuto (Ráfaga) por iluminancia (${lux.toFixed(0)} lx) a las ${caracasHour}h.`,
+                    )
+                    executeSystemCommand('INTERVAL_BURST', true)
+                  }
+                } else {
+                  // Debe ir a normal, pero ÚNICAMENTE si previamente lo habíamos cambiado a BURST
+                  if (lastSentRainInterval === 'INTERVAL_BURST') {
+                    lastSentRainInterval = 'INTERVAL_NORMAL'
+                    const reason = !isInBurstWindow
+                      ? `fin de ventana horaria (hora: ${caracasHour}h)`
+                      : `iluminancia recuperada (${lux.toFixed(0)} lx)`
 
-                  Logger.rain(
-                    `Restableciendo intervalo de chequeo de lluvia a 5 minutos (Vigía) por ${reason}.`,
-                  )
-                  executeSystemCommand('INTERVAL_NORMAL', true)
+                    Logger.rain(
+                      `Restableciendo intervalo de chequeo de lluvia a 5 minutos (Vigía) por ${reason}.`,
+                    )
+                    executeSystemCommand('INTERVAL_NORMAL', true)
+                  }
                 }
               }
             }
@@ -738,117 +853,120 @@ function setupMqttHandlers() {
 
           // 🚀 [PRESERVADO]: Mecanismo reactivo de acumulación post-boot.
           // Captura las variables del lote actual e hidrata el acumulador sin importar el orden de llegada.
-          if (typeof bootAccumulator !== 'undefined' && bootAccumulator) {
-            if (hasLux && lux !== null) bootAccumulator.lux = lux
-            if (hasTemp && temp !== null) bootAccumulator.temp = temp
-            if (hasHum && hum !== null) bootAccumulator.hum = hum
+          const accumulator = bootAccumulators.get(nodeName)
+          if (accumulator) {
+            if (hasLux && lux !== null) accumulator.lux = lux
+            if (hasTemp && temp !== null) accumulator.temp = temp
+            if (hasHum && hum !== null) accumulator.hum = hum
 
             // Si ya recolectamos las métricas requeridas, flusheamos el log inmediatamente sin esperar el timeout
             const isLuxRequired = isLuxSamplingActive()
             const allPresent =
-              (!isLuxRequired || bootAccumulator.lux !== null) &&
-              bootAccumulator.temp !== null &&
-              bootAccumulator.hum !== null
+              (!isLuxRequired || accumulator.lux !== null) &&
+              accumulator.temp !== null &&
+              accumulator.hum !== null
 
-            if (allPresent) flushBootLog()
+            if (allPresent) flushBootLog(nodeName)
           }
 
-          clearSyncTimerIfHealthy()
+          if (!isEma) {
+            clearSyncTimerIfHealthy()
 
-          if (lastRainState === 'Dry' && lux !== null && temp !== null && hum !== null) {
-            telemetryBuffer.push({ lux, temp, hum, timestamp: Date.now() })
-            if (telemetryBuffer.length > 10) telemetryBuffer.shift()
-          }
+            if (lastRainState === 'Dry' && lux !== null && temp !== null && hum !== null) {
+              telemetryBuffer.push({ lux, temp, hum, timestamp: Date.now() })
+              if (telemetryBuffer.length > 10) telemetryBuffer.shift()
+            }
 
-          if (
-            lastRainState === 'Raining' &&
-            !isRainOverridden &&
-            lux !== null &&
-            temp !== null &&
-            hum !== null
-          ) {
-            // Lógica de Fallback de Baseline (si no hubo datos pre-lluvia)
-            if (isWaitingForBaselineFallback && rainStartedAt) {
-              const elapsed = Date.now() - rainStartedAt
+            if (
+              lastRainState === 'Raining' &&
+              !isRainOverridden &&
+              lux !== null &&
+              temp !== null &&
+              hum !== null
+            ) {
+              // Lógica de Fallback de Baseline (si no hubo datos pre-lluvia)
+              if (isWaitingForBaselineFallback && rainStartedAt) {
+                const elapsed = Date.now() - rainStartedAt
 
-              if (elapsed < 10 * 60 * 1000) {
-                if (baselineLux === null || lux > baselineLux) baselineLux = lux
-                if (baselineTemp === null || temp > baselineTemp) baselineTemp = temp
-                if (baselineHum === null || hum > baselineHum) baselineHum = hum
-              } else {
-                isWaitingForBaselineFallback = false
-                Logger.debug(
-                  `Captura de fallback finalizada. Baseline: ${baselineLux?.toFixed(0)}lx / ${baselineTemp?.toFixed(1)}°C / ${baselineHum?.toFixed(1)}%.`,
-                )
+                if (elapsed < 10 * 60 * 1000) {
+                  if (baselineLux === null || lux > baselineLux) baselineLux = lux
+                  if (baselineTemp === null || temp > baselineTemp) baselineTemp = temp
+                  if (baselineHum === null || hum > baselineHum) baselineHum = hum
+                } else {
+                  isWaitingForBaselineFallback = false
+                  Logger.debug(
+                    `Captura de fallback finalizada. Baseline: ${baselineLux?.toFixed(0)}lx / ${baselineTemp?.toFixed(1)}°C / ${baselineHum?.toFixed(1)}%.`,
+                  )
+                }
+              }
+
+              // Si está lloviendo y no hemos vetado aún, evaluamos recuperación inteligente
+              const now = new Date()
+              const options: Intl.DateTimeFormatOptions = {
+                timeZone: 'America/Caracas',
+                hour: 'numeric',
+                hour12: false,
+              }
+              const caracasHour = parseInt(new Intl.DateTimeFormat('en-US', options).format(now))
+              const isWindow = caracasHour >= 6 && caracasHour < 17
+
+              if (baselineTemp !== null) {
+                const luxRecovery = isWindow && baselineLux !== null && lux > baselineLux * 1.2
+                const tempRecovery = temp > baselineTemp + 2
+                const humRecovery = baselineHum !== null && hum < baselineHum - 2 // Desaturación detectada
+                const absoluteSun = isWindow && lux > 26000
+
+                if (luxRecovery || tempRecovery || humRecovery || absoluteSun) {
+                  const reason = luxRecovery
+                    ? `Recuperación lumínica (+${Math.round((lux / baselineLux! - 1) * 100)}% vs mín.)`
+                    : tempRecovery
+                      ? `Recuperación térmica (+${(temp - baselineTemp).toFixed(1)}°C vs mín.)`
+                      : humRecovery
+                        ? `Recuperación de humedad (${hum.toFixed(1)}% vs mín.)`
+                        : 'Cielo Templado detectado (>26k lux)'
+
+                  Logger.rain(
+                    `Veto de lluvia inteligente: ${reason}. Baseline: ${baselineLux?.toFixed(0)}lx / ${baselineTemp.toFixed(1)}°C / ${baselineHum?.toFixed(1)}%. Actual: ${lux.toFixed(0)}lx / ${temp.toFixed(1)}°C / ${hum.toFixed(1)}%.`,
+                  )
+
+                  isRainOverridden = true
+                  lastVetoAt = Date.now()
+                  await closeRainEvent('SCHEDULER_OVERRIDE')
+                }
               }
             }
 
-            // Si está lloviendo y no hemos vetado aún, evaluamos recuperación inteligente
-            const now = new Date()
-            const options: Intl.DateTimeFormatOptions = {
-              timeZone: 'America/Caracas',
-              hour: 'numeric',
-              hour12: false,
-            }
-            const caracasHour = parseInt(new Intl.DateTimeFormat('en-US', options).format(now))
-            const isWindow = caracasHour >= 6 && caracasHour < 17
+            // Lógica de Reversión de Veto (Anti-Intermitencia)
+            if (
+              isRainOverridden &&
+              baselineLux !== null &&
+              baselineTemp !== null &&
+              lastVetoAt !== null &&
+              lux !== null &&
+              temp !== null &&
+              hum !== null
+            ) {
+              const timeSinceVeto = (Date.now() - lastVetoAt) / 60000
 
-            if (baselineTemp !== null) {
-              const luxRecovery = isWindow && baselineLux !== null && lux > baselineLux * 1.2
-              const tempRecovery = temp > baselineTemp + 2
-              const humRecovery = baselineHum !== null && hum < baselineHum - 2 // Desaturación detectada
-              const absoluteSun = isWindow && lux > 26000
+              if (timeSinceVeto < 30) {
+                const lostLux = lux < baselineLux * 1.1
+                const lostTemp = temp < baselineTemp + 1
+                const lostHum = baselineHum !== null && hum > baselineHum + 5
 
-              if (luxRecovery || tempRecovery || humRecovery || absoluteSun) {
-                const reason = luxRecovery
-                  ? `Recuperación lumínica (+${Math.round((lux / baselineLux! - 1) * 100)}% vs mín.)`
-                  : tempRecovery
-                    ? `Recuperación térmica (+${(temp - baselineTemp).toFixed(1)}°C vs mín.)`
-                    : humRecovery
-                      ? `Recuperación de humedad (${hum.toFixed(1)}% vs mín.)`
-                      : 'Cielo Templado detectado (>26k lux)'
+                if (lostLux || lostTemp || lostHum) {
+                  const reason = lostLux
+                    ? 'Nubes regresaron (Lux bajo)'
+                    : lostTemp
+                      ? 'Baja térmica'
+                      : 'Saturación de humedad'
 
-                Logger.rain(
-                  `Veto de lluvia inteligente: ${reason}. Baseline: ${baselineLux?.toFixed(0)}lx / ${baselineTemp.toFixed(1)}°C / ${baselineHum?.toFixed(1)}%. Actual: ${lux.toFixed(0)}lx / ${temp.toFixed(1)}°C / ${hum.toFixed(1)}%.`,
-                )
-
-                isRainOverridden = true
-                lastVetoAt = Date.now()
-                await closeRainEvent('SCHEDULER_OVERRIDE')
-              }
-            }
-          }
-
-          // Lógica de Reversión de Veto (Anti-Intermitencia)
-          if (
-            isRainOverridden &&
-            baselineLux !== null &&
-            baselineTemp !== null &&
-            lastVetoAt !== null &&
-            lux !== null &&
-            temp !== null &&
-            hum !== null
-          ) {
-            const timeSinceVeto = (Date.now() - lastVetoAt) / 60000
-
-            if (timeSinceVeto < 30) {
-              const lostLux = lux < baselineLux * 1.1
-              const lostTemp = temp < baselineTemp + 1
-              const lostHum = baselineHum !== null && hum > baselineHum + 5
-
-              if (lostLux || lostTemp || lostHum) {
-                const reason = lostLux
-                  ? 'Nubes regresaron (Lux bajo)'
-                  : lostTemp
-                    ? 'Baja térmica'
-                    : 'Saturación de humedad'
-
-                Logger.rain(
-                  `Anulando veto: ${reason} tras ${timeSinceVeto.toFixed(1)}min. La lluvia ha vuelto.`,
-                )
-                isRainOverridden = false
-                lastVetoAt = null
-                if (lastRainState === 'Raining') await openRainEvent()
+                  Logger.rain(
+                    `Anulando veto: ${reason} tras ${timeSinceVeto.toFixed(1)}min. La lluvia ha vuelto.`,
+                  )
+                  isRainOverridden = false
+                  lastVetoAt = null
+                  if (lastRainState === 'Raining') await openRainEvent()
+                }
               }
             }
           }
@@ -969,6 +1087,67 @@ async function checkRainOrphanTimeout() {
     lastRainState = 'Dry'
     // Cerrar el evento en Postgres con el motivo ORPHAN_TIMEOUT
     await closeRainEvent('ORPHAN_TIMEOUT')
+  }
+}
+
+/**
+ * Control de Suspensión Inteligente para el Nodo EMA:
+ * Apaga la radio WiFi y duerme el dispositivo si no tiene comandos encolados
+ * ni auditorías solicitadas o activas pendientes, evitando mantener la radio encendida.
+ */
+function checkAndSleepEma() {
+  const pendingCount = emaManager.getPendingCommandsCount()
+  const hasRequestedAudits = Object.values(emaAuditState.requested).some((v) => v === true)
+  const hasActiveAudits = Object.values(emaAuditState.active).some((v) => v === true)
+  const isBooting = bootAccumulators.has('Weather Station Orquideario')
+
+  if (pendingCount === 0 && !hasRequestedAudits && !hasActiveAudits && !isBooting) {
+    Logger.info('Apagando radio del Nodo EMA por inactividad de tareas/auditorías.', '💤')
+    executeEmaCommand('sleep', true)
+  }
+}
+
+/**
+ * Watchdog de inactividad de la Estación EMA:
+ * Si el nodo está registrado como online/sleep pero no hemos recibido telemetrías
+ * ni estados en 30 minutos (ventana de tolerancia que cubre el ciclo de sleep de 20min),
+ * lo forzamos a OFFLINE e inhabilitamos las toolcards del frontend.
+ */
+async function checkEmaHeartbeat() {
+  if (emaManager.connectionState === 'offline' && !isEmaSleeping) return
+
+  const elapsed = Date.now() - lastEmaHeartbeat
+  if (elapsed > 30 * 60 * 1000) {
+    Logger.node('OFFLINE', 'Weather Station Orquideario (Watchdog Timeout)')
+    emaManager.setOffline()
+    isEmaSleeping = false
+
+    // Sincronizar el estado de auditorías a inactivo
+    for (const key of Object.keys(emaAuditState.requested) as Array<keyof typeof emaAuditState.requested>) {
+      emaAuditState.requested[key] = false
+      emaAuditState.active[key] = false
+    }
+
+    // Publicar estado de auditoría vacío a MQTT
+    mqttClient.publish(
+      'PristinoPlant/Weather_Station/ZONA_A/audit/state',
+      JSON.stringify(emaAuditState),
+      { retain: true, qos: 1 }
+    )
+
+    // Persistir estado offline en DB
+    await prisma.deviceLog
+      .create({
+        data: {
+          device: 'Weather_Station_ZONA_A',
+          status: 'OFFLINE',
+          notes: 'Watchdog: Sin señales de vida durante 30 minutos (Offline)',
+        },
+      })
+      .catch((err) => Logger.error('Fallo persistiendo deviceLog para EMA (Watchdog OFFLINE)', err))
+
+    // Publicar estado offline en canal de status
+    mqttClient.publish('PristinoPlant/Weather_Station/ZONA_A/status', 'offline', { retain: true, qos: 1 })
   }
 }
 
@@ -1250,7 +1429,7 @@ async function handleNodeSync(isBoot: boolean = false, previousHeartbeat: number
  */
 async function handleEmaSync(isBoot: boolean = false) {
   isEmaSleeping = false
-  emaManager.setStabilizing()
+  emaManager.setReady()
 
   const statusToSave: DeviceStatus = isBoot ? 'REBOOT' : 'ONLINE'
   const notes = isBoot ? 'Reinicio' : 'Conectado'
@@ -1266,9 +1445,6 @@ async function handleEmaSync(isBoot: boolean = false) {
       },
     })
     .catch((err) => Logger.error('Fallo persistiendo deviceLog para EMA', err))
-
-  // Sincronizar muestreo (Amanecer/Anochecer) de iluminancia
-  syncNodeSampling(undefined, true)
 }
 
 /**
@@ -1396,6 +1572,7 @@ async function initScheduler() {
   // Verificación periódica de inactividad de nodos y eventos (cada 15s)
   setInterval(checkRainOrphanTimeout, 60_000)
   setInterval(checkSensorsHealth, 60_000)
+  setInterval(checkEmaHeartbeat, 60_000)
 
   // Cron de limpieza de tareas expiradas (Ventana de 20 min / 24h agroquímicos)
   new Cron('*/5 * * * *', { timezone: 'America/Caracas' }, async () => {

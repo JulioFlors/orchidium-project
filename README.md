@@ -611,6 +611,13 @@ El orquestador en el VPS de producción utiliza Docker Compose bajo la red cloud
   docker logs -f scheduler
   ```
 
+* **Monitorear transacciones y QoS en Mosquitto**
+  Para verificar en tiempo real los pings y mensajes MQTT junto a su nivel de QoS (requiere habilitar `log_type debug` en el archivo de configuración del broker):
+
+  ```bash
+  docker logs -f mosquitto | grep -i "PUBLISH"
+  ```
+
 * **Filtrar Logs (Para evitar saturar la terminal con días de historial)**
 
   ```bash
