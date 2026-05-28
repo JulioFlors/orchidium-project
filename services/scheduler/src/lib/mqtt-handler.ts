@@ -66,7 +66,7 @@ class CommandSequencer {
   private retryTimer: NodeJS.Timeout | null = null
   private throttleTimer: NodeJS.Timeout | null = null
 
-  constructor(private nodeName: string = 'Nodo') {}
+  constructor(public readonly nodeTarget: string = 'Nodo') {}
 
   public get connectionState() {
     return this.state === 'OFFLINE' ? 'offline' : 'online'
@@ -171,7 +171,7 @@ class CommandSequencer {
       const isIrrigation = topic.includes('irrigation')
 
       if (!isIrrigation) {
-        Logger.mqtt(`Comando: ${colors.magenta}${payload}${colors.reset}`)
+        Logger.mqtt(`Comando: ${colors.magenta}${payload}${colors.reset}`, this.nodeTarget)
       }
     }
 
@@ -203,6 +203,7 @@ class CommandSequencer {
     if (!isPersistent && ageMs > maxWindowMin * 60 * 1000) {
       Logger.mqtt(
         `Ventana de oportunidad cerrada (${maxWindowMin} min) para la tarea ${taskId.slice(0, 8)}.`,
+        this.nodeTarget
       )
       if (onFailure) {
         onFailure(taskId, `Ventana de oportunidad cerrada (${maxWindowMin} min expirados).`).catch(
@@ -219,12 +220,12 @@ class CommandSequencer {
     // [🔄 Gestión de Persistencia]: Registro en DB al intento 3 para feedback visual
     if (attempts === 3) {
       if (onFailure) {
-        Logger.mqtt(`Nodo Actuador no responde tras 3 intentos. Sincronizando estado FAILED en DB.`)
+        Logger.mqtt(`Nodo Actuador no responde tras 3 intentos. Sincronizando estado FAILED en DB.`, this.nodeTarget)
         onFailure(taskId, 'Sin respuesta del Nodo Actuador.').catch((err) =>
           Logger.error(`Error en callback de persistencia para ${taskId.slice(0, 8)}:`, err),
         )
       } else {
-        Logger.mqtt(`Nodo Actuador no responde tras 3 intentos al comando de sistema.`)
+        Logger.mqtt(`Nodo Actuador no responde tras 3 intentos al comando de sistema.`, this.nodeTarget)
       }
     }
 
@@ -264,7 +265,7 @@ class CommandSequencer {
 
       const attemptsStr = result.attempts > 1 ? ` (en ${result.attempts} intentos)` : ''
 
-      Logger.ack(`${this.nodeName} confirmó ACK${attemptsStr} para el comando: ${taskId}`)
+      Logger.ack(`${this.nodeTarget} confirmó ACK${attemptsStr} para el comando: ${taskId}`)
 
       // Eliminar de la cola
       this.queue.shift()
@@ -340,7 +341,7 @@ export const irrigationRetryManager = new CommandSequencer('Nodo Actuador')
 
 export const systemRetryManager = new CommandSequencer('Nodo Actuador')
 
-export const emaManager = new CommandSequencer('Estación EMA')
+export const emaManager = new CommandSequencer('Nodo EMA')
 
 /**
  * Envía un comando de circuito al Nodo Actuador.
@@ -377,6 +378,7 @@ export function executeSequence(
 
   Logger.mqtt(
     `Despachando Circuito: ${purpose} (${remainingMinutes} min / ${durationSec}s) [Task: ${taskId.slice(0, 8)}]`,
+    'Nodo Actuador'
   )
 }
 
@@ -397,7 +399,7 @@ export function stopSequence(purpose: TaskPurpose, taskId: string) {
   // Limpiamos reintentos de ON si existían para esta tarea
   irrigationRetryManager.confirmByTaskId(taskId)
 
-  Logger.mqtt(`Enviando PARADA (OFF) para: ${purpose} [Task: ${taskId.slice(0, 8)}]`)
+  Logger.mqtt(`Enviando PARADA (OFF) para: ${purpose} [Task: ${taskId.slice(0, 8)}]`, 'Nodo Actuador')
 }
 
 /**
@@ -418,7 +420,7 @@ export function executeSystemCommand(
 
   // Para comandos no persistentes, verificamos si el nodo está online
   if (targetManager.connectionState === 'offline' && !isPersistent) {
-    Logger.mqtt(`Comando: ${colors.magenta}${command}${colors.reset} (Descartado — Nodo Offline)`)
+    Logger.mqtt(`Comando: ${colors.magenta}${command}${colors.reset} (Descartado — Nodo Offline)`, targetManager.nodeTarget)
 
     return
   }

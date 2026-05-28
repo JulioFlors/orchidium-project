@@ -205,7 +205,6 @@ function ToolCard({ icon, label, colorKey, onClick, pending, active, disabled }:
   )
 }
 
-// --- Toolbox Grid ---
 interface ToolboxGridProps {
   isOnline: boolean
   activeAudits: string[]
@@ -213,6 +212,7 @@ interface ToolboxGridProps {
   hardwarePresence: Record<string, boolean>
   showTimeline: boolean
   onToggleTimeline: () => void
+  supportedAudits?: string[]
 }
 
 export function ToolboxGrid({
@@ -222,6 +222,7 @@ export function ToolboxGrid({
   hardwarePresence,
   showTimeline,
   onToggleTimeline,
+  supportedAudits,
 }: ToolboxGridProps) {
   return (
     <div className="@container w-full">
@@ -233,85 +234,97 @@ export function ToolboxGrid({
           label="Timeline"
           onClick={onToggleTimeline}
         />
-        <ToolCard
-          active={activeAudits.includes('lux')}
-          colorKey="lux"
-          disabled={!isOnline || hardwarePresence.lux === false}
-          icon={
-            <IoSearchOutline
-              className={clsx(!activeAudits.includes('lux') && TOOL_COLORS.lux.icon)}
-              size={24}
-            />
-          }
-          label={hardwarePresence.lux === false ? 'Lux (Off)' : 'Lux Meter'}
-          onClick={() => onCommand('audit_lux_on', 'lux')}
-        />
-        <ToolCard
-          active={activeAudits.includes('rain')}
-          colorKey="rain"
-          disabled={!isOnline || hardwarePresence.rain === false}
-          icon={
-            <IoPulseOutline
-              className={clsx(!activeAudits.includes('rain') && TOOL_COLORS.rain.icon)}
-              size={24}
-            />
-          }
-          label={hardwarePresence.rain === false ? 'Rain (Off)' : 'Rain Audit'}
-          onClick={() => onCommand('audit_rain_on', 'rain')}
-        />
+        {(!supportedAudits || supportedAudits.includes('lux')) && (
+          <ToolCard
+            active={activeAudits.includes('lux')}
+            colorKey="lux"
+            disabled={!isOnline || hardwarePresence.lux === false}
+            icon={
+              <IoSearchOutline
+                className={clsx(!activeAudits.includes('lux') && TOOL_COLORS.lux.icon)}
+                size={24}
+              />
+            }
+            label={hardwarePresence.lux === false ? 'Lux (Off)' : 'Lux Meter'}
+            onClick={() => onCommand('audit_lux_on', 'lux')}
+          />
+        )}
+        {(!supportedAudits || supportedAudits.includes('rain')) && (
+          <ToolCard
+            active={activeAudits.includes('rain')}
+            colorKey="rain"
+            disabled={!isOnline || hardwarePresence.rain === false}
+            icon={
+              <IoPulseOutline
+                className={clsx(!activeAudits.includes('rain') && TOOL_COLORS.rain.icon)}
+                size={24}
+              />
+            }
+            label={hardwarePresence.rain === false ? 'Rain (Off)' : 'Rain Audit'}
+            onClick={() => onCommand('audit_rain_on', 'rain')}
+          />
+        )}
 
-        <ToolCard
-          active={activeAudits.includes('ram')}
-          colorKey="ram"
-          disabled={!isOnline}
-          icon={
-            <IoHardwareChipOutline
-              className={clsx(!activeAudits.includes('ram') && TOOL_COLORS.ram.icon)}
-              size={24}
-            />
-          }
-          label="RAM Audit"
-          onClick={() => onCommand('audit_ram_on', 'ram')}
-        />
-        <ToolCard
-          active={activeAudits.includes('wifi')}
-          colorKey="wifi"
-          disabled={!isOnline}
-          icon={
-            <IoWifiOutline
-              className={clsx(!activeAudits.includes('wifi') && TOOL_COLORS.wifi.icon)}
-              size={24}
-            />
-          }
-          label="Wi-Fi Audit"
-          onClick={() => onCommand('audit_wifi_on', 'wifi')}
-        />
-        <ToolCard
-          active={activeAudits.includes('temp')}
-          colorKey="temp"
-          disabled={!isOnline || hardwarePresence.temp === false}
-          icon={
-            <IoThermometerOutline
-              className={clsx(!activeAudits.includes('temp') && TOOL_COLORS.temp.icon)}
-              size={24}
-            />
-          }
-          label={hardwarePresence.temp === false ? 'Temp (Off)' : 'Temperatura'}
-          onClick={() => onCommand('audit_temp_on', 'temp')}
-        />
-        <ToolCard
-          active={activeAudits.includes('hum')}
-          colorKey="hum"
-          disabled={!isOnline || hardwarePresence.hum === false}
-          icon={
-            <IoWaterOutline
-              className={clsx(!activeAudits.includes('hum') && TOOL_COLORS.hum.icon)}
-              size={24}
-            />
-          }
-          label={hardwarePresence.hum === false ? 'Hum (Off)' : 'Humedad'}
-          onClick={() => onCommand('audit_hum_on', 'hum')}
-        />
+        {(!supportedAudits || supportedAudits.includes('ram')) && (
+          <ToolCard
+            active={activeAudits.includes('ram')}
+            colorKey="ram"
+            disabled={!isOnline}
+            icon={
+              <IoHardwareChipOutline
+                className={clsx(!activeAudits.includes('ram') && TOOL_COLORS.ram.icon)}
+                size={24}
+              />
+            }
+            label="RAM Audit"
+            onClick={() => onCommand('audit_ram_on', 'ram')}
+          />
+        )}
+        {(!supportedAudits || supportedAudits.includes('wifi')) && (
+          <ToolCard
+            active={activeAudits.includes('wifi')}
+            colorKey="wifi"
+            disabled={!isOnline}
+            icon={
+              <IoWifiOutline
+                className={clsx(!activeAudits.includes('wifi') && TOOL_COLORS.wifi.icon)}
+                size={24}
+              />
+            }
+            label="Wi-Fi Audit"
+            onClick={() => onCommand('audit_wifi_on', 'wifi')}
+          />
+        )}
+        {(!supportedAudits || supportedAudits.includes('temp')) && (
+          <ToolCard
+            active={activeAudits.includes('temp')}
+            colorKey="temp"
+            disabled={!isOnline || hardwarePresence.temp === false}
+            icon={
+              <IoThermometerOutline
+                className={clsx(!activeAudits.includes('temp') && TOOL_COLORS.temp.icon)}
+                size={24}
+              />
+            }
+            label={hardwarePresence.temp === false ? 'Temp (Off)' : 'Temperatura'}
+            onClick={() => onCommand('audit_temp_on', 'temp')}
+          />
+        )}
+        {(!supportedAudits || supportedAudits.includes('hum')) && (
+          <ToolCard
+            active={activeAudits.includes('hum')}
+            colorKey="hum"
+            disabled={!isOnline || hardwarePresence.hum === false}
+            icon={
+              <IoWaterOutline
+                className={clsx(!activeAudits.includes('hum') && TOOL_COLORS.hum.icon)}
+                size={24}
+              />
+            }
+            label={hardwarePresence.hum === false ? 'Hum (Off)' : 'Humedad'}
+            onClick={() => onCommand('audit_hum_on', 'hum')}
+          />
+        )}
         <ToolCard
           colorKey="services"
           disabled={!isOnline}

@@ -126,36 +126,31 @@ function formatPointSummary(point: Point): string {
     if (k && v) fields[k] = v
   })
 
-  // Formato: [ Evento ] Origen -> Valor
+  const source = tags.source || 'Unknown'
+  const zoneStr = tags.zone ? `[ ${tags.zone} ]` : ''
+  const zonePart = zoneStr ? ` ${zoneStr}` : ''
+
+  // Formato: [ Origen ] [ Zona ] -> Valor
   if (measurement === 'system_events') {
     const val = fields.value?.replace(/"/g, '') || '?'
-    const event = tags.event_type || 'Event'
-    const source = tags.source || 'Unknown'
-    const zoneStr = tags.zone ? ` [ ${tags.zone} ]` : ''
-
-    return `[ ${event} ] [ ${source} ] ${zoneStr} -> ${val}`
+    return `[ ${source} ]${zonePart} -> ${val}`
   }
 
-  // Formato: [ Metrics ] Origen/Zona -> temp:25, hum:60...
+  // Formato: [ Origen ] [ Zona ] -> temp:25, hum:60...
   if (measurement === 'environment_metrics') {
     const metrics = Object.entries(fields)
       .map(([k, v]) => `${k}:${v}`)
       .join(', ')
 
-    const source = tags.source || 'Unknown'
-    const zoneStr = tags.zone ? ` [ ${tags.zone} ]` : ''
-
-    return `[ Metrics ] [ ${source} ] ${zoneStr} -> ${metrics}`
+    return `[ ${source} ]${zonePart} -> ${metrics}`
   }
 
-  // Formato: [ Rain_Event ] Origen -> 300s | 85%
+  // Formato: [ Origen ] [ Zona ] -> 300s | 85%
   if (measurement === 'rain_events') {
-    const source = tags.source || 'Unknown'
-    const zoneStr = tags.zone ? ` [ ${tags.zone} ]` : ''
     const dur = fields.duration_seconds || '?'
     const int = fields.intensity_percent || fields.average_intensity_percent || '?'
 
-    return `[ Rain_Event ] [ ${source} ]${zoneStr} -> ${dur}s | ${int}%`
+    return `[ ${source} ]${zonePart} -> ${dur}s | ${int}%`
   }
 
   // Fallback compacto (sin timestamp)
@@ -415,6 +410,7 @@ async function processRainEventPacket(
 
 // ---- Gestión de Estado (Deduplicación) ----
 const stateCache = new Map<string, string>()
+const lastNodeHeartbeats = new Map<string, number>()
 
 /**
  * Determina si un evento de estado debe persistirse (solo si cambió).
@@ -554,20 +550,35 @@ async function start() {
     // Ingest solo procesa telemetría en tiempo real para evitar duplicados o estados falsos al arrancar.
     if (packet.retain) return
 
-    const messageValue = payload.toString()
+    const messageValue = payload.toString().trim()
     const topicParts = topic.split('/')
     const firmwareSource = topicParts[1]
+    const zoneSlug = firmwareSource === 'Weather_Station' ? topicParts[2] : undefined
+    const deviceLabel = zoneSlug ? `${firmwareSource}/${zoneSlug}` : firmwareSource
+
+    // Guardar timestamp de latido para determinar si es sesión fresca (>15min de inactividad)
+    const now = Date.now()
+    const lastHeartbeat = lastNodeHeartbeats.get(deviceLabel)
+    const isFreshSession = !lastHeartbeat || (now - lastHeartbeat > 15 * 60 * 1000)
+
+    if (messageValue !== 'ping') {
+      lastNodeHeartbeats.set(deviceLabel, now)
+    }
 
     if (topic.endsWith('/status')) {
-      if (messageValue === 'ping') {
+      let finalMessage = messageValue
+
+      if (messageValue === 'reboot' && isFreshSession) {
+        finalMessage = 'online'
+      }
+
+      if (finalMessage === 'ping') {
         return // Omitir latidos periódicos para no inundar InfluxDB/logs
       }
 
-      const zoneSlug = firmwareSource === 'Weather_Station' ? topicParts[2] : undefined
       const zone = zoneSlug ? mapZoneSlugToZoneType(zoneSlug) : undefined
-      const deviceLabel = zoneSlug ? `${firmwareSource}/${zoneSlug}` : firmwareSource
 
-      if (messageValue === 'reboot') {
+      if (finalMessage === 'reboot') {
         Logger.node('REBOOT', deviceLabel)
 
         // Limpiar caché de estados para este nodo para forzar publicación fresca
@@ -578,11 +589,11 @@ async function start() {
             stateCache.delete(key)
           }
         }
-      } else if (messageValue === 'sleep') {
+      } else if (finalMessage === 'sleep') {
         Logger.node('SLEEP', deviceLabel)
-      } else if (messageValue === 'offline') {
+      } else if (finalMessage === 'offline') {
         Logger.node('OFFLINE', deviceLabel, 'BROKER')
-      } else if (messageValue === 'online') {
+      } else if (finalMessage === 'online') {
         Logger.node('ONLINE', deviceLabel, 'NODE')
       }
 
@@ -591,7 +602,7 @@ async function start() {
         .setTag('source', firmwareSource)
         .setTag('context', 'status')
         .setTag('event_type', 'Device_Status')
-        .setStringField('value', messageValue)
+        .setStringField('value', finalMessage)
 
       if (zone) {
         point.setTag('zone', zone)

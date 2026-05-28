@@ -24,24 +24,27 @@ interface DeviceConfig {
   isService?: boolean
   heartbeatTimeoutMs?: number
   hasDiagnostics?: boolean
+  supportedAudits?: string[]
 }
 
 const DEVICES: DeviceConfig[] = [
   {
     id: 'Actuator_Controller',
-    name: 'Controlador',
+    name: 'Nodo Actuador',
     description: 'Nodo Actuador + Estación Meteorológica Exterior',
     baseTopic: 'PristinoPlant/Actuator_Controller',
     heartbeatTimeoutMs: 60000,
     hasDiagnostics: true,
+    supportedAudits: ['lux', 'temp', 'hum', 'rain', 'ram', 'wifi'],
   },
   {
     id: 'Weather_Station_ZONA_A',
-    name: 'Estación Meteorológica',
+    name: 'Nodo EMA',
     description: `Estación Meteorológica ${ZoneTypeLabels[ZoneType.ZONA_A]}`,
     baseTopic: `PristinoPlant/Weather_Station/ZONA_A`,
     heartbeatTimeoutMs: 60000,
     hasDiagnostics: true,
+    supportedAudits: ['lux', 'temp', 'hum', 'ram', 'wifi'],
   },
 ]
 
@@ -262,6 +265,7 @@ export function DeviceDebugger() {
         hardwarePresence={hardwarePresence}
         isOnline={connectionState === 'online' || connectionState === 'sleep'}
         showTimeline={showTimeline}
+        supportedAudits={selectedDevice.supportedAudits}
         onCommand={handleCommand}
         onToggleTimeline={() => {
           const isCurrentlyVisible = widgetOrder.includes('timeline') || showTimeline

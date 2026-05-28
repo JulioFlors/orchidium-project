@@ -97,33 +97,61 @@ export const Logger = {
   node: (status: string, origin?: string) => {
     let icon = '📡'
     let color = colors.blue
-    let msg = status
+
+    let nodeLabel = '[Actuador]'
+    if (origin) {
+      const lower = origin.toLowerCase()
+      if (lower.includes('orquideario') || lower.includes('ema') || lower.includes('zona_a')) {
+        nodeLabel = '[EMA]'
+      }
+    }
 
     if (status === 'ONLINE') {
       icon = '🟢'
       color = colors.green
-      msg = `${status}${origin ? ` ${colors.dim}[${origin}]${colors.reset}` : ''}`
     } else if (status === 'REBOOT') {
       icon = '🔄'
       color = colors.blue
-      msg = `${status}${origin ? ` ${colors.dim}[${origin}]${colors.reset}` : ''}`
     } else if (status === 'SLEEP') {
       icon = '💤'
       color = colors.cyan
-      msg = `${status}${origin ? ` ${colors.dim}[${origin}]${colors.reset}` : ''}`
     } else if (status === 'OFFLINE') {
       icon = '🔴'
       color = colors.red
-      msg = `${status}${origin ? ` ${colors.dim}[${origin}]${colors.reset}` : ''}`
     }
 
+    let detail = ''
+    if (origin) {
+      if (origin.includes('Watchdog')) {
+        detail = ` ${colors.dim}[Watchdog]${colors.reset}`
+      } else if (origin.includes('BROKER')) {
+        detail = ` ${colors.dim}[BROKER]${colors.reset}`
+      } else if (origin.includes('NODE')) {
+        detail = ` ${colors.dim}[NODE]${colors.reset}`
+      } else if (origin.includes('SCHEDULER')) {
+        detail = ` ${colors.dim}[SCHEDULER]${colors.reset}`
+      }
+    }
+
+    const msg = `${status} ${colors.bold}${nodeLabel}${colors.reset}${detail}`
     console.log(formatLog(icon, 'NODE', color, msg))
   },
 
   // ---- Dominio: MQTT ----
 
   /** Comando MQTT enviado o recibido. */
-  mqtt: (msg: string) => console.log(formatLog('📡', 'MQTT', colors.magenta, msg)),
+  mqtt: (msg: string, node?: string) => {
+    let nodeLabel = ''
+    if (node) {
+      const lower = node.toLowerCase()
+      if (lower.includes('ema')) {
+        nodeLabel = `[EMA] `
+      } else if (lower.includes('actuador')) {
+        nodeLabel = `[Actuador] `
+      }
+    }
+    console.log(formatLog('📡', 'MQTT', colors.magenta, `${nodeLabel}${msg}`))
+  },
 
   /** ACK recibido del nodo. */
   ack: (msg: string) => console.log(formatLog('📬', 'ACK ', colors.green, msg)),

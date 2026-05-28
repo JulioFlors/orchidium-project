@@ -95,6 +95,9 @@ wifi_reset_event = asyncio.Event()
 # Evento asíncrono para esperar comandos de sincronización
 sync_event = asyncio.Event()
 
+# Evento asíncrono para indicar que el WiFi está listo (IP/DNS asignados) y MQTT limpio
+wifi_ready_event = asyncio.Event()
+
 # Variable de estado para indicar que el Scheduler ha solicitado suspender la radio
 sleep_received = False
 
@@ -788,11 +791,19 @@ async def wifi_coro():
     wlan = WLAN(STA_IF)
     wlan.active(True)
 
-    connected_once = False # Conexión inicial.
+    connected_once = wlan.isconnected()
+    was_connected = wlan.isconnected()
+    if was_connected:
+        wifi_ready_event.set()
+    else:
+        wifi_ready_event.clear()
+
     wifi_disconnect_start = None # Marca de tiempo para calcular la duración de la desconexión
 
     while True:
         if not CONNECTED_ALLOWED:
+            wifi_ready_event.clear()
+            was_connected = False
             if wlan.active():
                 try:
                     wlan.disconnect()
@@ -810,12 +821,14 @@ async def wifi_coro():
             except: pass
 
         if not wlan.isconnected() or wifi_reset_event.is_set():
+            wifi_ready_event.clear()
             # Limpiamos el evento inmediatamente al iniciar el ciclo de desconexión/reset
             wifi_reset_event.clear()
 
-            if connected_once:
+            if connected_once and was_connected:
                 if DEBUG:
-                    print(f"📡  WiFi {Colors.RED}Desconectado / Reset Solicitado{Colors.RESET}\n")
+                    print(f"📡  WiFi {Colors.RED}Desconectado{Colors.RESET}\n")
+            was_connected = False
 
             # ---- Verificación Previa (Safety Check) ----
             # Iniciamos el contador de desconexión por primera vez
@@ -878,8 +891,12 @@ async def wifi_coro():
                     # Invalidamos el cliente MQTT forzando una reconexión completa.
                     force_disconnect_mqtt()
 
+                    # Setear que WiFi está listo
+                    wifi_ready_event.set()
+
                     # Primera Conexión Establecida.
                     connected_once = True
+                    was_connected = True
 
             except Exception as e:
                 # OSErrors durante la conexión WiFi (ej: hardware no disponible, fallo de IP)
@@ -889,6 +906,9 @@ async def wifi_coro():
         else:
             # Conectado: Reseteamos contador
             wifi_disconnect_start = None
+            was_connected = True
+            if not wifi_ready_event.is_set():
+                wifi_ready_event.set()
             # Revisamos la conexion cada 20 segundos
             await asyncio.sleep(20)
 
@@ -981,9 +1001,11 @@ async def mqtt_connector_task(client_id):
             await asyncio.sleep(5)
             continue
 
-        if wlan is None or not wlan.isconnected():
-            await asyncio.sleep(10)
-            continue
+        if not wifi_ready_event.is_set():
+            try:
+                await asyncio.wait_for(wifi_ready_event.wait(), 10)
+            except asyncio.TimeoutError:
+                continue
 
         # 🔄 Gestionamos la (Re)conexión
         if client is None:
@@ -1171,9 +1193,17 @@ async def transmit_and_sync():
     global CONNECTED_ALLOWED, sync_event, sleep_received
     from utime import ticks_ms, ticks_diff
     
-    if DEBUG: print(f"\n📡  Activando {Colors.BLUE}radio WiFi{Colors.RESET}")
+    wlan_active = False
+    try:
+        if wlan and wlan.isconnected() and CONNECTED_ALLOWED:
+            wlan_active = True
+    except:
+        pass
 
-    CONNECTED_ALLOWED = True
+    if not wlan_active:
+        if DEBUG: print(f"\n📡  Activando {Colors.BLUE}radio WiFi{Colors.RESET}")
+        CONNECTED_ALLOWED = True
+
     sleep_received = False
 
     try:
@@ -1289,7 +1319,7 @@ async def sensor_publish_task():
 
         if DEBUG:
             c = max(temperature_Batch.count, illuminance_Batch.count)
-            print(f"\n📊 Data ({c}/{BATCH_SIZE}): Temperature: {Colors.MAGENTA}{temp}°C{Colors.RESET}  Humidity: {Colors.BLUE}{hum}%{Colors.RESET}  Illuminance: {Colors.YELLOW}{lux}lux{Colors.RESET}")
+            print(f"\n📊 Data ({c}/{BATCH_SIZE}): Temperature: {Colors.MAGENTA}{temp}°C{Colors.RESET}  Humidity: {Colors.BLUE}{hum}%{Colors.RESET}  Illuminance: {Colors.YELLOW}{lux} lux{Colors.RESET}")
 
         # 4. Transmitir si se completa el lote
         if temperature_Batch.count >= BATCH_SIZE or (IS_SAMPLING_LUX and illuminance_Batch.count >= BATCH_SIZE):

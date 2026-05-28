@@ -42,7 +42,7 @@ interface BootTelemetryAccumulator {
 }
 const bootAccumulators = new Map<string, BootTelemetryAccumulator>()
 let isSystemReady = false // Solo true tras recibir la primera telemetría post-boot
-let lastEmaHeartbeat: number = Date.now()
+let lastEmaHeartbeat: number = 0
 
 const emaAuditState = {
   requested: {
@@ -50,19 +50,19 @@ const emaAuditState = {
     wifi: false,
     ram: false,
     temp: false,
-    hum: false
+    hum: false,
   },
   active: {
     lux: false,
     wifi: false,
     ram: false,
     temp: false,
-    hum: false
+    hum: false,
   },
   lux_hw: true,
   temp_hw: true,
   hum_hw: true,
-  rain_hw: false
+  rain_hw: false,
 }
 
 async function init() {
@@ -127,7 +127,7 @@ async function waitForMosquitto(retries = 15) {
 
 // ---- Gestión de Estado Local ----
 let lastRainState: 'Raining' | 'Dry' = 'Dry'
-let lastFirmwareHeartbeat: number = Date.now()
+let lastFirmwareHeartbeat: number = 0
 let isEmaSleeping = false
 let lastSyncTimestamp: number = 0
 let openRainEventId: string | null = null // ID del RainEvent abierto en Postgres
@@ -296,8 +296,9 @@ const RAIN_ORPHAN_TIMEOUT_MS = 10 * 60 * 1000
  * Loguea el snapshot de arranque con los datos acumulados de los batches post-boot.
  * Se invoca cuando se reciben todas las métricas o cuando expira la ventana de 5s.
  */
-function flushBootLog(nodeName: string) {
-  const accumulator = bootAccumulators.get(nodeName)
+function flushBootLog(nodeSource: string) {
+  const accumulator = bootAccumulators.get(nodeSource)
+
   if (!accumulator) return
 
   if (accumulator.timer) {
@@ -305,7 +306,7 @@ function flushBootLog(nodeName: string) {
   }
 
   // Imprimir conexión del nodo
-  Logger.node(nodeName)
+  Logger.node(nodeSource)
 
   let hasInitFailure = false
 
@@ -334,7 +335,7 @@ function flushBootLog(nodeName: string) {
   }
 
   if (hasInitFailure) {
-    if (nodeName === 'Weather Station Orquideario') {
+    if (nodeSource === 'Weather Station Orquideario') {
       executeEmaCommand('sync_climate')
     } else {
       requestClimateSync()
@@ -343,20 +344,24 @@ function flushBootLog(nodeName: string) {
   }
 
   // 3. Sensor de Lluvia (excluido en el EMA)
-  if (nodeName !== 'Weather Station Orquideario') {
+  if (nodeSource !== 'Weather Station Orquideario') {
     Logger.info(
       `Sensor Lluvia: ${lastRainState === 'Raining' ? colors.blue : colors.yellow}${lastRainState}${colors.reset}`,
       '🌧️',
     )
   }
 
+  bootAccumulators.delete(nodeSource)
+
   // Sincronizar muestreo (Amanecer/Anochecer) de iluminancia al finalizar el flush del boot
   // Garantiza que el Nodo EMA ya esté escuchando comandos tras vaciar sus telemetrías
-  if (nodeName === 'Weather Station Orquideario') {
+  if (nodeSource === 'Weather Station Orquideario') {
     syncNodeSampling(undefined, true, 'ema')
 
     // Sincronizar auditorías solicitadas que aún no están activas en el nodo
-    for (const key of Object.keys(emaAuditState.requested) as Array<keyof typeof emaAuditState.requested>) {
+    for (const key of Object.keys(emaAuditState.requested) as Array<
+      keyof typeof emaAuditState.requested
+    >) {
       if (emaAuditState.requested[key] === true && emaAuditState.active[key] === false) {
         Logger.info(`Sincronizando auditoría pendiente '${key}' tras boot del EMA`, '⚡')
         executeEmaCommand(`audit_${key}_on`, true)
@@ -365,8 +370,6 @@ function flushBootLog(nodeName: string) {
 
     checkAndSleepEma()
   }
-
-  bootAccumulators.delete(nodeName)
 
   if (!isSystemReady) {
     isSystemReady = true
@@ -454,6 +457,7 @@ function setupMqttHandlers() {
           // 🚀 INICIALIZACIÓN SÍNCRONA PRE-AWAIT (Evita condición de carrera)
           isSystemReady = false
           const prev = bootAccumulators.get('Weather Station Exterior')
+
           if (prev?.timer) clearTimeout(prev.timer)
           bootAccumulators.set('Weather Station Exterior', {
             nodeName: 'Weather Station Exterior',
@@ -505,6 +509,7 @@ function setupMqttHandlers() {
       // 1.9 Nodo EMA (Weather Station ZONA_A) — Heartbeat de conectividad
       if (topic === 'PristinoPlant/Weather_Station/ZONA_A/status') {
         const previousEmaHeartbeat = lastEmaHeartbeat
+
         lastEmaHeartbeat = Date.now()
 
         if (message === 'ping') {
@@ -516,6 +521,7 @@ function setupMqttHandlers() {
           const isFreshSession = timeSinceLastHeartbeat > 15 * 60 * 1000
 
           let isBootEvent = message === 'reboot'
+
           // Si el nodo reporta reboot pero pasó más de 15 minutos en silencio,
           // se considera una "Nueva sesión" (ONLINE) en vez de un reboot en caliente
           if (isBootEvent && isFreshSession) {
@@ -523,14 +529,16 @@ function setupMqttHandlers() {
           }
 
           // Reiniciamos el estado físico active del EMA en memoria al conectar, pero PRESERVAMOS requested
-          for (const key of Object.keys(emaAuditState.active) as Array<keyof typeof emaAuditState.active>) {
+          for (const key of Object.keys(emaAuditState.active) as Array<
+            keyof typeof emaAuditState.active
+          >) {
             emaAuditState.active[key] = false
           }
           // Publicamos el estado inicial en MQTT
           mqttClient.publish(
             'PristinoPlant/Weather_Station/ZONA_A/audit/state',
             JSON.stringify(emaAuditState),
-            { retain: true, qos: 1 }
+            { retain: true, qos: 1 },
           )
 
           if (message === 'online' && emaManager.connectionState === 'online' && !isEmaSleeping) {
@@ -539,6 +547,7 @@ function setupMqttHandlers() {
 
           // Inicializar presencia en boot del EMA
           const prev = bootAccumulators.get('Weather Station Orquideario')
+
           if (prev?.timer) clearTimeout(prev.timer)
           bootAccumulators.set('Weather Station Orquideario', {
             nodeName: 'Weather Station Orquideario',
@@ -556,14 +565,16 @@ function setupMqttHandlers() {
           emaManager.setOffline()
 
           // Limpiar todo el estado de auditorías al entrar en sleep
-          for (const key of Object.keys(emaAuditState.requested) as Array<keyof typeof emaAuditState.requested>) {
+          for (const key of Object.keys(emaAuditState.requested) as Array<
+            keyof typeof emaAuditState.requested
+          >) {
             emaAuditState.requested[key] = false
             emaAuditState.active[key] = false
           }
           mqttClient.publish(
             'PristinoPlant/Weather_Station/ZONA_A/audit/state',
             JSON.stringify(emaAuditState),
-            { retain: true, qos: 1 }
+            { retain: true, qos: 1 },
           )
 
           await prisma.deviceLog
@@ -581,17 +592,19 @@ function setupMqttHandlers() {
             return
           }
           emaManager.setOffline()
-          Logger.node('OFFLINE', message === 'lwt_disconnect' ? 'BROKER' : 'NODE')
+          Logger.node('OFFLINE', `Weather Station Orquideario (${message === 'lwt_disconnect' ? 'BROKER' : 'NODE'})`)
 
           // Limpiar todo el estado de auditorías al quedar offline
-          for (const key of Object.keys(emaAuditState.requested) as Array<keyof typeof emaAuditState.requested>) {
+          for (const key of Object.keys(emaAuditState.requested) as Array<
+            keyof typeof emaAuditState.requested
+          >) {
             emaAuditState.requested[key] = false
             emaAuditState.active[key] = false
           }
           mqttClient.publish(
             'PristinoPlant/Weather_Station/ZONA_A/audit/state',
             JSON.stringify(emaAuditState),
-            { retain: true, qos: 1 }
+            { retain: true, qos: 1 },
           )
 
           await prisma.deviceLog
@@ -611,6 +624,84 @@ function setupMqttHandlers() {
         return
       }
 
+      // 1.10 Comandos encolados del Frontend hacia el Nodo EMA
+      if (topic === 'PristinoPlant/Weather_Station/ZONA_A/cmd/request') {
+        const cmdStr = message.trim()
+
+        // Proxy ACK inmediato a la UI
+        mqttClient.publish(
+          'PristinoPlant/Weather_Station/ZONA_A/cmd/received',
+          cmdStr,
+          { qos: 1 }
+        )
+
+        if (cmdStr.startsWith('audit_')) {
+          const isOn = cmdStr.endsWith('_on')
+          const isOff = cmdStr.endsWith('_off')
+          const category = isOn 
+            ? cmdStr.slice(6, -3) as keyof typeof emaAuditState.requested
+            : isOff 
+              ? cmdStr.slice(6, -4) as keyof typeof emaAuditState.requested
+              : null
+
+          if (category && category in emaAuditState.requested) {
+            if (isOn) {
+              emaAuditState.requested[category] = true
+              mqttClient.publish(
+                'PristinoPlant/Weather_Station/ZONA_A/audit/state',
+                JSON.stringify(emaAuditState),
+                { retain: true, qos: 1 }
+              )
+              executeEmaCommand(cmdStr, true)
+            } else if (isOff) {
+              emaAuditState.requested[category] = false
+              mqttClient.publish(
+                'PristinoPlant/Weather_Station/ZONA_A/audit/state',
+                JSON.stringify(emaAuditState),
+                { retain: true, qos: 1 }
+              )
+              emaManager.removeByTaskId(`audit_${category}_on`)
+              executeEmaCommand(cmdStr, true)
+            }
+          }
+        } else {
+          executeEmaCommand(cmdStr, true)
+        }
+        return
+      }
+
+      // 1.11 Procesar reportes de estado físico de auditoría del EMA
+      if (topic === 'PristinoPlant/Weather_Station/ZONA_A/audit/state') {
+        try {
+          const parsed = JSON.parse(message)
+          if (parsed.requested || parsed.active) return
+
+          for (const key of ['lux', 'wifi', 'ram', 'temp', 'hum'] as const) {
+            const isPhysicallyActive = parsed[key] === true
+            emaAuditState.active[key] = isPhysicallyActive
+            if (!isPhysicallyActive) {
+              emaAuditState.requested[key] = false
+            }
+          }
+
+          if (parsed.lux_hw !== undefined) emaAuditState.lux_hw = parsed.lux_hw
+          if (parsed.temp_hw !== undefined) emaAuditState.temp_hw = parsed.temp_hw
+          if (parsed.hum_hw !== undefined) emaAuditState.hum_hw = parsed.hum_hw
+          if (parsed.rain_hw !== undefined) emaAuditState.rain_hw = parsed.rain_hw
+
+          mqttClient.publish(
+            'PristinoPlant/Weather_Station/ZONA_A/audit/state',
+            JSON.stringify(emaAuditState),
+            { retain: true, qos: 1 }
+          )
+
+          checkAndSleepEma()
+        } catch (err) {
+          Logger.error('Error parseando audit/state de EMA:', err)
+        }
+        return
+      }
+
       // 2. Acuse de Recibo (ACK)
       if (
         topic === 'PristinoPlant/Actuator_Controller/cmd/received' ||
@@ -620,7 +711,7 @@ function setupMqttHandlers() {
           const parsed = JSON.parse(message)
           const taskId = parsed.task_id
           const isActuator = topic.includes('Actuator')
-          const nodeName = isActuator ? 'Nodo Actuador' : 'Estación EMA'
+          const nodeName = isActuator ? 'Nodo Actuador' : 'Nodo EMA'
 
           if (taskId) {
             const task = await recordTaskEvent(
@@ -854,6 +945,7 @@ function setupMqttHandlers() {
           // 🚀 [PRESERVADO]: Mecanismo reactivo de acumulación post-boot.
           // Captura las variables del lote actual e hidrata el acumulador sin importar el orden de llegada.
           const accumulator = bootAccumulators.get(nodeName)
+
           if (accumulator) {
             if (hasLux && lux !== null) accumulator.lux = lux
             if (hasTemp && temp !== null) accumulator.temp = temp
@@ -1117,13 +1209,16 @@ async function checkEmaHeartbeat() {
   if (emaManager.connectionState === 'offline' && !isEmaSleeping) return
 
   const elapsed = Date.now() - lastEmaHeartbeat
+
   if (elapsed > 30 * 60 * 1000) {
     Logger.node('OFFLINE', 'Weather Station Orquideario (Watchdog Timeout)')
     emaManager.setOffline()
     isEmaSleeping = false
 
     // Sincronizar el estado de auditorías a inactivo
-    for (const key of Object.keys(emaAuditState.requested) as Array<keyof typeof emaAuditState.requested>) {
+    for (const key of Object.keys(emaAuditState.requested) as Array<
+      keyof typeof emaAuditState.requested
+    >) {
       emaAuditState.requested[key] = false
       emaAuditState.active[key] = false
     }
@@ -1132,7 +1227,7 @@ async function checkEmaHeartbeat() {
     mqttClient.publish(
       'PristinoPlant/Weather_Station/ZONA_A/audit/state',
       JSON.stringify(emaAuditState),
-      { retain: true, qos: 1 }
+      { retain: true, qos: 1 },
     )
 
     // Persistir estado offline en DB
@@ -1147,7 +1242,10 @@ async function checkEmaHeartbeat() {
       .catch((err) => Logger.error('Fallo persistiendo deviceLog para EMA (Watchdog OFFLINE)', err))
 
     // Publicar estado offline en canal de status
-    mqttClient.publish('PristinoPlant/Weather_Station/ZONA_A/status', 'offline', { retain: true, qos: 1 })
+    mqttClient.publish('PristinoPlant/Weather_Station/ZONA_A/status', 'offline', {
+      retain: true,
+      qos: 1,
+    })
   }
 }
 
@@ -1308,9 +1406,9 @@ async function handleNodeSync(isBoot: boolean = false, previousHeartbeat: number
 
   // Marcamos estado tanto en consola como en Influx/Historial
   if (statusToSave === 'REBOOT') {
-    Logger.node('REBOOT')
+    Logger.node('REBOOT', 'Actuator_Controller')
   } else {
-    Logger.node('ONLINE')
+    Logger.node('ONLINE', 'Actuator_Controller')
   }
 
   if (irrigationRetryManager.connectionState !== 'online' || statusToSave === 'REBOOT' || isBoot) {
@@ -1383,31 +1481,35 @@ async function handleNodeSync(isBoot: boolean = false, previousHeartbeat: number
     }
   }
 
-  // El secuenciador ya está en modo STABILIZING (60s) gracias al caller de boot
-  resetSamplingState()
-  syncNodeSampling(undefined, true)
+  const shouldSync = isBoot || previousHeartbeat !== 0
 
-  // Al reconectarse o reiniciarse el nodo, asumimos que se inicializa en INTERVAL_NORMAL.
-  lastSentRainInterval = 'INTERVAL_NORMAL'
+  if (shouldSync) {
+    // El secuenciador ya está en modo STABILIZING (60s) gracias al caller de boot
+    resetSamplingState()
+    syncNodeSampling(undefined, true)
 
-  // Si las condiciones de ráfaga ya están dadas en este momento (según la última iluminancia conocida),
-  // forzamos al nodo a entrar a modo ráfaga de forma inmediata.
-  if (lastKnownLux !== null) {
-    const now = new Date()
-    const caracasHour = parseInt(
-      new Intl.DateTimeFormat('en-US', {
-        timeZone: 'America/Caracas',
-        hour: 'numeric',
-        hour12: false,
-      }).format(now),
-    )
+    // Al reconectarse o reiniciarse el nodo, asumimos que se inicializa en INTERVAL_NORMAL.
+    lastSentRainInterval = 'INTERVAL_NORMAL'
 
-    if (caracasHour >= 8 && caracasHour < 16 && lastKnownLux <= 10000) {
-      lastSentRainInterval = 'INTERVAL_BURST'
-      Logger.rain(
-        `Nodo reconectado/reiniciado. Forzando intervalo de chequeo de lluvia a 1 minuto (Ráfaga) por iluminancia previa (${lastKnownLux.toFixed(0)} lx) a las ${caracasHour}h.`,
+    // Si las condiciones de ráfaga ya están dadas en este momento (según la última iluminancia conocida),
+    // forzamos al nodo a entrar a modo ráfaga de forma inmediata.
+    if (lastKnownLux !== null) {
+      const now = new Date()
+      const caracasHour = parseInt(
+        new Intl.DateTimeFormat('en-US', {
+          timeZone: 'America/Caracas',
+          hour: 'numeric',
+          hour12: false,
+        }).format(now),
       )
-      executeSystemCommand('INTERVAL_BURST', true)
+
+      if (caracasHour >= 8 && caracasHour < 16 && lastKnownLux <= 10000) {
+        lastSentRainInterval = 'INTERVAL_BURST'
+        Logger.rain(
+          `Nodo reconectado/reiniciado. Forzando intervalo de chequeo de lluvia a 1 minuto (Ráfaga) por iluminancia previa (${lastKnownLux.toFixed(0)} lx) a las ${caracasHour}h.`,
+        )
+        executeSystemCommand('INTERVAL_BURST', true)
+      }
     }
   }
 
@@ -1550,12 +1652,10 @@ async function checkAndRecoverMissingStats(daysToLookBack = 7) {
     }
 
     if (processedCount > 0) {
-      Logger.info(
-        `🔍 Procesamiento retroactivo completado: se recuperaron ${processedCount} estadísticas faltantes.`,
-      )
+      Logger.info(`📊 Se procesaron ${processedCount} días de telemetría faltante`)
     }
   } catch (error) {
-    Logger.error('Error durante la verificación retroactiva de estadísticas:', error)
+    Logger.error('Fallo el procesamiento retroactivo de telemetría', error)
   }
 }
 
