@@ -1276,7 +1276,8 @@ def publish_single_batch(metric_name, ring_buffer):
         client.publish(MQTT_TOPIC_METRICS, payload_batch, qos=0)
         
         if DEBUG:
-            print(f"📊  [Batch] {metric_name.capitalize()} enviado con éxito ({count} muestras)")
+            name = metric_name.decode() if isinstance(metric_name, bytes) else metric_name
+            print(f"📊  [Batch] {name} enviado con éxito ({count} muestras)")
             
         ring_buffer.clear()
         return True
@@ -1285,38 +1286,69 @@ def publish_single_batch(metric_name, ring_buffer):
 # ---- Utilidades de Telemetría: Publica de manera asincrona todos los batches ----
 async def flush_telemetry_batches_async():
     """Vaciado asíncrono de buffers (evita bloquear el event loop cooperativo de uasyncio)."""
+    if not (client and getattr(client, 'sock', None) and wlan and wlan.isconnected()):
+        return
+
+    # 1. Illuminance
     try:
-        if not (client and getattr(client, 'sock', None) and wlan and wlan.isconnected()):
-            return
-        # 🔒 [Escudo de Concurrencia]: Cada publicación adquiere el lock para evitar
-        # interleaving de paquetes MQTT (ej: PUBACK/SUBACK pendientes mezclados con PUBLISH).
         async with mqtt_lock:
             if client and getattr(client, 'sock', None):
                 if publish_single_batch("illuminance", illuminance_Batch):
                     await asyncio.sleep_ms(500)
+    except Exception as e:
+        if DEBUG: print(f"⚠️ Fallo publicando illuminance batch: {e}")
+        await check_critical_mqtt_errors(e)
+
+    # 2. Temperature
+    try:
+        async with mqtt_lock:
+            if client and getattr(client, 'sock', None):
                 if publish_single_batch("temperature", temperature_Batch):
                     await asyncio.sleep_ms(500)
+    except Exception as e:
+        if DEBUG: print(f"⚠️ Fallo publicando temperature batch: {e}")
+        await check_critical_mqtt_errors(e)
+
+    # 3. Humidity
+    try:
+        async with mqtt_lock:
+            if client and getattr(client, 'sock', None):
                 if publish_single_batch("humidity", humidity_Batch):
                     await asyncio.sleep_ms(500)
     except Exception as e:
-        if DEBUG: print(f"⚠️ Fallo en flush_telemetry_batches_async: {e}")
+        if DEBUG: print(f"⚠️ Fallo publicando humidity batch: {e}")
         await check_critical_mqtt_errors(e)
 
 # ---- Utilidades de Telemetría: Publica de manera sincrona todos los batches ----
 def flush_telemetry_batches():
     """Vaciado síncrono de buffers (exclusivo para detención segura / stopped_program)."""
+    if not (client and getattr(client, 'sock', None) and wlan and wlan.isconnected()):
+        return
+    from utime import sleep_ms
+
+    # 1. Illuminance
     try:
-        if not (client and getattr(client, 'sock', None) and wlan and wlan.isconnected()):
-            return
-        from utime import sleep_ms
-        if publish_single_batch("illuminance", illuminance_Batch):
-            sleep_ms(300)
-        if publish_single_batch("temperature", temperature_Batch):
-            sleep_ms(300)
-        if publish_single_batch("humidity", humidity_Batch):
-            sleep_ms(300)
-    except Exception as _e:
-        if DEBUG: print(f"⚠️ Fallo en flush_telemetry_batches: {_e}")
+        if client and getattr(client, 'sock', None):
+            if publish_single_batch("illuminance", illuminance_Batch):
+                sleep_ms(300)
+    except Exception as e:
+        if DEBUG: print(f"⚠️ Fallo publicando illuminance batch (síncrono): {e}")
+
+    # 2. Temperature
+    try:
+        if client and getattr(client, 'sock', None):
+            if publish_single_batch("temperature", temperature_Batch):
+                sleep_ms(300)
+    except Exception as e:
+        if DEBUG: print(f"⚠️ Fallo publicando temperature batch (síncrono): {e}")
+
+    # 3. Humidity
+    try:
+        if client and getattr(client, 'sock', None):
+            if publish_single_batch("humidity", humidity_Batch):
+                sleep_ms(300)
+    except Exception as e:
+        if DEBUG: print(f"⚠️ Fallo publicando humidity batch (síncrono): {e}")
 
 # ---- CORRUTINA: Gestión de Conexión MQTT (Relay Modules) ----
 async def mqtt_connector_task(client_id):
