@@ -40,8 +40,8 @@ MAX_OFFLINE_RESET_SEC = const(600)
 WDT_TIMEOUT_MS = const(125000)
 # Tamaño máximo de la cola de mensajes MQTT para evitar OOM
 MAX_BUFFER_SIZE = const(15)
-# Tamaño de lote de telemetría (5 muestras = 5 minutos con frecuencia de 1 min)
-BATCH_SIZE = const(5)
+# Tamaño de lote de telemetría (12 muestras = 1 hora con frecuencia de 5 min)
+BATCH_SIZE = const(12)
 
 # ---- Hardware: Pines de Alimentación y Datos de Sensores (Centralizados) ----
 PIN_DHT_VCC      = const(15)
@@ -1393,7 +1393,7 @@ async def transmit_and_sync():
 # ---- CORUTINA: Muestreo Periódico de Sensores en Modo Continuo ----
 async def sensor_publish_task():
     """
-    Muestreo offline del DHT22 y BH1750 cada 1 minuto (60s).
+    Muestreo offline del DHT22 y BH1750 cada 5 minutos (300s).
     Acumula en RingBuffers y gatilla transmisión al completar el lote.
     """
     global CONNECTED_ALLOWED
@@ -1409,7 +1409,7 @@ async def sensor_publish_task():
 
     # === Bucle de Muestreo Periódico ===
     while True:
-        await asyncio.sleep(60) # Muestreo cada 1 minuto (pruebas)
+        await asyncio.sleep(300) # Muestreo cada 5 minutos (producción)
 
         temp, hum, lux = None, None, None
 
@@ -1465,8 +1465,13 @@ async def sensor_publish_task():
             c = max(temperature_Batch.count, illuminance_Batch.count)
             print(f"📊 Data ({c}/{BATCH_SIZE}): Temperature: {Colors.MAGENTA}{temp}°C{Colors.RESET}  Humidity: {Colors.BLUE}{hum}%{Colors.RESET}  Illuminance: {Colors.YELLOW}{lux} lux{Colors.RESET}")
 
-        # 4. Transmitir si se completa el lote
-        if temperature_Batch.count >= BATCH_SIZE or (IS_SAMPLING_LUX and illuminance_Batch.count >= BATCH_SIZE):
+        # 4. Transmitir si se completa el lote o en la hora en punto (minuto 0) con muestras acumuladas
+        from machine import RTC
+        dt = RTC().datetime()
+        is_clock_synced = (dt[0] >= 2026)
+        is_top_of_hour = (dt[5] == 0) if is_clock_synced else False
+        has_samples = temperature_Batch.count > 0
+        if temperature_Batch.count >= BATCH_SIZE or (IS_SAMPLING_LUX and illuminance_Batch.count >= BATCH_SIZE) or (is_top_of_hour and has_samples):
             await transmit_and_sync()
         else:
             # Apagar si la radio quedó encendida por una auditoría que terminó
@@ -1609,6 +1614,17 @@ async def main_transmission():
     asyncio.create_task(watchdog_wifi_connection())
 
     try:
+        # Sincronización de boot inicial: si el reloj no está en hora,
+        # leemos los sensores físicos para presentarnos al Scheduler con telemetrías válidas.
+        from machine import RTC
+        if RTC().datetime()[0] < 2026:
+            if DEBUG: print("\n🌡️  Primer boot: Inicializando y leyendo sensores físicos de prueba...")
+            global IS_SAMPLING_LUX
+            old_sampling = IS_SAMPLING_LUX
+            IS_SAMPLING_LUX = True
+            await setup_sensors()
+            IS_SAMPLING_LUX = old_sampling
+
         # Esperar conexión MQTT
         await asyncio.wait_for(mqtt_connected_event.wait(), 45)
         if DEBUG: print("\n📡 Conectado a MQTT. Esperando que finalice el envío de batches...")
@@ -1621,11 +1637,29 @@ async def main_transmission():
             await asyncio.sleep(1)
             if wdt: wdt.feed()
 
-        # Ventana de 10s para recibir comandos (sync horaria y auditorías)
-        if DEBUG: print("⏰ Ventana de sincronización abierta por 10 segundos...")
-        for _ in range(10):
-            await asyncio.sleep(1)
-            if wdt: wdt.feed()
+        # Ventana de sincronización inteligente (espera a sleep o timeout de 20s)
+        if DEBUG: print("⏰ Ventana de sincronización abierta...")
+        sync_event.clear()
+        start_time = utime.ticks_ms()
+        sync_timeout_ms = 20000
+
+        while not sleep_received:
+            elapsed = utime.ticks_diff(utime.ticks_ms(), start_time)
+            remaining_ms = sync_timeout_ms - elapsed
+            if remaining_ms <= 0:
+                if DEBUG: print("\n⚠️  Timeout de ventana de sincronización con el Scheduler")
+                break
+                
+            sync_event.clear()
+            try:
+                # Esperamos al evento en segundos
+                await asyncio.wait_for(sync_event.wait(), remaining_ms / 1000.0)
+                if wdt: wdt.feed()
+            except asyncio.TimeoutError:
+                break
+            except Exception as e:
+                if DEBUG: print(f"⚠️  Error esperando comandos en ventana: {e}")
+                break
 
         # Limpiar buffers de telemetría transmitida en el RTC RAM
         rtc_data = load_rtc_buffer()
@@ -1643,10 +1677,10 @@ async def main_transmission():
         CONNECTED_ALLOWED = False
         shutdown(status=b"sleep")
 
-        # Calcular tiempo para el siguiente ciclo exacto (múltiplo de 1 min)
-        sec_to_next = 60 - (utime.time() % 60)
-        if sec_to_next < 10:
-            sec_to_next += 60
+        # Calcular tiempo para el siguiente ciclo exacto (múltiplo de 5 min)
+        sec_to_next = 300 - (utime.time() % 300)
+        if sec_to_next < 30:
+            sec_to_next += 300
 
         if DEBUG: print(f"💤 Transmisión terminada. Entrando en Deep Sleep por {sec_to_next} segundos.")
         await asyncio.sleep_ms(200) # Flush sockets
@@ -1728,6 +1762,27 @@ def run_cycle():
 
     # Determinar si el reloj está sincronizado (año >= 2026)
     is_clock_synced = (dt[0] >= 2026)
+
+    # 3. Reporte Inicial / Sincronización de Primer Arranque
+    # Si el reloj no está sincronizado, forzamos una conexión inmediata no bloqueante para
+    # presentarnos al Scheduler, sincronizar el RTC y obtener el estado real de is_sampling_lux.
+    if not is_clock_synced:
+        if DEBUG: print("🚀 Primer arranque o desincronización horaria detectada. Conectando al Scheduler...")
+        try:
+            asyncio.run(main_transmission())
+            # Recargar estados del RTC tras sincronización exitosa
+            rtc_data = load_rtc_buffer()
+            IS_SAMPLING_LUX = rtc_data.get("is_sampling_lux", False)
+            for k, v in rtc_data.get("audit", {}).items():
+                if k in AUDIT_MODE:
+                    AUDIT_MODE[k] = v
+            is_auditing = any(AUDIT_MODE.values())
+            dt = RTC().datetime()
+            current_hour = dt[4]
+            is_clock_synced = (dt[0] >= 2026)
+        except Exception as e:
+            if DEBUG: print(f"❌ Error fatal en transmisión de primer arranque: {e}")
+            safe_reset()
 
     if is_clock_synced:
         # Horario de día: de 5:00 AM a 6:59 PM (5 <= hour < 19)
@@ -1868,8 +1923,9 @@ def run_cycle():
     samples_count = len(rtc_data["temp"])
     if DEBUG: print(f"📊 Muestras en buffer RTC: {samples_count}/{BATCH_SIZE}")
 
-    if samples_count >= BATCH_SIZE:
-        if DEBUG: print("🚀 Límite de muestras alcanzado. Iniciando transmisión asíncrona...")
+    is_top_of_hour = (dt[5] == 0) if is_clock_synced else False
+    if samples_count >= BATCH_SIZE or (is_top_of_hour and samples_count > 0):
+        if DEBUG: print("🚀 Límite de muestras o alineación horaria alcanzado. Iniciando transmisión asíncrona...")
         
         # Hidratar colas globales de RingBuffer para transmisión
         for ts, val in rtc_data["temp"]:
@@ -1894,10 +1950,10 @@ def run_cycle():
         # Guardar en RTC e ir a Deep Sleep
         save_rtc_buffer(rtc_data)
         
-        # Calcular segundos para el próximo ciclo múltiplo de 1 min (60 segundos)
-        sec_to_next = 60 - (utime.time() % 60)
-        if sec_to_next < 10:
-            sec_to_next += 60
+        # Calcular segundos para el próximo ciclo múltiplo de 5 min (300 segundos)
+        sec_to_next = 300 - (utime.time() % 300)
+        if sec_to_next < 30:
+            sec_to_next += 300
 
         if DEBUG: print(f"💤 Ciclo finalizado. Entrando en Deep Sleep por {sec_to_next} segundos.")
         utime.sleep_ms(100) # Pausa breve para vaciar UART
@@ -1960,6 +2016,8 @@ def shutdown(status=b"offline"):
             if DEBUG:
                 print(f"⚠️  Error publicando {status.decode() if hasattr(status, 'decode') else status} en shutdown: {e}")
     force_disconnect_mqtt(silent=False)
+    # Retardo de cortesía (300ms) para vaciado del buffer físico de red/SSL
+    sleep_ms(300)
     if wlan and wlan.isconnected():
         try:
             wlan.disconnect()
@@ -1976,6 +2034,9 @@ def safe_reset():
     except: pass
     sleep_ms(1000)
     reset()
+
+def main():
+    run_cycle()
 
 if __name__ == '__main__':
     run_cycle()

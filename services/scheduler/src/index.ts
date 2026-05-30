@@ -130,6 +130,7 @@ let lastRainState: 'Raining' | 'Dry' = 'Dry'
 let lastFirmwareHeartbeat: number = 0
 let isEmaSleeping = false
 let lastSyncTimestamp: number = 0
+let lastTimeSyncSent: number = 0
 let openRainEventId: string | null = null // ID del RainEvent abierto en Postgres
 
 // ---- Sincronización de Clima (DHT22) ----
@@ -1598,6 +1599,12 @@ async function handleNodeSync(
  * Envía un comando con la hora local actual de Caracas para sincronizar el RTC del EMA.
  */
 function sendCaracasTimeToEma(): void {
+  const nowMs = Date.now()
+  if (nowMs - lastTimeSyncSent < 30000) {
+    return
+  }
+  lastTimeSyncSent = nowMs
+
   try {
     const now = new Date()
     const parts = new Intl.DateTimeFormat('es-VE', {
