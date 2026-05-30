@@ -777,46 +777,45 @@ Si utilizas Windows y PowerShell, puedes automatizar todo el flujo agregando est
        # 🛡️ Validar la existencia de commit.txt antes de iniciar
        $CommitFile = "commit.txt"
        if (-not (Test-Path $CommitFile)) {
-           Write-Host "`n❌ Error: No se encontró '$CommitFile' en el directorio actual." -ForegroundColor Red
-           Write-Host "   Crea '$CommitFile' con el mensaje de commit antes de continuar.`n" -ForegroundColor Gray
+           Write-Host "`n❌ Error: No se encontró '$CommitFile' en el directorio actual.`n" -ForegroundColor Red
+           Write-Host "Crea '$CommitFile' con el mensaje de commit antes de continuar.`n" -ForegroundColor Gray
            return
        }
 
-       Write-Host "`n🚀 Iniciando flujo de sincronización..." -ForegroundColor Cyan
-
        # 1. Preparar Dev
-       Write-Host "`n┌── 🌿 Preparando rama Dev..." -ForegroundColor Gray
+       Write-Host "`n🌿 Preparando rama Dev`n" -ForegroundColor Gray
        git checkout Dev
        if ($LASTEXITCODE -ne 0) { return }
        git add .
 
        # 2. Commit y limpieza
-       Write-Host "├── 📝 Aplicando commit desde $CommitFile..." -ForegroundColor Gray
+       Write-Host "`n📝 Aplicando commit desde $CommitFile`n" -ForegroundColor Gray
        git commit -F $CommitFile
        if ($LASTEXITCODE -ne 0) { return }
        Remove-Item $CommitFile -Force
+       Write-Host "`n🗑️ Archivo $CommitFile eliminado`n" -ForegroundColor Gray
 
        # 3. Push Dev
-       Write-Host "├── 📤 Subiendo cambios de Dev..." -ForegroundColor Gray
+       Write-Host "`n📤 Subiendo cambios de Dev a remoto`n" -ForegroundColor Gray
        git push
        if ($LASTEXITCODE -ne 0) { return }
 
        # 4. Actualizar main
-       Write-Host "├── 🔀 Actualizando main..." -ForegroundColor Gray
+       Write-Host "`n🔀 Cambiando a rama main y actualizando`n" -ForegroundColor Gray
        git checkout main
        if ($LASTEXITCODE -ne 0) { return }
        git pull origin main
        if ($LASTEXITCODE -ne 0) { return }
 
        # 5. Fusionar y Push main
-       Write-Host "├── 🤝 Fusionando Dev en main..." -ForegroundColor Gray
+       Write-Host "`n🤝 Fusionando Dev en main`n" -ForegroundColor Gray
        git merge Dev
        if ($LASTEXITCODE -ne 0) {
            git merge --abort 2>$null
            git checkout Dev
            return
        }
-       Write-Host "├── 📤 Subiendo main..." -ForegroundColor Gray
+       Write-Host "`n📤 Subiendo rama main a remoto`n" -ForegroundColor Gray
        git push origin main
        if ($LASTEXITCODE -ne 0) {
            git checkout Dev
@@ -824,10 +823,8 @@ Si utilizas Windows y PowerShell, puedes automatizar todo el flujo agregando est
        }
 
        # 6. Retorno
-       Write-Host "└── 🌿 Volviendo a la rama Dev..." -ForegroundColor Gray
+       Write-Host "`n🌿 Volviendo a la rama Dev`n" -ForegroundColor Gray
        git checkout Dev
-
-       Write-Host "`n✅ Sincronización completada con éxito.`n" -ForegroundColor Green
    }
 
    Set-Alias -Name gmp -Value git-merge-push

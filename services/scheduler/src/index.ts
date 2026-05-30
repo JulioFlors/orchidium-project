@@ -316,6 +316,8 @@ function flushBootLog(nodeSource: string) {
       `Iluminancia: ${colors.yellow}${accumulator.lux.toFixed(0)} lx${colors.reset}`,
       '☀️',
     )
+  } else if (!isLuxSamplingActive()) {
+    Logger.info(`Iluminancia: ${colors.dim}Muestreo Suspendido (Anochecer)${colors.reset}`, '🌙')
   } else {
     Logger.info(`Iluminancia: ${colors.red}No se detecto el sensor BH1750${colors.reset}`, '⚠️')
     hasInitFailure = true
@@ -880,6 +882,7 @@ function setupMqttHandlers() {
 
         if (isEma) {
           lastEmaHeartbeat = Date.now()
+          sendCaracasTimeToEma()
         }
 
         try {
@@ -999,8 +1002,11 @@ function setupMqttHandlers() {
             if (hasHum && hum !== null) accumulator.hum = hum
 
             // Si ya recolectamos las métricas requeridas, flusheamos el log inmediatamente sin esperar el timeout
+            const isLuxRequired = isLuxSamplingActive()
             const allPresent =
-              accumulator.lux !== null && accumulator.temp !== null && accumulator.hum !== null
+              (!isLuxRequired || accumulator.lux !== null) &&
+              accumulator.temp !== null &&
+              accumulator.hum !== null
 
             if (allPresent) flushBootLog(nodeName)
           }
@@ -1589,6 +1595,50 @@ async function handleNodeSync(
 }
 
 /**
+ * Envía un comando con la hora local actual de Caracas para sincronizar el RTC del EMA.
+ */
+function sendCaracasTimeToEma(): void {
+  try {
+    const now = new Date()
+    const parts = new Intl.DateTimeFormat('es-VE', {
+      timeZone: 'America/Caracas',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).formatToParts(now)
+
+    const getPart = (type: Intl.DateTimeFormatPartTypes): number => {
+      const found = parts.find((p) => p.type === type)
+
+      return found ? parseInt(found.value, 10) : 0
+    }
+
+    const year = getPart('year')
+    const month = getPart('month')
+    const day = getPart('day')
+    const hour = getPart('hour')
+    const minute = getPart('minute')
+    const second = getPart('second')
+
+    const jsDay = now.getDay()
+    const weekday = jsDay === 0 ? 6 : jsDay - 1
+
+    const payload = JSON.stringify({
+      time: [year, month, day, weekday, hour, minute, second, 0],
+    })
+
+    executeEmaCommand(payload, false)
+    Logger.mqtt(`Sincronización horaria enviada al EMA: ${payload}`, 'Nodo EMA')
+  } catch (error) {
+    Logger.error('Error enviando sincronización horaria al EMA:', error)
+  }
+}
+
+/**
  * Orquesta la sincronización completa de la Estación EMA tras reconexión o reinicio.
  */
 async function handleEmaSync(statusToSave: DeviceStatus) {
@@ -1608,6 +1658,9 @@ async function handleEmaSync(statusToSave: DeviceStatus) {
       },
     })
     .catch((err) => Logger.error('Fallo persistiendo deviceLog para EMA', err))
+
+  // Sincronizar el reloj del EMA
+  sendCaracasTimeToEma()
 }
 
 /**

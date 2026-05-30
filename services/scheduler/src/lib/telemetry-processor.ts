@@ -5,10 +5,51 @@ import { influxClient } from './influx'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// Límites mínimos de muestras para considerar un día válido
-const MIN_SAMPLES_TEMP_HUM = 500
-const MIN_SAMPLES_LUX_BOTANICAL = 250
-const MIN_SAMPLES_LUX_TOTAL = 420
+// ── LÓGICA DE LÍMITES DE SUPERVIVENCIA ANTE CORTES (60% de operatividad esperada / tolerando 40% de pérdida)
+//
+// Fórmulas aplicadas:
+// - Muestras Totales (T) = Frecuencia (muestras/hora) * Duración de la ventana (horas)
+// - Mínimo Requerido (M) = T * 0.60 (60% de datos válidos, tolerando un corte continuo de luz/red de hasta el 40% del tiempo)
+//
+// 1. Zona Exterior (EXTERIOR) - Frecuencia de muestreo: 1 muestra/minuto (60 muestras/hora)
+//    - Temp/Hum (24h): 24h * 60 = 1440 muestras esperadas. Límite (60%): 1440 * 0.60 = 864
+//    - Lux Total (14h, 5am-7pm): 14h * 60 = 840 muestras esperadas. Límite (60%): 840 * 0.60 = 504
+//    - Lux Botánica (8h, 8am-4pm): 8h * 60 = 480 muestras esperadas. Límite (60%): 480 * 0.60 = 288
+//
+// 2. Zona Orquideario (ZONA_A) - Frecuencia de muestreo: 1 muestra/5minutos (12 muestras/hora)
+//    - Temp/Hum (24h): 24h * 12 = 288 muestras esperadas. Límite (60%): 288 * 0.60 = 172.8 (redondeado a 173)
+//    - Lux Total (14h, 5am-7pm): 14h * 12 = 168 muestras esperadas. Límite (60%): 168 * 0.60 = 100.8 (redondeado a 101)
+//    - Lux Botánica (8h, 8am-4pm): 8h * 12 = 96 muestras esperadas. Límite (60%): 96 * 0.60 = 57.6 (redondeado a 58)
+const ZONE_LIMITS: Record<
+  ZoneType,
+  { readonly minTempHum: number; readonly minLuxTotal: number; readonly minLuxBotanical: number }
+> = {
+  [ZoneType.EXTERIOR]: {
+    minTempHum: 864,
+    minLuxTotal: 504,
+    minLuxBotanical: 288,
+  },
+  [ZoneType.ZONA_A]: {
+    minTempHum: 173,
+    minLuxTotal: 101,
+    minLuxBotanical: 58,
+  },
+  [ZoneType.ZONA_B]: {
+    minTempHum: 173,
+    minLuxTotal: 101,
+    minLuxBotanical: 58,
+  },
+  [ZoneType.ZONA_C]: {
+    minTempHum: 173,
+    minLuxTotal: 101,
+    minLuxBotanical: 58,
+  },
+  [ZoneType.ZONA_D]: {
+    minTempHum: 173,
+    minLuxTotal: 101,
+    minLuxBotanical: 58,
+  },
+}
 
 function rowTimeToDate(rawTime: unknown): Date {
   if (rawTime instanceof Date) return rawTime
@@ -285,9 +326,10 @@ export async function processDay(
   }
 
   // ── 4. Cálculos finales ──────────────────────────────────────────────────
-  const isTempValid = countTemp >= MIN_SAMPLES_TEMP_HUM
-  const isHumValid = countHum >= MIN_SAMPLES_TEMP_HUM
-  const isLuxValid = countLumTotal >= MIN_SAMPLES_LUX_TOTAL || countLum >= MIN_SAMPLES_LUX_BOTANICAL
+  const limits = ZONE_LIMITS[zone]
+  const isTempValid = countTemp >= limits.minTempHum
+  const isHumValid = countHum >= limits.minTempHum
+  const isLuxValid = countLumTotal >= limits.minLuxTotal || countLum >= limits.minLuxBotanical
 
   const dli =
     isLuxValid && dliAccumulator > 0 ? Number((dliAccumulator / 1_000_000).toFixed(2)) : null
@@ -299,17 +341,17 @@ export async function processDay(
   if (!silent) {
     if (!isTempValid && countTemp > 0) {
       Logger.warn(
-        `[${dayLabel}] [${zone}] Temperatura descartada por baja densidad de muestras (${countTemp} < ${MIN_SAMPLES_TEMP_HUM}).`,
+        `[${dayLabel}] [${zone}] Temperatura descartada por baja densidad de muestras (${countTemp} < ${limits.minTempHum}).`,
       )
     }
     if (!isHumValid && countHum > 0) {
       Logger.warn(
-        `[${dayLabel}] [${zone}] Humedad descartada por baja densidad de muestras (${countHum} < ${MIN_SAMPLES_TEMP_HUM}).`,
+        `[${dayLabel}] [${zone}] Humedad descartada por baja densidad de muestras (${countHum} < ${limits.minTempHum}).`,
       )
     }
     if (!isLuxValid && countLumTotal > 0) {
       Logger.warn(
-        `[${dayLabel}] [${zone}] Iluminancia/DLI descartada por baja densidad de muestras (Total: ${countLumTotal} < ${MIN_SAMPLES_LUX_TOTAL} y Window: ${countLum} < ${MIN_SAMPLES_LUX_BOTANICAL}).`,
+        `[${dayLabel}] [${zone}] Iluminancia/DLI descartada por baja densidad de muestras (Total: ${countLumTotal} < ${limits.minLuxTotal} y Window: ${countLum} < ${limits.minLuxBotanical}).`,
       )
     }
   }

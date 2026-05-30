@@ -16,7 +16,7 @@ from micropython import const
 
 # ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
-DEBUG = True
+DEBUG = False
 
 # ---- Configuración MQTT (const() para ahorro de RAM) ----
 # El broker esperará ~1.5x este valor antes de desconectar al cliente.
@@ -40,8 +40,15 @@ MAX_OFFLINE_RESET_SEC = const(600)
 WDT_TIMEOUT_MS = const(125000)
 # Tamaño máximo de la cola de mensajes MQTT para evitar OOM
 MAX_BUFFER_SIZE = const(15)
-# Tamaño de lote de telemetría (10 muestras = 10 minutos)
-BATCH_SIZE = const(10)
+# Tamaño de lote de telemetría (5 muestras = 5 minutos con frecuencia de 1 min)
+BATCH_SIZE = const(5)
+
+# ---- Hardware: Pines de Alimentación y Datos de Sensores (Centralizados) ----
+PIN_DHT_VCC      = const(15)
+PIN_DHT_DATA     = const(4)
+PIN_BH1750_VCC   = const(23)
+PIN_I2C_SCL      = const(22)
+PIN_I2C_SDA      = const(21)
 
 # ---- Tópicos MQTT Pre-calculados (Optimización de RAM) ----
 # Usamos b"" (bytes) y constantes para evitar concatenación en tiempo de ejecución.
@@ -232,6 +239,11 @@ class RingBuffer:
         self.buffer[self.index] = (time(), item)
         self.index = (self.index + 1) % self.size
 
+    def append_raw(self, timestamp, item):
+        self.ensure_init()
+        self.buffer[self.index] = (timestamp, item)
+        self.index = (self.index + 1) % self.size
+
     def get_all(self):
         if not self.buffer: return []
         # Retorna los elementos en orden cronológico (del más viejo al más nuevo)
@@ -251,6 +263,48 @@ class RingBuffer:
             if item is not None:
                 n += 1
         return n
+
+# ---- Gestión del RTC RAM (Deep Sleep) ----
+def load_rtc_buffer():
+    from machine import RTC
+    import json
+    rtc = RTC()
+    try:
+        data = rtc.memory()
+        if data:
+            return json.loads(data.decode('utf-8'))
+    except Exception as e:
+        if DEBUG: print("⚠️ Error al cargar RTC RAM:", e)
+    # Inicialización por defecto
+    return {
+        "temp": [],
+        "hum": [],
+        "lux": [],
+        "audit": {
+            "lux": False,
+            "wifi": False,
+            "ram": False,
+            "temp": False,
+            "hum": False
+        },
+        "is_sampling_lux": False,
+        "wifi_failures": 0,
+        "dht_failures": 0,
+        "lux_failures": 0
+    }
+
+def save_rtc_buffer(buffer_data):
+    from machine import RTC
+    import json
+    rtc = RTC()
+    try:
+        serialized = json.dumps(buffer_data).encode('utf-8')
+        if len(serialized) <= 2048:
+            rtc.memory(serialized)
+        else:
+            if DEBUG: print("⚠️ Buffer excede los 2048 bytes del RTC RAM")
+    except Exception as e:
+        if DEBUG: print("⚠️ Error al guardar RTC RAM:", e)
 
 # Buffers de Telemetría (RingBuffer)
 illuminance_Batch = RingBuffer(BATCH_SIZE)
@@ -403,8 +457,8 @@ def clean_dht_line():
     """
     from machine import Pin
     from utime import sleep_ms
-    # Pin 4 es el estándar para el DHT22 en el Nodo EMA (ZONA_A)
-    p = Pin(4, Pin.IN, Pin.PULL_UP)
+    # PIN_DHT_DATA es el estándar para el DHT22 en el Nodo EMA (ZONA_A)
+    p = Pin(PIN_DHT_DATA, Pin.IN, Pin.PULL_UP)
     p.init(Pin.OUT)
     p.value(1)
     sleep_ms(500)
@@ -429,9 +483,9 @@ def setup_bh1750_sync():
             if sensor_connected: break
             try:
                 if bus_type == "soft":
-                    i2c_bus = SoftI2C(scl=Pin(22), sda=Pin(21), freq=freq, timeout=timeout)
+                    i2c_bus = SoftI2C(scl=Pin(PIN_I2C_SCL), sda=Pin(PIN_I2C_SDA), freq=freq, timeout=timeout)
                 else:
-                    i2c_bus = I2C(0, scl=Pin(22), sda=Pin(21), freq=freq)
+                    i2c_bus = I2C(0, scl=Pin(PIN_I2C_SCL), sda=Pin(PIN_I2C_SDA), freq=freq)
                 sleep_ms(150)
                 i2c_bus.writeto(addr, b'')
                 try: from bh1750 import BH1750 # type: ignore
@@ -459,33 +513,53 @@ def setup_bh1750_sync():
         bh1750_sensor = None
         i2c_bus = None
 
+async def hard_reset_sensors_physical():
+    from machine import Pin
+    import uasyncio as asyncio
+    if DEBUG: print("\n⚡  [Hard Reset Físico] Apagando alimentación de sensores por 2 segundos.")
+    Pin(PIN_DHT_VCC, Pin.OUT).value(0)
+    Pin(PIN_BH1750_VCC, Pin.OUT).value(0)
+    await asyncio.sleep(2)
+    # Volver a encender
+    Pin(PIN_DHT_VCC, Pin.OUT).value(1)
+    if IS_SAMPLING_LUX:
+        Pin(PIN_BH1750_VCC, Pin.OUT).value(1)
+    await asyncio.sleep(2) # Estabilización
+
 # ---- Función Auxiliar: Inicializar y Restablecer Sensores ----
 async def setup_sensors():
     """
     #### Inicialización Unificada de los sensores (Lógica)
     * Configura e instancia secuencialmente: DHT22 y BH1750.
-    * Realiza de forma autónoma hasta 3 reintentos lógicos de rescate si el DHT22 falla.
+    * Controla los pines de alimentación GPIO 13 y 12.
     """
-    # Gestión de variables globales
     global dht_sensor, bh1750_sensor
-
-    # (Optimización de memoria RAM)
-    # Lazy Imports (Importación tardía)
     from machine import Pin
 
-    # 1. Configuración de Sensor DHT22 (Clima Interior)
+    # 1. Configurar y encender alimentación
+    dht_vcc = Pin(PIN_DHT_VCC, Pin.OUT)
+    dht_vcc.value(1)
+
+    bh_vcc = Pin(PIN_BH1750_VCC, Pin.OUT)
+    if IS_SAMPLING_LUX:
+        bh_vcc.value(1)
+    else:
+        bh_vcc.value(0)
+
+    await asyncio.sleep(2) # Espera obligatoria para estabilización de sensores (LDO/DHT)
+
+    # 2. Configuración de Sensor DHT22 (Clima Interior)
     dht_boot_ok = False
     try:
         from dht import DHT22
         if DEBUG: print(f"\n🌡️  Verificando {Colors.YELLOW}DHT22{Colors.RESET}")
   
-        dht_sensor = DHT22(Pin(4, Pin.IN, Pin.PULL_UP))
+        dht_sensor = DHT22(Pin(PIN_DHT_DATA, Pin.IN, Pin.PULL_UP))
 
         # Verificación de lectura rápida
         try:
-            # Esto garantiza que el bus esté limpio a pesar del ruido/capacitancia.
             clean_dht_line()
-            await asyncio.sleep_ms(500) # Estabilización post-limpieza
+            await asyncio.sleep_ms(1500) # Estabilización post-limpieza
             dht_sensor.measure()
             temp, hum = dht_sensor.temperature(), dht_sensor.humidity()
             if -10 <= temp <= 60 and 0 <= hum <= 100:
@@ -507,16 +581,17 @@ async def setup_sensors():
     # [Plan B]: Rescate lógico si la verificación inicial falló en boot (bucle de hasta 3 rescates)
     if not dht_boot_ok:
         for attempt in range(1, 4):
-            if DEBUG: print(f"    ├─ 🔄 {Colors.CYAN}Reintento Lógico Sensors (Intento {attempt}/3).{Colors.RESET}")
+            if DEBUG: print(f"    ├─ 🔄 {Colors.CYAN}Reintento Lógico/Físico Sensors (Intento {attempt}/3).{Colors.RESET}")
             
+            # Reset físico de alimentación para limpiar los sensores
+            await hard_reset_sensors_physical()
             dht_sensor = None
-            await asyncio.sleep(5)
             
             try:
                 clean_dht_line()
                 await asyncio.sleep(1)
                 from dht import DHT22
-                dht_sensor = DHT22(Pin(4, Pin.IN, Pin.PULL_UP))
+                dht_sensor = DHT22(Pin(PIN_DHT_DATA, Pin.IN, Pin.PULL_UP))
                 dht_sensor.measure()
                 temp, hum = dht_sensor.temperature(), dht_sensor.humidity()
                 if -10 <= temp <= 60 and 0 <= hum <= 100:
@@ -524,7 +599,7 @@ async def setup_sensors():
                     humidity_Batch.append(round(hum, 1))
                     dht_boot_ok = True
                     if DEBUG:
-                        print(f"    ├─ ✅ {Colors.GREEN}Recuperado tras Reintento Lógico (Intento {attempt}){Colors.RESET}")
+                        print(f"    ├─ ✅ {Colors.GREEN}Recuperado tras Reset Físico (Intento {attempt}){Colors.RESET}")
                         print(f"    ├─ 📊 Valor: {Colors.YELLOW}{temp:.1f} °C{Colors.RESET}")
                         print(f"    └─ 📊 Valor: {Colors.BLUE}{hum:.1f} %{Colors.RESET}")
                     break
@@ -537,8 +612,12 @@ async def setup_sensors():
             if DEBUG: print(f"    └─ ❌ {Colors.RED}No se pudo recuperar el DHT22. El Scheduler sincronizará.{Colors.RESET}")
             dht_sensor = None
 
-    # 2. Inicializar el Sensor de Iluminancia (BH1750 / I2C)
-    setup_bh1750_sync()
+    # 3. Inicializar el Sensor de Iluminancia (BH1750 / I2C) (Solo si IS_SAMPLING_LUX es True)
+    if IS_SAMPLING_LUX:
+        setup_bh1750_sync()
+    else:
+        if DEBUG: print("\n🌙  Muestreo de BH1750 Suspendido (Noche). Saltando inicialización.")
+        bh1750_sensor = None
 
 # ---- Función Auxiliar: Callback de estado ----
 def sub_status_callback(pid, status):
@@ -643,9 +722,25 @@ async def mqtt_processor_task():
                     for cat in AUDIT_MODE:
                         AUDIT_MODE[cat] = False
                         AUDIT_COUNTERS[cat] = 0
+                    # Persistir en RTC
+                    rtc_data = load_rtc_buffer()
+                    rtc_data["audit"] = AUDIT_MODE
+                    save_rtc_buffer(rtc_data)
                     sync_event.set()
 
-                # 3. Control de Muestreo de Iluminancia (Día/Noche)
+                # 3. Sincronización Horaria (Scheduler -> Firmware)
+                elif msg.startswith(b'{"time"'):
+                    try:
+                        import json
+                        from machine import RTC
+                        data = json.loads(msg.decode('utf-8'))
+                        if "time" in data:
+                            RTC().datetime(data["time"])
+                            if DEBUG: print(f"    └─ RTC Sincronizado: {data['time']}")
+                    except Exception as e:
+                        if DEBUG: print(f"    └─ ❌ Error sincronizando RTC: {e}")
+
+                # 4. Control de Muestreo de Iluminancia (Día/Noche)
                 elif m_low.startswith(b"lux_sampling:"):
                     action = m_low.split(b":")[1]
                     if action == b"on":
@@ -656,8 +751,13 @@ async def mqtt_processor_task():
                         # Al apagar, limpiamos el buffer para no arrastrar basura de 0 lux
                         illuminance_Batch.clear()
                         if DEBUG: print("    └─ Bh1750: OFF")
+                    
+                    # Persistir en RTC
+                    rtc_data = load_rtc_buffer()
+                    rtc_data["is_sampling_lux"] = IS_SAMPLING_LUX
+                    save_rtc_buffer(rtc_data)
 
-                # 3. Comandos de Auditoría (Prefix: audit_)
+                # 5. Comandos de Auditoría (Prefix: audit_)
                 elif m_low.startswith(b"audit_") and m_low.endswith((b"_on", b"_off")):
                     parts = m_low.split(b"_")
                     if len(parts) == 3:
@@ -681,6 +781,11 @@ async def mqtt_processor_task():
                                 AUDIT_MODE[category] = False
                                 collect()
                                 if DEBUG: print(f"    └─ AUDIT {category.upper()}: OFF")
+                            
+                            # Persistir en RTC
+                            rtc_data = load_rtc_buffer()
+                            rtc_data["audit"] = AUDIT_MODE
+                            save_rtc_buffer(rtc_data)
                             
                             await publish_audit_state()
 
@@ -1285,10 +1390,10 @@ async def transmit_and_sync():
             CONNECTED_ALLOWED = False
             shutdown(status=b"sleep")
 
-# ---- CORUTINA: Muestreo Periódico de Sensores y Ahorro de Energía ----
+# ---- CORUTINA: Muestreo Periódico de Sensores en Modo Continuo ----
 async def sensor_publish_task():
     """
-    Muestreo offline del DHT22 y BH1750 cada 60s.
+    Muestreo offline del DHT22 y BH1750 cada 1 minuto (60s).
     Acumula en RingBuffers y gatilla transmisión al completar el lote.
     """
     global CONNECTED_ALLOWED
@@ -1304,7 +1409,7 @@ async def sensor_publish_task():
 
     # === Bucle de Muestreo Periódico ===
     while True:
-        await asyncio.sleep(60)
+        await asyncio.sleep(60) # Muestreo cada 1 minuto (pruebas)
 
         temp, hum, lux = None, None, None
 
@@ -1462,21 +1567,102 @@ async def unified_audit_task():
         except Exception as e:
             if DEBUG: print(f"⚠️ Error en unified_audit: {e}")
 
-# ---- CORUTINA: Programa Principal ----
-async def main():
+# ---- Watchdog de Conexión WiFi (30s) ----
+async def watchdog_wifi_connection():
+    import uasyncio as asyncio
+    from network import WLAN, STA_IF # type: ignore
+    await asyncio.sleep(30)
+    w = WLAN(STA_IF)
+    if not w.isconnected():
+        if DEBUG: print("\n⚠️ [Watchdog WiFi] No se pudo conectar en 30s. Entrando en deep sleep de recuperación (10 min).")
+        # Incrementar fallas en RTC
+        rtc_data = load_rtc_buffer()
+        rtc_data["wifi_failures"] = rtc_data.get("wifi_failures", 0) + 1
+        save_rtc_buffer(rtc_data)
+        try:
+            w.disconnect()
+            w.active(False)
+        except: pass
+        import machine
+        machine.deepsleep(600 * 1000) # 10 minutos de deep sleep
+
+# ---- CORUTINA: Transmisión y Sincronización en Deep Sleep ----
+async def main_transmission():
+    from gc        import collect
+    from machine   import WDT
+    from network   import STA_IF, WLAN # type: ignore
+    from ubinascii import hexlify      # type: ignore
+    import utime
+
+    mac_address = hexlify(WLAN(STA_IF).config('mac')).decode()
+    client_id = f"NODO_EMA_ZONA_A_{mac_address}"
+
+    try:
+        wdt = WDT(timeout=WDT_TIMEOUT_MS)
+    except:
+        wdt = None
+
+    # Iniciar tareas de red
+    asyncio.create_task(wifi_coro())
+    asyncio.create_task(mqtt_connector_task(client_id))
+    asyncio.create_task(mqtt_processor_task())
+    asyncio.create_task(watchdog_wifi_connection())
+
+    try:
+        # Esperar conexión MQTT
+        await asyncio.wait_for(mqtt_connected_event.wait(), 45)
+        if DEBUG: print("\n📡 Conectado a MQTT. Esperando que finalice el envío de batches...")
+
+        # Esperar que los RingBuffers de batches se vacíen
+        for _ in range(30):
+            if temperature_Batch.count == 0 and humidity_Batch.count == 0 and (not IS_SAMPLING_LUX or illuminance_Batch.count == 0):
+                if DEBUG: print("📊 Telemetrías enviadas con éxito a Ingest.")
+                break
+            await asyncio.sleep(1)
+            if wdt: wdt.feed()
+
+        # Ventana de 10s para recibir comandos (sync horaria y auditorías)
+        if DEBUG: print("⏰ Ventana de sincronización abierta por 10 segundos...")
+        for _ in range(10):
+            await asyncio.sleep(1)
+            if wdt: wdt.feed()
+
+        # Limpiar buffers de telemetría transmitida en el RTC RAM
+        rtc_data = load_rtc_buffer()
+        rtc_data["temp"] = []
+        rtc_data["hum"] = []
+        rtc_data["lux"] = []
+        rtc_data["wifi_failures"] = 0
+        save_rtc_buffer(rtc_data)
+
+    except Exception as e:
+        if DEBUG: print(f"⚠️ Error durante transmisión/sincronización horaria: {e}")
+    finally:
+        # Desconectar red
+        global CONNECTED_ALLOWED
+        CONNECTED_ALLOWED = False
+        shutdown(status=b"sleep")
+
+        # Calcular tiempo para el siguiente ciclo exacto (múltiplo de 1 min)
+        sec_to_next = 60 - (utime.time() % 60)
+        if sec_to_next < 10:
+            sec_to_next += 60
+
+        if DEBUG: print(f"💤 Transmisión terminada. Entrando en Deep Sleep por {sec_to_next} segundos.")
+        await asyncio.sleep_ms(200) # Flush sockets
+        import machine
+        machine.deepsleep(sec_to_next * 1000)
+
+# ---- CORUTINA: Modo Continuo (Auditoría) ----
+async def main_async():
     from gc        import collect
     from machine   import WDT
     from network   import STA_IF, WLAN # type: ignore
     from ubinascii import hexlify      # type: ignore
 
-    # ---- Identificación unica del ESP32 ----
-    # Obtenemos la MAC del dispositivo
     mac_address = hexlify(WLAN(STA_IF).config('mac')).decode()
-    # Construye el client_id único
     client_id = f"NODO_EMA_ZONA_A_{mac_address}"
 
-    # ---- Watchdog Timer ----
-    # Seguridad de hardware: Si el bucle principal se congela, el dispositivo se reinicia.
     try:
         wdt = WDT(timeout=WDT_TIMEOUT_MS)
         if DEBUG:
@@ -1486,35 +1672,238 @@ async def main():
             print(f"⚠️  No se pudo iniciar el Watchdog: {e}")
         wdt = None
 
-    # ---- Tareas Asíncronas de Red ----
-    # (Re)conexión WiFi
+    # Tareas Asíncronas de Red
     asyncio.create_task(wifi_coro())
 
-    # ---- Inicialización del Hardware ----
+    # Inicialización del Hardware
     await setup_sensors()
 
-    # ---- Resto de Tareas Asíncronas ----
-    # Reconexión MQTT (Depende de WiFi)
+    # Resto de Tareas Asíncronas
     asyncio.create_task(mqtt_connector_task(client_id))
-    # Consumidor de mensajes MQTT (Patrón Productor-Consumidor)
     asyncio.create_task(mqtt_processor_task())
-    # Gestiona la lectura y publicacion de los sensores (Bajo Consumo)
     asyncio.create_task(sensor_publish_task())
-    # Gestion de Auditorías
     asyncio.create_task(unified_audit_task())
 
-    # ---- Bucle de Supervisión y Recolección de Basura ----
+    # Bucle de Supervisión y persistencia de estado en RTC
     while True:
-        # Alimentar al Watchdog
         if wdt: wdt.feed()
-
-        # Gestión de Memoria Proactiva
         collect()
 
-        # El event loop cede control a todas las tareas asíncronas.
+        # Guardar periódicamente el estado actual en RTC RAM por si hay reboot inesperado
+        rtc_data = load_rtc_buffer()
+        rtc_data["audit"] = AUDIT_MODE
+        rtc_data["is_sampling_lux"] = IS_SAMPLING_LUX
+        save_rtc_buffer(rtc_data)
+
+        # Si ya no hay ninguna auditoría activa, forzamos un reinicio seguro para ir a deepsleep normal
+        if not any(AUDIT_MODE.values()):
+            if DEBUG: print("\n🔍 No hay auditorías activas. Reiniciando para entrar en Deep Sleep normal.")
+            await asyncio.sleep(1)
+            safe_reset()
+
         await asyncio.sleep(20)
 
-# ---- Función Auxiliar: Detener Programa (Ctrl+C) ----
+# ---- Punto de Entrada Principal (Bajo Consumo / Auditorías) ----
+def run_cycle():
+    global IS_SAMPLING_LUX, AUDIT_MODE
+    import utime
+    import machine
+    from machine import Pin
+
+    # 1. Cargar el buffer del RTC RAM
+    rtc_data = load_rtc_buffer()
+
+    # 2. Configurar estados globales a partir de la memoria RTC
+    IS_SAMPLING_LUX = rtc_data.get("is_sampling_lux", False)
+    for k, v in rtc_data.get("audit", {}).items():
+        if k in AUDIT_MODE:
+            AUDIT_MODE[k] = v
+
+    is_auditing = any(AUDIT_MODE.values())
+
+    # Determinar si es de día basándonos de forma autónoma en el RTC
+    from machine import RTC
+    dt = RTC().datetime()
+    current_hour = dt[4]
+
+    # Determinar si el reloj está sincronizado (año >= 2026)
+    is_clock_synced = (dt[0] >= 2026)
+
+    if is_clock_synced:
+        # Horario de día: de 5:00 AM a 6:59 PM (5 <= hour < 19)
+        is_daytime = (5 <= current_hour < 19)
+    else:
+        # Si no está sincronizado, por seguridad muestreamos lux para no perder datos iniciales
+        is_daytime = True
+
+    # El sensor se lee si es de día (o si no se ha sincronizado el reloj aún)
+    # y además el Scheduler tiene habilitado el muestreo, o si hay diagnóstico activo.
+    should_sample_lux = (IS_SAMPLING_LUX and is_daytime) or is_auditing
+
+    # CASO A: Modo Auditoría Activa (Runtime asíncrono permanente)
+    if is_auditing:
+        if DEBUG: print("\n🔍 Modo Auditoría Activo. Iniciando Runtime Asíncrono Completo.")
+        # Hidratar batches con los datos acumulados
+        for ts, val in rtc_data.get("temp", []):
+            temperature_Batch.append_raw(ts, val)
+        for ts, val in rtc_data.get("hum", []):
+            humidity_Batch.append_raw(ts, val)
+        for ts, val in rtc_data.get("lux", []):
+            illuminance_Batch.append_raw(ts, val)
+        
+        try:
+            asyncio.run(main_async())
+        except KeyboardInterrupt:
+            stopped_program()
+        except Exception as e:
+            if DEBUG: print(f"❌ Error fatal en runtime asíncrono: {e}")
+            safe_reset()
+        return
+
+    # CASO B: Muestreo en Deep Sleep (Bajo Consumo)
+    if DEBUG: print(f"\n💤 [Bajo Consumo] Iniciando toma de muestras offline... Lux sampling: {should_sample_lux} (RTC hora: {current_hour}h)")
+
+    # Configurar y energizar sensores
+    Pin(PIN_DHT_VCC, Pin.OUT).value(1)
+    if should_sample_lux:
+        Pin(PIN_BH1750_VCC, Pin.OUT).value(1)
+    else:
+        Pin(PIN_BH1750_VCC, Pin.OUT).value(0)
+
+    utime.sleep_ms(2000) # Estabilización post-energización
+
+    # Leer DHT22
+    temp, hum = None, None
+    try:
+        clean_dht_line()
+        utime.sleep_ms(1500)
+        from dht import DHT22
+        d_sensor = DHT22(Pin(PIN_DHT_DATA, Pin.IN, Pin.PULL_UP))
+        d_sensor.measure()
+        temp = round(d_sensor.temperature(), 1)
+        hum = round(d_sensor.humidity(), 1)
+        rtc_data["dht_failures"] = 0
+    except Exception as e:
+        if DEBUG: print("⚠️ Fallo lectura DHT22:", e)
+        rtc_data["dht_failures"] = rtc_data.get("dht_failures", 0) + 1
+
+    # Leer BH1750
+    lux = None
+    if should_sample_lux:
+        try:
+            from machine import SoftI2C
+            from bh1750 import BH1750
+            i2c = SoftI2C(scl=Pin(PIN_I2C_SCL), sda=Pin(PIN_I2C_SDA), freq=100000)
+            utime.sleep_ms(100)
+            b_sensor = BH1750(bus=i2c, addr=0x23)
+            utime.sleep_ms(200)
+            lux = round(b_sensor.get_auto_luminance(), 1)
+            rtc_data["lux_failures"] = 0
+        except Exception as e:
+            if DEBUG: print("⚠️ Fallo lectura BH1750:", e)
+            rtc_data["lux_failures"] = rtc_data.get("lux_failures", 0) + 1
+
+    # Apagar alimentación de sensores
+    Pin(PIN_DHT_VCC, Pin.OUT).value(0)
+    Pin(PIN_BH1750_VCC, Pin.OUT).value(0)
+
+    # Lógica de Hard Reset físico (3 fallos seguidos)
+    dht_fail = rtc_data.get("dht_failures", 0)
+    lux_fail = rtc_data.get("lux_failures", 0)
+    if dht_fail >= 3 or (should_sample_lux and lux_fail >= 3):
+        if DEBUG: print("⚠️ Fallos de sensores consecutivos. Ejecutando Hard Reset Físico...")
+        utime.sleep_ms(2000)
+        # Volver a alimentar
+        Pin(PIN_DHT_VCC, Pin.OUT).value(1)
+        if should_sample_lux:
+            Pin(PIN_BH1750_VCC, Pin.OUT).value(1)
+        utime.sleep_ms(2000)
+
+        # Reintento DHT22
+        try:
+            clean_dht_line()
+            utime.sleep_ms(1500)
+            from dht import DHT22
+            d_sensor = DHT22(Pin(PIN_DHT_DATA, Pin.IN, Pin.PULL_UP))
+            d_sensor.measure()
+            temp = round(d_sensor.temperature(), 1)
+            hum = round(d_sensor.humidity(), 1)
+            rtc_data["dht_failures"] = 0
+        except Exception as e:
+            if DEBUG: print("⚠️ Reintento DHT22 fallido tras reset:", e)
+
+        # Reintento BH1750
+        if should_sample_lux:
+            try:
+                from machine import SoftI2C
+                from bh1750 import BH1750
+                i2c = SoftI2C(scl=Pin(PIN_I2C_SCL), sda=Pin(PIN_I2C_SDA), freq=100000)
+                utime.sleep_ms(100)
+                b_sensor = BH1750(bus=i2c, addr=0x23)
+                utime.sleep_ms(200)
+                lux = round(b_sensor.get_auto_luminance(), 1)
+                rtc_data["lux_failures"] = 0
+            except Exception as e:
+                if DEBUG: print("⚠️ Reintento BH1750 fallido tras reset:", e)
+
+        # Apagar alimentación nuevamente
+        Pin(PIN_DHT_VCC, Pin.OUT).value(0)
+        Pin(PIN_BH1750_VCC, Pin.OUT).value(0)
+
+    # 3. Guardar las muestras tomadas en el RTC RAM
+    now_ts = utime.time()
+    if temp is not None:
+        rtc_data["temp"].append([now_ts, temp])
+    if hum is not None:
+        rtc_data["hum"].append([now_ts, hum])
+    if lux is not None and should_sample_lux:
+        rtc_data["lux"].append([now_ts, lux])
+
+    # Limitar tamaño de seguridad de los arrays
+    for key in ["temp", "hum", "lux"]:
+        if len(rtc_data[key]) > 24:
+            rtc_data[key] = rtc_data[key][-24:]
+
+    # 4. Decidir transmisión o deepsleep
+    samples_count = len(rtc_data["temp"])
+    if DEBUG: print(f"📊 Muestras en buffer RTC: {samples_count}/{BATCH_SIZE}")
+
+    if samples_count >= BATCH_SIZE:
+        if DEBUG: print("🚀 Límite de muestras alcanzado. Iniciando transmisión asíncrona...")
+        
+        # Hidratar colas globales de RingBuffer para transmisión
+        for ts, val in rtc_data["temp"]:
+            temperature_Batch.append_raw(ts, val)
+        for ts, val in rtc_data["hum"]:
+            humidity_Batch.append_raw(ts, val)
+        for ts, val in rtc_data["lux"]:
+            illuminance_Batch.append_raw(ts, val)
+
+        # Guardar de forma persistente en RTC antes de intentar conectar
+        save_rtc_buffer(rtc_data)
+
+        # Iniciar transmisión asíncrona
+        try:
+            asyncio.run(main_transmission())
+        except KeyboardInterrupt:
+            stopped_program()
+        except Exception as e:
+            if DEBUG: print(f"❌ Error fatal en main_transmission: {e}")
+            safe_reset()
+    else:
+        # Guardar en RTC e ir a Deep Sleep
+        save_rtc_buffer(rtc_data)
+        
+        # Calcular segundos para el próximo ciclo múltiplo de 1 min (60 segundos)
+        sec_to_next = 60 - (utime.time() % 60)
+        if sec_to_next < 10:
+            sec_to_next += 60
+
+        if DEBUG: print(f"💤 Ciclo finalizado. Entrando en Deep Sleep por {sec_to_next} segundos.")
+        utime.sleep_ms(100) # Pausa breve para vaciar UART
+        machine.deepsleep(sec_to_next * 1000)
+
+# ---- Detener Programa (Ctrl+C) ----
 def stopped_program():
     """
     #### Detener el programa desde la terminal (Ctrl+C)
@@ -1554,16 +1943,9 @@ def stopped_program():
         except Exception:
             pass
 
-# ---- FUNCIÓN AUXILIAR: Gestión de desconexión (Nodo EMA) ----
+# ---- Detención Segura ----
 def shutdown(status=b"offline"):
-    """
-    **Desconexion Controlada**
-    * Publica `status` explícitamente con QoS 0.
-    * Flush de telemetría acumulada de forma síncrona.
-    * Desconecta MQTT y WiFi.
-    """
     from utime import sleep_ms
-    # Publicamos en MQTT (Solo si hay conexión)
     if client and hasattr(client, 'sock') and client.sock and wlan and wlan.isconnected():
         try:
             flush_telemetry_batches()
@@ -1577,9 +1959,7 @@ def shutdown(status=b"offline"):
         except Exception as e:
             if DEBUG:
                 print(f"⚠️  Error publicando {status.decode() if hasattr(status, 'decode') else status} en shutdown: {e}")
-    # Invalidamos el cliente MQTT
     force_disconnect_mqtt(silent=False)
-    # Desconectamos el WiFi.
     if wlan and wlan.isconnected():
         try:
             wlan.disconnect()
@@ -1587,11 +1967,8 @@ def shutdown(status=b"offline"):
             if DEBUG: print(f"📡  WiFi     {Colors.GREEN}Desconectado{Colors.RESET}\n")
         except Exception:
             pass
-# ---- Función Auxiliar: Safe Reset (Reinicio Seguro) ----
+
 def safe_reset():
-    """
-    Cierra conexiones de red y reinicia el dispositivo.
-    """
     from machine import reset
     from utime   import sleep_ms
     try:
@@ -1599,15 +1976,6 @@ def safe_reset():
     except: pass
     sleep_ms(1000)
     reset()
-# ---- Punto de Entrada ----
+
 if __name__ == '__main__':
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        stopped_program()
-    except Exception as e:
-        if DEBUG: print(f"\n\n❌  Error fatal no capturado: {Colors.RED}{e}{Colors.RESET}\n\n")
-        try:
-            safe_reset()
-        except:
-            pass
+    run_cycle()
