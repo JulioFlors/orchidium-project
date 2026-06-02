@@ -25,7 +25,7 @@ export const influxClient =
     host: INFLUX_URL,
     token: INFLUX_TOKEN,
     database: INFLUX_BUCKET,
-    queryTimeout: 10000,
+    queryTimeout: 30000,
     transportOptions: {
       // Ignorar fallos de identidad del servidor en hosts internos
       // Si no es la nube pública, relajamos la verificación de SSL para evitar bloqueos

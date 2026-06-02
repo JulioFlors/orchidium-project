@@ -344,10 +344,10 @@ cd pristinoplant
 sudo docker run -it --rm -p 80:80 \
   -v $(pwd)/infrastructure/certs:/etc/letsencrypt \
   certbot/certbot certonly --standalone \
-  -d vps.midominio.com -d mqtt.midominio.com
+  -d mqtt.midominio.com -d vps.midominio.com
 ```
 
-> **Nota:** Siempre que quieras actualizar los certificados, ejecuta el comando anterior.
+> **Nota:** Es sumamente importante mantener este orden de dominios para que la carpeta principal tome el nombre de `mqtt.midominio.com`.
 
 **Ajuste y Aislamiento de Permisos (Crucial para Docker):**
 Por defecto, Git o Certbot crean archivos con propiedad estricta para el usuario `root` de Linux. Sin embargo, los contenedores seguros (PostgreSQL, InfluxDB) ejecutan sus motores con usuarios internos sin privilegios. Si no preparamos los permisos de antemano, los contenedores colapsarán con errores de "Acceso Denegado" (`Permission denied`).
@@ -404,6 +404,41 @@ docker exec --user root -it influxdb sh -c \
 >
 > * Si la URL contiene `influxdb` o `localhost`, se desactiva la verificación estricta para permitir certificados autofirmados.
 > * Si la URL es externa (`*.influxdata.com`), se mantiene la validación estricta para garantizar la seguridad en la nube.
+
+##### 🔄 Renovación de Certificados SSL (Cada 90 días)
+
+Los certificados de Let's Encrypt tienen una validez estricta de **90 días** (por ejemplo, con expiración el `2026-08-31`). Es obligatorio renovar los certificados aproximadamente cada 3 meses para evitar errores TLS (`net::ERR_CERT_DATE_INVALID` o `certificate has expired`) que bloquean la comunicación con Mosquitto, InfluxDB o PostgreSQL.
+
+**Procedimiento de renovación paso a paso en el VPS (SSH):**
+
+1. **Liberar el puerto 80** del servidor (si tienes servicios activos como Nginx externo, deténlos temporalmente).
+2. **Ejecutar Certbot** para renovar manteniendo el orden de dominios original (con el broker `mqtt` primero):
+   ```bash
+   cd ~/pristinoplant
+   sudo docker run -it --rm -p 80:80 \
+     -v $(pwd)/infrastructure/certs:/etc/letsencrypt \
+     certbot/certbot certonly --standalone \
+     -d mqtt.sisparrow.com -d vps.sisparrow.com
+   ```
+3. **Copiar los certificados actualizados** reemplazando los anteriores en Postgres e InfluxDB:
+   ```bash
+   sudo cp -L infrastructure/certs/live/mqtt.sisparrow.com/* infrastructure/certs/postgres/
+   sudo cp -L infrastructure/certs/live/mqtt.sisparrow.com/* infrastructure/certs/influxdb/
+   ```
+4. **Re-aplicar permisos estrictos de Docker**:
+   ```bash
+   # Permisos para Postgres (UID 999)
+   sudo chown -R 999:999 infrastructure/certs/postgres/
+   sudo chmod 600 infrastructure/certs/postgres/privkey.pem
+
+   # Permisos para InfluxDB (UID 1500)
+   sudo chown -R 1500:1500 infrastructure/certs/influxdb/
+   sudo chmod 644 infrastructure/certs/influxdb/privkey.pem
+   ```
+5. **Reiniciar los contenedores de infraestructura** para que recarguen las nuevas llaves:
+   ```bash
+   docker compose --profile cloud restart postgres influxdb mosquitto
+   ```
 
 ---
 

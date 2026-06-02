@@ -6,18 +6,35 @@ import mqtt from 'mqtt'
  * una conexión persistente.
  */
 export async function sendMqttCommand(topic: string, payload: string | Record<string, unknown>) {
-  const brokerUrl =
-    process.env.MQTT_BROKER_URL ||
-    process.env.MQTT_BROKER_URL_CLOUD ||
-    process.env.MQTT_BROKER_URL_LOCAL
+  let brokerUrl = process.env.MQTT_BROKER_URL
+
+  if (!brokerUrl) {
+    const isVercel = !!process.env.VERCEL
+
+    if (isVercel && process.env.NEXT_PUBLIC_MQTT_BROKER) {
+      brokerUrl = `mqtts://${process.env.NEXT_PUBLIC_MQTT_BROKER}:8883`
+    } else {
+      brokerUrl = process.env.MQTT_BROKER_URL_CLOUD || process.env.MQTT_BROKER_URL_LOCAL
+    }
+  }
 
   if (!brokerUrl) {
     throw new Error('MQTT_BROKER_URL no configurada')
   }
 
+  const username =
+    process.env.MQTT_USERNAME ||
+    process.env.MQTT_USER_BACKEND ||
+    process.env.NEXT_PUBLIC_MQTT_USERNAME
+
+  const password =
+    process.env.MQTT_PASSWORD ||
+    process.env.MQTT_PASS_BACKEND ||
+    process.env.NEXT_PUBLIC_MQTT_PASSWORD
+
   const client = mqtt.connect(brokerUrl, {
-    username: process.env.MQTT_USERNAME || process.env.MQTT_USER_BACKEND,
-    password: process.env.MQTT_PASSWORD || process.env.MQTT_PASS_BACKEND,
+    username,
+    password,
     protocol: brokerUrl.startsWith('mqtts') ? 'mqtts' : 'mqtt',
     rejectUnauthorized: false,
     connectTimeout: 5000,

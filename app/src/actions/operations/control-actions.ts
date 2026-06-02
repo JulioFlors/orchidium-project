@@ -199,7 +199,7 @@ export async function cancelManualTask(taskId: string, notes?: string) {
       const finalNotes =
         notes ||
         (currentTask.status === 'IN_PROGRESS'
-          ? `${adminName} cerró el circuito desde el Centro de Control.${timeInfo ? `\n${timeInfo}` : ''}`
+          ? `[ATOMIC_CANCEL] ${adminName} cerró el circuito desde el Centro de Control.${timeInfo ? `\n${timeInfo}` : ''}`
           : `Tarea Cancelada por ${adminName === 'El Admin' ? 'el Admin' : adminName} antes de iniciar`)
 
       await tx.taskLog.update({

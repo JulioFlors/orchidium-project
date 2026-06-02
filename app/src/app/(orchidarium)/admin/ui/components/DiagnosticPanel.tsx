@@ -393,6 +393,7 @@ interface AuditConsoleCardProps {
   isPending?: boolean
   isOnline?: boolean
   currentPayload: unknown
+  receivedAt?: number
   isStale?: boolean
   onStart?: () => void
   onClose?: () => void
@@ -407,6 +408,7 @@ export function AuditConsoleCard({
   isPending = false,
   isOnline = true,
   currentPayload,
+  receivedAt,
   isStale = false,
   onStart,
   onClose,
@@ -445,9 +447,37 @@ export function AuditConsoleCard({
         setDisplayPayload((prev) => {
           const prevHistory = (prev as { history?: unknown[] })?.history || []
 
-          if (prevHistory.length > 0) return prev as AuditPayload
+          const mergedMap = new Map<string, unknown>()
+          const getSampleKey = (item: unknown) => {
+            if (!Array.isArray(item) || item.length < 2) return null
+            const ts = item[0]
+            const val = JSON.stringify(item[1])
 
-          return { history, receivedAt: Date.now() }
+            return `${ts}_${val}`
+          }
+
+          history.forEach((item) => {
+            const key = getSampleKey(item)
+
+            if (key) mergedMap.set(key, item)
+          })
+
+          prevHistory.forEach((item) => {
+            const key = getSampleKey(item)
+
+            if (key) mergedMap.set(key, item)
+          })
+
+          const mergedHistory = Array.from(mergedMap.values())
+            .sort((a, b) => {
+              const tsA = Array.isArray(a) ? Number(a[0]) : 0
+              const tsB = Array.isArray(b) ? Number(b[0]) : 0
+
+              return tsA - tsB
+            })
+            .slice(-100)
+
+          return { history: mergedHistory, receivedAt: Date.now() }
         })
 
         setLocalReceivedAt(Date.now())
@@ -564,7 +594,7 @@ export function AuditConsoleCard({
         setLocalReceivedAt(nextState.receivedAt)
       })
     }
-  }, [currentPayload, activeAudit, deviceId])
+  }, [currentPayload, receivedAt, activeAudit, deviceId])
 
   const activeColor = activeAudit
     ? TOOL_COLORS[activeAudit]

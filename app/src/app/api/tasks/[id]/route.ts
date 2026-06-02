@@ -117,11 +117,16 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     const isActivelyRunning = activeStatuses.includes(task.status)
 
     const finalStatus = TaskStatus.CANCELLED
-    const finalReason = reason
+    let finalReason = reason
       ? `Tarea cancelada por ${userName}.\nMotivo: ${reason}`
       : isActivelyRunning
         ? `Tarea cancelada por ${userName} durante su ejecución.`
         : `Tarea cancelada por ${userName} antes de su ejecución.`
+
+    // Anteponer prefijo si está corriendo activamente
+    if (isActivelyRunning) {
+      finalReason = `[ATOMIC_CANCEL] ${finalReason}`
+    }
 
     // 1. Si está activa, enviar OFF al hardware
     if (isActivelyRunning) {

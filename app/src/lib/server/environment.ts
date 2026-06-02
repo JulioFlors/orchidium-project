@@ -12,6 +12,8 @@ import { influxClient } from './influxdb'
 
 import { ZoneMetrics, ZoneType } from '@/config/mappings'
 
+const INFLUX_PHYSICAL_FIELDS = ['temperature', 'humidity', 'illuminance', 'rain_intensity']
+
 // Interfaz para el tipado de filas de InfluxDB
 interface InfluxRow {
   time: unknown
@@ -126,6 +128,8 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
   const midnightVETInUTC = new Date(midnightVET.getTime() + VET_OFFSET)
 
   if (
+    range === '30m' ||
+    range === '90m' ||
     range === '1h' ||
     range === '12h' ||
     range === '24h' ||
@@ -135,6 +139,8 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
   ) {
     let timeFilter = `AND time >= now() - interval '24 hours'`
 
+    if (range === '30m') timeFilter = `AND time >= now() - interval '30 minutes'`
+    if (range === '90m') timeFilter = `AND time >= now() - interval '90 minutes'`
     if (range === '1h') timeFilter = `AND time >= now() - interval '1 hours'`
     if (range === '12h') timeFilter = `AND time >= now() - interval '12 hours'`
 
@@ -156,8 +162,10 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
       timeFilter = `AND time >= TIMESTAMP '${start.toISOString()}' AND time <= TIMESTAMP '${end.toISOString()}'`
     }
 
+    const influxFields = fieldsToQuery.filter((f) => INFLUX_PHYSICAL_FIELDS.includes(f))
+    const selectFields = ['time', ...influxFields].join(', ')
     const query = `
-      SELECT *
+      SELECT ${selectFields}
       FROM environment_metrics 
       WHERE zone = '${zone}' 
       ${timeFilter}
@@ -261,9 +269,10 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
         isLive: true,
       }
 
-      const lastRainState = ['12h', '24h', '5-19h', '8-16h', '1D'].includes(range)
-        ? await getLastRainState()
-        : null
+      const lastRainState =
+        zone === ZoneType.EXTERIOR || ['12h', '24h', '5-19h', '8-16h', '1D'].includes(range)
+          ? await getLastRainState()
+          : null
 
       return { data, liveKPIs, lastRainState }
     } catch (error) {
@@ -352,7 +361,9 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
     if (!pgData.some((d) => d.date.toISOString().startsWith(todayISO))) {
       const zoneFilter = `zone = '${zone}'`
 
-      const todayQuery = `SELECT * FROM environment_metrics WHERE ${zoneFilter} AND time >= TIMESTAMP '${midnightVETInUTC.toISOString()}' ORDER BY time ASC`
+      const influxFields = fieldsToQuery.filter((f) => INFLUX_PHYSICAL_FIELDS.includes(f))
+      const selectFields = ['time', ...influxFields].join(', ')
+      const todayQuery = `SELECT ${selectFields} FROM environment_metrics WHERE ${zoneFilter} AND time >= TIMESTAMP '${midnightVETInUTC.toISOString()}' ORDER BY time ASC`
 
       try {
         const reader = influxClient.query(todayQuery)

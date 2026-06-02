@@ -1997,7 +1997,11 @@ async def rain_monitor_task():
                 if current_rain_state == 'Dry' and rain_Batch.count > 0:
                     try:
                         data_items = rain_Batch.get_all()
-                        data_str = ",".join('[%d,{"rain_intensity":%s}]' % (it[0], str(it[1])) for it in data_items)
+                        data_str = ",".join('[%d,{"rain_intensity":%d,"rain_raw":%d}]' % (
+                            it[0],
+                            round(((RAIN_STOP_VALUE - max(RAW_INTENSITY_MIN, min(it[1], RAIN_STOP_VALUE))) / delta_max) * 100),
+                            it[1]
+                        ) for it in data_items)
                         payload_batch = '{"data":[%s]}' % data_str
                         async with mqtt_lock:
                             if client and getattr(client, 'sock', None):
@@ -2034,14 +2038,18 @@ async def rain_monitor_task():
             elif current_rain_state == 'Raining':
                 # Siempre acumulamos en el batch si el sensor detecta humedad
                 if raw <= RAIN_STOP_VALUE:
-                    rain_Batch.append(intensity)
+                    rain_Batch.append(raw)
                     rain_cycle_counter += 1
 
                 # Si el batch se llena con >= 5 muestras, enviamos un adelanto (cada 5 min)
                 if rain_Batch.count >= 5:
                     if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
                         try:
-                            data_str = ",".join('[%d,{"rain_intensity":%s}]' % (it[0], str(it[1])) for it in rain_Batch.get_all())
+                            data_str = ",".join('[%d,{"rain_intensity":%d,"rain_raw":%d}]' % (
+                                it[0],
+                                round(((RAIN_STOP_VALUE - max(RAW_INTENSITY_MIN, min(it[1], RAIN_STOP_VALUE))) / delta_max) * 100),
+                                it[1]
+                            ) for it in rain_Batch.get_all())
                             payload_batch = '{"data":[%s]}' % data_str
                             async with mqtt_lock:
                                 if client and getattr(client, 'sock', None):
@@ -2077,7 +2085,11 @@ async def rain_monitor_task():
                     if data_items:
                         await asyncio.sleep_ms(500)
                         try:
-                            data_str = ",".join('[%d,{"rain_intensity":%s}]' % (it[0], str(it[1])) for it in data_items)
+                            data_str = ",".join('[%d,{"rain_intensity":%d,"rain_raw":%d}]' % (
+                                it[0],
+                                round(((RAIN_STOP_VALUE - max(RAW_INTENSITY_MIN, min(it[1], RAIN_STOP_VALUE))) / delta_max) * 100),
+                                it[1]
+                            ) for it in data_items)
                             payload_batch = '{"data":[%s]}' % data_str
                             async with mqtt_lock:
                                 if client and getattr(client, 'sock', None):

@@ -6,6 +6,13 @@ description: Protocolo maestro de desarrollo. Define convenciones git, manejo de
 # Protocolo de Desarrollo Pristinoplant
 
 > [!IMPORTANT]
+> **ACTIVACIONES OBLIGATORIAS AL INVOCAR**:
+> - Activar `/caveman ultra`.
+> - Activar modo planificación.
+> - Se requiere autorización explícita para proceder con el plan.
+> - Cada modificación debe de planificarse previamente.
+
+> [!IMPORTANT]
 > **ESTÁNDARES DE MARKDOWN (PASO 8)**: Es mandatorio cumplir con el espaciado de encabezados y listas. El sistema de linting ahora está unificado bajo ESLint; asegúrate de ejecutar `pnpm lint:fix` antes de cualquier entrega importante.
 >
 > [!CAUTION]

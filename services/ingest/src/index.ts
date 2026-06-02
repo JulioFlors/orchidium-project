@@ -187,6 +187,16 @@ async function writeToInflux(point: Point) {
 
 // ---- Procesadores de Paquetes JSON ----
 
+interface EnvironmentMetrics {
+  temperature?: number | string
+  temp?: number | string
+  humidity?: number | string
+  hum?: number | string
+  illuminance?: number | string
+  rain_intensity?: number | string
+  rain_raw?: number | string
+}
+
 async function processEnvironmentPacket(
   source: string,
   zone: ZoneType,
@@ -194,7 +204,7 @@ async function processEnvironmentPacket(
   payload: string,
 ) {
   try {
-    const data = JSON.parse(payload)
+    const data = JSON.parse(payload) as EnvironmentMetrics & { data?: unknown }
 
     // Estandarización: Usamos siempre 'data' para batches
     const batch = data.data
@@ -222,16 +232,16 @@ async function processEnvironmentPacket(
       for (const entry of batch) {
         // Soporta formatos: [timestamp, metrics] o { ...metrics }
         let unixTimestamp: number
-        let metrics: Record<string, string | number>
+        let metrics: EnvironmentMetrics
 
         if (Array.isArray(entry) && entry.length === 2) {
           // Formato [ts, {m}]
           unixTimestamp = Number(entry[0])
-          metrics = entry[1] as Record<string, string | number>
+          metrics = entry[1] as EnvironmentMetrics
         } else if (typeof entry === 'object' && entry !== null) {
           // Formato { ... }
           unixTimestamp = Math.floor(Date.now() / 1000)
-          metrics = entry as Record<string, string | number>
+          metrics = entry as EnvironmentMetrics
         } else {
           continue
         }
@@ -257,11 +267,13 @@ async function processEnvironmentPacket(
         const h = metrics.humidity ?? metrics.hum
         const l = metrics.illuminance
         const r = metrics.rain_intensity
+        const rr = metrics.rain_raw
 
         if (t !== undefined) point.setFloatField('temperature', Number(t))
         if (h !== undefined) point.setFloatField('humidity', Number(h))
         if (l !== undefined) point.setFloatField('illuminance', Number(l))
         if (r !== undefined) point.setFloatField('rain_intensity', Number(r))
+        if (rr !== undefined) point.setFloatField('rain_raw', Number(rr))
 
         await writeToInflux(point)
       }
@@ -280,11 +292,13 @@ async function processEnvironmentPacket(
     const h = data.humidity ?? data.hum
     const l = data.illuminance
     const r = data.rain_intensity
+    const rr = data.rain_raw
 
     if (t !== undefined) point.setFloatField('temperature', Number(t))
     if (h !== undefined) point.setFloatField('humidity', Number(h))
     if (l !== undefined) point.setFloatField('illuminance', Number(l))
     if (r !== undefined) point.setFloatField('rain_intensity', Number(r))
+    if (rr !== undefined) point.setFloatField('rain_raw', Number(rr))
 
     await writeToInflux(point)
   } catch (e) {

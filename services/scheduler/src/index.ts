@@ -125,6 +125,28 @@ async function waitForMosquitto(retries = 15) {
   return mqttClient.connected
 }
 
+// ---- Registro y Deduplicación de Estados de Dispositivos ----
+async function saveDeviceLog(device: string, status: DeviceStatus, notes: string) {
+  try {
+    const lastLog = await prisma.deviceLog.findFirst({
+      where: { device },
+      orderBy: { timestamp: 'desc' },
+    })
+
+    if (!lastLog || lastLog.status !== status) {
+      await prisma.deviceLog.create({
+        data: { device, status, notes },
+      })
+    }
+  } catch (err) {
+    Logger.error(`Fallo persistiendo deviceLog (${status}) para ${device}:`, err)
+  }
+}
+
+// ---- Configuración de Watchdogs ----
+const ACTUATOR_HEARTBEAT_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutos
+const EMA_HEARTBEAT_TIMEOUT_MS = 70 * 60 * 1000 // 70 minutos
+
 // ---- Gestión de Estado Local ----
 let lastRainState: 'Raining' | 'Dry' = 'Dry'
 let lastFirmwareHeartbeat: number = 0
@@ -615,15 +637,7 @@ function setupMqttHandlers() {
             { retain: true, qos: 1 },
           )
 
-          await prisma.deviceLog
-            .create({
-              data: {
-                device: 'Weather_Station_ZONA_A',
-                status: 'SLEEP',
-                notes: 'Suspendido',
-              },
-            })
-            .catch((err) => Logger.error('Fallo persistiendo deviceLog (SLEEP)', err))
+          await saveDeviceLog('Weather_Station_ZONA_A', 'SLEEP', 'Suspendido')
         } else if (message === 'lwt_disconnect' || message === 'offline') {
           if (isEmaSleeping) {
             // Ignorar señales de desconexión lwt si el nodo se durmió limpiamente
@@ -648,18 +662,11 @@ function setupMqttHandlers() {
             { retain: true, qos: 1 },
           )
 
-          await prisma.deviceLog
-            .create({
-              data: {
-                device: 'Weather_Station_ZONA_A',
-                status: 'OFFLINE',
-                notes:
-                  message === 'lwt_disconnect'
-                    ? 'Desconexión inesperada'
-                    : 'Desconexión voluntaria',
-              },
-            })
-            .catch((err) => Logger.error('Fallo persistiendo deviceLog (OFFLINE)', err))
+          await saveDeviceLog(
+            'Weather_Station_ZONA_A',
+            'OFFLINE',
+            message === 'lwt_disconnect' ? 'Desconexión inesperada' : 'Desconexión voluntaria',
+          )
         }
 
         return
@@ -1264,7 +1271,7 @@ async function checkEmaHeartbeat() {
 
   const elapsed = Date.now() - lastEmaHeartbeat
 
-  if (elapsed > 30 * 60 * 1000) {
+  if (elapsed > EMA_HEARTBEAT_TIMEOUT_MS) {
     Logger.node('OFFLINE', 'Weather Station Orquideario (Watchdog Timeout)')
     emaManager.setOffline()
     isEmaSleeping = false
@@ -1285,21 +1292,37 @@ async function checkEmaHeartbeat() {
     )
 
     // Persistir estado offline en DB
-    await prisma.deviceLog
-      .create({
-        data: {
-          device: 'Weather_Station_ZONA_A',
-          status: 'OFFLINE',
-          notes: 'Watchdog: Sin señales de vida durante 30 minutos (Offline)',
-        },
-      })
-      .catch((err) => Logger.error('Fallo persistiendo deviceLog para EMA (Watchdog OFFLINE)', err))
+    await saveDeviceLog(
+      'Weather_Station_ZONA_A',
+      'OFFLINE',
+      'Watchdog: Sin señales de vida durante 70 minutos (Offline)',
+    )
 
     // Publicar estado offline en canal de status
     mqttClient.publish('PristinoPlant/Weather_Station/ZONA_A/status', 'offline', {
       retain: true,
       qos: 1,
     })
+  }
+}
+
+/**
+ * Watchdog de inactividad del Nodo Actuador:
+ * Si han transcurrido más de 30 minutos sin señales de vida (pings, telemetría)
+ * del actuador, lo declaramos OFFLINE de manera reactiva.
+ */
+async function checkActuatorHeartbeat() {
+  if (lastFirmwareHeartbeat === 0) return
+  if (irrigationRetryManager.connectionState === 'offline') return
+
+  const elapsed = Date.now() - lastFirmwareHeartbeat
+
+  if (elapsed > ACTUATOR_HEARTBEAT_TIMEOUT_MS) {
+    Logger.node('OFFLINE', 'Actuator_Controller (Watchdog Timeout)')
+    await handleNodeOffline(
+      `Watchdog: Sin señales de vida durante ${Math.round(elapsed / 60000)} minutos (Offline)`,
+      'SCHEDULER',
+    )
   }
 }
 
@@ -1347,21 +1370,20 @@ function checkSensorsHealth() {
 async function handleNodeOffline(reason: string, origin: 'BROKER' | 'NODE' | 'SCHEDULER') {
   if (irrigationRetryManager.connectionState === 'offline') return
 
+  if (climateSyncTimer) {
+    clearInterval(climateSyncTimer)
+    climateSyncTimer = null
+  }
+  climateSyncAttempts = 0
+  climateSyncPhase = 'idle'
+
   irrigationRetryManager.setOffline()
   systemRetryManager.setOffline()
   Logger.node('OFFLINE', origin)
   resetSamplingState()
 
   // 1. Registro en el Historial (Postgres)
-  await prisma.deviceLog
-    .create({
-      data: {
-        device: 'Actuator_Controller',
-        status: 'OFFLINE',
-        notes: reason,
-      },
-    })
-    .catch((err) => Logger.error('Fallo persistiendo deviceLog (OFFLINE)', err))
+  await saveDeviceLog('Actuator_Controller', 'OFFLINE', reason)
 
   // 2. Gestionar tareas que estaban en ejecución
   const interruptedTasks = await prisma.taskLog.findMany({
@@ -1476,15 +1498,7 @@ async function handleNodeSync(
     statusToSave === 'REBOOT' ||
     message !== 'ping'
   ) {
-    await prisma.deviceLog
-      .create({
-        data: {
-          device: 'Actuator_Controller',
-          status: statusToSave,
-          notes: notes,
-        },
-      })
-      .catch((err) => Logger.error('Fallo persistiendo deviceLog (ONLINE/REBOOT)', err))
+    await saveDeviceLog('Actuator_Controller', statusToSave, notes)
   }
 
   // Asegurar que el secuenciador transicione a modo estabilización (online)
@@ -1582,8 +1596,8 @@ async function handleNodeSync(
     }
   }
 
-  // Al arrancar (boot), nos aseguramos de limpiar cualquier temporizador previo
-  if (message === 'online' || (message === 'reboot' && isFreshSession)) {
+  // Al arrancar (boot) o reconectarse, nos aseguramos de limpiar cualquier temporizador previo
+  if (message === 'online' || message === 'reboot') {
     if (climateSyncTimer) {
       clearInterval(climateSyncTimer)
       climateSyncTimer = null
@@ -1599,7 +1613,10 @@ async function handleNodeSync(
  * Envía un comando con la hora local actual de Caracas para sincronizar el RTC del EMA.
  */
 function sendCaracasTimeToEma(): void {
+  if (emaManager.connectionState !== 'online' || isEmaSleeping) return
+
   const nowMs = Date.now()
+
   if (nowMs - lastTimeSyncSent < 30000) {
     return
   }
@@ -1656,15 +1673,7 @@ async function handleEmaSync(statusToSave: DeviceStatus) {
 
   Logger.node(statusToSave, 'Weather Station Orquideario')
 
-  await prisma.deviceLog
-    .create({
-      data: {
-        device: 'Weather_Station_ZONA_A',
-        status: statusToSave,
-        notes: notes,
-      },
-    })
-    .catch((err) => Logger.error('Fallo persistiendo deviceLog para EMA', err))
+  await saveDeviceLog('Weather_Station_ZONA_A', statusToSave, notes)
 
   // Sincronizar el reloj del EMA
   sendCaracasTimeToEma()
@@ -1694,6 +1703,7 @@ function clearSyncTimerIfHealthy() {
  * Envía comando sync_climate al nodo actuador.
  */
 function requestClimateSync() {
+  if (irrigationRetryManager.connectionState !== 'online') return
   executeSystemCommand('sync_climate', true)
 }
 
@@ -1790,10 +1800,11 @@ async function initScheduler() {
   // 0.1. Verificación retroactiva de estadísticas diarias (últimos 7 días)
   await checkAndRecoverMissingStats()
 
-  // Verificación periódica de inactividad de nodos y eventos (cada 15s)
+  // Verificación periódica de inactividad de nodos y eventos (cada 1 min)
   setInterval(checkRainOrphanTimeout, 60_000)
   setInterval(checkSensorsHealth, 60_000)
   setInterval(checkEmaHeartbeat, 60_000)
+  setInterval(checkActuatorHeartbeat, 60_000)
 
   // Cron de limpieza de tareas expiradas (Ventana de 20 min / 24h agroquímicos)
   new Cron('*/5 * * * *', { timezone: 'America/Caracas' }, async () => {

@@ -111,7 +111,7 @@ export function EnvironmentCard({
       ref={containerRef}
       animate="rest"
       className={clsx(
-        'group relative flex min-h-[180px] w-full flex-col overflow-hidden rounded-md border',
+        'group relative z-1 flex min-h-[180px] w-full flex-col overflow-hidden rounded-md border',
         'bg-surface',
         isHovered || isActive ? 'border-primary/20' : 'border-input-outline',
         'cursor-pointer transition-all duration-300 select-none',

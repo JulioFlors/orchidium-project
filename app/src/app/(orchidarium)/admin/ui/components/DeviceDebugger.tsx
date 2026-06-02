@@ -387,6 +387,7 @@ export function DeviceDebugger() {
               }
 
               const unifiedPacket = messages[unifiedAuditTopic]?.payload as Record<string, unknown>
+              const receivedAt = messages[unifiedAuditTopic]?.receivedAt
 
               // Mapeo de nombres cortos a largos para extraer datos del paquete unificado
               const auditMapping: Record<string, string> = {
@@ -422,6 +423,7 @@ export function DeviceDebugger() {
                           Boolean(pendingAcks[`audit_${auditId}_off`])
                     }
                     isStale={false}
+                    receivedAt={receivedAt}
                     onClear={() => {
                       // El widget ya se encarga de limpiar su propia sesión internamente
                     }}
