@@ -224,7 +224,7 @@ services:
       - ./infrastructure/mosquitto/config:/mosquitto/config
       - ./infrastructure/mosquitto/data:/mosquitto/data
       - ./infrastructure/mosquitto/log:/mosquitto/log
-      - ./infrastructure/certs:/mosquitto/certs:ro
+      - ./infrastructure/certs/mosquitto:/mosquitto/certs:ro
 
   influxdb:
     image: influxdb:3-core

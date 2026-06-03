@@ -508,7 +508,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
         label: 'Desconectado',
         icon: <Cloud className="h-6 w-6 text-slate-500" />,
         color: 'orange' as const,
-        description: 'Estación meteorológica fuera de línea',
+        description: 'Estación meteorológica Offline',
         status: 'critical' as const,
       }
     }

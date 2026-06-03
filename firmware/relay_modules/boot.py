@@ -60,7 +60,6 @@ def connect_wifi_sync():
         except Exception as e:
             if DEBUG: print(f"⚠️  Error forzando DNS en Boot: {e}")
 
-
         # ---- Sincronización de Tiempo NTP ----
         if DEBUG: print(f"\n🕒  Sincronizando ", end="")
 

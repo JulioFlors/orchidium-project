@@ -333,7 +333,7 @@ Pega tus credenciales de producción (Contraseñas fuertes para tu Postgres loca
 
 Para que el frontend (Vercel) y los ESP32 puedan conectarse de forma segura a los servicios (PostgreSQL, MQTT e InfluxDB) en el VPS, es obligatorio generar certificados SSL válidos utilizando Let's Encrypt.
 
-Para mantener el sistema anfitrión limpio, ejecutamos Certbot de forma efímera a través de Docker. Esto creará los certificados y los guardará directamente en la carpeta del proyecto.
+Para mantener el sistema anfitrión limpio, ejecutamos Certbot en un contenedor de forma efímera a través de Docker. Esto creará los certificados y los guardará directamente en la carpeta del proyecto.
 
 > **Requisito previo:** Asegúrate de que los subdominios (ej. `vps.tudominio.com` y `mqtt.tudominio.com`) ya estén apuntando a la IP del VPS y que el puerto 80 del servidor esté libre.
 
@@ -366,8 +366,8 @@ mkdir -p infrastructure/certs/postgres
 mkdir -p infrastructure/certs/influxdb
 
 # 3. Copiar los certificados reales (resolviendo los links de Certbot)
-cp -L infrastructure/certs/live/vps.midominio.com/* infrastructure/certs/postgres/
-cp -L infrastructure/certs/live/vps.midominio.com/* infrastructure/certs/influxdb/
+cp -L infrastructure/certs/live/mqtt.midominio.com/* infrastructure/certs/postgres/
+cp -L infrastructure/certs/live/mqtt.midominio.com/* infrastructure/certs/influxdb/
 
 # 4. Darle los permisos estrictos a PostgreSQL (Usuario interno UID 999)
 sudo chown -R 999:999 infrastructure/certs/postgres/
@@ -407,25 +407,29 @@ docker exec --user root -it influxdb sh -c \
 
 ##### 🔄 Renovación de Certificados SSL (Cada 90 días)
 
-Los certificados de Let's Encrypt tienen una validez estricta de **90 días** (por ejemplo, con expiración el `2026-08-31`). Es obligatorio renovar los certificados aproximadamente cada 3 meses para evitar errores TLS (`net::ERR_CERT_DATE_INVALID` o `certificate has expired`) que bloquean la comunicación con Mosquitto, InfluxDB o PostgreSQL.
+Los certificados de Let's Encrypt tienen una validez estricta de **90 días** (por ejemplo, con expiración el `2026-08-31`). Es obligatorio renovar los certificados aproximadamente cada 3 meses para evitar errores TLS (`net::ERR_CERT_DATE_INVALID` o `certificate has expired`) que bloquean la comunicación con Mosquitto, InfluxDB y PostgreSQL.
 
 **Procedimiento de renovación paso a paso en el VPS (SSH):**
 
-1. **Liberar el puerto 80** del servidor (si tienes servicios activos como Nginx externo, deténlos temporalmente).
-2. **Ejecutar Certbot** para renovar manteniendo el orden de dominios original (con el broker `mqtt` primero):
+1. **Ejecutar Certbot** para renovar manteniendo el orden de dominios original (con el broker `mqtt` primero):
+
    ```bash
    cd ~/pristinoplant
    sudo docker run -it --rm -p 80:80 \
      -v $(pwd)/infrastructure/certs:/etc/letsencrypt \
      certbot/certbot certonly --standalone \
-     -d mqtt.sisparrow.com -d vps.sisparrow.com
+     -d mqtt.midominio.com -d vps.midominio.com
    ```
-3. **Copiar los certificados actualizados** reemplazando los anteriores en Postgres e InfluxDB:
+
+2. **Copiar los certificados actualizados** reemplazando los anteriores en Postgres e InfluxDB:
+
    ```bash
-   sudo cp -L infrastructure/certs/live/mqtt.sisparrow.com/* infrastructure/certs/postgres/
-   sudo cp -L infrastructure/certs/live/mqtt.sisparrow.com/* infrastructure/certs/influxdb/
+   sudo cp -L infrastructure/certs/live/mqtt.midominio.com/* infrastructure/certs/postgres/
+   sudo cp -L infrastructure/certs/live/mqtt.midominio.com/* infrastructure/certs/influxdb/
    ```
-4. **Re-aplicar permisos estrictos de Docker**:
+
+3. **Re-aplicar permisos estrictos de Docker**:
+
    ```bash
    # Permisos para Postgres (UID 999)
    sudo chown -R 999:999 infrastructure/certs/postgres/
@@ -435,7 +439,9 @@ Los certificados de Let's Encrypt tienen una validez estricta de **90 días** (p
    sudo chown -R 1500:1500 infrastructure/certs/influxdb/
    sudo chmod 644 infrastructure/certs/influxdb/privkey.pem
    ```
-5. **Reiniciar los contenedores de infraestructura** para que recarguen las nuevas llaves:
+
+4. **Reiniciar los contenedores de infraestructura** para que recarguen las nuevas llaves:
+
    ```bash
    docker compose --profile cloud restart postgres influxdb mosquitto
    ```
