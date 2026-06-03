@@ -6,7 +6,7 @@ from utime   import sleep #type: ignore
 
 # ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
-DEBUG = False
+DEBUG = True
 
 # ---- Colors for logs ----
 # Solo se crea si estamos en modo desarrollo

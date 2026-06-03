@@ -6,7 +6,7 @@ from utime   import sleep #type: ignore
 
 # ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
-DEBUG = False
+DEBUG = True
 
 # ---- Colors for logs ----
 # Solo se crea si estamos en modo desarrollo
@@ -59,7 +59,6 @@ def connect_wifi_sync():
                 print(f"\n🌍  DNS: {Colors.CYAN}{cloudflare_dns}{Colors.RESET}")
         except Exception as e:
             if DEBUG: print(f"⚠️  Error forzando DNS en Boot: {e}")
-
 
         # ---- Sincronización de Tiempo NTP ----
         if DEBUG: print(f"\n🕒  Sincronizando ", end="")

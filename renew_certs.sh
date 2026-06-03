@@ -30,7 +30,7 @@ CYAN='\x1b[96m'
 # Asegurar que el script se ejecuta en la raíz del proyecto
 cd "$(dirname "$0")"
 
-echo -e "${GREEN}🔒 Renovación de Certificados SSL${RESET}"
+echo -e "${GREEN}🌵 PristinoPlant | Renovación de Certificados SSL${RESET}"
 echo -e "${CYAN}------------------------------------------------------------${RESET}"
 
 # Requisito previo: Validar que Docker esté instalado
@@ -50,7 +50,7 @@ fi
 # PASO PREVENTIVO: Crear Respaldo y Limpiar Linajes Antiguos de Certbot
 # -------------------------------------------------------------------------------------
 BACKUP_DIR="infrastructure/certs_backup_$(date +%Y%m%d_%H%M%S)"
-echo -e "\n${CYAN}📦 Creando respaldo de seguridad en '${BACKUP_DIR}'${RESET}"
+echo -e "\n${CYAN}📦 Creando respaldo de seguridad en '${BACKUP_DIR}'...${RESET}"
 mkdir -p "$BACKUP_DIR"
 if [ -d "infrastructure/certs" ]; then
   sudo cp -rp infrastructure/certs/* "$BACKUP_DIR/"
@@ -59,7 +59,7 @@ else
   echo -e "${YELLOW}⚠️ No se encontró la carpeta 'infrastructure/certs'. Se creará desde cero.${RESET}"
 fi
 
-echo -e "${CYAN}🧹 Limpiando configuraciones antiguas de Certbot para evitar conflictos y directorios incrementales (-0001)${RESET}"
+echo -e "${CYAN}🧹 Limpiando configuraciones antiguas de Certbot para evitar conflictos y directorios incrementales (-0001)...${RESET}"
 # Eliminar linajes antiguos en live, archive y renewal
 sudo rm -rf infrastructure/certs/live/mqtt.sisparrow.com*
 sudo rm -rf infrastructure/certs/archive/mqtt.sisparrow.com*
@@ -70,29 +70,31 @@ sudo rm -rf infrastructure/certs/archive/vps.sisparrow.com*
 sudo rm -rf infrastructure/certs/renewal/vps.sisparrow.com*.conf
 
 # -------------------------------------------------------------------------------------
-# PASO 1: Generación de Certificados con Certbot Docker (ECDSA)
+# PASO 1: Generación de Certificados con Certbot Docker (RSA 2048 - Estándar IoT)
 # -------------------------------------------------------------------------------------
-echo -e "\n${CYAN}🔑 [1/5] Ejecutando Certbot para 'mqtt.sisparrow.com'${RESET}"
+# RSA 2048 es el estándar comprobado para dispositivos IoT (ESP32/MicroPython).
+# El motor mbedTLS del ESP32 soporta nativamente las cipher suites ECDHE_RSA,
+# lo que garantiza un handshake TLS exitoso con bajo consumo de RAM (~45KB).
+# -------------------------------------------------------------------------------------
+echo -e "\n${CYAN}🔑 [1/5] Ejecutando Certbot para 'mqtt.sisparrow.com' (RSA 2048)...${RESET}"
 echo -e "${YELLOW}⚠️  Asegúrate de que el puerto 80 del VPS esté totalmente libre.${RESET}\n"
 
 sudo docker run -it --rm -p 80:80 \
   -v $(pwd)/infrastructure/certs:/etc/letsencrypt \
   certbot/certbot certonly --standalone \
-  --key-type ecdsa \
   -d mqtt.sisparrow.com
 
-echo -e "\n${CYAN}🔑 [2/5] Ejecutando Certbot para 'vps.sisparrow.com'${RESET}\n"
+echo -e "\n${CYAN}🔑 [2/5] Ejecutando Certbot para 'vps.sisparrow.com' (RSA 2048)...${RESET}\n"
 
 sudo docker run -it --rm -p 80:80 \
   -v $(pwd)/infrastructure/certs:/etc/letsencrypt \
   certbot/certbot certonly --standalone \
-  --key-type ecdsa \
   -d vps.sisparrow.com
 
 # -------------------------------------------------------------------------------------
 # PASO 2: Limpieza de directorios dedicados previos
 # -------------------------------------------------------------------------------------
-echo -e "\n${CYAN}🗑️ [3/5] Limpiando carpetas de certificados dedicados anteriores${RESET}"
+echo -e "\n${CYAN}🗑️  [3/5] Limpiando carpetas de certificados dedicados anteriores...${RESET}"
 sudo rm -rf infrastructure/certs/mosquitto/*
 sudo rm -rf infrastructure/certs/postgres/*
 sudo rm -rf infrastructure/certs/influxdb/*
@@ -100,7 +102,7 @@ sudo rm -rf infrastructure/certs/influxdb/*
 # -------------------------------------------------------------------------------------
 # PASO 3: Copiar nuevos certificados resolviendo los enlaces simbólicos
 # -------------------------------------------------------------------------------------
-echo -e "${CYAN}📂 [4/5] Copiando certificados a directorios aislados${RESET}"
+echo -e "${CYAN}📂 [4/5] Copiando certificados a directorios aislados...${RESET}"
 mkdir -p infrastructure/certs/mosquitto
 mkdir -p infrastructure/certs/postgres
 mkdir -p infrastructure/certs/influxdb
@@ -113,22 +115,22 @@ sudo cp -L infrastructure/certs/live/vps.sisparrow.com/* infrastructure/certs/in
 # -------------------------------------------------------------------------------------
 # PASO 4: Otorgar propiedad y permisos de lectura estándar
 # -------------------------------------------------------------------------------------
-echo -e "${CYAN}🔒 [5/5] Ajustando propiedad (UID) y permisos de seguridad${RESET}"
+echo -e "${CYAN}🔒 [5/5] Ajustando propiedad (UID) y permisos de seguridad...${RESET}"
 
 # A. Mosquitto (Usuario interno UID 1883)
-echo -e "   ├─ Configurando permisos para Mosquitto (UID 1883)"
+echo -e "   ├─ Configurando permisos para Mosquitto (UID 1883)..."
 sudo chown -R 1883:1883 infrastructure/certs/mosquitto/
 sudo chmod 600 infrastructure/certs/mosquitto/privkey.pem
 sudo chmod 644 infrastructure/certs/mosquitto/fullchain.pem
 
 # B. PostgreSQL (Usuario interno UID 999)
-echo -e "   ├─ Configurando permisos para PostgreSQL (UID 999)"
+echo -e "   ├─ Configurando permisos para PostgreSQL (UID 999)..."
 sudo chown -R 999:999 infrastructure/certs/postgres/
 sudo chmod 600 infrastructure/certs/postgres/privkey.pem
 sudo chmod 644 infrastructure/certs/postgres/fullchain.pem
 
 # C. InfluxDB (Usuario interno UID 1500)
-echo -e "   └─ Configurando permisos para InfluxDB (UID 1500)"
+echo -e "   └─ Configurando permisos para InfluxDB (UID 1500)..."
 sudo chown -R 1500:1500 infrastructure/certs/influxdb/
 sudo chmod 644 infrastructure/certs/influxdb/privkey.pem
 sudo chmod 644 infrastructure/certs/influxdb/fullchain.pem
@@ -136,7 +138,7 @@ sudo chmod 644 infrastructure/certs/influxdb/fullchain.pem
 # -------------------------------------------------------------------------------------
 # REINICIAR SERVICIOS
 # -------------------------------------------------------------------------------------
-echo -e "\n${CYAN}🔄 Reiniciando contenedores de infraestructura en Docker${RESET}"
+echo -e "\n${CYAN}🔄 Reiniciando contenedores de infraestructura en Docker...${RESET}"
 docker compose --profile cloud restart postgres influxdb mosquitto
 
 echo -e "\n${GREEN}✅ Certificados renovados y contenedores reiniciados con éxito!${RESET}"
