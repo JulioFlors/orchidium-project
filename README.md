@@ -113,7 +113,7 @@ El archivo `.env` está dividido en secciones. Rellena tus credenciales (Google,
 
 Al final del archivo `.env`, encontrarás la sección **"APP NEXT.JS"**. Aquí decides a qué backend se conecta tu entorno de desarrollo local (`pnpm dev`):
 
-* **Opción A (Cloud):** Apunta a los servicios alojados en tu VPS propio (`vps.midominio.com`).
+* **Opción A (Cloud):** Apunta a los servicios alojados en tu VPS propio (`vps.sisparrow.com`).
 * **Opción B (Local):** Apunta a los contenedores locales de tu computadora (`localhost`).
 * **Opción C (Serverless):** Apunta a proveedores externos en la nube (Neon DB, HiveMQ, InfluxDB Cloud).
 
@@ -327,124 +327,121 @@ Pega tus credenciales de producción (Contraseñas fuertes para tu Postgres loca
 * Presiona `Ctrl + O` y `Enter` para guardar.
 * Presiona `Ctrl + X` para salir.
 
-> **Importante:** Asegúrate de incluir la variable `COMPOSE_PROFILES=cloud` para que Docker levante la infraestructura nativa del VPS.
-
 #### 4. Preparación de Volúmenes y Certificados SSL (Mosquitto, PostgreSQL e InfluxDB)
 
-Para que el frontend (Vercel) y los ESP32 puedan conectarse de forma segura a los servicios (PostgreSQL, MQTT e InfluxDB) en el VPS, es obligatorio generar certificados SSL válidos utilizando Let's Encrypt.
+Para que tanto la aplicación web (dashboard en Vercel) como los dispositivos físicos (ESP32) puedan conectarse con seguridad (encriptación SSL/TLS) a los servicios alojados en el VPS, es indispensable generar certificados de seguridad válidos y gratuitos a través de **Let's Encrypt** usando la herramienta **Certbot**.
 
-Para mantener el sistema anfitrión limpio, ejecutamos Certbot en un contenedor de forma efímera a través de Docker. Esto creará los certificados y los guardará directamente en la carpeta del proyecto.
+---
 
-> **Requisito previo:** Asegúrate de que los subdominios (ej. `vps.tudominio.com` y `mqtt.tudominio.com`) ya estén apuntando a la IP del VPS y que el puerto 80 del servidor esté libre.
+##### 📖 Glosario y Conceptos Clave (Para no olvidar)
 
-Ejecuta el siguiente comando en la raíz del proyecto (`pristinoplant`):
+Para comprender el flujo de seguridad y por qué se configuró de esta manera, es vital entender los siguientes conceptos:
+
+* **¿Qué es la "Cadena de Certificación" (Cadena CA / Chain of Trust)?**
+    Un certificado digital no se valida solo. Para que tu computadora o un navegador confíe en `mqtt.sisparrow.com`, se requiere verificar una cadena jerárquica de confianza:
+    1. **Certificado Hoja (`cert.pem`):** El certificado específico emitido para tu dominio. Contiene tu clave pública.
+    2. **Certificado Intermedio (`chain.pem`):** Emitido por una entidad de confianza (como Let's Encrypt R3) que da fe de que tu certificado de dominio es legítimo.
+    3. **Certificado Raíz (Root CA):** El certificado de la entidad emisora principal (como *ISRG Root X1*). Este certificado ya viene pre-instalado de fábrica en los sistemas operativos y navegadores del mundo.
+
+    *La unión del Certificado Hoja y el Intermedio se conoce como **Cadena Completa (`fullchain.pem`)**.*
+
+* **¿Por qué el ESP32 falla con la "Cadena Completa" (Error `-17040`)?**
+    El ESP32 tiene una memoria RAM extremadamente limitada. Cuando intenta negociar la conexión SSL/TLS, la librería criptográfica interna (`mbedTLS`) procesa matemáticamente las claves criptográficas. Si el broker Mosquitto le envía la cadena completa (`fullchain.pem`), el ESP32 gasta valiosos kilobytes de RAM cargando y analizando los certificados intermedios. Esto agota el heap de memoria del chip y lanza el error `-17040` (`MBEDTLS_ERR_MPI_ALLOC_FAILED`), interrumpiendo la conexión.
+
+* **🕵️ Bitácora de Decisiones: ¿Por qué antes sí conectaba con la cadena completa?**
+    Es común preguntarse: *"Si nunca modifiqué el broker, ¿por qué dejó de funcionar justo al caducar los certificados si antes conectaba sin problemas?"*. Hay dos explicaciones técnicas críticas para esto:
+    1. **Crecimiento progresivo del Firmware:** Cuando se generaron los primeros certificados hace meses, el firmware del ESP32 era más sencillo y liviano. Con las sucesivas actualizaciones de software (módulos de riego diferido, colas asíncronas para el patrón productor-consumidor, y control del watchdog de hardware), el código en RAM creció considerablemente. Al haber más tareas corriendo simultáneamente en segundo plano, la memoria heap libre residual disminuyó. El límite de RAM para procesar el TLS era suficiente al principio, pero las actualizaciones de firmware terminaron por cerrar esa brecha de seguridad en memoria.
+    2. **Cambio en las firmas de la entidad emisora (Let's Encrypt):** Let's Encrypt actualiza periódicamente sus llaves y certificados intermedios (como el retiro definitivo del certificado intermedio con firma cruzada *DST Root CA X3* para usar únicamente la jerarquía moderna *ISRG Root X1*). Aunque para nosotros los certificados parezcan iguales, las nuevas firmas criptográficas e intermedios generados por Certbot en la última renovación son estructuralmente más complejos o ligeramente más pesados, requiriendo más operaciones aritméticas internas de precisión en `mbedTLS`.
+
+    *Al combinar un firmware más pesado con certificados modernos, la memoria RAM colapsó. Configurar el broker para servir únicamente `cert.pem` en el puerto 8883 elimina este overhead por completo y garantiza la estabilidad a largo plazo.*
+
+* **La Solución Híbrida (Optimización de RAM):**
+  * **Para los ESP32 (Puerto MQTTS 8883):** Configuramos Mosquitto para que use **`cert.pem`** (solo el certificado hoja, sin intermedios). En el código del ESP32 especificamos `"cert_reqs": 0` (que equivale a decir "no valides si la entidad emisora es de confianza, solo encripta la comunicación"). Al no validar la cadena, el ESP32 no necesita los certificados intermedios, el paquete TLS es sumamente ligero, consume muy poca RAM y conecta exitosamente usando el cifrado rápido `ECDHE-ECDSA-AES256-GCM-SHA384`.
+  * **Para el Navegador Web / WebSockets (Puerto WSS 8884):** Los navegadores son estrictos y exigen validar la legitimidad del emisor. Aquí es obligatorio que Mosquitto sirva **`fullchain.pem`** (la cadena completa) para evitar alertas rojas de "Sitio No Seguro".
+
+---
+
+##### 🐳 Generación de Certificados (Certbot Efímero)
+
+Para no instalar herramientas basura ni dependencias innecesarias en el sistema operativo del VPS, ejecutamos Certbot dentro de un contenedor Docker efímero (que se destruye inmediatamente tras cumplir su tarea).
+
+* **¿Qué significa `certonly`?**
+    Le indica a Certbot que únicamente queremos obtener/descargar los archivos de los certificados. No intentará modificar ni configurar ningún servidor web local (como Nginx o Apache).
+* **¿Qué significa `--standalone`?**
+    Le indica a Certbot que levante de forma autónoma y temporal su propio servidor web interno en el puerto 80 para responder al desafío de validación de Let's Encrypt.
+* **¿Cómo funciona la validación (Desafío HTTP-01) y por qué importa el Firewall (UFW)?**
+    Para entregarte un certificado, Let's Encrypt debe asegurarse de que tú controlas el dominio. Certbot crea un archivo de validación temporal en su servidor web interno. Los servidores de Let's Encrypt intentan acceder a `http://mqtt.sisparrow.com/.well-known/acme-challenge/xxxx` por el puerto 80.
+
+    **El problema del Firewall:** Aunque tu VPS no tenga ningún otro servicio (como Apache o Nginx) escuchando en el puerto 80, el puerto está **cerrado de entrada a nivel de Firewall (UFW)** debido a la política restrictiva por defecto (`ufw default deny incoming`). UFW descarta cualquier paquete entrante que no esté explícitamente permitido en sus reglas. Si UFW está activo, bloqueará la validación HTTP-01 de Let's Encrypt y Certbot fallará. Por ello, el script `renew_certs.sh` ejecuta `ufw allow 80/tcp` de forma automatizada al iniciar y `ufw delete allow 80/tcp` al finalizar.
+
+---
+
+##### 🚀 Generación Inicial en el VPS
+
+Ejecuta los siguientes comandos (de forma independiente) en la raíz del proyecto (`pristinoplant`) en tu VPS para obtener los certificados de cada dominio por primera vez en carpetas separadas:
 
 ```bash
-cd pristinoplant
+# 1. Asegúrate de permitir temporalmente el puerto 80 si usas UFW:
+# sudo ufw allow 80/tcp
+
+# 2. Generar certificado para el broker MQTT (mqtt.sisparrow.com)
 sudo docker run -it --rm -p 80:80 \
   -v $(pwd)/infrastructure/certs:/etc/letsencrypt \
   certbot/certbot certonly --standalone \
-  -d mqtt.midominio.com -d vps.midominio.com
+  -d mqtt.sisparrow.com
+
+# 3. Generar certificado para la base de datos e Influx (vps.sisparrow.com)
+sudo docker run -it --rm -p 80:80 \
+  -v $(pwd)/infrastructure/certs:/etc/letsencrypt \
+  certbot/certbot certonly --standalone \
+  -d vps.sisparrow.com
 ```
 
-> **Nota:** Es sumamente importante mantener este orden de dominios para que la carpeta principal tome el nombre de `mqtt.midominio.com`.
+##### 📂 Ajuste y Aislamiento de Permisos (Crucial para Docker)
 
-**Ajuste y Aislamiento de Permisos (Crucial para Docker):**
-Por defecto, Git o Certbot crean archivos con propiedad estricta para el usuario `root` de Linux. Sin embargo, los contenedores seguros (PostgreSQL, InfluxDB) ejecutan sus motores con usuarios internos sin privilegios. Si no preparamos los permisos de antemano, los contenedores colapsarán con errores de "Acceso Denegado" (`Permission denied`).
+Los contenedores de Postgres, InfluxDB y Mosquitto corren bajo usuarios internos del contenedor (con identificadores numéricos llamados UIDs). Si los certificados pertenecen únicamente al usuario `root` del VPS, los contenedores fallarán con errores de "Acceso Denegado" (`Permission denied`).
 
-Para resolver esto y garantizar un arranque exitoso, creamos copias aisladas de los certificados y pre-asignamos la propiedad de las carpetas de datos a los identificadores internos (UID) que usa cada base de datos. Ejecuta este bloque de comandos en tu VPS:
+Para simplificar esto, el script automatizado `./renew_certs.sh` se encarga de crear copias aisladas, distribuir los archivos correctos (`cert.pem` o `fullchain.pem` según corresponda) y asignar la propiedad a los UIDs necesarios (UID `1883` para Mosquitto, `999` para Postgres, y `1500` para InfluxDB).
+
+---
+
+##### 🔄 Renovación de Certificados SSL (Automatizada con `renew_certs.sh`)
+
+Los certificados de Let's Encrypt expiran estrictamente cada **90 días**. Para evitar tener que recordar todos estos comandos, el archivo `./renew_certs.sh` en la raíz del proyecto automatiza todo el proceso:
+
+1. Limpia los directorios temporales de Certbot para evitar colisiones.
+2. Detecta si el firewall UFW está activo y **abre automáticamente el puerto 80/tcp** en el VPS.
+3. Levanta el contenedor de Certbot para renovar los certificados mediante el desafío `--standalone`.
+4. **Cierra automáticamente el puerto 80/tcp** en UFW una vez renovados los certificados.
+5. Distribuye y aísla los archivos correctos (`cert.pem` para Mosquitto en hardware, y `fullchain.pem` para Postgres, InfluxDB y Websockets).
+6. Aplica los permisos y propietarios (UIDs `1883`, `999` y `1500`) adecuados.
+7. Reinicia los contenedores de infraestructura para que recarguen las nuevas llaves criptográficas.
+
+**Para renovar en tu VPS mediante SSH, simplemente ejecuta:**
 
 ```bash
-# 1. Pre-asignar permisos a las carpetas de datos ANTES de arrancar Docker
-# UID 1500 es el usuario interno estricto para influxdb:3-core
-mkdir -p infrastructure/influxdb/data
-sudo chown -R 1500:1500 infrastructure/influxdb/data/
-sudo chmod -R 755 infrastructure/influxdb/data/
-
-# 2. Crear carpetas aisladas para los certificados de cada DB
-mkdir -p infrastructure/certs/postgres
-mkdir -p infrastructure/certs/influxdb
-
-# 3. Copiar los certificados reales (resolviendo los links de Certbot)
-cp -L infrastructure/certs/live/mqtt.midominio.com/* infrastructure/certs/postgres/
-cp -L infrastructure/certs/live/mqtt.midominio.com/* infrastructure/certs/influxdb/
-
-# 4. Darle los permisos estrictos a PostgreSQL (Usuario interno UID 999)
-sudo chown -R 999:999 infrastructure/certs/postgres/
-sudo chmod 600 infrastructure/certs/postgres/privkey.pem
-
-# 5. Darle los permisos de lectura estándar a InfluxDB (UID 1500)
-sudo chown -R 1500:1500 infrastructure/certs/influxdb/
-sudo chmod 644 infrastructure/certs/influxdb/privkey.pem
+cd ~/pristinoplant
+./renew_certs.sh
 ```
-
-> **💡 Tip para confirmar tu dominio:**
-> Certbot nombra la carpeta usando el primer dominio que le pasaste en el comando. Si no estás seguro del nombre exacto, ejecuta este comando para listar el contenido y copiar el nombre real:
->
-> ```bash
-> ls infrastructure/certs/live/
-> ```
->
-> Sustituye `vps.midominio.com` en los comandos del paso 3 por el nombre exacto que te devuelva el comando anterior.
 
 **Regenerar Token Admin de InfluxDB (Con TLS habilitado):**
 
-Cuando InfluxDB corre con TLS (`--tls-cert` / `--tls-key`), el CLI `influxdb3` dentro del contenedor necesita comunicarse vía HTTPS. Como el certificado fue emitido para el dominio público (`vps.midominio.com`) y no para `127.0.0.1`, hay que inyectar la resolución DNS manualmente dentro del contenedor:
+Cuando InfluxDB corre con TLS (`--tls-cert` / `--tls-key`), el CLI `influxdb3` dentro del contenedor necesita comunicarse vía HTTPS. Como el certificado fue emitido para el dominio público (`vps.sisparrow.com`) y no para `127.0.0.1`, hay que inyectar la resolución DNS manualmente dentro del contenedor:
 
 ```bash
 docker exec --user root -it influxdb sh -c \
-  'echo "127.0.0.1 vps.midominio.com" >> /etc/hosts && influxdb3 create token --admin --host "https://vps.midominio.com:8181" --tls-ca /ssl/fullchain.pem'
+  'echo "127.0.0.1 vps.sisparrow.com" >> /etc/hosts && influxdb3 create token --admin --host "https://vps.sisparrow.com:8181" --tls-ca /ssl/fullchain.pem'
 ```
 
 > [!IMPORTANT]
 > Guarda el token generado inmediatamente. No se mostrará de nuevo.
 > Actualiza `INFLUX_TOKEN` en el `.env` del VPS y reinicia los servicios que lo utilicen: `docker compose restart scheduler`.
+>
 > [!NOTE]
 > **Gestión Inteligente de TLS:** El sistema detecta automáticamente si la conexión a InfluxDB es interna (red Docker) o externa (InfluxDB Cloud).
 >
 > * Si la URL contiene `influxdb` o `localhost`, se desactiva la verificación estricta para permitir certificados autofirmados.
 > * Si la URL es externa (`*.influxdata.com`), se mantiene la validación estricta para garantizar la seguridad en la nube.
-
-##### 🔄 Renovación de Certificados SSL (Cada 90 días)
-
-Los certificados de Let's Encrypt tienen una validez estricta de **90 días** (por ejemplo, con expiración el `2026-08-31`). Es obligatorio renovar los certificados aproximadamente cada 3 meses para evitar errores TLS (`net::ERR_CERT_DATE_INVALID` o `certificate has expired`) que bloquean la comunicación con Mosquitto, InfluxDB y PostgreSQL.
-
-**Procedimiento de renovación paso a paso en el VPS (SSH):**
-
-1. **Ejecutar Certbot** para renovar manteniendo el orden de dominios original (con el broker `mqtt` primero):
-
-   ```bash
-   cd ~/pristinoplant
-   sudo docker run -it --rm -p 80:80 \
-     -v $(pwd)/infrastructure/certs:/etc/letsencrypt \
-     certbot/certbot certonly --standalone \
-     -d mqtt.midominio.com -d vps.midominio.com
-   ```
-
-2. **Copiar los certificados actualizados** reemplazando los anteriores en Postgres e InfluxDB:
-
-   ```bash
-   sudo cp -L infrastructure/certs/live/mqtt.midominio.com/* infrastructure/certs/postgres/
-   sudo cp -L infrastructure/certs/live/mqtt.midominio.com/* infrastructure/certs/influxdb/
-   ```
-
-3. **Re-aplicar permisos estrictos de Docker**:
-
-   ```bash
-   # Permisos para Postgres (UID 999)
-   sudo chown -R 999:999 infrastructure/certs/postgres/
-   sudo chmod 600 infrastructure/certs/postgres/privkey.pem
-
-   # Permisos para InfluxDB (UID 1500)
-   sudo chown -R 1500:1500 infrastructure/certs/influxdb/
-   sudo chmod 644 infrastructure/certs/influxdb/privkey.pem
-   ```
-
-4. **Reiniciar los contenedores de infraestructura** para que recarguen las nuevas llaves:
-
-   ```bash
-   docker compose --profile cloud restart postgres influxdb mosquitto
-   ```
 
 ---
 

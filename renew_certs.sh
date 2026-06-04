@@ -1,21 +1,6 @@
 #!/bin/bash
 # renew_certs.sh - Automatización de renovación y aislamiento de certificados SSL/TLS en VPS.
 # -------------------------------------------------------------------------------------
-# 
-# 🆘 PLAN DE CONTINGENCIA / RESTAURACIÓN (En caso de fallo en Certbot):
-# Si el script falla durante la generación de certificados y necesitas restaurar el estado anterior,
-# ejecuta los siguientes comandos en tu VPS (reemplazando la fecha con el nombre real del respaldo):
-# 
-#   1. Eliminar la carpeta limpia/incompleta:
-#      sudo rm -rf infrastructure/certs
-# 
-#   2. Restaurar la carpeta del respaldo:
-#      sudo cp -rp infrastructure/certs_backup_YYYYMMDD_HHMMSS infrastructure/certs
-# 
-#   3. Reiniciar los contenedores para volver a usar los certificados anteriores:
-#      docker compose --profile cloud restart postgres influxdb mosquitto
-# 
-# -------------------------------------------------------------------------------------
 
 set -e
 
@@ -47,18 +32,8 @@ if [[ ! "$CONFIRM" =~ ^[sS](i|I)?$ ]]; then
 fi
 
 # -------------------------------------------------------------------------------------
-# PASO PREVENTIVO: Crear Respaldo y Limpiar Linajes Antiguos de Certbot
+# PASO PREVENTIVO: Limpiar Linajes Antiguos de Certbot
 # -------------------------------------------------------------------------------------
-BACKUP_DIR="infrastructure/certs_backup_$(date +%Y%m%d_%H%M%S)"
-echo -e "\n${CYAN}📦 Creando respaldo de seguridad en '${BACKUP_DIR}'...${RESET}"
-mkdir -p "$BACKUP_DIR"
-if [ -d "infrastructure/certs" ]; then
-  sudo cp -rp infrastructure/certs/* "$BACKUP_DIR/"
-  echo -e "${GREEN}✅ Respaldo preventivo creado con éxito.${RESET}"
-else
-  echo -e "${YELLOW}⚠️ No se encontró la carpeta 'infrastructure/certs'. Se creará desde cero.${RESET}"
-fi
-
 echo -e "${CYAN}🧹 Limpiando configuraciones antiguas de Certbot para evitar conflictos y directorios incrementales (-0001)...${RESET}"
 # Eliminar linajes antiguos en live, archive y renewal
 sudo rm -rf infrastructure/certs/live/mqtt.sisparrow.com*
@@ -70,26 +45,43 @@ sudo rm -rf infrastructure/certs/archive/vps.sisparrow.com*
 sudo rm -rf infrastructure/certs/renewal/vps.sisparrow.com*.conf
 
 # -------------------------------------------------------------------------------------
-# PASO 1: Generación de Certificados con Certbot Docker (RSA 2048 - Estándar IoT)
+# PASO 1: Generación de Certificados con Certbot Docker
 # -------------------------------------------------------------------------------------
-# RSA 2048 es el estándar comprobado para dispositivos IoT (ESP32/MicroPython).
-# El motor mbedTLS del ESP32 soporta nativamente las cipher suites ECDHE_RSA,
-# lo que garantiza un handshake TLS exitoso con bajo consumo de RAM (~45KB).
+# NOTA: Las versiones modernas de Certbot generan certificados ECDSA (secp256r1) por
+# defecto. El ESP32 es compatible con ECDSA (de hecho, es más liviano que RSA 2048),
+# pero fallaba debido a que la cadena completa ("fullchain.pem") excedía la RAM.
+# La solución real es usar "cert.pem" (solo la hoja) en el broker Mosquitto.
 # -------------------------------------------------------------------------------------
-echo -e "\n${CYAN}🔑 [1/5] Ejecutando Certbot para 'mqtt.sisparrow.com' (RSA 2048)...${RESET}"
-echo -e "${YELLOW}⚠️  Asegúrate de que el puerto 80 del VPS esté totalmente libre.${RESET}\n"
+
+# A. Abrir temporalmente el puerto 80 en UFW si está activo
+UFW_STATUS=$(sudo ufw status | grep -i "Status: active" || true)
+PORT80_ADDED=false
+if [ -n "$UFW_STATUS" ]; then
+  echo -e "\n${YELLOW}🛡️  UFW activo. Abriendo temporalmente el puerto 80/tcp...${RESET}"
+  sudo ufw allow 80/tcp
+  PORT80_ADDED=true
+fi
+
+echo -e "\n${CYAN}🔑 [1/5] Ejecutando Certbot para 'mqtt.sisparrow.com'...${RESET}"
+echo -e "${YELLOW}⚠️  Asegúrate de que no haya otros servicios ocupando el puerto 80 del VPS.${RESET}\n"
 
 sudo docker run -it --rm -p 80:80 \
   -v $(pwd)/infrastructure/certs:/etc/letsencrypt \
   certbot/certbot certonly --standalone \
   -d mqtt.sisparrow.com
 
-echo -e "\n${CYAN}🔑 [2/5] Ejecutando Certbot para 'vps.sisparrow.com' (RSA 2048)...${RESET}\n"
+echo -e "\n${CYAN}🔑 [2/5] Ejecutando Certbot para 'vps.sisparrow.com'...${RESET}\n"
 
 sudo docker run -it --rm -p 80:80 \
   -v $(pwd)/infrastructure/certs:/etc/letsencrypt \
   certbot/certbot certonly --standalone \
   -d vps.sisparrow.com
+
+# B. Cerrar el puerto 80 en UFW si fue abierto por este script
+if [ "$PORT80_ADDED" = true ]; then
+  echo -e "\n${YELLOW}🛡️  Cerrando el puerto 80/tcp en el firewall UFW...${RESET}"
+  sudo ufw delete allow 80/tcp
+fi
 
 # -------------------------------------------------------------------------------------
 # PASO 2: Limpieza de directorios dedicados previos

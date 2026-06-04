@@ -16,7 +16,7 @@ from micropython import const
 
 # ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
-DEBUG = True
+DEBUG = False
 
 # ---- Configuración MQTT (const() para ahorro de RAM) ----
 # El broker esperará ~1.5x este valor antes de desconectar al cliente.
@@ -527,26 +527,47 @@ async def hard_reset_sensors_physical():
     await asyncio.sleep(2) # Estabilización
 
 # ---- Función Auxiliar: Inicializar y Restablecer Sensores ----
-async def setup_sensors():
+async def setup_sensors(force_hard_reset=False):
     """
     #### Inicialización Unificada de los sensores (Lógica)
     * Configura e instancia secuencialmente: DHT22 y BH1750.
-    * Controla los pines de alimentación GPIO 13 y 12.
+    * Controla los pines de alimentación GPIO.
+    * Si force_hard_reset=True, realiza un hard reset de alimentación física.
     """
     global dht_sensor, bh1750_sensor
     from machine import Pin
+    import uasyncio as asyncio
 
-    # 1. Configurar y encender alimentación
-    dht_vcc = Pin(PIN_DHT_VCC, Pin.OUT)
-    dht_vcc.value(1)
+    # 0. Fase Física: Hard Reset por Corte de Energía
+    if force_hard_reset:
+        if DEBUG:
+            print(f"\n⚡  {Colors.YELLOW}Hard Reset {Colors.RESET} [ DHT22 + BH1750 ]")
+        dht_sensor = None
+        bh1750_sensor = None
 
-    bh_vcc = Pin(PIN_BH1750_VCC, Pin.OUT)
-    if IS_SAMPLING_LUX:
-        bh_vcc.value(1)
+        # Cortamos la energía
+        Pin(PIN_DHT_VCC, Pin.OUT).value(0)
+        Pin(PIN_BH1750_VCC, Pin.OUT).value(0)
+        # Esperamos que se descargue la capacitancia
+        await asyncio.sleep(5)
+
+        # Restauramos la energía
+        Pin(PIN_DHT_VCC, Pin.OUT).value(1)
+        if IS_SAMPLING_LUX:
+            Pin(PIN_BH1750_VCC, Pin.OUT).value(1)
+        else:
+            Pin(PIN_BH1750_VCC, Pin.OUT).value(0)
+        # Esperamos que se estabilice la capacitancia
+        await asyncio.sleep(5)
+
     else:
-        bh_vcc.value(0)
-
-    await asyncio.sleep(2) # Espera obligatoria para estabilización de sensores (LDO/DHT)
+        # 1. Configurar y encender alimentación
+        Pin(PIN_DHT_VCC, Pin.OUT).value(1)
+        if IS_SAMPLING_LUX:
+            Pin(PIN_BH1750_VCC, Pin.OUT).value(1)
+        else:
+            Pin(PIN_BH1750_VCC, Pin.OUT).value(0)
+        await asyncio.sleep(2) # Espera obligatoria para estabilización de sensores (LDO/DHT)
 
     # 2. Configuración de Sensor DHT22 (Clima Interior)
     dht_boot_ok = False
@@ -579,9 +600,9 @@ async def setup_sensors():
         dht_sensor = None
 
     # [Plan B]: Rescate lógico si la verificación inicial falló en boot (bucle de hasta 3 rescates)
-    if not dht_boot_ok:
+    if not dht_boot_ok and not force_hard_reset:
         for attempt in range(1, 4):
-            if DEBUG: print(f"    ├─ 🔄 {Colors.CYAN}Reintento Lógico/Físico Sensors (Intento {attempt}/3).{Colors.RESET}")
+            if DEBUG: print(f"    ├─ 🔄 {Colors.CYAN}Hard Reset Sensors (Intento {attempt}/3).{Colors.RESET}")
             
             # Reset físico de alimentación para limpiar los sensores
             await hard_reset_sensors_physical()
@@ -609,7 +630,7 @@ async def setup_sensors():
                 if DEBUG: print(f"    ├─ ⚠️ {Colors.YELLOW}Sin respuesta tras reset (Intento {attempt}/3){Colors.RESET}")
         
         if not dht_boot_ok:
-            if DEBUG: print(f"    └─ ❌ {Colors.RED}No se pudo recuperar el DHT22. El Scheduler sincronizará.{Colors.RESET}")
+            if DEBUG: print(f"    └─ ❌ {Colors.RED}No se pudo recuperar el DHT22 tras 3 intentos. El Scheduler sincronizará.{Colors.RESET}")
             dht_sensor = None
 
     # 3. Inicializar el Sensor de Iluminancia (BH1750 / I2C) (Solo si IS_SAMPLING_LUX es True)
@@ -618,6 +639,12 @@ async def setup_sensors():
     else:
         if DEBUG: print("\n🌙  Muestreo de BH1750 Suspendido (Noche). Saltando inicialización.")
         bh1750_sensor = None
+
+    # Seteo final de seguridad para el DHT22 si no está inicializado
+    if not dht_boot_ok:
+        dht_sensor = None
+        if force_hard_reset:
+            if DEBUG: print(f"    └─ ❌ {Colors.RED}Desconectado / Fallo tras restablecimiento síncrono{Colors.RESET}")
 
 # ---- Función Auxiliar: Callback de estado ----
 def sub_status_callback(pid, status):
@@ -1572,14 +1599,14 @@ async def unified_audit_task():
         except Exception as e:
             if DEBUG: print(f"⚠️ Error en unified_audit: {e}")
 
-# ---- Watchdog de Conexión WiFi (30s) ----
+# ---- Watchdog de Conexión WiFi (60s) ----
 async def watchdog_wifi_connection():
     import uasyncio as asyncio
     from network import WLAN, STA_IF # type: ignore
-    await asyncio.sleep(30)
+    await asyncio.sleep(60)
     w = WLAN(STA_IF)
     if not w.isconnected():
-        if DEBUG: print("\n⚠️ [Watchdog WiFi] No se pudo conectar en 30s. Entrando en deep sleep de recuperación (10 min).")
+        if DEBUG: print("\n⚠️ [Watchdog WiFi] No se pudo conectar en 60s. Entrando en deep sleep de recuperación (10 min).")
         # Incrementar fallas en RTC
         rtc_data = load_rtc_buffer()
         rtc_data["wifi_failures"] = rtc_data.get("wifi_failures", 0) + 1
@@ -1600,18 +1627,12 @@ async def main_transmission():
     import utime
 
     mac_address = hexlify(WLAN(STA_IF).config('mac')).decode()
-    client_id = f"NODO_EMA_ZONA_A_{mac_address}"
+    client_id = f"__Nodo__EMA__Zona_A__{mac_address[-3:]}__"
 
     try:
         wdt = WDT(timeout=WDT_TIMEOUT_MS)
     except:
         wdt = None
-
-    # Iniciar tareas de red
-    asyncio.create_task(wifi_coro())
-    asyncio.create_task(mqtt_connector_task(client_id))
-    asyncio.create_task(mqtt_processor_task())
-    asyncio.create_task(watchdog_wifi_connection())
 
     try:
         # Sincronización de boot inicial: si el reloj no está en hora,
@@ -1625,8 +1646,14 @@ async def main_transmission():
             await setup_sensors()
             IS_SAMPLING_LUX = old_sampling
 
+        # Iniciar tareas de red (Secuencial tras el setup de sensores para evitar colisiones de RF y solapes de terminal)
+        asyncio.create_task(wifi_coro())
+        asyncio.create_task(mqtt_connector_task(client_id))
+        asyncio.create_task(mqtt_processor_task())
+        asyncio.create_task(watchdog_wifi_connection())
+
         # Esperar conexión MQTT
-        await asyncio.wait_for(mqtt_connected_event.wait(), 45)
+        await asyncio.wait_for(mqtt_connected_event.wait(), 60)
         if DEBUG: print("\n📡 Conectado a MQTT. Esperando que finalice el envío de batches...")
 
         # Esperar que los RingBuffers de batches se vacíen
@@ -1695,7 +1722,7 @@ async def main_async():
     from ubinascii import hexlify      # type: ignore
 
     mac_address = hexlify(WLAN(STA_IF).config('mac')).decode()
-    client_id = f"NODO_EMA_ZONA_A_{mac_address}"
+    client_id = f"__Nodo__EMA__Zona_A__{mac_address[-3:]}__"
 
     try:
         wdt = WDT(timeout=WDT_TIMEOUT_MS)
@@ -1706,13 +1733,11 @@ async def main_async():
             print(f"⚠️  No se pudo iniciar el Watchdog: {e}")
         wdt = None
 
-    # Tareas Asíncronas de Red
-    asyncio.create_task(wifi_coro())
-
-    # Inicialización del Hardware
+    # Inicialización del Hardware (Secuencial y limpia antes de iniciar red)
     await setup_sensors()
 
-    # Resto de Tareas Asíncronas
+    # Tareas Asíncronas de Red y Lógica
+    asyncio.create_task(wifi_coro())
     asyncio.create_task(mqtt_connector_task(client_id))
     asyncio.create_task(mqtt_processor_task())
     asyncio.create_task(sensor_publish_task())

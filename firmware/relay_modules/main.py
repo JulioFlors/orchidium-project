@@ -2454,8 +2454,8 @@ async def main():
     # ---- Identificación unica del ESP32 ----
     # Obtenemos la MAC del dispositivo
     mac_address = hexlify(WLAN(STA_IF).config('mac')).decode()
-    # Construye el client_id único
-    client_id = f"NODO_Actuador_{mac_address}"
+    # Construye el client_id único (truncado a los últimos 3 caracteres hexadecimales)
+    client_id = f"__Nodo__Actuador__{mac_address[-3:]}__"
 
     # ---- Watchdog Timer ----
     # Seguridad de hardware: Si el bucle principal se congela, el dispositivo se reinicia.
