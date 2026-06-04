@@ -379,6 +379,9 @@ function flushBootLog(nodeSource: string) {
   // Sincronizar muestreo (Amanecer/Anochecer) de iluminancia al finalizar el flush del boot
   // Garantiza que el Nodo EMA ya esté escuchando comandos tras vaciar sus telemetrías
   if (nodeSource === 'Weather Station Orquideario') {
+    // Sincronizar el reloj del EMA (luego de imprimir los datos de lectura inicial)
+    sendCaracasTimeToEma()
+
     syncNodeSampling(undefined, true, 'ema')
 
     // Sincronizar auditorías solicitadas que aún no están activas en el nodo
@@ -890,7 +893,6 @@ function setupMqttHandlers() {
 
         if (isEma) {
           lastEmaHeartbeat = Date.now()
-          sendCaracasTimeToEma()
         }
 
         try {
@@ -1656,7 +1658,6 @@ function sendCaracasTimeToEma(): void {
     })
 
     executeEmaCommand(payload, false)
-    Logger.mqtt(`Sincronización horaria enviada al EMA: ${payload}`, 'Nodo EMA')
   } catch (error) {
     Logger.error('Error enviando sincronización horaria al EMA:', error)
   }
@@ -1674,9 +1675,6 @@ async function handleEmaSync(statusToSave: DeviceStatus) {
   Logger.node(statusToSave, 'Weather Station Orquideario')
 
   await saveDeviceLog('Weather_Station_ZONA_A', statusToSave, notes)
-
-  // Sincronizar el reloj del EMA
-  sendCaracasTimeToEma()
 }
 
 /**
