@@ -226,6 +226,15 @@ SI lluvia_acumulada(últimas 12h) ≥ 10 min
 SI lluvia_acumulada(últimas 4h) ≥ 20 minutos → SKIP
 ```
 
+#### Veto de 4 Horas: Humedad y Temperatura Promedios
+
+```text
+SI humedad_promedio_acumulada(últimas 4h) ≥ 91.0% → SKIP
+SI temperatura_promedio_acumulada(últimas 4h) ≤ 30.9°C → SKIP
+```
+
+*Nota: Se evalúan de forma prioritaria los datos del orquideario interior (ZONA_A) y se realiza fallback automático a los datos de la estación exterior (EXTERIOR) si la densidad de datos es insuficiente (<25 muestras). El origen de datos utilizado se especifica explícitamente en el log (`Datos: INT` o `Datos: EXT`).*
+
 #### Evaluación Contextual con Timeline de Eventos
 
 ```text

@@ -461,7 +461,7 @@ def clean_dht_line():
     p = Pin(PIN_DHT_DATA, Pin.IN, Pin.PULL_UP)
     p.init(Pin.OUT)
     p.value(1)
-    sleep_ms(500)
+    sleep_ms(1500)
     p.init(Pin.IN, Pin.PULL_UP)
 
 # ---- Función Auxiliar: Setup del BH1750 ----
@@ -516,15 +516,15 @@ def setup_bh1750_sync():
 async def hard_reset_sensors_physical():
     from machine import Pin
     import uasyncio as asyncio
-    if DEBUG: print("\n⚡  [Hard Reset Físico] Apagando alimentación de sensores por 2 segundos.")
+    if DEBUG: print("    ├─ ⚡ Reiniciando")
     Pin(PIN_DHT_VCC, Pin.OUT).value(0)
     Pin(PIN_BH1750_VCC, Pin.OUT).value(0)
-    await asyncio.sleep(2)
+    await asyncio.sleep(3)
     # Volver a encender
     Pin(PIN_DHT_VCC, Pin.OUT).value(1)
     if IS_SAMPLING_LUX:
         Pin(PIN_BH1750_VCC, Pin.OUT).value(1)
-    await asyncio.sleep(2) # Estabilización
+    await asyncio.sleep(3) # Estabilización
 
 # ---- Función Auxiliar: Inicializar y Restablecer Sensores ----
 async def setup_sensors(force_hard_reset=False):
@@ -610,7 +610,7 @@ async def setup_sensors(force_hard_reset=False):
             
             try:
                 clean_dht_line()
-                await asyncio.sleep(1)
+                await asyncio.sleep(1.5)
                 from dht import DHT22
                 dht_sensor = DHT22(Pin(PIN_DHT_DATA, Pin.IN, Pin.PULL_UP))
                 dht_sensor.measure()
@@ -1400,6 +1400,11 @@ async def transmit_and_sync():
             try:
                 # Esperamos al evento en segundos
                 await asyncio.wait_for(sync_event.wait(), remaining_ms / 1000.0)
+                
+                # Si se recibió un comando que no es sleep, extendemos la ventana de vigilia
+                if not sleep_received:
+                    if DEBUG: print("🔄 Comando recibido. Extendiendo ventana de sincronización por 60 segundos.")
+                    start_time = ticks_ms()
             except asyncio.TimeoutError:
                 if DEBUG: print("\n⚠️  Timeout de sincronización con el Scheduler")
                 break
@@ -1682,6 +1687,11 @@ async def main_transmission():
                 # Esperamos al evento en segundos
                 await asyncio.wait_for(sync_event.wait(), remaining_ms / 1000.0)
                 if wdt: wdt.feed()
+                
+                # Si se recibió un comando que no es sleep, extendemos la ventana de vigilia
+                if not sleep_received:
+                    if DEBUG: print("🔄 Comando recibido. Extendiendo ventana de sincronización por 20 segundos.")
+                    start_time = utime.ticks_ms()
             except asyncio.TimeoutError:
                 break
             except Exception as e:
@@ -1945,7 +1955,7 @@ def run_cycle():
             rtc_data[key] = rtc_data[key][-24:]
 
     # 4. Decidir transmisión o deepsleep
-    samples_count = len(rtc_data["temp"])
+    samples_count = max(len(rtc_data["temp"]), len(rtc_data["lux"]))
     if DEBUG: print(f"📊 Muestras en buffer RTC: {samples_count}/{BATCH_SIZE}")
 
     is_top_of_hour = (dt[5] == 0) if is_clock_synced else False

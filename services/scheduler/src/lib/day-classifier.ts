@@ -183,9 +183,10 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
       SELECT illuminance
       FROM "environment_metrics"
       WHERE time <= '${endISO}'
-      AND time >= '${startISO}'
-      AND source = 'Weather_Station'
-      AND zone = 'EXTERIOR'
+        AND time >= '${endISO}' - INTERVAL '15 minutes'
+        AND source = 'Weather_Station'
+        AND zone = 'EXTERIOR'
+        AND illuminance IS NOT NULL
       ORDER BY time DESC
       LIMIT 1
     `
@@ -301,7 +302,7 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
     }
 
     Logger.dayClass(
-      `Tipo: ${type} | Lux promedio (8am-ahora): ${avgLux.toFixed(0)} | Lux actual: ${currentLux.toFixed(0)} | Nublado consecutivo: ${overcastMinutes} min | Nublado intenso: ${overcastHeavyMinutes} min`,
+      `Tipo: ${type} | Lux promedio (8am-ahora): ${avgLux.toFixed(0)} | Lux actual: ${currentLux.toFixed(0)} | <= 26k lux -> Nublado: ${overcastMinutes}min | <= 10k lux -> Nubes Grises: ${overcastHeavyMinutes}min`,
     )
 
     return {

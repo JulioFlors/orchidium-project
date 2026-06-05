@@ -682,7 +682,7 @@ function setupMqttHandlers() {
               temp: null,
               hum: null,
               bootAt: Date.now(),
-              timer: setTimeout(() => flushBootLog('Weather Station Orquideario'), 30000), // Ventana de 30s
+              timer: setTimeout(() => flushBootLog('Weather Station Orquideario'), 10000), // Ventana de 10s
             })
 
             return
@@ -706,11 +706,16 @@ function setupMqttHandlers() {
             temp: null,
             hum: null,
             bootAt: Date.now(),
-            timer: setTimeout(() => flushBootLog('Weather Station Orquideario'), 30000), // Ventana de 30s
+            timer: setTimeout(() => flushBootLog('Weather Station Orquideario'), 10000), // Ventana de 10s
           })
 
           await handleEmaSync(statusToSave)
         } else if (message === 'sleep') {
+          // Flush preventivo del boot log si el EMA se va a dormir antes de que expire su timer normal
+          if (bootAccumulators.has('Weather Station Orquideario')) {
+            flushBootLog('Weather Station Orquideario')
+          }
+
           Logger.node('SLEEP', 'Weather Station Orquideario')
           isEmaSleeping = true
           emaManager.setOffline()

@@ -222,15 +222,15 @@ class CommandSequencer {
     if (attempts === 3) {
       if (onFailure) {
         Logger.mqtt(
-          `Nodo Actuador no responde tras 3 intentos. Sincronizando estado FAILED en DB.`,
+          `${this.nodeTarget} no responde tras 3 intentos. Sincronizando estado FAILED en DB.`,
           this.nodeTarget,
         )
-        onFailure(taskId, 'Sin respuesta del Nodo Actuador.').catch((err) =>
+        onFailure(taskId, `Sin respuesta de ${this.nodeTarget}.`).catch((err) =>
           Logger.error(`Error en callback de persistencia para ${taskId.slice(0, 8)}:`, err),
         )
       } else {
         Logger.mqtt(
-          `Nodo Actuador no responde tras 3 intentos al comando de sistema.`,
+          `${this.nodeTarget} no responde tras 3 intentos al comando de sistema.`,
           this.nodeTarget,
         )
       }

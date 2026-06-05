@@ -154,8 +154,10 @@ export const Logger = {
   // ---- Dominio: MQTT ----
 
   /** Comando MQTT enviado o recibido. */
-  mqtt: (msg: string, _node?: string) => {
-    console.log(formatLog('📡', 'MQTT', colors.magenta, msg))
+  mqtt: (msg: string, node?: string) => {
+    const nodeSuffix = node ? ` [${node}]` : ''
+
+    console.log(formatLog('📡', 'MQTT', colors.magenta, `${msg}${nodeSuffix}`))
   },
 
   /** ACK recibido del nodo. */

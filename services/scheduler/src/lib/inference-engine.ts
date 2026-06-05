@@ -246,6 +246,46 @@ export class InferenceEngine {
         }
       }
 
+      // ── 3.3.1: Veto Acumulado de 4h para Humectación del Suelo (SOIL_WETTING) ──
+      if (purpose === 'SOIL_WETTING') {
+        const lookbackMin = 240 // 4 horas
+
+        let humData = await this.getRecentAverageHumidity(lookbackMin, 'ZONA_A')
+        let tempData = await this.getRecentAverageTemperature(lookbackMin, 'ZONA_A')
+        let dataUsed = 'INT'
+
+        if (humData.count < 25 || tempData.count < 25) {
+          humData = await this.getRecentAverageHumidity(lookbackMin, 'EXTERIOR')
+          tempData = await this.getRecentAverageTemperature(lookbackMin, 'EXTERIOR')
+          dataUsed = 'EXT'
+        }
+
+        const avgHum = humData.average
+        const avgTemp = tempData.average
+
+        Logger.inference(
+          `Evaluando regla de 4h para SOIL_WETTING → HR promedio: ${avgHum.toFixed(1)}% | Temp promedio: ${avgTemp.toFixed(1)}°C | Datos: ${dataUsed}`,
+        )
+
+        if (avgHum >= 91.0) {
+          return {
+            shouldCancel: true,
+            reason: `VETO SOIL_WETTING (4h): HR promedio ${avgHum.toFixed(1)}% ≥ 91.0% (Datos: ${dataUsed}).`,
+            action: 'SKIP',
+            metadata: { avgHum, avgTemp, dataUsed },
+          }
+        }
+
+        if (avgTemp <= 30.9) {
+          return {
+            shouldCancel: true,
+            reason: `VETO SOIL_WETTING (4h): Temperatura promedio ${avgTemp.toFixed(1)}°C ≤ 30.9°C (Datos: ${dataUsed}).`,
+            action: 'SKIP',
+            metadata: { avgHum, avgTemp, dataUsed },
+          }
+        }
+      }
+
       // ── 4. Lluvia Acumulada → IRRIGATION (>20min en 12h) ──
       if (purpose === 'IRRIGATION') {
         const recentRain = await this.getRecentRainAccumulation(THRESHOLDS.RAIN_LOOKBACK_IRRIGATION)
@@ -897,14 +937,19 @@ export class InferenceEngine {
     return false
   }
 
-  private static async getExternalRecentAverageHumidity(lookbackMinutes: number): Promise<number> {
+  private static async getRecentAverageHumidity(
+    lookbackMinutes: number,
+    zone: 'ZONA_A' | 'EXTERIOR',
+  ): Promise<{ average: number; count: number }> {
     try {
       const query = `
         SELECT humidity
         FROM "environment_metrics"
         WHERE time >= now() - INTERVAL '${lookbackMinutes} minutes'
-        AND source = 'Weather_Station'
-        AND zone = 'EXTERIOR'
+          AND source = 'Weather_Station'
+          AND zone = '${zone}'
+          AND humidity IS NOT NULL
+          AND humidity >= 5.0 AND humidity <= 100.0
         ORDER BY time DESC
       `
       const stream = influxClient.query(query)
@@ -918,58 +963,80 @@ export class InferenceEngine {
         }
       }
 
-      if (count < 50) {
-        Logger.inference(
-          `Humedad exterior reciente ignorada por baja densidad de datos (${count} muestras < 50 en los últimos ${lookbackMinutes} min).`,
-        )
+      return {
+        average: count > 0 ? sum / count : 0,
+        count,
+      }
+    } catch {
+      Logger.inference(`Error al consultar HR promedio para ${zone}.`)
 
-        return 0
+      return { average: 0, count: 0 }
+    }
+  }
+
+  private static async getRecentAverageTemperature(
+    lookbackMinutes: number,
+    zone: 'ZONA_A' | 'EXTERIOR',
+  ): Promise<{ average: number; count: number }> {
+    try {
+      const query = `
+        SELECT temperature
+        FROM "environment_metrics"
+        WHERE time >= now() - INTERVAL '${lookbackMinutes} minutes'
+          AND source = 'Weather_Station'
+          AND zone = '${zone}'
+          AND temperature IS NOT NULL
+          AND temperature >= 0.0 AND temperature <= 60.0
+        ORDER BY time DESC
+      `
+      const stream = influxClient.query(query)
+      let sum = 0
+      let count = 0
+
+      for await (const row of stream) {
+        if (row.temperature != null) {
+          sum += Number(row.temperature)
+          count++
+        }
       }
 
-      return sum / count
+      return {
+        average: count > 0 ? sum / count : 0,
+        count,
+      }
     } catch {
-      Logger.inference('No se pudo consultar HR promedio exterior reciente (InfluxDB).')
+      Logger.inference(`Error al consultar temperatura promedio para ${zone}.`)
+
+      return { average: 0, count: 0 }
+    }
+  }
+
+  private static async getExternalRecentAverageHumidity(lookbackMinutes: number): Promise<number> {
+    const res = await this.getRecentAverageHumidity(lookbackMinutes, 'EXTERIOR')
+
+    if (res.count < 50) {
+      Logger.inference(
+        `Humedad exterior reciente ignorada por baja densidad de datos (${res.count} muestras < 50 en los últimos ${lookbackMinutes} min).`,
+      )
+
+      return 0
     }
 
-    return 0
+    return res.average
   }
 
   private static async getInteriorRecentAverageHumidity(lookbackMinutes: number): Promise<number> {
-    try {
-      const query = `
-        SELECT humidity
-        FROM "environment_metrics"
-        WHERE time >= now() - INTERVAL '${lookbackMinutes} minutes'
-        AND source = 'Weather_Station'
-        AND zone = 'ZONA_A'
-        ORDER BY time DESC
-      `
-      const stream = influxClient.query(query)
-      let sum = 0
-      let count = 0
+    const res = await this.getRecentAverageHumidity(lookbackMinutes, 'ZONA_A')
 
-      for await (const row of stream) {
-        if (row.humidity != null) {
-          sum += Number(row.humidity)
-          count++
-        }
-      }
+    if (res.count < 25) {
+      Logger.inference(
+        `Humedad interior reciente ignorada por baja densidad de datos (${res.count} muestras < 25 en los últimos ${lookbackMinutes} min).`,
+      )
 
-      if (count < 25) {
-        // El EMA puede estar durmiendo o tener menor densidad
-        Logger.inference(
-          `Humedad interior reciente ignorada por baja densidad de datos (${count} muestras < 25 en los últimos ${lookbackMinutes} min).`,
-        )
-
-        return 0
-      }
-
-      return sum / count
-    } catch {
-      Logger.inference('No se pudo consultar HR promedio interior reciente (InfluxDB).')
+      return 0
     }
 
-    return 0
+    return res.average
   }
 
   public static async getOrInitSchedulerState(): Promise<string> {

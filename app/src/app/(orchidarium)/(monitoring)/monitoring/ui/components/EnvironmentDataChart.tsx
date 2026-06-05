@@ -176,7 +176,7 @@ function CustomTooltip({
 
         {data.intensity !== undefined && (
           <span className="mt-1 flex items-center gap-1.5 font-semibold text-blue-400">
-            Intensidad: {data.intensity}%
+            Intensidad: {formatTooltipValue(data.intensity)}%
           </span>
         )}
 
