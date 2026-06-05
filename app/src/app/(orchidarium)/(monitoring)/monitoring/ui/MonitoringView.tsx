@@ -74,7 +74,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
       const metrics = ZoneMetrics[z] || []
 
       metrics.forEach((m) => {
-        initial[z][m] = m === 'illuminance' ? '8-16h' : '12h'
+        initial[z][m] = m === 'illuminance' ? '8-16h' : '24h'
       })
       // Agregar métricas especiales que no están en ZoneMetrics pero se muestran en la UI
       if (z === ZoneType.EXTERIOR) {
@@ -109,7 +109,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
   const { error: notifyError } = useToast()
 
   const currentRange =
-    selectedMetric && metricRanges[zone] ? metricRanges[zone][selectedMetric] : '12h'
+    selectedMetric && metricRanges[zone] ? metricRanges[zone][selectedMetric] : '24h'
 
   const handleRangeChange = (newRange: string) => {
     if (selectedMetric && zone) {
@@ -129,12 +129,16 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     data: cardStatusResponse,
     error: cardStatusError,
     isLoading: isCardStatusLoading,
-  } = useSWR<SensorDataResponse>(`/api/environment/history?range=${cardRange}&zone=${zone}`, fetcher, {
-    refreshInterval: 30000,
-    revalidateOnFocus: false,
-    errorRetryCount: 3,
-    errorRetryInterval: 5000,
-  })
+  } = useSWR<SensorDataResponse>(
+    `/api/environment/history?range=${cardRange}&zone=${zone}`,
+    fetcher,
+    {
+      refreshInterval: 30000,
+      revalidateOnFocus: false,
+      errorRetryCount: 3,
+      errorRetryInterval: 5000,
+    },
+  )
 
   const cardStatusData = useMemo(() => cardStatusResponse?.data || [], [cardStatusResponse])
 
@@ -304,9 +308,9 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
       return isNaN(num) ? null : num
     }
 
-    // Buscamos el último valor no nulo y verificamos que no sea antiguo (> 25 min)
+    // Buscamos el último valor no nulo y verificamos que no sea antiguo (> 65 min para ZONA_A, > 25 min para otras)
     const getLastValid = (key: string) => {
-      const STALE_THRESHOLD = 25 * 60 * 1000 // 25 minutos
+      const STALE_THRESHOLD = zone === ZoneType.ZONA_A ? 65 * 60 * 1000 : 25 * 60 * 1000
       const nowMs = now
 
       for (let i = cardStatusData.length - 1; i >= 0; i--) {
@@ -363,7 +367,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     }
 
     return merged
-  }, [cardStatusData, mqttReadings, now])
+  }, [cardStatusData, mqttReadings, now, zone])
 
   // Normalizar datos del gráfico para que Recharts encuentre las métricas por sus nombres estándar
   const normalizedChartData = useMemo(() => {
@@ -497,8 +501,9 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     // Tiempo desde la última actualización del dato
     const minutesSinceLastUpdate = (now ? now - lastUpdateDate.getTime() : 0) / 60000
     // "isStale" solo aplica dentro del horario donde el sensor DEBERÍA estar enviando datos
-    // Si tienen mas de 10min se asume que no llego el batch de datos nuevos.
-    const isStale = sensorIsActive && minutesSinceLastUpdate > 10
+    // Si supera el límite de inactividad (65 min para ZONA_A y 25 min para otras) se considera offline.
+    const staleLimit = zone === ZoneType.ZONA_A ? 65 : 25
+    const isStale = sensorIsActive && minutesSinceLastUpdate > staleLimit
 
     const luxTrend = calculateTrend('illuminance')
 
@@ -514,7 +519,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     }
 
     // ─── PRIORIDAD 2: Dato viejo (isStale) ──────────────────────────────────────────
-    // Si el dato tiene más de 10 min, no es confiable.
+    // Si el dato supera el límite de inactividad, no es confiable.
     if (isStale) {
       return {
         label: 'Sin Datos',

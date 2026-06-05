@@ -38,8 +38,8 @@ export const useDeviceHeartbeat = (
   const rawStatus = statusData ? String(statusData.payload).trim() : initialStatus.trim()
 
   const isEmaTopic = topic.includes('Weather_Station')
-  const zombieThreshold = isEmaTopic ? 12 * 60 * 1000 : 75000 // 12 min para EMA, 75s para Actuador
-  const offlineThreshold = isEmaTopic ? 15 * 60 * 1000 : 145000 // 15 min para EMA, 145s para Actuador
+  const zombieThreshold = isEmaTopic ? 62 * 60 * 1000 : 75000 // 62 min para EMA, 75s para Actuador
+  const offlineThreshold = isEmaTopic ? 65 * 60 * 1000 : 145000 // 65 min para EMA, 145s para Actuador
   const initialSearchThreshold = 30000
 
   // Normalizar los posibles payloads de desconexión y vida a un estado unificado

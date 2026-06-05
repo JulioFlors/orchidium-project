@@ -497,12 +497,28 @@ export function syncNodeSampling(
 
   if (targetState === 'on') {
     if (!forcePublish && !targetNode) Logger.info('☀  Iniciando muestreo de iluminancia (Amanecer)')
-    if (!targetNode || targetNode === 'actuator') executeSystemCommand('lux_sampling:on', true)
-    if (!targetNode || targetNode === 'ema') executeEmaCommand('lux_sampling:on', true)
+    if (!targetNode || targetNode === 'actuator') {
+      if (irrigationRetryManager.connectionState !== 'offline' || forcePublish) {
+        executeSystemCommand('lux_sampling:on', true)
+      }
+    }
+    if (!targetNode || targetNode === 'ema') {
+      if (emaManager.connectionState !== 'offline' || forcePublish) {
+        executeEmaCommand('lux_sampling:on', true)
+      }
+    }
   } else {
     if (!forcePublish && !targetNode)
       Logger.info('🌙  Suspendiendo muestreo de iluminancia (Anochecer)')
-    if (!targetNode || targetNode === 'actuator') executeSystemCommand('lux_sampling:off', true)
-    if (!targetNode || targetNode === 'ema') executeEmaCommand('lux_sampling:off', true)
+    if (!targetNode || targetNode === 'actuator') {
+      if (irrigationRetryManager.connectionState !== 'offline' || forcePublish) {
+        executeSystemCommand('lux_sampling:off', true)
+      }
+    }
+    if (!targetNode || targetNode === 'ema') {
+      if (emaManager.connectionState !== 'offline' || forcePublish) {
+        executeEmaCommand('lux_sampling:off', true)
+      }
+    }
   }
 }

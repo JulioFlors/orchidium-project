@@ -576,3 +576,12 @@ model Notification {
   @@index([createdAt])
   @@index([targetUserId])
 }
+
+model SchedulerState {
+  id             String   @id @default(uuid())
+  state          String   // "STANDARD_CRON", "DIFERIDO_SCHEDULER", "RAIN_SUSPENSION"
+  lastEvaluation DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+

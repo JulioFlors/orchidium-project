@@ -143,6 +143,9 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
     if (range === '90m') timeFilter = `AND time >= now() - interval '90 minutes'`
     if (range === '1h') timeFilter = `AND time >= now() - interval '1 hours'`
     if (range === '12h') timeFilter = `AND time >= now() - interval '12 hours'`
+    if (range === '24h') {
+      timeFilter = `AND time >= TIMESTAMP '${midnightVETInUTC.toISOString()}'`
+    }
 
     if (range === '5-19h') {
       const start = new Date(midnightVETInUTC.getTime() + 5 * 3600000)
@@ -156,10 +159,18 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
       timeFilter = `AND time >= TIMESTAMP '${start.toISOString()}' AND time <= TIMESTAMP '${end.toISOString()}'`
     } else if (range === '1D') {
       const yesterdayMidnightVETInUTC = new Date(midnightVETInUTC.getTime() - 24 * 3600000)
-      const start = new Date(yesterdayMidnightVETInUTC.getTime() + 5 * 3600000)
-      const end = new Date(yesterdayMidnightVETInUTC.getTime() + 19 * 3600000 + 59 * 1000)
 
-      timeFilter = `AND time >= TIMESTAMP '${start.toISOString()}' AND time <= TIMESTAMP '${end.toISOString()}'`
+      if (metric === 'illuminance') {
+        const start = new Date(yesterdayMidnightVETInUTC.getTime() + 5 * 3600000)
+        const end = new Date(yesterdayMidnightVETInUTC.getTime() + 19 * 3600000 + 59 * 1000)
+
+        timeFilter = `AND time >= TIMESTAMP '${start.toISOString()}' AND time <= TIMESTAMP '${end.toISOString()}'`
+      } else {
+        const start = yesterdayMidnightVETInUTC
+        const end = new Date(yesterdayMidnightVETInUTC.getTime() + 24 * 3600000 - 1000)
+
+        timeFilter = `AND time >= TIMESTAMP '${start.toISOString()}' AND time <= TIMESTAMP '${end.toISOString()}'`
+      }
     }
 
     const influxFields = fieldsToQuery.filter((f) => INFLUX_PHYSICAL_FIELDS.includes(f))

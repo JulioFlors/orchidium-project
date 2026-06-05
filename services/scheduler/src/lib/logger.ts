@@ -13,8 +13,16 @@ export const colors = {
   dim: '\x1b[90m',
 }
 
+function cleanAmPm(str: string): string {
+  return str
+    .replace(/a\.\s*m\./gi, 'am')
+    .replace(/p\.\s*m\./gi, 'pm')
+    .replace(/a\s*m/gi, 'am')
+    .replace(/p\s*m/gi, 'pm')
+}
+
 const getLogTime = () => {
-  return new Intl.DateTimeFormat('es-VE', {
+  const formatted = new Intl.DateTimeFormat('es-VE', {
     timeZone: 'America/Caracas',
     day: '2-digit',
     month: '2-digit',
@@ -23,6 +31,8 @@ const getLogTime = () => {
     minute: '2-digit',
     hour12: true,
   }).format(new Date())
+
+  return cleanAmPm(formatted)
 }
 
 /**

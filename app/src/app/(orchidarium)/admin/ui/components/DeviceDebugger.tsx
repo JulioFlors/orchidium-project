@@ -155,6 +155,7 @@ export function DeviceDebugger() {
   interface AuditStatePayload {
     requested?: Record<string, boolean>
     active?: Record<string, boolean>
+    waiting_wakeup?: Record<string, boolean>
   }
 
   const auditStatePayload = useMemo<AuditStatePayload | null>(() => {
@@ -418,12 +419,16 @@ export function DeviceDebugger() {
                     isPending={
                       isEma
                         ? Boolean(auditStatePayload?.requested?.[auditId]) &&
-                          !Boolean(auditStatePayload?.active?.[auditId])
+                          !Boolean(auditStatePayload?.active?.[auditId]) &&
+                          !Boolean(auditStatePayload?.waiting_wakeup?.[auditId])
                         : Boolean(pendingAcks[`audit_${auditId}_on`]) ||
                           Boolean(pendingAcks[`audit_${auditId}_off`])
                     }
                     isStale={false}
                     receivedAt={receivedAt}
+                    waitingWakeup={
+                      isEma ? Boolean(auditStatePayload?.waiting_wakeup?.[auditId]) : false
+                    }
                     onClear={() => {
                       // El widget ya se encarga de limpiar su propia sesión internamente
                     }}

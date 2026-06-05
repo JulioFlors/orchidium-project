@@ -399,6 +399,7 @@ interface AuditConsoleCardProps {
   onClose?: () => void
   onStop?: () => void
   onClear?: () => void
+  waitingWakeup?: boolean
 }
 
 export function AuditConsoleCard({
@@ -414,6 +415,7 @@ export function AuditConsoleCard({
   onClose,
   onStop,
   onClear,
+  waitingWakeup = false,
 }: AuditConsoleCardProps) {
   const { data: session } = authClient.useSession()
 
@@ -737,6 +739,21 @@ export function AuditConsoleCard({
   }
 
   const renderContent = () => {
+    if (waitingWakeup) {
+      return (
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 py-12">
+          <span
+            className={clsx(
+              'animate-pulse text-sm font-medium tracking-wide',
+              TOOL_COLORS[activeColor].icon,
+            )}
+          >
+            Esperando que el Nodo EMA despierte
+          </span>
+        </div>
+      )
+    }
+
     if (isPending && isOnline) {
       return (
         <div className="flex flex-1 flex-col items-center justify-center gap-4 py-12">
@@ -1032,10 +1049,10 @@ export function AuditConsoleCard({
             </span>
           )}
           <div className="flex items-center gap-0.5 border-l border-zinc-200 pl-2 dark:border-white/5">
-            {isActive ? (
+            {isActive || isPending || waitingWakeup ? (
               <button
                 className="group bg-black-and-white/10 hover:bg-hover-overlay relative flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-red-500 transition-all disabled:pointer-events-none dark:text-red-400"
-                disabled={isPending}
+                disabled={isPending && !waitingWakeup}
                 type="button"
                 onClick={() => {
                   if (stopCalledRef.current) return

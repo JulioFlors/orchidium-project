@@ -1,9 +1,9 @@
 # -----------------------------------------------------------------------------
 # Relay Modules: Actuator Controller + Weather Station (Exterior)
 # Descripcion: Nodo Actuador (sistema de riego) + Nodo EMA (Meteorológia Exterior).
-# Fecha: 26-05-2026
-# Version: v0.15.2
-# notes_release: [Coordinación de Sensores]: recuperación de sensores por el Scheduler y suspensión de monitoreo mediante eventos si están desconectados.
+# Fecha: 06-06-2026
+# Version: v0.15.3
+# notes_release: [🌧 Rain Sensor]: modificacion de los parametros de inicio y fin de lluvia.
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib.
@@ -17,7 +17,7 @@ from micropython import const
 
 # ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
-DEBUG = True
+DEBUG = False
 
 # ---- Configuración MQTT (const() para ahorro de RAM) ----
 # El broker esperará ~1.5x este valor antes de desconectar al cliente.
@@ -169,8 +169,8 @@ INTERVAL_NORMAL = const(300) # 5 minutos
 INTERVAL_BURST  = const(60)  # 1 minuto
 
 # configuracion de inicio
-RAIN_START_VALUE  = const(3000) # Mojado (Inicia evento)
-RAIN_STOP_VALUE   = const(3400) # Seco (Finaliza evento)
+RAIN_START_VALUE  = const(2300) # Mojado (Inicia evento)
+RAIN_STOP_VALUE   = const(2800) # Seco (Finaliza evento)
 RAW_INTENSITY_MIN = const(1700) # 100%
 
 # Oversampling toma 10 muestras cada 50ms = 500ms total

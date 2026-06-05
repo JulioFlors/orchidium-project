@@ -2,7 +2,7 @@ import mqtt from 'mqtt'
 import { InfluxDBClient, Point } from '@influxdata/influxdb3-client'
 import { prisma, ZoneType } from '@package/database'
 
-import { Logger } from './lib/logger'
+import { Logger, cleanAmPm } from './lib/logger'
 
 // ---- Cargar variables de entorno ----
 // La carga de variables de entorno se gestiona externamente.
@@ -130,32 +130,55 @@ function formatPointSummary(point: Point): string {
   const zoneStr = tags.zone ? `[ ${tags.zone} ]` : ''
   const zonePart = zoneStr ? ` ${zoneStr}` : ''
 
-  // Formato: [ Origen ] [ Zona ] -> Valor
+  // Extracción del timestamp real del protocolo de línea (si existe)
+  let timeLabel = ''
+
+  if (parts.length >= 3) {
+    const timestampVal = Number(parts[2])
+
+    if (!isNaN(timestampVal)) {
+      // Si el timestamp viene en nanosegundos (19 dígitos), convertir a milisegundos
+      const epochMs =
+        timestampVal > 10000000000000 ? Math.floor(timestampVal / 1000000) : timestampVal
+      const date = new Date(epochMs)
+      const rawTime = new Intl.DateTimeFormat('es-VE', {
+        timeZone: 'America/Caracas',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+      }).format(date)
+
+      timeLabel = ` [ ${cleanAmPm(rawTime)} ]`
+    }
+  }
+
+  // Formato: [ Origen ] [ Zona ] [ Hora Muestra ] -> Valor
   if (measurement === 'system_events') {
     const val = fields.value?.replace(/"/g, '') || '?'
 
-    return `[ ${source} ]${zonePart} -> ${val}`
+    return `[ ${source} ]${zonePart}${timeLabel} -> ${val}`
   }
 
-  // Formato: [ Origen ] [ Zona ] -> temp:25, hum:60...
+  // Formato: [ Origen ] [ Zona ] [ Hora Muestra ] -> temp:25, hum:60...
   if (measurement === 'environment_metrics') {
     const metrics = Object.entries(fields)
       .map(([k, v]) => `${k}:${v}`)
       .join(', ')
 
-    return `[ ${source} ]${zonePart} -> ${metrics}`
+    return `[ ${source} ]${zonePart}${timeLabel} -> ${metrics}`
   }
 
-  // Formato: [ Origen ] [ Zona ] -> 300s | 85%
+  // Formato: [ Origen ] [ Zona ] [ Hora Muestra ] -> 300s | 85%
   if (measurement === 'rain_events') {
     const dur = fields.duration_seconds || '?'
     const int = fields.intensity_percent || fields.average_intensity_percent || '?'
 
-    return `[ ${source} ]${zonePart} -> ${dur}s | ${int}%`
+    return `[ ${source} ]${zonePart}${timeLabel} -> ${dur}s | ${int}%`
   }
 
-  // Fallback compacto (sin timestamp)
-  return `[ ${measurement} ] ${fieldsRaw}`
+  // Fallback compacto
+  return `[ ${measurement} ]${timeLabel} ${fieldsRaw}`
 }
 
 /**
@@ -255,6 +278,12 @@ async function processEnvironmentPacket(
         // Si el tiempo era basura, le sumamos el offset para traerlo al "presente"
         // manteniendo la distancia relativa entre las muestras del batch.
         unixTimestamp += backtrackingOffset
+
+        // Si no se requirió backtracking y proviene de Weather_Station en ZONA_A,
+        // el timestamp está en hora local Caracas (UTC-4). Sumamos 4 horas (14400s) para llevar a UTC.
+        if (backtrackingOffset === 0 && source === 'Weather_Station' && zone === ZoneType.ZONA_A) {
+          unixTimestamp += 4 * 3600
+        }
 
         const point = Point.measurement('environment_metrics')
           .setTag('source', source)
