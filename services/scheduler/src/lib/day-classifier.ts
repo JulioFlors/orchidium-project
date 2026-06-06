@@ -179,11 +179,12 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
     }
 
     // 2. Lux instantáneo (el último dato de la ventana evaluada)
+    const fifteenMinutesAgo = new Date(endEval.getTime() - 15 * 60 * 1000).toISOString()
     const currentQuery = `
       SELECT illuminance
       FROM "environment_metrics"
       WHERE time <= '${endISO}'
-        AND time >= '${endISO}' - INTERVAL '15 minutes'
+        AND time >= '${fifteenMinutesAgo}'
         AND source = 'Weather_Station'
         AND zone = 'EXTERIOR'
         AND illuminance IS NOT NULL
@@ -199,10 +200,11 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
 
     // 3. Minutos consecutivos recientes bajo umbral de nublado (<15k)
     // Consultamos los últimos 120 min y contamos hacia atrás desde el más reciente
+    const twoHoursAgo = new Date(now.getTime() - 120 * 60 * 1000).toISOString()
     const overcastQuery = `
       SELECT illuminance, time
       FROM "environment_metrics"
-      WHERE time >= now() - interval '120 minutes'
+      WHERE time >= '${twoHoursAgo}'
       AND source = 'Weather_Station'
       AND zone = 'EXTERIOR'
       ORDER BY time DESC
@@ -313,8 +315,10 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
       overcastHeavyMinutes,
       evaluatedAt: now,
     }
-  } catch {
-    Logger.dayClass('Error al clasificar el día.')
+  } catch (error) {
+    Logger.dayClass(
+      `Error al clasificar el día: ${error instanceof Error ? error.message : String(error)}`,
+    )
 
     return {
       type: 'DESCONOCIDO',

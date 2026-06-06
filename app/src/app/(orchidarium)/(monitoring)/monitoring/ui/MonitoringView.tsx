@@ -824,8 +824,8 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
                       {(() => {
                         const r = metricRanges[zone]?.['rain_events']
 
-                        if (r === 'yesterday') return '1D'
                         if (r === 'today') return 'HOY'
+                        if (r === 'yesterday') return '1D'
                         if (r === '7d') return '7D'
                         if (r === '30d') return '30D'
                         if (r === 'all') return 'TODO'

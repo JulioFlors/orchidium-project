@@ -325,7 +325,7 @@ export function EnvironmentDataChart({
       if (r === 'today') return 'HOY'
       if (r === 'yesterday') return '1D'
       if (r === '7d') return '7D'
-      if (r === '30d') return '30'
+      if (r === '30d') return '30D'
       if (r === 'all') return 'TODO'
     }
     if (r === '24h') return 'HOY'
@@ -340,7 +340,7 @@ export function EnvironmentDataChart({
     allowedRanges ||
     (dataKey === 'illuminance'
       ? ['8-16h', '5-19h', '1D', '30d', 'all']
-      : ['1D', '24h', '7d', '30d', 'all'])
+      : ['24h', '1D', '7d', '30d', 'all'])
 
   return (
     <div

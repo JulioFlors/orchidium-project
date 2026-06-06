@@ -20,49 +20,99 @@ import { influxClient } from './influx'
  * de datos calibrados del sensor DHT22 interior (aún no activado).
  * Se dejaron TODO: en cada regla que depende de esta calibración.
  */
+/**
+ * LEYENDA Y SISTEMA DE CONSTANTES DEL MOTOR DE INFERENCIA CLIMÁTICA
+ *
+ * Este objeto centraliza todos los parámetros operativos y biológicos calibrados
+ * para el orquideario en Ciudad Guayana, Venezuela.
+ */
 const THRESHOLDS = {
-  // Lluvia acumulada (segundos)
-  MIN_RAIN_FOR_IRRIGATION: 1200, // 20 min de lluvia acumulada → omitir riego por aspersión
-  MIN_RAIN_FOR_SOIL_WETTING: 1200, // 20 min de lluvia acumulada → omitir humectación suelo
+  // ==========================================
+  // 1. UMBRALES DE LLUVIA ACUMULADA (Postgres)
+  // ==========================================
+  /** Lluvia acumulada requerida en 24h para cancelar el riego de aspersión (segundos) */
+  MIN_RAIN_DURATION_IRRIGATION_24H: 1200, // 20 min
+  /** Lluvia acumulada requerida en 4h para cancelar la humectación de suelo (segundos) */
+  MIN_RAIN_DURATION_SOIL_WETTING_4H: 1200, // 20 min
+  /** Ventana de análisis de lluvia para el riego de aspersión (horas) */
+  RAIN_LOOKBACK_IRRIGATION_HOURS: 24,
+  /** Ventana de análisis de lluvia para la humectación del suelo (horas) */
+  RAIN_LOOKBACK_SOIL_WETTING_HOURS: 4,
+  /** Ventana de análisis de lluvia para la nebulización (horas) */
+  RAIN_LOOKBACK_HUMIDIFICATION_HOURS: 8,
 
-  // Ventanas de análisis (horas)
-  RAIN_LOOKBACK_IRRIGATION: 24, // Lluvia acumulada en 24h → aplica a IRRIGATION
-  RAIN_LOOKBACK_SOIL_WETTING: 4, // Lluvia acumulada en 4h → aplica a SOIL_WETTING
-  RAIN_LOOKBACK_HUMIDIFICATION: 8, // Lluvia acumulada en 8h → aplica a HUMIDIFICATION (8am-4pm)
+  // ==========================================
+  // 2. REGLA DE HUMEDAD DIARIA SOSTENIDA (Lluvia Persistente)
+  // ==========================================
+  /** Límite de horas (bloques de 1h) saturadas hoy para activar veto general */
+  VETO_DAILY_SATURATED_HOURS_LIMIT: 6,
+  /** Umbral de humedad para considerar un bloque de 1h como saturado */
+  HUMIDITY_SATURATION_THRESHOLD: 98.0, // >= 98%
+  /** Mínimo de muestras válidas requeridas en un bloque de 1h */
+  MIN_SAMPLES_PER_HOUR_BLOCK: 5,
 
-  // Humedad Crítica Interior (EMA Interior, ZONA_A)
-  // Veto absoluto de HUMIDIFICATION y SOIL_WETTING si el promedio de 3h es >= 95%
-  MAX_HUMIDITY_CRITICAL_INTERIOR: 95.0,
-  INTERIOR_HUMIDITY_LOOKBACK_MIN: 180, // 3 horas (180 minutos)
+  // ==========================================
+  // 3. UMBRALES DE ILUMINANCIA Y RADIACIÓN (DayClassifier)
+  // ==========================================
+  /** Promedio de lux diario a partir de 8:00 AM para considerar el día templado/soleado */
+  SUNNY_DAY_LUX_THRESHOLD: 26000,
+  /** Umbral de nubosidad severa (posible lluvia) */
+  HEAVY_OVERCAST_LUX_THRESHOLD: 10000,
 
-  // Amanecer: HR natural por rocío alcanza 95-98%
-  MAX_HUMIDITY_DAWN: 100, // Umbral de HR para ventana de amanecer (4:00-7:00 AM, incluye evaluación de 6AM)
+  // ==========================================
+  // 4. UMBRALES DINÁMICOS DE HUMEDAD RELATIVA (EMA Interior / ZONA_A)
+  // ==========================================
+  // --- Ventana de 3 Horas (Humedad Crítica para Humectación, Nebulización y Fitosanitarias) ---
+  /** Ventana retrospectiva de análisis para el veto por humedad de 3 horas (minutos) */
+  LOOKBACK_MINUTES_3H: 180,
+  /** Umbral de veto de 3h en día nublado/lluvioso (microclima saturado) */
+  HUMIDITY_VETO_3H_CLOUDY: 95.0,
+  /** Umbral de veto de 3h en día templado/soleado (sensibilidad alta por transpiración activa) */
+  HUMIDITY_VETO_3H_SUNNY: 88.0,
+
+  // --- Ventana de 4 Horas (Humedad y Temperatura para Humectación y Fitosanitarias) ---
+  /** Ventana retrospectiva de análisis para el veto por humedad de 4 horas (minutos) */
+  LOOKBACK_MINUTES_4H: 240,
+  /** Umbral de veto de 4h en día nublado/lluvioso */
+  HUMIDITY_VETO_4H_CLOUDY: 91.0,
+  /** Umbral de veto de 4h en día templado/soleado */
+  HUMIDITY_VETO_4H_SUNNY: 85.0,
+  /** Temperatura promedio mínima en 4h bajo la cual se cancelan las tareas (evitando shock por frío y exceso hídrico) */
+  TEMPERATURE_MIN_VETO_4H: 30.9, // <= 30.9°C
+
+  // ==========================================
+  // 5. VENTANAS BIOLÓGICAS Y SEGURIDAD NOCTURNA
+  // ==========================================
+  /** Ventana de rocío / amanecer: humedad máxima tolerada */
+  MAX_HUMIDITY_DAWN: 100.0,
+  /** Hora de inicio de la ventana de amanecer (local) */
   DAWN_START_HOUR: 4,
+  /** Hora de fin de la ventana de amanecer (local) */
   DAWN_END_HOUR: 7,
+  /** Ventana retrospectiva para veto de respaldo nocturno (minutos) */
+  BACKUP_NOCTURNAL_LOOKBACK_MIN: 180, // 3h
+  /** Umbral de humedad exterior promedio nocturna para veto de respaldo (redundancia física de lluvia) */
+  BACKUP_NOCTURNAL_HR_THRESHOLD: 98.0,
 
-  // Respaldo Nocturno: HR exterior sostenida (EMA Exterior, zone = EXTERIOR)
-  // Usado para cancelar el riego de las 6AM cuando el sensor de lluvia físico no se activó.
-  // TODO: [CALIBRACIÓN INICIAL] — Este umbral y la ventana de 60 min son valores de inicio.
-  // Monitorear si genera:
-  //   (a) Falsos positivos: ambiente saturado de noche sin lluvia real.
-  //   (b) Falsos negativos: lluvia real sin que la HR exterior sostenga este promedio 60 min.
-  // Si ocurre (b), reducir la ventana a 30-45 min en BACKUP_NOCTURNAL_LOOKBACK_MIN.
-  BACKUP_NOCTURNAL_HR_THRESHOLD: 98.0, // HR promedio exterior >= 98.0%
-  BACKUP_NOCTURNAL_LOOKBACK_MIN: 180, // Ventana de búsqueda de 180 min (3 horas)
+  // ==========================================
+  // 6. CONTROL OPERATIVO DE ACTUADORES
+  // ==========================================
+  /** Duración máxima de la nebulización para evitar goteo sobre las hojas (minutos) */
+  MAX_NEBULIZATION_DURATION_MINUTES: 3,
+  /** Duración estándar de riego de aspersión matutino (minutos) */
+  IRRIGATION_DURATION_MINUTES: 15,
+  /** Umbral de humedad provisional para misting en nebulización de las 4PM */
+  MISTING_HUMIDITY_PROVISIONAL_THRESHOLD: 80.0,
+  /** Temperatura mínima interior provisional para misting de las 4PM */
+  MISTING_TEMPERATURE_PROVISIONAL_MIN: 28.0, // < 28°C no se nebuliza
 
-  // Correlación de lluvia por HR sostenida (minutos)
-  SUSTAINED_HR_MINUTES: 20, // Mínimo de min consecutivos con HR >= umbral para cancelar
-  SUSTAINED_HR_LOOKBACK_MIN: 120, // Ventana de búsqueda (2 horas)
-
-  // Iluminancia (calibrado con observaciones de campo marzo-abril 2026)
-  OVERCAST_LUX_THRESHOLD: 26000, // Promedio diario < 26k = nublado confirmado
-  HEAVY_OVERCAST_LUX: 10000, // Nubosidad intensa → posible lluvia
-
-  // Duración máxima de nebulización (minutos)
-  MAX_NEBULIZATION_MINUTES: 3, // > 3min la línea gotea y riega plantas debajo
-
-  // Aspersión
-  IRRIGATION_DURATION_MINUTES: 15, // Duración de la rutina de aspersión 6AM
+  // ==========================================
+  // 7. PROTECCIÓN DE AGROQUÍMICOS (Fumigación y Fertilización)
+  // ==========================================
+  /** Probabilidad de lluvia en pronóstico (consenso APIs) para veto estricto */
+  FORECAST_PRECIPITATION_PROBABILITY_LIMIT: 0.95,
+  /** Lluvia acumulada reciente en 4h que veta agroquímicos (segundos) */
+  AGROCHEMICAL_RAIN_LOOKBACK_LIMIT_4H: 14400, // 4 horas en segundos
 }
 
 export interface InferenceResult {
@@ -101,7 +151,6 @@ export interface InferenceResult {
  * HERRAMIENTAS DE REGULACIÓN:
  * - Humectación del suelo: sin peligro de mojar plantas, puede repetirse.
  * - Pulverización/Nebulización: máx 3 min, la línea gotea y moja plantas debajo.
- * - Aspersión: solo a las 6AM, 15 min, interdiaria.
  */
 export class InferenceEngine {
   static async evaluate(schedule: AutomationSchedule): Promise<InferenceResult> {
@@ -161,7 +210,6 @@ export class InferenceEngine {
       )
 
       // ── 3. HARD BLOCK: Lluvia Real en Curso ──
-      // Si está lloviendo AHORA → no ejecutar ninguna tarea hídrica
       const currentlyRaining =
         isCurrentlyRaining() ||
         (localConditions.exterior.rain_intensity && localConditions.exterior.rain_intensity > 0)
@@ -175,29 +223,50 @@ export class InferenceEngine {
         }
       }
 
+      // ── 3.A: Umbrales Dinámicos según Radiación Solar (Lux promedio desde 8:00 AM) ──
+      const isSunnyOrTemperate = dayClass.avgLuxSince8am >= THRESHOLDS.SUNNY_DAY_LUX_THRESHOLD
+      const THRESHOLD_3H = isSunnyOrTemperate
+        ? THRESHOLDS.HUMIDITY_VETO_3H_SUNNY
+        : THRESHOLDS.HUMIDITY_VETO_3H_CLOUDY
+      const THRESHOLD_4H = isSunnyOrTemperate
+        ? THRESHOLDS.HUMIDITY_VETO_4H_SUNNY
+        : THRESHOLDS.HUMIDITY_VETO_4H_CLOUDY
+
+      // ── 3.B: Veto Humedad Diaria Sostenida (6h Acumuladas >= 98% hoy) ──
+      if (
+        purpose === 'HUMIDIFICATION' ||
+        purpose === 'SOIL_WETTING' ||
+        purpose === 'FUMIGATION' ||
+        purpose === 'FERTIGATION'
+      ) {
+        const saturatedBlocks = await this.getHourlySaturatedBlocks()
+
+        if (saturatedBlocks >= THRESHOLDS.VETO_DAILY_SATURATED_HOURS_LIMIT) {
+          return {
+            shouldCancel: true,
+            reason: `VETO HUMEDAD DIARIA SOSTENIDA: Se han acumulado ${saturatedBlocks} bloques de 1h con HR promedio ≥ ${THRESHOLDS.HUMIDITY_SATURATION_THRESHOLD}% hoy (lluvia persistente / día muy húmedo). Omitiendo ${purpose}.`,
+            action: 'SKIP',
+            metadata: {
+              saturatedBlocks,
+              thresholdLimit: THRESHOLDS.VETO_DAILY_SATURATED_HOURS_LIMIT,
+            },
+          }
+        }
+      }
+
       // ── 3.1: Veto Autoridad Principal — Criterio del Día Anterior (solo IRRIGATION) ──
-      // Cancela el riego de aspersión de las 6AM si las condiciones de ayer fueron
-      // lo suficientemente húmedas como para que el suelo aún esté humectado.
-      // Se aplica solo en ventana de evaluación matutina (antes de las 7AM).
       const localHour = (now.getUTCHours() - 4 + 24) % 24
 
       if (purpose === 'IRRIGATION' && localHour < 7) {
         const yesterdayRain = await this.getYesterdayRainAccumulation(now)
         const yesterdayLux = await this.getYesterdayAverageLux(now)
 
-        // Criterio A1: Lluvia >20 min acumulada ayer + promedio de lux < 26k (evapotranspiración mínima)
         const criterioA1 =
-          yesterdayRain.durationSeconds >= THRESHOLDS.MIN_RAIN_FOR_IRRIGATION &&
-          yesterdayLux < THRESHOLDS.OVERCAST_LUX_THRESHOLD
-
-        // TODO: [EVALUACIÓN HISTÓRICA] El Criterio A2 (nubosidad severa sola) ha sido desactivado temporalmente para IRRIGATION.
-        // Se evidenció que días muy nublados (como el 19 de mayo) pueden no tener lluvia significativa,
-        // lo que provocaría sub-riego de aspersión.
-        // const hadHeavyOvercast = await this.hasYesterdayHeavyOvercast60Min(now)
-        // const criterioA2 = hadHeavyOvercast
+          yesterdayRain.durationSeconds >= THRESHOLDS.MIN_RAIN_DURATION_IRRIGATION_24H &&
+          yesterdayLux < THRESHOLDS.SUNNY_DAY_LUX_THRESHOLD
 
         if (criterioA1) {
-          const razon = `Lluvia acumulada ayer: ${Math.round(yesterdayRain.durationSeconds / 60)} min + Lux promedio: ${yesterdayLux.toFixed(0)} (< ${THRESHOLDS.OVERCAST_LUX_THRESHOLD} lux)`
+          const razon = `Lluvia acumulada ayer: ${Math.round(yesterdayRain.durationSeconds / 60)} min + Lux promedio: ${yesterdayLux.toFixed(0)} (< ${THRESHOLDS.SUNNY_DAY_LUX_THRESHOLD} lux)`
 
           return {
             shouldCancel: true,
@@ -209,8 +278,6 @@ export class InferenceEngine {
       }
 
       // ── 3.2: Veto Respaldo Nocturno — HR exterior promedio >= 98.0% (solo IRRIGATION) ──
-      // Mecanismo de redundancia por fallo del sensor de lluvia físico.
-      // Activo en la ventana nocturna: 7:00 PM (19:00) hasta 5:59:59 AM del día siguiente.
       if (purpose === 'IRRIGATION') {
         const isNocturnalWindow = localHour >= 19 || localHour < 6
 
@@ -230,25 +297,25 @@ export class InferenceEngine {
         }
       }
 
-      // ── 3.3: Veto Humedad Crítica Interior — HR interior promedio >= 95% (solo HUMIDIFICATION y SOIL_WETTING) ──
-      if (purpose === 'HUMIDIFICATION' || purpose === 'SOIL_WETTING') {
+      // ── 3.3: Veto Humedad Crítica Interior (3h) — (solo HUMIDIFICATION) ──
+      if (purpose === 'HUMIDIFICATION') {
         const avgIntHum = await this.getInteriorRecentAverageHumidity(
-          THRESHOLDS.INTERIOR_HUMIDITY_LOOKBACK_MIN,
+          THRESHOLDS.LOOKBACK_MINUTES_3H,
         )
 
-        if (avgIntHum >= THRESHOLDS.MAX_HUMIDITY_CRITICAL_INTERIOR) {
+        if (avgIntHum >= THRESHOLD_3H) {
           return {
             shouldCancel: true,
-            reason: `VETO HUMEDAD INTERIOR: Promedio 3h de ZONA_A (${avgIntHum.toFixed(1)}%) ≥ ${THRESHOLDS.MAX_HUMIDITY_CRITICAL_INTERIOR}% (Evitando exceso hídrico).`,
+            reason: `VETO HUMEDAD INTERIOR (3h): Promedio 3h de ZONA_A (${avgIntHum.toFixed(1)}%) ≥ ${THRESHOLD_3H}% (Umbral Dinámico; evitando exceso hídrico foliar).`,
             action: 'SKIP',
-            metadata: { avgIntHum },
+            metadata: { avgIntHum, threshold3h: THRESHOLD_3H },
           }
         }
       }
 
-      // ── 3.3.1: Veto Acumulado de 4h para Humectación del Suelo (SOIL_WETTING) ──
-      if (purpose === 'SOIL_WETTING') {
-        const lookbackMin = 240 // 4 horas
+      // ── 3.4: Veto Acumulado de 4h (Humedad/Temperatura) — (solo SOIL_WETTING y FUMIGATION) ──
+      if (purpose === 'SOIL_WETTING' || purpose === 'FUMIGATION' || purpose === 'FERTIGATION') {
+        const lookbackMin = THRESHOLDS.LOOKBACK_MINUTES_4H
 
         let humData = await this.getRecentAverageHumidity(lookbackMin, 'ZONA_A')
         let tempData = await this.getRecentAverageTemperature(lookbackMin, 'ZONA_A')
@@ -264,147 +331,82 @@ export class InferenceEngine {
         const avgTemp = tempData.average
 
         Logger.inference(
-          `Evaluando regla de 4h para SOIL_WETTING → HR promedio: ${avgHum.toFixed(1)}% | Temp promedio: ${avgTemp.toFixed(1)}°C | Datos: ${dataUsed}`,
+          `Evaluando regla de 4h para ${purpose} → HR promedio: ${avgHum.toFixed(1)}% | Temp promedio: ${avgTemp.toFixed(1)}°C | Datos: ${dataUsed}`,
         )
 
-        if (avgHum >= 91.0) {
+        if (avgHum >= THRESHOLD_4H) {
           return {
             shouldCancel: true,
-            reason: `VETO SOIL_WETTING (4h): HR promedio ${avgHum.toFixed(1)}% ≥ 91.0% (Datos: ${dataUsed}).`,
+            reason: `VETO CLIMÁTICO ${purpose} (4h): HR promedio ${avgHum.toFixed(1)}% ≥ ${THRESHOLD_4H}% (Umbral Dinámico; Datos: ${dataUsed}).`,
             action: 'SKIP',
-            metadata: { avgHum, avgTemp, dataUsed },
+            metadata: { avgHum, threshold4h: THRESHOLD_4H, dataUsed },
           }
         }
 
-        if (avgTemp <= 30.9) {
+        if (avgTemp <= THRESHOLDS.TEMPERATURE_MIN_VETO_4H) {
           return {
             shouldCancel: true,
-            reason: `VETO SOIL_WETTING (4h): Temperatura promedio ${avgTemp.toFixed(1)}°C ≤ 30.9°C (Datos: ${dataUsed}).`,
+            reason: `VETO CLIMÁTICO ${purpose} (4h): Temperatura promedio ${avgTemp.toFixed(1)}°C ≤ ${THRESHOLDS.TEMPERATURE_MIN_VETO_4H}°C (Datos: ${dataUsed}).`,
             action: 'SKIP',
-            metadata: { avgHum, avgTemp, dataUsed },
+            metadata: { avgTemp, thresholdTemp: THRESHOLDS.TEMPERATURE_MIN_VETO_4H, dataUsed },
           }
         }
       }
 
-      // ── 4. Lluvia Acumulada → IRRIGATION (>20min en 12h) ──
+      // ── 4. Lluvia Acumulada → IRRIGATION (lookback 24h) ──
       if (purpose === 'IRRIGATION') {
-        const recentRain = await this.getRecentRainAccumulation(THRESHOLDS.RAIN_LOOKBACK_IRRIGATION)
+        const recentRain = await this.getRecentRainAccumulation(
+          THRESHOLDS.RAIN_LOOKBACK_IRRIGATION_HOURS,
+        )
 
-        if (recentRain.durationSeconds >= THRESHOLDS.MIN_RAIN_FOR_IRRIGATION) {
+        if (recentRain.durationSeconds >= THRESHOLDS.MIN_RAIN_DURATION_IRRIGATION_24H) {
           return {
             shouldCancel: true,
-            reason: `Lluvia acumulada: ${Math.round(recentRain.durationSeconds / 60)} min en las últimas ${THRESHOLDS.RAIN_LOOKBACK_IRRIGATION}h.`,
+            reason: `Lluvia acumulada: ${Math.round(recentRain.durationSeconds / 60)} min en las últimas ${THRESHOLDS.RAIN_LOOKBACK_IRRIGATION_HOURS}h.`,
             action: 'SKIP',
             metadata: { recentRain },
           }
         }
       }
 
-      // ── 4.1 Lluvia Acumulada → SOIL_WETTING (Ventana 4h) ──
+      // ── 4.1 Lluvia Acumulada → SOIL_WETTING (lookback 4h) ──
       if (purpose === 'SOIL_WETTING') {
         const recentRain = await this.getRecentRainAccumulation(
-          THRESHOLDS.RAIN_LOOKBACK_SOIL_WETTING,
+          THRESHOLDS.RAIN_LOOKBACK_SOIL_WETTING_HOURS,
         )
 
         if (recentRain.durationSeconds > 0) {
           return {
             shouldCancel: true,
-            reason: `Cancelación automática: Lluvia detectada en las últimas ${THRESHOLDS.RAIN_LOOKBACK_SOIL_WETTING} horas. Suelo ya humectado.`,
+            reason: `Cancelación automática: Lluvia detectada en las últimas ${THRESHOLDS.RAIN_LOOKBACK_SOIL_WETTING_HOURS} horas. Suelo ya humectado.`,
             action: 'SKIP',
             metadata: { recentRain },
           }
         }
       }
 
-      // ── 4.2 Lluvia Acumulada → HUMIDIFICATION (Día Botánico 8h) ──
+      // ── 4.2 Lluvia Acumulada → HUMIDIFICATION (lookback 8h) ──
       if (purpose === 'HUMIDIFICATION') {
         const recentRain = await this.getRecentRainAccumulation(
-          THRESHOLDS.RAIN_LOOKBACK_HUMIDIFICATION,
+          THRESHOLDS.RAIN_LOOKBACK_HUMIDIFICATION_HOURS,
         )
 
         if (recentRain.durationSeconds > 0) {
           return {
             shouldCancel: true,
-            reason: `Cancelación automática: Lluvia detectada durante el día botánico (últimas 8h). Ambiente saturado.`,
+            reason: `Cancelación automática: Lluvia detectada durante el día botánico (últimas ${THRESHOLDS.RAIN_LOOKBACK_HUMIDIFICATION_HOURS}h). Ambiente saturado.`,
             action: 'SKIP',
             metadata: { recentRain },
           }
         }
       }
 
-      // TODO: [EMA INTERIOR DESHABILITADO] — Bloque de Humedad Crítica Interior.
-      //
-      // Este bloque evalúa la HR del sensor DHT22 interior (bajo mallasombra) para cancelar
-      // tareas hídricas cuando el microclima ya está saturado.
-      //
-      // ESTADO: Deshabilitado. El firmware weather_station/main.py no ha sido actualizado
-      // con arquitectura robusta, y no existen datos históricos calibrados del interior que
-      // permitan validar los umbrales propuestos.
-      //
-      // CONDICIONES PARA HABILITAR:
-      //   1. Actualizar firmware weather_station a nivel de resiliencia del nodo actuador.
-      //   2. Recolectar un histórico real del microclima interior (DHT22 bajo mallasombra).
-      //   3. Validar umbrales: tentativo >= 97.9% (paridad con EMA exterior, mismo sensor DHT22).
-      //
-      // CUANDO SE HABILITE, reemplazar este bloque por la lógica original:
-      //
-      // if (
-      //   interiorHum > 0 &&
-      //   (purpose === 'IRRIGATION' || purpose === 'HUMIDIFICATION' || purpose === 'SOIL_WETTING')
-      // ) {
-      //   const currentHour = now.getHours()
-      //   const isDawn =
-      //     currentHour >= THRESHOLDS.DAWN_START_HOUR && currentHour < THRESHOLDS.DAWN_END_HOUR
-      //
-      //   const effectiveHumThreshold = isDawn
-      //     ? THRESHOLDS.MAX_HUMIDITY_DAWN
-      //     : THRESHOLDS.MAX_HUMIDITY_CRITICAL  // TODO: 97.9% una vez calibrado
-      //
-      //   if (interiorHum > effectiveHumThreshold) {
-      //     const recentRainCheck = await this.getRecentRainAccumulation(4)
-      //     const rainedRecently = recentRainCheck.durationSeconds > 0
-      //
-      //     if (isDawn) {
-      //       const sustainedHR = await this.getSustainedHighHumidity(
-      //         THRESHOLDS.SUSTAINED_HR_LOOKBACK_MIN,
-      //         THRESHOLDS.MAX_HUMIDITY_DAWN,
-      //       )
-      //       if (rainedRecently || sustainedHR.minutes >= THRESHOLDS.SUSTAINED_HR_MINUTES) {
-      //         const evidencia = rainedRecently
-      //           ? `lluvia real (${Math.round(recentRainCheck.durationSeconds / 60)}min)`
-      //           : `HR >=${THRESHOLDS.MAX_HUMIDITY_DAWN}% sostenida por ${sustainedHR.minutes}min`
-      //         return {
-      //           shouldCancel: true,
-      //           reason: `HR INT ${interiorHum.toFixed(0)}% (amanecer) + ${evidencia}. Omitiendo ${purpose}.`,
-      //           action: 'SKIP',
-      //           metadata: { localConditions, dayClass, sustainedHR },
-      //         }
-      //       }
-      //     } else {
-      //       const cloudyDay = dayClass.type === 'NUBLADO' || dayClass.type === 'LLUVIOSO'
-      //       if (rainedRecently || cloudyDay) {
-      //         return {
-      //           shouldCancel: true,
-      //           reason: `HR INT ${interiorHum.toFixed(0)}% (crítica) + ${cloudyDay ? `día ${dayClass.type}` : `lluvia reciente`}. Omitiendo ${purpose}.`,
-      //           action: 'SKIP',
-      //           metadata: { localConditions, dayClass },
-      //         }
-      //       }
-      //     }
-      //   }
-      // }
-
-      // ── 6. Pulverización innecesaria (día nublado + HR alta) ──
-      // HR > 80% + día promedio < 26k lux → no pulverizar
-      // TODO: [EMA INTERIOR] — Este umbral de HR (80%) es provisional. Calibrar con datos
-      // reales del DHT22 interior cuando el firmware weather_station esté actualizado.
-      const MAX_HUMIDITY_FOR_MISTING_PROVISIONAL = 80 // TODO: reemplazar con THRESHOLDS una vez calibrado
-
+      // ── 6. Pulverización innecesaria (día fresco/nublado + HR alta) ──
       if (
         purpose === 'HUMIDIFICATION' &&
-        interiorHum > MAX_HUMIDITY_FOR_MISTING_PROVISIONAL &&
-        interiorTemp < 28 &&
-        dayClass.avgLuxSince8am < THRESHOLDS.OVERCAST_LUX_THRESHOLD &&
+        interiorHum > THRESHOLDS.MISTING_HUMIDITY_PROVISIONAL_THRESHOLD &&
+        interiorTemp < THRESHOLDS.MISTING_TEMPERATURE_PROVISIONAL_MIN &&
+        dayClass.avgLuxSince8am < THRESHOLDS.SUNNY_DAY_LUX_THRESHOLD &&
         dayClass.type !== 'DESCONOCIDO'
       ) {
         return {
@@ -416,16 +418,14 @@ export class InferenceEngine {
       }
 
       // ── 7. Evaluación de pulverización diaria (4PM) ──
-      // La pulverización se ejecuta si el promedio del día (8am-4pm) > 26k lux
-      // TODO: Este umbral está calibrado para temporada seca
       if (
         purpose === 'HUMIDIFICATION' &&
         dayClass.type !== 'DESCONOCIDO' &&
-        dayClass.avgLuxSince8am <= THRESHOLDS.OVERCAST_LUX_THRESHOLD
+        dayClass.avgLuxSince8am <= THRESHOLDS.SUNNY_DAY_LUX_THRESHOLD
       ) {
         return {
           shouldCancel: true,
-          reason: `Día ${dayClass.type} (Lux prom 8am-ahora: ${dayClass.avgLuxSince8am.toFixed(0)}). Promedio ≤ ${THRESHOLDS.OVERCAST_LUX_THRESHOLD} lux → pulverización innecesaria.`,
+          reason: `Día ${dayClass.type} (Lux prom 8am-ahora: ${dayClass.avgLuxSince8am.toFixed(0)}). Promedio ≤ ${THRESHOLDS.SUNNY_DAY_LUX_THRESHOLD} lux → pulverización innecesaria.`,
           action: 'SKIP',
           metadata: { dayClass },
         }
@@ -434,23 +434,25 @@ export class InferenceEngine {
       // ── 8. Protección de Fertilización/Fumigación contra Tormentas (Veto Estricto) ──
       if (purpose === 'FERTIGATION' || purpose === 'FUMIGATION') {
         const forecast = await this.getForecastConsensus()
-        const recentRain4h = await this.getRecentRainAccumulation(4)
+        const recentRain4h = await this.getRecentRainAccumulation(
+          THRESHOLDS.RAIN_LOOKBACK_SOIL_WETTING_HOURS,
+        )
 
         const conditionA =
           localConditions.exterior.rain_intensity > 0 || recentRain4h.durationSeconds > 0
 
-        // TODO: Calibrar HR cuando DHT22 esté activo. 95% es el umbral solicitado.
         const conditionB =
-          dayClass.avgLuxSince8am < THRESHOLDS.OVERCAST_LUX_THRESHOLD &&
+          dayClass.avgLuxSince8am < THRESHOLDS.SUNNY_DAY_LUX_THRESHOLD &&
           dayClass.type !== 'DESCONOCIDO' &&
-          interiorHum > 95
+          interiorHum > THRESHOLDS.HUMIDITY_VETO_3H_CLOUDY
 
-        const conditionC = forecast.consensusPrecipProb > 0.95
+        const conditionC =
+          forecast.consensusPrecipProb > THRESHOLDS.FORECAST_PRECIPITATION_PROBABILITY_LIMIT
 
         if ((conditionA || conditionB) && conditionC) {
           return {
             shouldCancel: true,
-            reason: `VETO AMBIENTAL: ${conditionA ? 'Lluvia actual/reciente' : 'Día muy nublado + HR crítica'} con Pronóstico > 95%. Protegiendo ${purpose}.`,
+            reason: `VETO AMBIENTAL: ${conditionA ? 'Lluvia actual/reciente' : 'Día muy nublado + HR crítica'} con Pronóstico > ${(THRESHOLDS.FORECAST_PRECIPITATION_PROBABILITY_LIMIT * 100).toFixed(0)}%. Protegiendo ${purpose}.`,
             action: 'SKIP',
             metadata: { forecast, dayClass, recentRain4h },
           }
@@ -937,6 +939,109 @@ export class InferenceEngine {
     return false
   }
 
+  /**
+   * Consulta el promedio de humedad en un intervalo de tiempo específico (start a end) para una zona dada.
+   * Fuente: InfluxDB.
+   */
+  private static async getAverageHumidityInWindow(
+    start: Date,
+    end: Date,
+    zone: 'ZONA_A' | 'EXTERIOR',
+  ): Promise<{ average: number; count: number }> {
+    try {
+      const query = `
+        SELECT humidity
+        FROM "environment_metrics"
+        WHERE time >= '${start.toISOString()}' AND time <= '${end.toISOString()}'
+          AND source = 'Weather_Station'
+          AND zone = '${zone}'
+          AND humidity IS NOT NULL
+          AND humidity >= 5.0 AND humidity <= 100.0
+        ORDER BY time DESC
+      `
+      const stream = influxClient.query(query)
+      let sum = 0
+      let count = 0
+
+      for await (const row of stream) {
+        if (row.humidity != null) {
+          sum += Number(row.humidity)
+          count++
+        }
+      }
+
+      return {
+        average: count > 0 ? sum / count : 0,
+        count,
+      }
+    } catch {
+      Logger.inference(
+        `Error al consultar HR promedio para ${zone} en ventana ${start.toISOString()} - ${end.toISOString()}.`,
+      )
+
+      return { average: 0, count: 0 }
+    }
+  }
+
+  /**
+   * Divide el día de hoy (desde las 00:00 AM hora local de Caracas) en bloques de 1 hora.
+   * Cuenta cuántos bloques promediaron >= HUMIDITY_SATURATION_THRESHOLD (98.0%) en interior o exterior.
+   * Usado para el Veto de Humedad Diaria Sostenida (Lluvia Persistente).
+   */
+  private static async getHourlySaturatedBlocks(): Promise<number> {
+    try {
+      const now = new Date()
+      const caracasOffsetMs = -4 * 60 * 60 * 1000
+      const localTime = new Date(now.getTime() + caracasOffsetMs)
+
+      const localMidnight = new Date(localTime)
+
+      localMidnight.setUTCHours(0, 0, 0, 0)
+
+      const startOfDayUTC = new Date(localMidnight.getTime() - caracasOffsetMs)
+
+      const blocks: { start: Date; end: Date }[] = []
+      let blockStart = new Date(startOfDayUTC)
+
+      while (blockStart < now) {
+        const blockEnd = new Date(blockStart.getTime() + 60 * 60 * 1000)
+
+        blocks.push({
+          start: new Date(blockStart),
+          end: blockEnd > now ? new Date(now) : blockEnd,
+        })
+        blockStart = blockEnd
+      }
+
+      const promises = blocks.map(async (block) => {
+        const intRes = await this.getAverageHumidityInWindow(block.start, block.end, 'ZONA_A')
+        const extRes = await this.getAverageHumidityInWindow(block.start, block.end, 'EXTERIOR')
+
+        const isIntSaturated =
+          intRes.count >= THRESHOLDS.MIN_SAMPLES_PER_HOUR_BLOCK &&
+          intRes.average >= THRESHOLDS.HUMIDITY_SATURATION_THRESHOLD
+        const isExtSaturated =
+          extRes.count >= THRESHOLDS.MIN_SAMPLES_PER_HOUR_BLOCK &&
+          extRes.average >= THRESHOLDS.HUMIDITY_SATURATION_THRESHOLD
+
+        return isIntSaturated || isExtSaturated
+      })
+
+      const results = await Promise.all(promises)
+      const saturatedBlocksCount = results.filter(Boolean).length
+
+      Logger.inference(
+        `Humedad Diaria Sostenida: ${saturatedBlocksCount} bloques de 1h saturados (>=${THRESHOLDS.HUMIDITY_SATURATION_THRESHOLD}%) hoy (límite: ${THRESHOLDS.VETO_DAILY_SATURATED_HOURS_LIMIT}).`,
+      )
+
+      return saturatedBlocksCount
+    } catch (err) {
+      Logger.error('Error al calcular los bloques de humedad diaria sostenida:', err)
+
+      return 0
+    }
+  }
+
   private static async getRecentAverageHumidity(
     lookbackMinutes: number,
     zone: 'ZONA_A' | 'EXTERIOR',
@@ -1274,13 +1379,21 @@ export class InferenceEngine {
         Logger.cron('Límite de Emergencia: 3 días consecutivos sin riego completo detectado.')
 
         // Exclusión 1: Lluvia acumulada en las últimas 24h >= 20 min (1200s)
-        const rain24h = await this.getRecentRainAccumulation(24)
-        const rainExclusion = rain24h.durationSeconds >= 1200
+        const rain24h = await this.getRecentRainAccumulation(
+          THRESHOLDS.RAIN_LOOKBACK_IRRIGATION_HOURS,
+        )
+        const rainExclusion = rain24h.durationSeconds >= THRESHOLDS.MIN_RAIN_DURATION_IRRIGATION_24H
 
         // Exclusión 2: Promedio de 3h de humedad >= 98% en exterior o interior
-        const avgExtHum3h = await this.getExternalRecentAverageHumidity(180)
-        const avgIntHum3h = await this.getInteriorRecentAverageHumidity(180)
-        const humExclusion = avgExtHum3h >= 98.0 || avgIntHum3h >= 98.0
+        const avgExtHum3h = await this.getExternalRecentAverageHumidity(
+          THRESHOLDS.LOOKBACK_MINUTES_3H,
+        )
+        const avgIntHum3h = await this.getInteriorRecentAverageHumidity(
+          THRESHOLDS.LOOKBACK_MINUTES_3H,
+        )
+        const humExclusion =
+          avgExtHum3h >= THRESHOLDS.HUMIDITY_SATURATION_THRESHOLD ||
+          avgIntHum3h >= THRESHOLDS.HUMIDITY_SATURATION_THRESHOLD
 
         if (rainExclusion || humExclusion) {
           Logger.cron(
@@ -1288,7 +1401,7 @@ export class InferenceEngine {
           )
         } else {
           Logger.cron(
-            'Programando Riego Diferido de Emergencia (15 min) para mañana a las 6:00 AM.',
+            `Programando Riego Diferido de Emergencia (${THRESHOLDS.IRRIGATION_DURATION_MINUTES} min) para mañana a las 6:00 AM.`,
           )
           await this.createDeferredIrrigation(
             this.getNext6am(now, 1),
@@ -1331,16 +1444,19 @@ export class InferenceEngine {
         const rainToday = await this.getRainAccumulationForDate(today)
         const rainYesterday = await this.getRainAccumulationForDate(yesterday)
 
-        if (rainToday.durationSeconds >= 1200 && rainYesterday.durationSeconds >= 1200) {
+        if (
+          rainToday.durationSeconds >= THRESHOLDS.MIN_RAIN_DURATION_IRRIGATION_24H &&
+          rainYesterday.durationSeconds >= THRESHOLDS.MIN_RAIN_DURATION_IRRIGATION_24H
+        ) {
           Logger.cron(
-            'Lluvia >= 20 min registrada por 2 días consecutivos. Activando RAIN_SUSPENSION.',
+            `Lluvia >= ${Math.round(THRESHOLDS.MIN_RAIN_DURATION_IRRIGATION_24H / 60)} min registrada por 2 días consecutivos. Activando RAIN_SUSPENSION.`,
           )
           await this.updateSchedulerState('RAIN_SUSPENSION')
 
           return
         }
 
-        // Reset por Riego Doble: hoy y ayer aspersión completada >= 15 min en cada día
+        // Reset por Riego Doble: hoy y ayer aspersión completada >= IRRIGATION_DURATION_MINUTES min en cada día
         const startToday = new Date(today)
 
         startToday.setHours(0, 0, 0, 0)
@@ -1371,7 +1487,10 @@ export class InferenceEngine {
           _sum: { duration: true },
         })
 
-        if ((aspToday._sum.duration ?? 0) >= 15 && (aspYesterday._sum.duration ?? 0) >= 15) {
+        if (
+          (aspToday._sum.duration ?? 0) >= THRESHOLDS.IRRIGATION_DURATION_MINUTES &&
+          (aspYesterday._sum.duration ?? 0) >= THRESHOLDS.IRRIGATION_DURATION_MINUTES
+        ) {
           Logger.cron(
             'Intervención manual de riego doble detectada (2 días seguidos de aspersión). Reseteando a STANDARD_CRON.',
           )
@@ -1417,7 +1536,7 @@ export class InferenceEngine {
           const dayClass = await classifyCurrentDay()
 
           const isDryAndSunny =
-            rainToday.durationSeconds < 1200 &&
+            rainToday.durationSeconds < THRESHOLDS.MIN_RAIN_DURATION_IRRIGATION_24H &&
             avgLuxToday > 13000 &&
             dayClass.type !== 'OVERCAST' &&
             dayClass.type !== 'RAINY'
@@ -1441,7 +1560,9 @@ export class InferenceEngine {
       if (updatedState === 'RAIN_SUSPENSION') {
         const rainToday = await this.getRainAccumulationForDate(today)
         const avgLuxToday = await this.getTodayAverageLux(now)
-        const isSoleado = avgLuxToday > 20000 && rainToday.durationSeconds < 1200
+        const isSoleado =
+          avgLuxToday > 20000 &&
+          rainToday.durationSeconds < THRESHOLDS.MIN_RAIN_DURATION_IRRIGATION_24H
 
         if (isSoleado) {
           Logger.cron(
