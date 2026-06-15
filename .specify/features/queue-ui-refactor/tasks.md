@@ -1,0 +1,16 @@
+- [x] Actualizar `spec.md` con los detalles adicionales del usuario (circuitos de fumigación y fertilización, estructura del label de subtítulo de la card basado en `HistoryTaskCard.tsx`).
+- [ ] Modificar `TaskStatusBadge.tsx` para alinear el estado `PENDING` a "Pendiente" y usar la paleta azul (`bg-blue-500/10 text-blue-600 dark:text-blue-400`).
+- [ ] Modificar `QueueTaskCard.tsx` para:
+  - Permitir posponer (24h/48h) solo si `task.purpose === 'FERTIGATION' || task.purpose === 'FUMIGATION'`.
+  - Mostrar un único badge de estado `TaskStatusBadge` (remover `SourceBadge`).
+  - Formatear el label dinámico de subtítulo siguiendo la estructura de `HistoryTaskCard.tsx`:
+    - Rutina: `Rutina #[ID] [Nombre de la rutina]`
+    - Diferida: `Diferido #[ID] [Notas/Justificación]`
+    - Inferencia: `Inferencia #[ID] [Notas/Regla en la que se basó]`
+  - Asegurar la compatibilidad si la tarea no tiene ID de base de datos (ej. tareas proyectadas que empiezan por `routine-`).
+- [ ] Modificar `QueueView.tsx` para rediseñar el modal de cancelación imitando la estructura de `DeferredTaskModal.tsx`:
+  - Cambiar el título al circuito de la tarea (+ `#id` si posee ID).
+  - Añadir una fila secundaria con fecha y hora planificada.
+  - Cambiar el label de la caja de texto a `Motivo de cancelación`.
+  - Utilizar botones de confirmación destructivos y ghost para volver.
+- [ ] Validar cambios con build/linting.

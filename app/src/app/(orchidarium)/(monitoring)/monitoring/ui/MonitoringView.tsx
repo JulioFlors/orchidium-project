@@ -54,6 +54,7 @@ interface RainEvent {
   baselineTemp: number | null
   baselineHum: number | null
   baselineLux: number | null
+  baselineAgeMinutes?: number | null
   triggerReason: string | null
   closeReason: string | null
 }
@@ -596,6 +597,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
                   baselineTemp: ev.baselineTemp ?? undefined,
                   baselineHum: ev.baselineHum ?? undefined,
                   baselineLux: ev.baselineLux ?? undefined,
+                  baselineAgeMinutes: ev.baselineAgeMinutes ?? undefined,
                   triggerReason: ev.triggerReason ?? undefined,
                   closeReason: ev.closeReason ?? undefined,
                 }

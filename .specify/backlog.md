@@ -1,0 +1,266 @@
+# 📋 Backlog de Ingeniería (Micro-Gerencia)
+
+Este documento centraliza todas las tareas del proyecto, fusionando la Estrategia de 4 Fases con los requerimientos técnicos de infraestructura y hardware.
+
+---
+
+## 🏗️ FASE 0: INFRAESTRUCTURA & DEVOPS
+
+*Objetivo:* Cimientos sólidos para el despliegue híbrido (Local/Cloud).
+
+### ☁️ 0.1 Almacenamiento y Base de Datos
+
+* [ ] **Pipeline de Imágenes AOT (VPS Media Storage):**
+  * [ ] Cliente: Implementar `browser-image-compression` para convertir crudos (JPG/PNG) a `WebP` sub-300KB (Max 1920px) AOT (Ahead of Time) antes de subir.
+  * [ ] Backend/VPS: Configurar contenedor o endpoint en VPS para recibir ficheros WebP y servirlos como ficheros estáticos.
+  * [ ] Frontend: Atar URL pública generada por el VPS a modelo Prisma (`SpeciesImage`).
+  * [ ] *Mitigación Marzo:* Esto oficializa el workaround, manteniendo `unoptimized: true` en NextConfig. Consumo Vercel quota = 0.
+* [ ] **InfluxDB VPS (Cubo Histórico):** Migrar de Cloud a instancia VPS propia.
+  * [ ] Eliminar política de retención de 30 días.
+  * [ ] Crear *Continuous Queries* (o Tareas en Flux/SQL) para realizar **Downsampling**: Resumir datos crudos (minuto a minuto) en un bucket secundario con resoluciones horarias (max, min, mean) para consultas de meses/años sin penalizar el rendimiento.
+* [x] **Dominio y SSL (VPS/Certbot):** Configurar dominio personalizado y generar certificados mediante Certbot (Let's Encrypt) en el VPS para habilitar HTTPS de forma nativa (sin proxy de Cloudflare).
+
+### 🚀 0.2 Despliegue de Servicios (Backend)
+
+* [x] **Dockerización Producción:** Configurar los servicios de `ingest` y `scheduler` en un VPS.
+* [x] **Optimización de Ingesta (Deduplicación):** Implementar caché de estados para evitar spam redundante de heartbeats en InfluxDB.
+* [x] **Calidad de Código & Linting:**
+  * [x] Corregir crash de ESLint en archivos Markdown mediante restricción de reglas de `import/react/next` a archivos de script.
+  * [x] Unificar configuración de linting en `@package/eslint-config`.
+* [x] **Mantenimiento y Salud del VPS:** Documentar e integrar comandos de administración (OS, Docker, Recursos, Logs) en el protocolo maestro del agente para garantizar la trazabilidad y optimización del servidor de producción.
+
+### 📄 0.3 Documentación & Trazabilidad
+
+* [x] **Refuerzo de Protocolos:** Implementar regla MANDATORIA en `SKILL.md` para actualización proactiva de `todos.md` y `ROADMAP.md` por parte de agentes.
+* [x] **Guía de Scripts de Utilidad:** Documentación técnica para estandarización de la creación de herramientas locales (Postgres/InfluxDB) con soporte para batching.
+* [x] **Script de Backfill de Lluvia (`backfill-rain-events.ts`):** Reconstrucción y agrupación de eventos históricos de lluvia desde InfluxDB hacia Postgres con saneamiento de época y truncamiento de anomalías de sensor.
+* [x] **Documentación Botánica Avanzada:** Formalización de DIF, DLI, VPD y Riesgo Fúngico en las especificaciones del orquideario (docs/specs).
+* [ ] **Estandarización de Tópicos MQTT:**
+  * [x] Cambiar tópico base de sensores: `Environmental_Monitoring` -> `Weather_Station` (v0.12.0).
+  * [x] Normalizar Zonas: Usar capitalización de base de datos (`ZONA_A`) en lugar de formateo manual.
+  * [x] Sincronizar firmware (`sensors`), `ingest`, `scheduler` y `frontend`.
+
+---
+
+## 🟣 FASE 1: FUNDAMENTOS DE GESTIÓN (Sistemas CRUD)
+
+*Objetivo:* Poblar la base de datos con la realidad biológica y de insumos.
+
+### 🌿 1.1 Gestión de Inventario (Taxonomía y Activos)
+
+* [ ] **Sistema de Géneros (`Genus`):** CRUD universal en ruta `/genus`.
+* [ ] **Sistema de Especies (`Species`):**
+  * [ ] CRUD central en `/species` (Editor Slug, Metadatos).
+  * [ ] Integración Uploader Múltiple: Dropzone con Compresión Cliente WebP -> POST a VPS -> Prisma `SpeciesImage`.
+* [ ] **Gestión de Tienda (`ProductVariant`):**
+  * [ ] CRUD en `/store`. Vinculación Taxonomía -> Variantes comerciales (Precio, Stock Crítico).
+* [ ] **Sistema de Plantas (`Plant`):** CRUD Activos (Gemelo Digital) en `/plants`.
+* [ ] **Diario Biológico (Eventos):** CRUD completo para registrar "Avistamientos de Plagas" y "Floraciones". Incluye búsqueda in-situ y persistencia atómica.
+* [ ] **Cierre de Ciclos:** Implementar lógica para marcar el fin de una floración (endDate) y resolución de plagas.
+* [ ] **Visibilidad Histórica:** Dashboard para visualizar la línea de tiempo biológica cruzada con telemetría.
+
+### 🌸 1.2 Tienda & Lógica de Negocio
+
+* [ ] **CRUD Variantes (`ProductVariant`):** Gestión de precios y stock.
+* [x] **Mejora UI Tienda:**
+  * [x] Filtro/sección para agrupar plantas con **Floración Activa** (Sincronizado con el Diario Biológico).
+  * [x] Aplicar label "Floración" (FloweringLabel) a los productos correspondientes.
+  * [x] Distintivo visual en la card de producto.
+
+### 🧪 1.3 Gestión de Laboratorio (Insumos y Recetas)
+
+*Objetivo:* Implementar los CRUD de `/supplies` (Insumos) y `/recipes` (Programas) usando **estrictamente componentes UI universales** para garantizar diseño consistente y escalabilidad.
+
+* [ ] **Capa 0: Reutilización de UI (Universal Components):**
+  * Identificar e implementar un Sistema de Diseño atómico basado en Tailwind y clsx-tailwind-merge en `src/components/ui/` para evitar código espagueti.
+  * [ ] `Button.tsx`: Botón universal con variantes (`primary`, `secondary`, `destructive`, `ghost`, `outline`) y estados (`isLoading`, `disabled`).
+  * [ ] `Card.tsx`: Contenedor semántico compuesto de `Card`, `CardHeader`, `CardTitle`, `CardContent`, y `CardFooter`.
+  * [ ] `Table.tsx`: Sistema de tablas componibles (`Table`, `TableHeader`, `TableRow`, `TableHead`, `TableBody`, `TableCell`).
+  * [ ] `Badge.tsx`: Píldoras indicadoras de estado.
+  * [ ] Reemplazar las implementaciones ad-hoc en vistas existentes (ej. `AdminDashboard.tsx`) para asegurar que el sistema se adapte bien antes de construir el CRUD.
+* [x] **Página `/supplies` (Catálogo de Agroquímicos):**
+  * [x] Tabla universal para listar `Agrochemical` (Nombre, Tipo, Propósito, Instrucciones).
+  * [x] Modal/Panel unificado para **Crear/Editar** insumos (Fertilizante/Fitosanitario).
+  * [x] Lógica de Server Actions (`createSupply`, `updateSupply`, `deleteSupply`).
+* [x] **Página `/recipes` (Programas de Cultivo):**
+  * [x] Interfaces para listar `FertilizationProgram` y `PhytosanitaryProgram`.
+  * [x] Componente Constructor de Recetas: Permitir añadir N pasos (Cycles) y seleccionar el Agroquímico y Sequencia con un selector unificado.
+
+### 👥 1.4 Gestión de Usuarios
+
+* [x] **Panel Admin:** Promover/Degradar usuarios.
+* [x] **Mi Cuenta:** Botón "Cerrar Sesión" y gestión básica.
+
+---
+
+## 🎮 FASE 2: NÚCLEO OPERATIVO (Control Manual)
+
+*Objetivo:* Control en tiempo real con feedback inmediato.
+
+### ⚙️ 2.1 Backend: Abstracción
+
+* [x] **API de Comandos:** Implementado como **Cliente MQTT Directo** para latencia cero.
+* [x] **Seguridad:** Implementado **Exclusión Mutua** en Frontend y Timeout de 10min.
+
+### 🎛️ 2.2 Frontend: Centro de Control (`/operations/control`)
+
+* [x] **Conectividad MQTT (Cliente):**
+  * [x] Hook `useMqttConnection`: Gestión de estado, suscripciones y reconexión.
+  * [x] Lógica **Heartbeat**: Indicador UI Online/Offline basado en tópicos `.../status`.
+* [x] **UI de Mando:**
+  * [x] **Grid Acciones:** Regar, Nebulizar, Humedecer, Fertirriego.
+  * [x] **Orquestador JS:** Manejo de exclusión mutua y timeouts visuales.
+* [x] **Refinamiento UI/UX:** Pulido general de la página de operaciones y monitoreo (Skeletons, Recharts accessibility fixes, Select-none).
+* [ ] **Smart Safety Checks (Roadmap):** Modal de confirmación "Pre-Flight" consultando sensores.
+  * [x] **Gestión de Orfandad (Offline Fallback):** Implementar lógica para desactivar visualmente las cards y estados (Zombie/Offline) basándose en intervalos dinámicos de MQTT.
+* [ ] **Confirmación de Agroquímicos (Manual):** Cuando el usuario active manualmente un circuito de Fertirriego o Fumigación desde `/control`, se debe exigir una confirmación explícita de que el tanque auxiliar (Relé 2) ha sido preparado con el producto correspondiente. El circuito debe ejecutarse por un máximo de 5 minutos.
+
+### 📅 2.3 Agendamiento
+
+* [x] **Separación Lógica:** Mover "Tareas Programadas" a su propia vista/componente, independiente del control manual inmediato (`/planner`).
+
+---
+
+## 🧠 FASE 3: AUTOMATIZACIÓN INTELIGENTE
+
+*Objetivo:* El sistema se cuida solo y aprende de su entorno.
+
+### 📅 3.1 Gestión de Rutinas (Scheduler)
+
+* [ ] **CRUD Programas de Cultivo:** Creación de secuencias de fertilización completas.
+* [x] **Scheduler Diferido:** Motor de ejecución backend (Polling DB) e UI para agendar Tareas Diferidas Manuales.
+* [x] **Mejora de Trazabilidad Offline/Expiración:** Registro de eventos en timeline para tareas postergadas por nodo offline y mapeo visual de estado `EXPIRED` como "Fallida" en la UI.
+* [x] **Resolución de Limbo de Expiración (v0.14.4):** Corregido el filtro en `cleanupExpiredTasks` para que las tareas en estado inicializándose o estabilizándose también expiren tras 20 minutos, y purga automática al iniciar el scheduler.
+* [x] **Resumen de Riego Multi-Circuito en Telemetría (v0.14.4):** Reporte en doble línea (circuitos base y químicos) de los minutos reales acumulados por circuito en el log de telemetría, eliminando filtros de actualStartAt y aplicando fallback de duración nominal.
+* [x] **Scheduler UI (Crons Recurrentes):** Interfaz para gestionar `AutomationSchedule` (rutinas continuas).
+* [x] **Confirmación de Agroquímicos (Diferido/Automatizado):** Implementado protocolo de seguridad v5. Las tareas se pre-agendan 12h antes en `WAITING_CONFIRMATION`. Permanecen en la cola durante la ejecución (`IN_PROGRESS`) para permitir cancelación inmediata. Soporte para posponer 24h/48h.
+* [x] **Auditoría de Acciones (Firma de Admin):** Todas las cancelaciones y omisiones manuales ahora registran el `userId` del administrador, permitiendo trazabilidad total en el historial de operaciones.
+* [x] **Resiliencia ante Desconexiones ESP32:**
+  * [x] Firmware: Reconciliación atómica al arrancar entre estado guardado en NVS y lectura física del sensor de lluvia.
+  * [x] Scheduler: Implementado timeout de 10min para cerrar eventos de lluvia huérfanos si el firmware deja de reportar.
+  * [x] Ingest: Limpieza de `stateCache` selectiva por nodo en eventos de `boot`.
+* [x] **WeatherGuard Básico:** "Si llovió > X mm, cancelar riego" o si hay precipitaciones pronosticadas.
+* [x] **Integración Ingest/Scheduler:** Suscripción reactiva a eventos de lluvia (`rain/event`, `rain/state`) para toma de decisiones instantánea.
+* [x] **Harden DHT22 (Stability & Recovery):** Implementado "Atomic Fix" (limpieza de línea) pre-lectura y recuperación automática tras desconexiones físicas en el firmware.
+* [x] **Precisión Temporal en Lluvia:** Implementado envío de `timestamp` (Unix/MicroPython) desde el firmware para el inicio y fin de la lluvia, con normalización de época en la ingesta para garantizar historia fidedigna post-reconexión.
+* [x] **WeatherGuard Básico:** "Si llovió > X mm, cancelar riego" o si hay precipitaciones pronosticadas.
+
+### 💡 3.2 Motor de Inferencias (El Cerebro Analítico)
+
+* [x] **Fase 3.2.1 - Estabilización de Tiempo Real (Smooth Data):**
+  * [x] Modificar la API/WebSocket de telemetría para que retorne Medias Móviles Simples (SMA de 10-15 min) en vez de lecturas crudas puras (elimina parpadeos UI por nubes/reflejos).
+  * [x] **Fidelidad Total de Datos (Anti-Zeros):** Eliminada la fabricación de ceros en Ingest y el filtrado preventivo. El sistema registra 0.0 lux si el sensor lo dice. El filtrado para estadísticas se realiza en el agregador diario (08:00-16:00) y la UI ignora valores nulos de otros dispositivos.
+* [x] **Fase 3.2.2 - Agregación de VPD:**
+  * [x] Backend: Añadir cálculo de Déficit de Presión de Vapor (VPD) combinando Temp/Humedad para inferir transpiración de fluidos en las orquídeas.
+* [x] **Fase 3.2.3 - Worker de Agregación Diaria (CRON 00:01 - Cierre de Ayer):**
+  * [x] Crear script/servicio independiente para Downsampling de InfluxDB (Refactorizado en `telemetry-processor.ts`).
+  * [x] Calcular métricas botánicas: DLI (Daily Light Integral) convirtiendo Lux a PPFD, y DIF (Salto Térmico Día-Noche).
+  * [x] Calcular Riesgo Epidemiológico: "Horas de Humedad Foliar" consecutivas (>85% HR sin salto térmico).
+  * [x] Persistir resumen procesado diario en base de datos central (PostgreSQL).
+  * [x] **Corrección:** Execución a las 00:01 AM para procesar el día anterior completo (Yesterday).
+* [x] **Motor de Inferencias (v4):** Implementado lazo cerrado de decisión con **Consenso de APIs** (OWM + OpenMeteo) y **Refutación por Sensores** (Lux/HR). Incluye protocolo de **Veto Ambiental Estricto** para agroquímicos (Lluvia 4h + Nubosidad + HR > 95% + API > 95%).
+* [x] **Optimización de Diagnóstico e Inteligencia Ambiental (v5):**
+  * [x] Sincronizados IDs de dispositivos entre Frontend y Base de Datos para asegurar la visibilidad en el Timeline.
+  * [x] Implementado Fallback Robusto en el Motor de Inferencia basado en presencia real de sensores.
+  * [x] Calibrados umbrales de nubosidad (15k-26k lux) y lógica de continuidad de datos.
+  * [x] Preservadas notas de diagnóstico originales según preferencia del usuario.
+* [x] **Corrección de Reglas Diarias e Inferencia del Scheduler (v5.1):**
+  * [x] Mover cron de evaluación diaria de máquina de estados a las 05:50 AM para usar datos frescos.
+  * [x] Resolver desfase de 4h en base de datos forzando UTC Caracas a las 10:00:00Z (6:00 AM local).
+  * [x] Restringir la creación de tareas diferidas de aspersión únicamente a la zona activa (`ZONA_A`).
+  * [x] Eliminar por completo el bloque del Límite de Emergencia redundante.
+  * [x] Robustecer la alternancia interdiaria impidiendo reprogramaciones si llovió en absoluto en el día actual (`rainToday.eventCount === 0`).
+* [ ] **Machine Learning Ligero:** Función para cruzar avistamientos de plagas (Fase 1.1) con los históricos de InfluxDB.
+
+### 🌤️ 3.3 WeatherGuard (Inteligencia Predictiva Híbrida)
+
+*Objetivo:* Evitar riegos redundantes y prevenir pudrición de raíces anticipándose al clima.
+
+* [x] **Integración de API Meteorológica Atmosférica:** Conectar el backend a APIs externas (Open-Meteo y OpenWeatherMap) para Ciudad Guayana.
+* [x] **Integración de API Agrícola (AgroMonitoring):** Oráculo capaz de leer el estado del suelo (humedad y temperatura a 10cm) mediante polígonos satelitales.
+* [x] **Algoritmo de Decisión Proactiva/Reactiva (Scheduler):** Evaluar múltiples factores antes de abrir una válvula:
+  * *Reactivo (Físico):* Consultar InfluxDB -> ¿La lluvia local en 24h superó el umbral? (Sensor `EXTERIOR`).
+  * *Reactivo (Satelital):* Consultar AgroMonitoring -> ¿El suelo ya tiene suficiente humedad base?
+  * *Proactivo (Nube):* Consultar OWM/Open-Meteo -> ¿La probabilidad de precipitación (PoP) para las próximas 3 horas es mayor al 70%?
+  * *Acción:* Cancelar o posponer riego y auditar el motivo.
+
+---
+
+## ✨ FASE 4: EXPERIENCIA (Dashboard)
+
+*Objetivo:* Visualización de datos para toma de decisiones.
+
+### 📊 4.1 UI/UX & Visualización Avanzada
+
+* [x] **Gráficos en Tiempo Real:** Implementar Recharts para Temperatura/Humedad.
+* [x] **Layouts y Accesibilidad:** Refinar Grids, transiciones, eliminación de marcos de enfoque.
+* [x] **Lógica de Clima Inteligente:** Detección de "Falla de Sensor", "Obsoleto" and validación robusta de paleta de colores TDS.
+* [ ] **Micro-Visión (Vista 24h):**
+  * [ ] Implementar **Escala Logarítmica** en el eje Y de Iluminancia (para ver sutiles variaciones de 100lx y picos de 60,000lx simultáneamente).
+  * [ ] Implementar **Sombreado Contextual** (Fondo gris/azulado) durante las horas del Valle Nocturno y Transición Vespertina.
+* [ ] **Macro-Visión (Vista 7-30 días):** Desarrollar Gráficos de Bandas de Rango (Range Area) o Velas (Candlestick) mostrando Máximos, Mínimos y Promedios diarios.
+
+### 🐞 Bugs Críticos & Refinamiento UI (Mayo 2026)
+
+* [x] **Fallo en Auditorías Temp/Hum (Frontend):** Las auditorías se envían correctamente desde el ESP32 pero no se visualizan o procesan en el frontend.
+* [ ] **Sincronización de Estados en Widgets:**
+  * [ ] Corregir publicación de estados vencidos (ej. cancelar iluminancia) al abrir/cerrar widgets desde las CARDS.
+  * [ ] Eliminar estado "fantasma" de `esperando datos` en widgets de Temp/Hum si no han sido inicializados.
+* [x] **Persistencia de Muestras en Widgets:** Asegurar que las auditorías (Iluminancia, Lluvia, RAM) persistan todas las muestras con su marca de tiempo para graficar el historial completo al cerrar/abrir el widget, no solo la última lectura.
+* [ ] **Sincronización de Ruta `/control`:**
+  * [ ] Sincronizar Cards con el estado real de los circuitos de riego (actualmente desfasados).
+  * [ ] Resolver colisión hidráulica: Las cards deben reflejar si una tarea ya se está ejecutando para permitir su cancelación manual.
+* [x] **Flujo de Cancelación Físico/Lógico:**
+  * [x] Garantizar que el evento de cancelación espere el ACK del nodo sobre el cierre del circuito antes de marcar la tarea como `Cancelada`.
+  * [x] Asegurar despacho del comando de cierre físico al cancelar desde la cola.
+* [ ] **Fix Estético Z-Index:** Ajustar `StatusCircleIcon.tsx` para que el icono no levite por encima del header (z-index issue).
+* [x] **Corrección de Logs y Condición de Carrera:** Recuperar nombre real del administrador de la sesión actual en cancelación manual, formatear notas con salto de línea responsive en timeline y prevenir regresión de estados en el scheduler (condición de carrera).
+* [x] **Formatos y Responsividad (v0.14.4):** Estandarización de formato 12h a `am`/`pm` sin espacios ni puntos en tooltips y tablas, simplificación de la etiqueta 'Ayer' y adaptabilidad de las tuplas de conectividad de administración para pantallas pequeñas.
+
+---
+
+## 📲 SISTEMA DE NOTIFICACIONES E INTERACCIONES (Transversal)
+
+> Sistema transversal que habilita la comunicación bidireccional entre PristinoPlant y el usuario fuera de la aplicación web.
+
+### 📨 Canal de Notificaciones
+
+* [x] **Apartado de Notificaciones Web (`/notifications`):** Vista dedicada para gestionar alertas de mantenimiento y solicitudes de confirmación de agroquímicos.
+* [ ] **Alertas de Mantenimiento Programadas:** Implementar lógica para emitir notificaciones los lunes y jueves para la limpieza del filtro del circuito de riego.
+* [ ] **Integración con Telegram o WhatsApp:** Implementar un bot/canal que permita enviar notificaciones al usuario (alertas, solicitudes de confirmación, reportes). Elegir la opción más rápida, gratuita y mantenible tanto en desarrollo como en producción.
+* [ ] **Web Push Notifications:** Notificaciones del navegador como canal secundario para usuarios que no tengan la app abierta. Permite reaccionar en ventanas de oportunidad (ej: confirmar agroquímicos antes de ejecución).
+
+### 🔄 Tipos de Interacción
+
+* [ ] **Notificaciones Informativas:** Alertas de estado del sistema que no requieren respuesta (ej: "Riego completado", "Nodo Actuador offline").
+* [ ] **Notificaciones con Confirmación:** Solicitudes que requieren acción del usuario (ej: "¿El tanque de fertirriego está preparado? Confirmar/Cancelar").
+* [ ] **Confirmación vía Web:** Permitir que la confirmación también se pueda otorgar desde la aplicación web (fallback al canal de mensajería).
+
+### 📋 Registro de Interacciones
+
+* [ ] **Log de Notificaciones:** Registrar todas las notificaciones enviadas, su estado (enviada/leída/respondida) y la respuesta del usuario, visible en un apartado de la web.
+
+---
+
+## 🛡️ DEUDA TÉCNICA & SEGURIDAD
+
+* [ ] **HiveMQ ACLs (Permisos):** Configurar listas de control de acceso (ACLs) en HiveMQ Cloud. Restringir Frontend a solo `/cmd`.
+
+---
+
+## 🔌 HARDWARE (Pausado / Pendiente Validación)
+
+> Tareas físicas pendientes de validación de componentes.
+
+* [ ] **Optimización Energética (Sensors ESP32):** Implementar `machine.deepsleep()`. Investigar y decidir entre:
+  * **Deep Sleep Cíclico:** Boot → WiFi → Publish → Sleep (máximo ahorro, ~10µA).
+  * **Deep Sleep Adaptativo:** Intervalos variables por hora del día (3-15 min según fase circadiana).
+  * **Light Sleep:** Mantiene RAM/WiFi, menor ahorro (~2mA) pero mantiene MQTT.
+  * **Delta Publishing:** Solo publicar cuando el cambio supere un umbral (ej: ΔTemp > 0.5°C).
+  * Reducir frecuencia de OTA checks (ej: 1 de cada N boots).
+* [x] **Renombrar Light Intensity a Illuminance:** Uniformar el término técnico en todo el sistema (firmware, ingest, database, frontend) (v0.6.1).
+* [x] **Optimización Status Exterior:** Unificar el status de la estación exterior con el del nodo actuador para ahorrar recursos (v0.6.1).
+* [x] **Migración Sensor Lluvia al Nodo Actuador:** Migrado en v0.6.0. Incluye BH1750 exterior + sensor de gotas de lluvia. Tópicos MQTT bajo `PristinoPlant/Weather_Station/Exterior/`.
+  * [x] Sensor de Iluminancia externo: Implementado en v0.6.0 como `exterior_publish_task()` en el nodo actuador. Publica en `Exterior/readings` para comparar con el BH1750 interior.
+* [x] **Sincronización de Firmware Weather Station:** Actualizar `weather_station/main.py` con las mejoras de resiliencia, auditoría y estandarización aplicadas en `relay_modules/main.py` (v0.12.1+).
+  * [x] Optimización de la secuencia de arranque, watchdog a 45s y soporte de force_hard_reset para setup_sensors en el comando sync_climate (v0.12.2).

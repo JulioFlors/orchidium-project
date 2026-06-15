@@ -825,6 +825,7 @@ export async function getRainSummaryInternal(range: string, zone: ZoneType) {
       baselineTemp: ev.baselineTemp,
       baselineHum: ev.baselineHum,
       baselineLux: ev.baselineLux,
+      baselineAgeMinutes: ev.baselineAgeMinutes,
       triggerReason: ev.triggerReason,
       closeReason: ev.closeReason,
     }))
@@ -918,6 +919,7 @@ export async function getRainEventTelemetryInternal(eventId: string) {
         baselineTemp: event.baselineTemp,
         baselineHum: event.baselineHum,
         baselineLux: event.baselineLux,
+        baselineAgeMinutes: event.baselineAgeMinutes,
         triggerReason: event.triggerReason,
         closeReason: event.closeReason,
       },

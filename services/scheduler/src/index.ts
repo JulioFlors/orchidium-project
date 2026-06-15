@@ -279,7 +279,12 @@ let rainEventMutex = Promise.resolve()
 async function openRainEvent(
   timestamp: Date = new Date(),
   isVirtual: boolean = false,
-  baselines?: { temp: number | null; hum: number | null; lux: number | null },
+  baselines?: {
+    temp: number | null
+    hum: number | null
+    lux: number | null
+    ageMinutes?: number | null
+  },
   triggerReason?: string,
 ) {
   rainEventMutex = rainEventMutex
@@ -311,6 +316,7 @@ async function openRainEvent(
                 baselineTemp: baselines?.temp ?? null,
                 baselineHum: baselines?.hum ?? null,
                 baselineLux: baselines?.lux ?? null,
+                baselineAgeMinutes: baselines?.ageMinutes ?? null,
                 triggerReason: triggerReason ?? null,
               },
             })
@@ -2426,12 +2432,17 @@ async function evaluateClimateTrends(lux: number, temp: number, hum: number, now
     let currentBaselineLux = lux
     let currentBaselineTemp = temp
     let currentBaselineHum = hum
+    let baselineAgeMinutes: number | null = null
 
     if (baselineSamples.length > 0) {
       // Baselines basados en el lote previo: máximo de lux y temp, mínimo de humedad
       currentBaselineLux = Math.max(...baselineSamples.map((s) => s.lux))
       currentBaselineTemp = Math.max(...baselineSamples.map((s) => s.temp))
       currentBaselineHum = Math.min(...baselineSamples.map((s) => s.hum))
+
+      const totalAgeMs = baselineSamples.reduce((sum, s) => sum + (nowMs - s.timestamp), 0)
+
+      baselineAgeMinutes = Math.round(totalAgeMs / baselineSamples.length / (60 * 1000))
     }
 
     if (isDay) {
@@ -2464,7 +2475,12 @@ async function evaluateClimateTrends(lux: number, temp: number, hum: number, now
         await openRainEvent(
           new Date(),
           true,
-          { temp: baselineTemp, hum: baselineHum, lux: baselineLux },
+          {
+            temp: baselineTemp,
+            hum: baselineHum,
+            lux: baselineLux,
+            ageMinutes: baselineAgeMinutes,
+          },
           `Inferencia de Día: Incremento de +${deltaHum30.toFixed(1)}% HR y caída térmica de ${deltaTemp30.toFixed(1)}°C en 30m (iluminancia cayó un ${dropPct.toFixed(0)}% a ${Math.round(lux).toLocaleString()} lx).`,
         )
       }
@@ -2489,7 +2505,12 @@ async function evaluateClimateTrends(lux: number, temp: number, hum: number, now
         await openRainEvent(
           new Date(),
           true,
-          { temp: baselineTemp, hum: baselineHum, lux: baselineLux },
+          {
+            temp: baselineTemp,
+            hum: baselineHum,
+            lux: baselineLux,
+            ageMinutes: baselineAgeMinutes,
+          },
           `Inferencia de Noche: Incremento de +${deltaHum30.toFixed(1)}% HR y caída térmica de ${deltaTemp30.toFixed(1)}°C en 30m.`,
         )
       }

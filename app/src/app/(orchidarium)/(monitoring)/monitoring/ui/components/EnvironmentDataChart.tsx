@@ -218,16 +218,19 @@ function CustomTooltip({
       return (
         <div className="bg-surface border-input-outline relative z-50 flex max-w-[340px] flex-col gap-3 overflow-visible rounded-lg border p-3 text-xs shadow-md outline-none">
           {/* Encabezado: Fecha y Duración */}
-          <div className="flex flex-col gap-1">
-            <span className="text-foreground flex items-center gap-1.5 text-xs font-bold">
-              📅 {formattedTime} | ⏱️ Duración: {formatTooltipStat(data[dataKey], unit)}
+          <div className="text-foreground flex flex-col gap-1 text-xs font-bold">
+            <span className="flex items-center gap-1.5">📅 {formattedTime}</span>
+            <span className="flex items-center gap-1.5">
+              ⏱️ Duración: {formatTooltipStat(data[dataKey], unit)}
             </span>
           </div>
 
-          {/* Condiciones Climáticas Previas (10-20 min antes) */}
+          {/* Condiciones Climáticas Previas */}
           <div className="border-input-outline/30 flex flex-col gap-1 border-t pt-2">
             <span className="text-foreground font-bold">
-              Condiciones Climáticas Previas (10-20 min antes)
+              {data.baselineAgeMinutes !== undefined && data.baselineAgeMinutes !== null
+                ? `Condiciones climáticas hace ${data.baselineAgeMinutes}min`
+                : 'Condiciones climáticas previas (10-20 min antes)'}
             </span>
             <span className="text-foreground/80 font-medium">
               🌡️ Temp:{' '}

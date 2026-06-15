@@ -373,6 +373,7 @@ model RainEvent {
   baselineTemp    Float?
   baselineHum     Float?
   baselineLux     Float?
+  baselineAgeMinutes Int?
   /// Registro de diagnóstico de apertura y cierre
   triggerReason   String?
   closeReason     String?
