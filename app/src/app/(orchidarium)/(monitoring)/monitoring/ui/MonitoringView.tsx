@@ -1,7 +1,16 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import { CloudRain, Droplets, Thermometer, Sun, Cloud, Moon } from 'lucide-react'
+import {
+  CloudRain,
+  Thermometer,
+  Sun,
+  Cloud,
+  Moon,
+  Info,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react'
 import { FaChartLine } from 'react-icons/fa6'
 import { IoWaterOutline } from 'react-icons/io5'
 import useSWR from 'swr'
@@ -14,7 +23,13 @@ import { useDeviceHeartbeat, useToast } from '@/hooks'
 import { useMqttStore } from '@/store/mqtt/mqtt.store'
 import { formatTime12h, formatDateLong, getHourInCaracas } from '@/utils/timeFormat'
 
-type MetricType = 'temperature' | 'humidity' | 'illuminance' | 'rain_intensity' | 'rain_events'
+type MetricType =
+  | 'temperature'
+  | 'humidity'
+  | 'illuminance'
+  | 'rain_intensity'
+  | 'rain_events'
+  | 'rain_inferred'
 
 interface SensorData {
   [key: string]: string | number | boolean | undefined
@@ -29,13 +44,29 @@ interface SensorData {
   isAudit?: boolean
 }
 
+interface RainEvent {
+  id: string
+  time: string
+  duration: number
+  intensity: number
+  isInfered: boolean
+  isVirtual: boolean
+  baselineTemp: number | null
+  baselineHum: number | null
+  baselineLux: number | null
+  triggerReason: string | null
+  closeReason: string | null
+}
+
 interface RainData {
   totalDurationSeconds: number
   averageIntensity: number
   eventCount: number
   isActive: boolean
   activeEventId: string | null
-  events?: { time: string; duration: number; intensity: number }[]
+  activeInferredEventId?: string | null
+  isInferredActive?: boolean
+  events?: RainEvent[]
 }
 
 interface SensorDataResponse {
@@ -79,6 +110,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
       // Agregar métricas especiales que no están en ZoneMetrics pero se muestran en la UI
       if (z === ZoneType.EXTERIOR) {
         initial[z]['rain_events'] = 'today'
+        initial[z]['rain_inferred'] = 'today'
       }
     })
 
@@ -86,6 +118,8 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
   })
 
   const [selectedMetric, setSelectedMetric] = useState<MetricType | null>(null)
+  const [isInfoOpen, setIsInfoOpen] = useState<boolean>(false)
+
   const [now, setNow] = useState(() => Date.now())
 
   // Capturar tiempo de montaje y mantenerlo actualizado para clasificaciones dinámicas
@@ -148,7 +182,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     error: chartError,
     isLoading: isChartLoading,
   } = useSWR<SensorDataResponse | SensorData[]>(
-    selectedMetric && !['rain_events'].includes(selectedMetric)
+    selectedMetric && !['rain_events', 'rain_inferred'].includes(selectedMetric)
       ? `/api/environment/history?range=${currentRange}&zone=${zone}&metric=${selectedMetric}`
       : null,
     fetcher,
@@ -165,14 +199,48 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     [chartResponse],
   )
 
-  // 3. Consulta para "Rain Events" (Siempre activa en EXTERIOR, usa su propio rango independiente)
+  // 3a. Consulta para "Lluvia Física" (Siempre activa en EXTERIOR, usa su propio rango)
+  const physicalRainRange = useMemo(() => {
+    if (zone === ZoneType.EXTERIOR) {
+      return metricRanges[zone]?.['rain_events'] || 'today'
+    }
+
+    return null
+  }, [zone, metricRanges])
+
   const {
-    data: rainData = null,
-    error: rainError,
-    isLoading: isRainLoading,
+    data: physicalRainData = null,
+    error: physicalRainError,
+    isLoading: isPhysicalRainLoading,
   } = useSWR<RainData>(
-    zone === ZoneType.EXTERIOR && metricRanges[zone]?.['rain_events']
-      ? `/api/environment/rain?range=${metricRanges[zone]['rain_events']}&zone=${zone}`
+    zone === ZoneType.EXTERIOR && physicalRainRange
+      ? `/api/environment/rain?range=${physicalRainRange}&zone=${zone}`
+      : null,
+    fetcher,
+    {
+      refreshInterval: 60000,
+      revalidateOnFocus: false,
+      errorRetryCount: 3,
+      errorRetryInterval: 5000,
+    },
+  )
+
+  // 3b. Consulta para "Lluvia Inferida" (Siempre activa en EXTERIOR, usa su propio rango)
+  const inferredRainRange = useMemo(() => {
+    if (zone === ZoneType.EXTERIOR) {
+      return metricRanges[zone]?.['rain_inferred'] || 'today'
+    }
+
+    return null
+  }, [zone, metricRanges])
+
+  const {
+    data: inferredRainData = null,
+    error: inferredRainError,
+    isLoading: isInferredRainLoading,
+  } = useSWR<RainData>(
+    zone === ZoneType.EXTERIOR && inferredRainRange
+      ? `/api/environment/rain?range=${inferredRainRange}&zone=${zone}`
       : null,
     fetcher,
     {
@@ -191,10 +259,39 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     if (chartError) {
       notifyError(`Error en historial: ${chartError.message}`)
     }
-    if (rainError) {
-      notifyError(`Error en pluviómetro: ${rainError.message}`)
+    if (physicalRainError) {
+      notifyError(`Error en pluviómetro físico: ${physicalRainError.message}`)
     }
-  }, [cardStatusError, chartError, rainError, notifyError])
+    if (inferredRainError) {
+      notifyError(`Error en pluviómetro inferido: ${inferredRainError.message}`)
+    }
+  }, [cardStatusError, chartError, physicalRainError, inferredRainError, notifyError])
+
+  const parsedRainData = useMemo(() => {
+    const physicalEvents = (physicalRainData?.events || []).filter((e) => !e.isVirtual)
+    const inferredEvents = (inferredRainData?.events || []).filter((e) => e.isVirtual)
+
+    const isPhysicalActive = physicalRainData?.isActive || false
+    const isInferredActive = inferredRainData?.isInferredActive || false
+
+    const physicalDuration = physicalEvents.reduce((acc, ev) => acc + ev.duration, 0)
+    const inferredDuration = inferredEvents.reduce((acc, ev) => acc + ev.duration, 0)
+
+    return {
+      physical: {
+        count: physicalEvents.length,
+        duration: physicalDuration,
+        isActive: isPhysicalActive,
+        events: physicalEvents,
+      },
+      inferred: {
+        count: inferredEvents.length,
+        duration: inferredDuration,
+        isActive: isInferredActive,
+        events: inferredEvents,
+      },
+    }
+  }, [physicalRainData, inferredRainData])
 
   // ----- MQTT & Heartbeat -----
 
@@ -429,7 +526,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
           color: '#3b82f6',
           unit: MetricUnits.humidity,
           title: MetricLabels.humidity,
-          icon: <Droplets className="h-4 w-4" />,
+          icon: <IoWaterOutline className="h-4 w-4" />,
         }
       case 'illuminance':
         return {
@@ -452,23 +549,57 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
           dataKey: 'duration',
           color: '#3b82f6',
           unit: 'min',
-          title: 'Duración',
-          icon: <FaChartLine className="h-4 w-4" />,
+          title: 'Eventos de Lluvia',
+          icon: <CloudRain className="h-4 w-4" />,
           chartType: 'bar' as const,
           customData:
-            (rainData?.events || []).map((ev) => {
-              const endDate = new Date(ev.time)
-              const startDate = new Date(endDate.getTime() - ev.duration * 1000)
+            (physicalRainData?.events || [])
+              .filter((ev: RainEvent) => !ev.isVirtual)
+              .map((ev: RainEvent) => {
+                const startDate = new Date(ev.time)
+                const endDate = new Date(startDate.getTime() + ev.duration * 1000)
 
-              return {
-                time: ev.time,
-                duration: Math.round(ev.duration / 60),
-                intensity: ev.intensity,
-                startTime: formatTime12h(startDate),
-                endTime: formatTime12h(endDate),
-                dateLabel: formatDateLong(endDate),
-              }
-            }) || [],
+                return {
+                  time: ev.time,
+                  duration: Math.round(ev.duration / 60),
+                  intensity: ev.intensity,
+                  startTime: formatTime12h(startDate),
+                  endTime: formatTime12h(endDate),
+                  dateLabel: formatDateLong(startDate),
+                  isVirtual: ev.isVirtual,
+                }
+              }) || [],
+        }
+      case 'rain_inferred':
+        return {
+          dataKey: 'duration',
+          color: '#a855f7',
+          unit: 'min',
+          title: 'Lluvia Inferida',
+          icon: <CloudRain className="h-4 w-4" />,
+          chartType: 'bar' as const,
+          customData:
+            (inferredRainData?.events || [])
+              .filter((ev: RainEvent) => ev.isVirtual)
+              .map((ev: RainEvent) => {
+                const startDate = new Date(ev.time)
+                const endDate = new Date(startDate.getTime() + ev.duration * 1000)
+
+                return {
+                  time: ev.time,
+                  duration: Math.round(ev.duration / 60),
+                  intensity: ev.intensity,
+                  startTime: formatTime12h(startDate),
+                  endTime: formatTime12h(endDate),
+                  dateLabel: formatDateLong(startDate),
+                  isVirtual: ev.isVirtual,
+                  baselineTemp: ev.baselineTemp ?? undefined,
+                  baselineHum: ev.baselineHum ?? undefined,
+                  baselineLux: ev.baselineLux ?? undefined,
+                  triggerReason: ev.triggerReason ?? undefined,
+                  closeReason: ev.closeReason ?? undefined,
+                }
+              }) || [],
         }
 
       default:
@@ -812,12 +943,12 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
             />
 
             <EnvironmentCard
-              className="tds-sm:order-4 tds-lg:col-span-3"
+              className="tds-sm:order-4 tds-lg:col-span-2"
               color="blue"
               description={
-                rainData ? (
+                physicalRainData ? (
                   <div className="flex items-center gap-2">
-                    {rainData.isActive && (
+                    {parsedRainData.physical.isActive && (
                       <span className="flex h-2 w-2 animate-pulse rounded-full bg-blue-500" />
                     )}
                     <span className="font-semibold">
@@ -835,24 +966,82 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
                     </span>
                     <span className="text-primary/20">|</span>
                     <span className="font-semibold">
-                      {Math.round(rainData.totalDurationSeconds / 60)} min
+                      {(() => {
+                        const mins = Math.round(parsedRainData.physical.duration / 60)
+
+                        if (mins < 60) return `${mins} min`
+
+                        const hours = Math.floor(mins / 60)
+                        const remaining = mins % 60
+
+                        return remaining > 0 ? `${hours}h ${remaining}min` : `${hours}h`
+                      })()}
                     </span>
                   </div>
                 ) : (
                   'Sin registros'
                 )
               }
-              icon={<FaChartLine className="h-6 w-6" />}
+              icon={<CloudRain className="h-6 w-6" />}
               isActive={selectedMetric === 'rain_events'}
-              isLoading={isRainLoading}
-              title={MetricLabels.rain_events}
+              isLoading={isPhysicalRainLoading}
+              title="Eventos de Lluvia"
               unit="Eventos"
-              value={!rainData ? '--' : rainData.eventCount}
+              value={!physicalRainData ? '--' : parsedRainData.physical.count}
               onClick={() => setSelectedMetric('rain_events')}
             />
 
             <EnvironmentCard
-              className="tds-sm:col-span-2 tds-sm:order-5 tds-lg:col-span-3"
+              className="tds-sm:order-5 tds-lg:col-span-2"
+              color="purple"
+              description={
+                inferredRainData ? (
+                  <div className="flex items-center gap-2">
+                    {parsedRainData.inferred.isActive && (
+                      <span className="flex h-2 w-2 animate-pulse rounded-full bg-purple-500" />
+                    )}
+                    <span className="font-semibold">
+                      {(() => {
+                        const r = metricRanges[zone]?.['rain_inferred']
+
+                        if (r === 'today') return 'HOY'
+                        if (r === 'yesterday') return '1D'
+                        if (r === '7d') return '7D'
+                        if (r === '30d') return '30D'
+                        if (r === 'all') return 'TODO'
+
+                        return 'HOY'
+                      })()}
+                    </span>
+                    <span className="text-primary/20">|</span>
+                    <span className="font-semibold">
+                      {(() => {
+                        const mins = Math.round(parsedRainData.inferred.duration / 60)
+
+                        if (mins < 60) return `${mins} min`
+
+                        const hours = Math.floor(mins / 60)
+                        const remaining = mins % 60
+
+                        return remaining > 0 ? `${hours}h ${remaining}min` : `${hours}h`
+                      })()}
+                    </span>
+                  </div>
+                ) : (
+                  'Sin registros'
+                )
+              }
+              icon={<CloudRain className="h-6 w-6" />}
+              isActive={selectedMetric === 'rain_inferred'}
+              isLoading={isInferredRainLoading}
+              title="Lluvia Inferida"
+              unit="Eventos"
+              value={!inferredRainData ? '--' : parsedRainData.inferred.count}
+              onClick={() => setSelectedMetric('rain_inferred')}
+            />
+
+            <EnvironmentCard
+              className="tds-sm:col-span-2 tds-sm:order-6 tds-lg:col-span-2"
               color={climate.color}
               description={climate.description}
               icon={climate.icon}
@@ -885,22 +1074,124 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
             </div>
           </div>
         ) : chartProps ? (
-          <EnvironmentDataChart
-            allowedRanges={
-              selectedMetric === 'rain_events'
-                ? ['today', 'yesterday', '7d', '30d', 'all']
-                : undefined
-            }
-            chartType={chartProps.chartType as 'area' | 'bar'}
-            color={chartProps.color}
-            data={chartProps.customData || normalizedChartData}
-            dataKey={chartProps.dataKey}
-            icon={chartProps.icon}
-            range={currentRange}
-            title={chartProps.title}
-            unit={chartProps.unit}
-            onRangeChange={handleRangeChange}
-          />
+          <>
+            <EnvironmentDataChart
+              allowedRanges={
+                selectedMetric === 'rain_events' || selectedMetric === 'rain_inferred'
+                  ? ['today', 'yesterday', '7d', '30d', 'all']
+                  : undefined
+              }
+              chartType={chartProps.chartType as 'area' | 'bar'}
+              color={chartProps.color}
+              data={chartProps.customData || normalizedChartData}
+              dataKey={chartProps.dataKey}
+              icon={chartProps.icon}
+              range={currentRange}
+              title={chartProps.title}
+              unit={chartProps.unit}
+              onRangeChange={handleRangeChange}
+            />
+
+            {/* Guía Explicativa de Inferencia (Colapsable) */}
+            {selectedMetric === 'rain_inferred' && (
+              <div className="border-input-outline bg-surface/30 mt-6 rounded-xl border p-4 backdrop-blur-sm transition-all duration-200">
+                <button
+                  className="flex w-full items-center justify-between gap-3 text-left font-semibold text-slate-200 focus:outline-none"
+                  type="button"
+                  onClick={() => setIsInfoOpen(!isInfoOpen)}
+                >
+                  <div className="flex items-center gap-2 text-sm">
+                    <Info className="h-4 w-4 text-purple-400" />
+                    <span>Guía de Interpretación de Lluvia Inferida</span>
+                  </div>
+                  {isInfoOpen ? (
+                    <ChevronUp className="h-4 w-4 text-slate-400" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-slate-400" />
+                  )}
+                </button>
+
+                {isInfoOpen && (
+                  <div className="mt-4 grid grid-cols-1 gap-6 border-t border-slate-800/60 pt-4 text-xs text-slate-400 md:grid-cols-3">
+                    {/* Regla 1: Inicio */}
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-amber-400 uppercase">
+                        <span>⚡ Criterios de Inicio</span>
+                      </div>
+                      <p className="leading-relaxed">
+                        El Scheduler evalúa cambios en las variables climáticas exteriores
+                        comparando la lectura actual con la de hace 30 minutos:
+                      </p>
+                      <ul className="list-disc space-y-1 pl-4 leading-relaxed">
+                        <li>
+                          <strong className="text-slate-300">De Día:</strong> Subida de humedad de
+                          al menos 12.0% y caída de temperatura de al menos 3.0°C. Si hay sol
+                          (iluminancia previa mayor a 10,000 lx), la iluminación debe caer un 60% o
+                          más con respecto a ese lote previo.
+                        </li>
+                        <li>
+                          <strong className="text-slate-300">De Noche:</strong> Subida de humedad de
+                          al menos 10.0% y caída de temperatura de al menos 2.0°C.
+                        </li>
+                      </ul>
+                    </div>
+
+                    {/* Regla 2: Cierre adaptativo */}
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-green-400 uppercase">
+                        <span>♻️ Criterios de Cierre</span>
+                      </div>
+                      <p className="leading-relaxed">
+                        Determina cuándo ha cesado la lluvia y se divide según el periodo horario:
+                      </p>
+                      <ul className="list-disc space-y-1.5 pl-4 leading-relaxed">
+                        <li>
+                          <strong className="text-slate-300">De Día (Despeje Solar):</strong> La
+                          iluminancia sube por encima del umbral adaptativo calculado entre el punto
+                          más oscuro del evento y el valor previo.
+                        </li>
+                        <li>
+                          <strong className="text-slate-300">
+                            De Día (Retorno Térmico e Hídrico):
+                          </strong>{' '}
+                          La temperatura sube hasta quedar a 1°C o menos del valor previo, y la
+                          humedad baja hasta quedar a 5% o menos del valor previo.
+                        </li>
+                        <li>
+                          <strong className="text-slate-300">De Noche:</strong> Al no haber
+                          radiación solar, el cese del evento se rige en exclusiva por las
+                          salvaguardas de seguridad.
+                        </li>
+                      </ul>
+                    </div>
+
+                    {/* Regla 3: Cierres de seguridad */}
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-blue-400 uppercase">
+                        <span>🛡️ Salvaguardas de Seguridad</span>
+                      </div>
+                      <p className="leading-relaxed">
+                        Límites de protección globales para evitar que un evento quede abierto de
+                        forma indefinida por fallos de red o anomalías del clima:
+                      </p>
+                      <ul className="list-disc space-y-1.5 pl-4 leading-relaxed">
+                        <li>
+                          <strong className="text-slate-300">Duración máxima:</strong> El evento de
+                          lluvia se cierra de forma obligatoria al alcanzar los 120 minutos (2
+                          horas) de duración.
+                        </li>
+                        <li>
+                          <strong className="text-slate-300">Estancamiento:</strong> Si tras 60
+                          minutos la humedad varía menos de un 1.0% y la temperatura varía menos de
+                          0.4°C, indicando que el clima se estabilizó.
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         ) : null}
       </div>
     </div>

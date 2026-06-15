@@ -1,10 +1,9 @@
 'use client'
 
-import { motion } from 'motion/react'
 import { ReactNode } from 'react'
 import clsx from 'clsx'
 
-import { Card } from '@/components/ui'
+import { Card, StatusCircleIcon } from '@/components'
 
 interface QuickActionCardProps {
   title: string
@@ -30,37 +29,71 @@ export function QuickActionCard({
   color = 'blue',
   className,
 }: QuickActionCardProps) {
+  // Mapear el color a la variante de color glow de StatusCircleIcon
+  const glowVariant =
+    color === 'orange'
+      ? 'orange'
+      : color === 'pink'
+        ? 'pink'
+        : color === 'emerald'
+          ? 'green'
+          : 'blue'
+
   return (
-    <motion.div className="h-full" whileHover={{ y: -4, scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-      <Card
+    <Card
+      className={clsx(
+        'group relative flex h-full cursor-pointer flex-col justify-between overflow-hidden rounded-xl p-6 transition-all duration-300 select-none',
+        'border bg-linear-to-br shadow-lg hover:shadow-xl',
+        'hover:bg-hover-overlay',
+        COLOR_MAP[color],
+        className,
+      )}
+      onClick={onClick}
+    >
+      {/* Hover overlay para asegurar accesibilidad */}
+      <div className="bg-hover-overlay absolute inset-0 opacity-0 transition-opacity group-hover:opacity-100" />
+
+      {/* Glow radial sutil de fondo */}
+      <div
         className={clsx(
-          'group relative h-full cursor-pointer overflow-hidden p-6 transition-all duration-300',
-          'border bg-linear-to-br shadow-lg hover:shadow-xl',
-          COLOR_MAP[color],
-          className,
+          'absolute -top-4 -right-4 h-24 w-24 rounded-full bg-current opacity-0 blur-3xl transition-opacity',
+          color === 'orange' && 'text-orange-500 group-hover:opacity-10 dark:group-hover:opacity-5',
+          color === 'pink' && 'text-pink-500 group-hover:opacity-10 dark:group-hover:opacity-5',
+          color === 'emerald' &&
+            'text-emerald-500 group-hover:opacity-10 dark:group-hover:opacity-5',
+          color === 'blue' && 'text-blue-500 group-hover:opacity-10 dark:group-hover:opacity-5',
         )}
-        onClick={onClick}
-      >
-        {/* Glow de fondo */}
-        <div className="absolute -top-4 -right-4 h-24 w-24 rounded-full bg-current opacity-10 blur-3xl transition-opacity group-hover:opacity-20" />
+      />
 
-        <div className="relative flex flex-col gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/10 bg-white/5 shadow-inner transition-colors group-hover:border-current/30">
-            {icon}
-          </div>
+      <div className="relative z-1 flex flex-col gap-4">
+        {/* Usamos el StatusCircleIcon con variante glow y tamaño lg */}
+        <StatusCircleIcon
+          translucent
+          glowVariant={glowVariant}
+          icon={icon}
+          size="lg"
+          variant="glow"
+        />
 
-          <div>
-            <h3 className="text-primary text-lg font-bold tracking-tight">{title}</h3>
-            <p className="text-secondary mt-1 text-sm leading-relaxed">{description}</p>
-          </div>
-
-          <div className="mt-2 flex items-center gap-1.5 text-xs font-bold tracking-widest uppercase opacity-60 transition-opacity group-hover:opacity-100">
-            <span>Acción Rápida</span>
-            <span className="h-1 w-1 rounded-full bg-current" />
-            <span className="text-[10px]">Pristino Engine</span>
-          </div>
+        <div>
+          <h3 className="text-primary text-lg font-bold tracking-tight">{title}</h3>
+          <p className="text-secondary mt-1 text-sm leading-relaxed">{description}</p>
         </div>
-      </Card>
-    </motion.div>
+
+        <div
+          className={clsx(
+            'mt-2 flex items-center gap-1.5 text-xs font-bold tracking-widest uppercase opacity-60 transition-opacity group-hover:opacity-100',
+            color === 'orange' && 'text-orange-500 dark:text-orange-400',
+            color === 'pink' && 'text-pink-500 dark:text-pink-400',
+            color === 'emerald' && 'text-emerald-500 dark:text-emerald-400',
+            color === 'blue' && 'text-blue-500 dark:text-blue-400',
+          )}
+        >
+          <span>Acción Rápida</span>
+          <span className="h-1 w-1 rounded-full bg-current" />
+          <span className="text-[10px]">Pristino Engine</span>
+        </div>
+      </div>
+    </Card>
   )
 }

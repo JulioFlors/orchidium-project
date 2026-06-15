@@ -309,6 +309,18 @@ class CommandSequencer {
     return this.queue.length + (this.currentCommand ? 1 : 0)
   }
 
+  public hasCommand(taskId: string): boolean {
+    if (this.currentCommand && this.currentCommand.taskId === taskId) {
+      return true
+    }
+
+    return this.queue.some((c) => c.taskId === taskId)
+  }
+
+  public getCurrentCommandTaskId(): string | null {
+    return this.currentCommand ? this.currentCommand.taskId : null
+  }
+
   /**
    * Limpia absolutamente todo el estado del secuenciador.
    */
@@ -477,14 +489,19 @@ export function syncNodeSampling(
   } else {
     // Inicialización por hora solo si no hay estado previo (primer arranque) o se fuerza
     const now = new Date()
-    const options: Intl.DateTimeFormatOptions = {
+    const formatter = new Intl.DateTimeFormat('en-US', {
       timeZone: 'America/Caracas',
       hour: 'numeric',
+      minute: 'numeric',
       hour12: false,
-    }
-    const hour = parseInt(new Intl.DateTimeFormat('en-US', options).format(now))
+    })
+    const formatted = formatter.format(now)
+    const [h, m] = formatted.split(':').map(Number)
+    const currentMinutes = h * 60 + m
 
-    targetState = hour >= 5 && hour < 19 ? 'on' : 'off'
+    // 04:59 = 4 * 60 + 59 = 299 minutos
+    // 19:00 = 19 * 60 = 1140 minutos
+    targetState = currentMinutes >= 299 && currentMinutes < 1140 ? 'on' : 'off'
   }
 
   // Evitar duplicados si el estado no ha cambiado (y no se está forzando publicación)

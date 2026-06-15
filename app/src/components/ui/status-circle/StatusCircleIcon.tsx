@@ -117,6 +117,8 @@ interface StatusCircleIconProps {
   active?: boolean
   /** Estilos inline para el círculo (ej: borderColor dinámico) */
   style?: React.CSSProperties
+  /** Si es true, usa un fondo translúcido (bg-white/5 shadow-inner) en lugar de bg-surface en reposo */
+  translucent?: boolean
 }
 
 const sizeClasses = {
@@ -135,6 +137,7 @@ export function StatusCircleIcon({
   glowColor,
   active = false,
   style,
+  translucent = false,
 }: StatusCircleIconProps) {
   // Determinar colores base: prioridad Variant > Hex
   let colors: GlowColors | null = null
@@ -173,15 +176,18 @@ export function StatusCircleIcon({
         variant === 'overlay' && 'bg-hover-overlay border-transparent',
 
         // Lógica para Glow (Acrílico)
-        isGlow &&
-          'bg-surface border-(--_glow-border-rest) bg-linear-to-br from-(--_glow-rest) to-transparent',
+        isGlow && 'border-(--_glow-border-rest)',
+        isGlow && !translucent && 'bg-surface bg-linear-to-br from-(--_glow-rest) to-transparent',
+        isGlow && translucent && 'bg-white/5 shadow-inner',
 
         // Aplicar estado "encendido" (hover appearance) si active es true
-        isGlow && active && 'border-(--_glow-border-hover) from-(--_glow-hover) to-(--_glow-rest)',
+        isGlow &&
+          active &&
+          'border-(--_glow-border-hover) bg-linear-to-br from-(--_glow-hover) to-(--_glow-rest)',
 
         // Hover adaptativo (Intensificación)
         isGlow &&
-          'group-hover:border-(--_glow-border-hover) group-hover:from-(--_glow-hover) group-hover:to-(--_glow-rest)',
+          'group-hover:border-(--_glow-border-hover) group-hover:bg-linear-to-br group-hover:from-(--_glow-hover) group-hover:to-(--_glow-rest)',
 
         colorClassName,
         className,

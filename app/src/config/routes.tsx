@@ -1,5 +1,6 @@
 import {
   IoCalendarOutline,
+  IoCloudOutline,
   IoConstructOutline,
   IoFlaskOutline,
   IoGridOutline,
@@ -83,6 +84,12 @@ export const adminRoutes: AdminRoute[] = [
         url: '/monitoring',
         icon: <IoHardwareChipOutline />,
         description: 'Telemetría cruda y gráficas',
+      },
+      {
+        name: 'Pronósticos Meteorológicos',
+        url: '/weather-oracle',
+        icon: <IoCloudOutline />,
+        description: "API's meteorológicas",
       },
     ],
   },

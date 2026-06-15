@@ -3,10 +3,12 @@
 import * as z from 'zod'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useEffect, useRef } from 'react'
 import clsx from 'clsx'
 
 import { PlannerCircuitSelect, PlannerZoneSelect, PlannerDurationInput } from './PlannerInputs'
 
+import { useFormDraftStore } from '@/store'
 import { ZoneType, ZoneTypeLabels } from '@/config/mappings'
 import { Modal, Button, FormField, Input } from '@/components/ui'
 
@@ -44,6 +46,14 @@ const plannerSchema = z.object({
 
 export type PlannerFormInputs = z.infer<typeof plannerSchema>
 
+const DEFAULT_VALUES: PlannerFormInputs = {
+  purpose: 'IRRIGATION',
+  zone: ZoneType.ZONA_A,
+  duration: 1,
+  scheduledAt: '',
+  notes: '',
+}
+
 interface Props {
   isOpen: boolean
   onClose: () => void
@@ -51,30 +61,63 @@ interface Props {
 }
 
 export function DeferredTaskModal({ isOpen, onClose, onSubmitSuccess }: Props) {
+  const { setDraft, clearDraft } = useFormDraftStore()
+  const draftKey = 'deferred-task'
+  const isRestoringRef = useRef(false)
+
   const {
     control,
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<PlannerFormInputs>({
     resolver: zodResolver(plannerSchema),
-    defaultValues: {
-      zone: ZoneType.ZONA_A,
-      scheduledAt: '',
-      notes: '',
-    },
+    defaultValues: DEFAULT_VALUES,
   })
 
-  // Limpiar el form cuando se cierra el modal
+  // Cargar borrador cuando se abre el modal (lectura imperativa, sin dependencia reactiva)
+  useEffect(() => {
+    if (isOpen) {
+      const savedDraft = useFormDraftStore.getState().getDraft(draftKey) as
+        | PlannerFormInputs
+        | undefined
+
+      isRestoringRef.current = true
+      reset(savedDraft ?? DEFAULT_VALUES)
+      // Dar tiempo a react-hook-form para completar el reset antes de permitir guardado
+      requestAnimationFrame(() => {
+        isRestoringRef.current = false
+      })
+    }
+  }, [isOpen, reset])
+
+  // Persistir cambios en el store (lectura imperativa para comparar, sin dep. reactiva)
+  const watchedValues = watch()
+  const watchedString = JSON.stringify(watchedValues)
+
+  useEffect(() => {
+    if (!isOpen || isRestoringRef.current) return
+
+    const currentDraft = useFormDraftStore.getState().getDraft(draftKey) as
+      | PlannerFormInputs
+      | undefined
+
+    if (JSON.stringify(currentDraft) !== watchedString) {
+      setDraft(draftKey, JSON.parse(watchedString) as PlannerFormInputs)
+    }
+  }, [watchedString, isOpen, setDraft])
+
+  // Cerrar sin limpiar borrador
   const handleClose = () => {
-    reset()
     onClose()
   }
 
-  // Interceptar el submit exitoso
+  // Interceptar el submit exitoso y limpiar borrador
   const submitHandler = async (data: PlannerFormInputs) => {
     await onSubmitSuccess(data)
+    clearDraft(draftKey)
     handleClose()
   }
 
@@ -144,7 +187,7 @@ export function DeferredTaskModal({ isOpen, onClose, onSubmitSuccess }: Props) {
             Cancelar
           </Button>
           <Button isLoading={isSubmitting} type="submit">
-            {isSubmitting ? 'Agendando...' : 'Agendar Tarea'}
+            {isSubmitting ? 'Agendando' : 'Agendar Tarea'}
           </Button>
         </div>
       </form>

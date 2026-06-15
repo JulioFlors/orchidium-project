@@ -226,7 +226,9 @@ SI lluvia_acumulada(últimas 4h) > 0 → SKIP (Suelo ya humectado)
 #### Veto de 4 Horas: Humedad y Temperatura Promedios (Retrospectivas)
 ```text
 SI humedad_promedio(últimas 4h) ≥ Umbral_Dinámico_4H (THRESHOLD_4H) → SKIP
-SI temperatura_promedio(últimas 4h) ≤ 30.9°C (TEMPERATURE_MIN_VETO_4H) → SKIP
+SI temperatura_promedio(últimas 4h) ≤ 30.0°C (TEMPERATURE_MIN_VETO_4H)
+   Y humedad_promedio(últimas 4h) ≥ 80.0%
+   → SKIP (Veto acoplado por ambiente fresco y húmedo)
 ```
 * **Umbral Dinámico de 4h (THRESHOLD_4H)**:
   * Si Lux promedio desde 8:00 AM es $\ge 26,000\text{ lx}$ (Templado/Soleado): **$\ge 85.0\%$**
@@ -265,7 +267,9 @@ SI interior.hum > 80% (MISTING_HUMIDITY_PROVISIONAL_THRESHOLD)
 Para evitar la escorrentía, lavado y proliferación de hongos foliares, se aplican los mismos vetos retrospectivos que en SOIL_WETTING:
 ```text
 SI humedad_promedio(últimas 4h) ≥ Umbral_Dinámico_4H (THRESHOLD_4H) → SKIP
-SI temperatura_promedio(últimas 4h) ≤ 30.9°C (TEMPERATURE_MIN_VETO_4H) → SKIP
+SI temperatura_promedio(últimas 4h) ≤ 30.0°C (TEMPERATURE_MIN_VETO_4H)
+   Y humedad_promedio(últimas 4h) ≥ 80.0%
+   → SKIP (Veto acoplado)
 ```
 * **Umbral Dinámico de 4h (THRESHOLD_4H)**:
   * Si Lux promedio desde 8:00 AM es $\ge 26,000\text{ lx}$: **$\ge 85.0\%$**
@@ -417,7 +421,7 @@ A continuación se detallan todas las constantes operativas y biológicas centra
 | **LOOKBACK_MINUTES_4H** | `240` | minutos | Ventana retrospectiva de análisis para el veto por humedad/temperatura de 4h. |
 | **HUMIDITY_VETO_4H_CLOUDY** | `91.0` | $\%$ | Umbral de veto de 4h de humedad en día nublado/lluvioso. |
 | **HUMIDITY_VETO_4H_SUNNY** | `85.0` | $\%$ | Umbral de veto de 4h de humedad en día templado/soleado. |
-| **TEMPERATURE_MIN_VETO_4H** | `30.9` | $^\circ\text{C}$ | Temperatura promedio mínima en 4h bajo la cual se cancelan humectación y agroquímicos. |
+| **TEMPERATURE_MIN_VETO_4H** | `30.0` | $^\circ\text{C}$ | Temperatura promedio mínima en 4h (acoplada con HR $\ge 80.0\%$) bajo la cual se cancelan humectación y agroquímicos. |
 | **MAX_HUMIDITY_DAWN** | `100.0` | $\%$ | Humedad relativa máxima permitida durante la ventana de amanecer. |
 | **DAWN_START_HOUR** | `4` | hora local | Hora de inicio de la ventana de amanecer (rocío natural). |
 | **DAWN_END_HOUR** | `7` | hora local | Hora de fin de la ventana de amanecer. |

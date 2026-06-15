@@ -1,16 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import {
-  FaCloudSunRain,
-  FaSatelliteDish,
-  FaTintSlash,
-  FaBalanceScale,
-  FaInfoCircle,
-} from 'react-icons/fa'
+import { FaCloudSunRain, FaSatelliteDish, FaInfoCircle } from 'react-icons/fa'
 import { motion, AnimatePresence } from 'motion/react'
 
-import { OracleForecast } from '@/actions/insights/insight-actions'
+import { OracleForecast } from '@/actions'
 
 export function OracleDecisionCard({ forecast }: { forecast: OracleForecast | undefined }) {
   const [showPressureInfo, setShowPressureInfo] = useState(false)
@@ -30,36 +24,32 @@ export function OracleDecisionCard({ forecast }: { forecast: OracleForecast | un
   const owmProb = forecast.sources.owm?.precipProb ?? 0
   const omProb = forecast.sources.om?.precipProb ?? 0
 
-  const localLux = forecast.localSensors?.lux ?? 0
-  const isSunnyLocal = localLux > 18000 // Umbral de sol intenso local
+  // Promedio de probabilidad de lluvia
+  const avgRainProb = (owmProb + omProb) / 2
+  let forecastStatus = 'Cielo Despejado'
+  let forecastDesc = 'Las condiciones meteorológicas son estables y no se prevén precipitaciones.'
+  let forecastColor = 'text-green-400'
+  let forecastBg = 'bg-green-500/10 border-green-500/20'
 
-  // Lógica de visualización de consenso
-  const hasConflict =
-    Math.abs(owmProb - omProb) > 0.4 || (forecast.precipProb > 0.6 && isSunnyLocal)
-  const willRain = forecast.precipProb >= 0.7 && !isSunnyLocal
-  const drySoil = forecast.soilMoisture !== null && forecast.soilMoisture < 0.35
-
-  let decisionTitle = 'Riego Permitido'
-  let decisionDesc =
-    'No se prevén lluvias fuertes inminentes y la humedad satelital está en rango normal.'
-  let decisionColor = 'text-green-400'
-
-  if (willRain) {
-    decisionTitle = 'Riego Probablemente Bloqueado'
-    decisionDesc = `Pronóstico de lluvia (${(forecast.precipProb * 100).toFixed(0)}%). Será refutado si hay sol intenso localmente.`
-    decisionColor = 'text-blue-400'
-  } else if (isSunnyLocal && forecast.precipProb > 0.5) {
-    decisionTitle = 'Riego Permitido (Refutado)'
-    decisionDesc = `Aunque hay pronóstico de lluvia, el sol intenso local (${localLux.toLocaleString()} lx) sugiere nubes pasajeras.`
-    decisionColor = 'text-amber-400'
-  } else if (!drySoil && forecast.soilMoisture !== null) {
-    decisionTitle = 'Riego Innecesario'
-    decisionDesc = `Imágenes satelitales reportan suelo húmedo (${(forecast.soilMoisture * 100).toFixed(0)}%).`
-    decisionColor = 'text-yellow-400'
+  if (avgRainProb >= 0.7) {
+    forecastStatus = 'Lluvia Inminente / Alta Probabilidad'
+    forecastDesc = `Consenso meteorológico indica alta probabilidad de lluvia (${(avgRainProb * 100).toFixed(0)}%). Se recomiendan previsiones.`
+    forecastColor = 'text-blue-400'
+    forecastBg = 'bg-blue-500/10 border-blue-500/20'
+  } else if (avgRainProb >= 0.4) {
+    forecastStatus = 'Probabilidad de Lluvia Moderada'
+    forecastDesc = `Nubosidad variable con posibilidad moderada de precipitaciones (${(avgRainProb * 100).toFixed(0)}%).`
+    forecastColor = 'text-yellow-400'
+    forecastBg = 'bg-yellow-500/10 border-yellow-500/20'
+  } else if (avgRainProb >= 0.15) {
+    forecastStatus = 'Parcialmente Nublado'
+    forecastDesc = `Nubosidad leve con baja probabilidad de precipitaciones (${(avgRainProb * 100).toFixed(0)}%).`
+    forecastColor = 'text-amber-400'
+    forecastBg = 'bg-amber-500/10 border-amber-500/20'
   }
 
   return (
-    <div className="from-surface to-surface/80 relative flex h-full flex-col gap-5 overflow-hidden rounded-xl border border-white/10 bg-linear-to-br p-6">
+    <div className="from-surface to-surface/80 relative z-0 flex h-full flex-col gap-5 overflow-hidden rounded-xl border border-white/10 bg-linear-to-br p-6">
       <div className="absolute top-0 right-0 p-4 opacity-5">
         <FaCloudSunRain className="h-32 w-32" />
       </div>
@@ -76,32 +66,17 @@ export function OracleDecisionCard({ forecast }: { forecast: OracleForecast | un
             </div>
           </div>
           <p className="text-secondary text-xs font-medium tracking-wide">
-            IA AGRONÓMICA + SENSORES LOCALES
+            IA AGRONÓMICA SATELITAL
           </p>
         </div>
       </div>
 
-      <div className="relative z-10 flex flex-col gap-2 rounded-lg border border-white/5 bg-black/20 p-4">
+      <div className={`relative z-10 flex flex-col gap-2 rounded-lg border p-4 ${forecastBg}`}>
         <div className="mb-1 flex items-center gap-2">
-          {willRain || (!drySoil && forecast.soilMoisture !== null) ? (
-            <FaTintSlash className={`h-4 w-4 ${decisionColor}`} />
-          ) : (
-            <div className="h-2 w-2 rounded-full bg-green-400" />
-          )}
-          <span className={`font-bold ${decisionColor}`}>{decisionTitle}</span>
+          <FaCloudSunRain className={`h-4 w-4 ${forecastColor}`} />
+          <span className={`font-bold ${forecastColor}`}>{forecastStatus}</span>
         </div>
-        <p className="text-secondary/90 text-sm leading-relaxed">{decisionDesc}</p>
-
-        {hasConflict && (
-          <div className="mt-2 flex items-center gap-2 rounded-md border border-amber-500/20 bg-amber-500/10 p-2">
-            <FaBalanceScale className="h-3 w-3 text-amber-400" />
-            <span className="text-[10px] font-bold tracking-wider text-amber-400 uppercase">
-              {isSunnyLocal && forecast.precipProb > 0.5
-                ? 'Discrepancia: Sol intenso detectado localmente'
-                : 'Discrepancia Detectada: Validando con Lux local'}
-            </span>
-          </div>
-        )}
+        <p className="text-secondary/90 text-sm leading-relaxed">{forecastDesc}</p>
       </div>
 
       <div className="relative z-10 grid grid-cols-2 gap-4">
@@ -183,7 +158,7 @@ export function OracleDecisionCard({ forecast }: { forecast: OracleForecast | un
                         {'>'} 1013 hPa
                       </span>
                       <span className="text-secondary/80 text-[9px]">
-                        Alta Presión. Tiempo estable y despejado.
+                        Alta Presión. Tiempo stable y despejado.
                       </span>
                     </li>
                     <li className="flex flex-col">

@@ -333,7 +333,7 @@ export function DeviceDebugger() {
                         connectivityLogs.map((item) => (
                           <div
                             key={item.id}
-                            className="group hover:bg-hover-overlay flex items-center justify-between px-5 py-3 transition-all"
+                            className="group hover:bg-hover-overlay flex flex-col gap-2 px-5 py-3 transition-all sm:flex-row sm:items-center sm:justify-between"
                           >
                             <div className="flex items-center gap-4">
                               <StatusCircleIcon
@@ -371,11 +371,12 @@ export function DeviceDebugger() {
                               </div>
                             </div>
 
-                            <div className="flex flex-col items-end text-right">
-                              <span className="text-primary font-mono text-sm font-bold">
+                            <div className="flex flex-row items-center gap-1.5 pl-12 text-xs sm:flex-col sm:items-end sm:gap-0 sm:pl-0 sm:text-right sm:text-sm">
+                              <span className="text-primary font-mono font-bold sm:text-sm">
                                 {formatTime12h(item.timestamp, true)}
                               </span>
-                              <span className="text-secondary text-sm font-medium tracking-tight opacity-70">
+                              <span className="text-secondary font-medium tracking-tight opacity-70 sm:text-xs">
+                                <span className="text-secondary/50 inline sm:hidden"> · </span>
                                 {formatRelativeHeartbeat(item.timestamp)}
                               </span>
                             </div>

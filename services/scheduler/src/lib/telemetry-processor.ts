@@ -1,4 +1,4 @@
-import { prisma, ZoneType } from '@package/database'
+import { prisma, ZoneType, TaskPurpose } from '@package/database'
 
 import { Logger } from './logger'
 import { influxClient } from './influx'
@@ -64,11 +64,20 @@ function toCaracasTimeStr(isoStr: string | null): string | null {
 
   if (isNaN(d.getTime())) return null
 
-  return d.toLocaleTimeString('es-VE', {
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'America/Caracas',
-  })
+  const formatted = d
+    .toLocaleTimeString('es-VE', {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: 'America/Caracas',
+    })
+    .toLowerCase()
+
+  return formatted
+    .replace(/a\.\s*m\./gi, 'am')
+    .replace(/p\.\s*m\./gi, 'pm')
+    .replace(/a\s*m/gi, 'am')
+    .replace(/p\s*m/gi, 'pm')
+    .trim()
 }
 
 const safeAvg = (sum: number, count: number) =>
@@ -154,9 +163,52 @@ export async function processDay(
     countTempDay = 0,
     sumTempNight = 0,
     countTempNight = 0
+  let minTempDay = Infinity,
+    maxTempDay = -Infinity,
+    minTempDayTime: string | null = null,
+    maxTempDayTime: string | null = null
+  let minTempNight = Infinity,
+    maxTempNight = -Infinity,
+    minTempNightTime: string | null = null,
+    maxTempNightTime: string | null = null
+
+  let sumHumDay = 0,
+    countHumDay = 0,
+    minHumDay = Infinity,
+    maxHumDay = -Infinity,
+    minHumDayTime: string | null = null,
+    maxHumDayTime: string | null = null
+  let sumHumNight = 0,
+    countHumNight = 0,
+    minHumNight = Infinity,
+    maxHumNight = -Infinity,
+    minHumNightTime: string | null = null,
+    maxHumNightTime: string | null = null
   let highHumStreakMinutes = 0,
     maxHighHumStreakMinutes = 0,
     lastHumTime: Date | null = null
+
+  // Variables desglosadas para iluminancia (Amanecer, Fotoperíodo, Atardecer)
+  let sumIllumDawn = 0,
+    countIllumDawn = 0,
+    minIllumDawn = Infinity,
+    maxIllumDawn = -Infinity
+  let minIllumDawnTime: string | null = null,
+    maxIllumDawnTime: string | null = null
+
+  let sumIllumDay = 0,
+    countIllumDay = 0,
+    minIllumDay = Infinity,
+    maxIllumDay = -Infinity
+  let minIllumDayTime: string | null = null,
+    maxIllumDayTime: string | null = null
+
+  let sumIllumDusk = 0,
+    countIllumDusk = 0,
+    minIllumDusk = Infinity,
+    maxIllumDusk = -Infinity
+  let minIllumDuskTime: string | null = null,
+    maxIllumDuskTime: string | null = null
 
   let rowCount = 0
 
@@ -169,12 +221,18 @@ export async function processDay(
       const tIso = tDate.toISOString()
       const localHour = (tDate.getUTCHours() - 4 + 24) % 24
       const localMin = tDate.getUTCMinutes()
+      const localMinutes = localHour * 60 + localMin
+
+      // Definir rangos exactos de minutos para la hora local (Caracas VET)
+      const isDawn = localMinutes >= 360 && localMinutes < 480 // 06:00 am - 07:59 am
+      const isFotoperiodo = localMinutes >= 480 && localMinutes <= 960 // 08:00 am - 04:00 pm
+      const isDusk = localMinutes > 960 && localMinutes <= 1080 // 04:01 pm - 06:00 pm
 
       // Rango Botánico Estricto: 08:00:00 a 16:00:59
       const isDaytime = (localHour >= 8 && localHour < 16) || (localHour === 16 && localMin === 0)
       const isNighttime = localHour >= 19 || localHour <= 5
 
-      // Temperatura (24h)
+      // Temperatura (24h y desglosado)
       if (row.temperature != null) {
         const v = Number(row.temperature)
 
@@ -192,15 +250,31 @@ export async function processDay(
           if (isDaytime) {
             sumTempDay += v
             countTempDay++
+            if (v < minTempDay) {
+              minTempDay = v
+              minTempDayTime = tIso
+            }
+            if (v > maxTempDay) {
+              maxTempDay = v
+              maxTempDayTime = tIso
+            }
           }
           if (isNighttime) {
             sumTempNight += v
             countTempNight++
+            if (v < minTempNight) {
+              minTempNight = v
+              minTempNightTime = tIso
+            }
+            if (v > maxTempNight) {
+              maxTempNight = v
+              maxTempNightTime = tIso
+            }
           }
         }
       }
 
-      // Humedad (24h)
+      // Humedad (24h y desglosado)
       if (row.humidity != null) {
         const v = Number(row.humidity)
 
@@ -214,6 +288,31 @@ export async function processDay(
           if (v > maxHum) {
             maxHum = v
             maxHumTime = tIso
+          }
+
+          if (isDaytime) {
+            sumHumDay += v
+            countHumDay++
+            if (v < minHumDay) {
+              minHumDay = v
+              minHumDayTime = tIso
+            }
+            if (v > maxHumDay) {
+              maxHumDay = v
+              maxHumDayTime = tIso
+            }
+          }
+          if (isNighttime) {
+            sumHumNight += v
+            countHumNight++
+            if (v < minHumNight) {
+              minHumNight = v
+              minHumNightTime = tIso
+            }
+            if (v > maxHumNight) {
+              maxHumNight = v
+              maxHumNightTime = tIso
+            }
           }
 
           // Riesgo epidemiológico
@@ -250,12 +349,52 @@ export async function processDay(
         }
       }
 
-      // Iluminancia (solo 08:00–16:00 para promedio y DLI, pero contando total)
+      // Iluminancia (desglosada por franjas y general diurno)
       if (row.illuminance != null) {
         const v = Number(row.illuminance)
 
         if (!isNaN(v) && v >= 0) {
           countLumTotal++
+
+          if (isDawn) {
+            sumIllumDawn += v
+            countIllumDawn++
+            if (v < minIllumDawn) {
+              minIllumDawn = v
+              minIllumDawnTime = tIso
+            }
+            if (v > maxIllumDawn) {
+              maxIllumDawn = v
+              maxIllumDawnTime = tIso
+            }
+          }
+
+          if (isFotoperiodo) {
+            sumIllumDay += v
+            countIllumDay++
+            if (v < minIllumDay) {
+              minIllumDay = v
+              minIllumDayTime = tIso
+            }
+            if (v > maxIllumDay) {
+              maxIllumDay = v
+              maxIllumDayTime = tIso
+            }
+          }
+
+          if (isDusk) {
+            sumIllumDusk += v
+            countIllumDusk++
+            if (v < minIllumDusk) {
+              minIllumDusk = v
+              minIllumDuskTime = tIso
+            }
+            if (v > maxIllumDusk) {
+              maxIllumDusk = v
+              maxIllumDuskTime = tIso
+            }
+          }
+
           if (isDaytime) {
             sumLum += v
             countLum++
@@ -294,29 +433,40 @@ export async function processDay(
   }
 
   // ── 3. Balance hídrico desde TaskLog ──────────────────────────────────────
-  let irrigationMinutes = 0,
-    nebulizationMinutes = 0,
-    totalWaterEvents = 0
+  let nebulizationMinutes = 0
+  let irrigationMinutes = 0
+  let soilWettingMinutes = 0
+  let fertigationMinutes = 0
+  let fumigationMinutes = 0
+  let totalWaterEvents = 0
 
   try {
     const taskLogs = await prisma.taskLog.findMany({
       where: {
         status: 'COMPLETED',
-        actualStartAt: { gte: dayStart, lt: dayEnd },
+        scheduledAt: { gte: dayStart, lt: dayEnd },
       },
-      select: { purpose: true, actualStartAt: true, completedMinutes: true },
+      select: { purpose: true, actualStartAt: true, completedMinutes: true, duration: true },
     })
 
     for (const task of taskLogs) {
-      if (!task.actualStartAt) continue
-      const durationMin = task.completedMinutes
-      const purposeStr = String(task.purpose || '').toUpperCase()
+      const durationMin = task.completedMinutes > 0 ? task.completedMinutes : task.duration
+      const purpose = task.purpose
 
-      if (purposeStr.includes('NEBUL') || purposeStr.includes('HUMIDIF')) {
+      if (purpose === TaskPurpose.HUMIDIFICATION) {
         nebulizationMinutes += durationMin
         totalWaterEvents++
-      } else if (purposeStr.includes('RIEGO') || purposeStr.includes('IRRIG')) {
+      } else if (purpose === TaskPurpose.IRRIGATION) {
         irrigationMinutes += durationMin
+        totalWaterEvents++
+      } else if (purpose === TaskPurpose.SOIL_WETTING) {
+        soilWettingMinutes += durationMin
+        totalWaterEvents++
+      } else if (purpose === TaskPurpose.FERTIGATION) {
+        fertigationMinutes += durationMin
+        totalWaterEvents++
+      } else if (purpose === TaskPurpose.FUMIGATION) {
+        fumigationMinutes += durationMin
         totalWaterEvents++
       }
     }
@@ -369,6 +519,9 @@ export async function processDay(
       ? Number((maxHighHumStreakMinutes / 60).toFixed(1))
       : null
 
+  const totalIrrigationMinutes =
+    irrigationMinutes + soilWettingMinutes + fertigationMinutes + fumigationMinutes
+
   if (dryRun) {
     if (!silent) {
       Logger.info(
@@ -390,11 +543,54 @@ export async function processDay(
     minHumTime: isHumValid ? toCaracasTimeStr(minHumTime) : null,
     maxHumidity: isHumValid ? safeInf(maxHum) : null,
     maxHumTime: isHumValid ? toCaracasTimeStr(maxHumTime) : null,
+
+    // Nuevas métricas de Día
+    minTempDay: isTempValid && countTempDay > 0 ? safeInf(minTempDay) : null,
+    minTempDayTime: isTempValid && countTempDay > 0 ? toCaracasTimeStr(minTempDayTime) : null,
+    maxTempDay: isTempValid && countTempDay > 0 ? safeInf(maxTempDay) : null,
+    maxTempDayTime: isTempValid && countTempDay > 0 ? toCaracasTimeStr(maxTempDayTime) : null,
+    avgHumDay: isHumValid && countHumDay > 0 ? safeAvg(sumHumDay, countHumDay) : null,
+    minHumDay: isHumValid && countHumDay > 0 ? safeInf(minHumDay) : null,
+    minHumDayTime: isHumValid && countHumDay > 0 ? toCaracasTimeStr(minHumDayTime) : null,
+    maxHumDay: isHumValid && countHumDay > 0 ? safeInf(maxHumDay) : null,
+    maxHumDayTime: isHumValid && countHumDay > 0 ? toCaracasTimeStr(maxHumDayTime) : null,
+
+    // Nuevas métricas de Noche
+    minTempNight: isTempValid && countTempNight > 0 ? safeInf(minTempNight) : null,
+    minTempNightTime: isTempValid && countTempNight > 0 ? toCaracasTimeStr(minTempNightTime) : null,
+    maxTempNight: isTempValid && countTempNight > 0 ? safeInf(maxTempNight) : null,
+    maxTempNightTime: isTempValid && countTempNight > 0 ? toCaracasTimeStr(maxTempNightTime) : null,
+    avgHumNight: isHumValid && countHumNight > 0 ? safeAvg(sumHumNight, countHumNight) : null,
+    minHumNight: isHumValid && countHumNight > 0 ? safeInf(minHumNight) : null,
+    minHumNightTime: isHumValid && countHumNight > 0 ? toCaracasTimeStr(minHumNightTime) : null,
+    maxHumNight: isHumValid && countHumNight > 0 ? safeInf(maxHumNight) : null,
+    maxHumNightTime: isHumValid && countHumNight > 0 ? toCaracasTimeStr(maxHumNightTime) : null,
+
     avgIlluminance: isLuxValid ? safeAvg(sumLum, countLum) : null,
     minIlluminance: isLuxValid ? safeInf(minLum) : null,
     minIllumTime: isLuxValid ? toCaracasTimeStr(minLumTime) : null,
     maxIlluminance: isLuxValid ? safeInf(maxLum) : null,
     maxIllumTime: isLuxValid ? toCaracasTimeStr(maxLumTime) : null,
+
+    // Iluminancia desglosada
+    avgIllumDawn: isLuxValid && countIllumDawn > 0 ? safeAvg(sumIllumDawn, countIllumDawn) : null,
+    minIllumDawn: isLuxValid && countIllumDawn > 0 ? safeInf(minIllumDawn) : null,
+    minIllumDawnTime: isLuxValid && countIllumDawn > 0 ? toCaracasTimeStr(minIllumDawnTime) : null,
+    maxIllumDawn: isLuxValid && countIllumDawn > 0 ? safeInf(maxIllumDawn) : null,
+    maxIllumDawnTime: isLuxValid && countIllumDawn > 0 ? toCaracasTimeStr(maxIllumDawnTime) : null,
+
+    avgIllumDay: isLuxValid && countIllumDay > 0 ? safeAvg(sumIllumDay, countIllumDay) : null,
+    minIllumDay: isLuxValid && countIllumDay > 0 ? safeInf(minIllumDay) : null,
+    minIllumDayTime: isLuxValid && countIllumDay > 0 ? toCaracasTimeStr(minIllumDayTime) : null,
+    maxIllumDay: isLuxValid && countIllumDay > 0 ? safeInf(maxIllumDay) : null,
+    maxIllumDayTime: isLuxValid && countIllumDay > 0 ? toCaracasTimeStr(maxIllumDayTime) : null,
+
+    avgIllumDusk: isLuxValid && countIllumDusk > 0 ? safeAvg(sumIllumDusk, countIllumDusk) : null,
+    minIllumDusk: isLuxValid && countIllumDusk > 0 ? safeInf(minIllumDusk) : null,
+    minIllumDuskTime: isLuxValid && countIllumDusk > 0 ? toCaracasTimeStr(minIllumDuskTime) : null,
+    maxIllumDusk: isLuxValid && countIllumDusk > 0 ? safeInf(maxIllumDusk) : null,
+    maxIllumDuskTime: isLuxValid && countIllumDusk > 0 ? toCaracasTimeStr(maxIllumDuskTime) : null,
+
     lightDurationHours: isExterior && isLuxValid ? 8 : 0,
     totalRainDuration: Math.round(totalRain),
     avgRainIntensity: avgRainIntensity ? Number(avgRainIntensity.toFixed(2)) : null,
@@ -406,7 +602,7 @@ export async function processDay(
     avgTempDay,
     avgTempNight,
     highHumidityHours,
-    irrigationMinutes,
+    irrigationMinutes: totalIrrigationMinutes,
     nebulizationMinutes,
     totalWaterEvents,
   }
@@ -435,9 +631,27 @@ export async function processDay(
   })
 
   if (!silent) {
-    Logger.success(
-      `[${dayLabel}] [${zone}] rows=${rowCount} DLI=${dli} VPD=${vpdAvg} DIF=${dif} riego=${irrigationMinutes}min OK`,
-    )
+    Logger.success(`[${dayLabel}] [${zone}] rows=${rowCount} DLI=${dli} VPD=${vpdAvg} DIF=${dif}`)
+
+    if (!isExterior) {
+      const firstLineParts: string[] = []
+
+      if (nebulizationMinutes > 0) firstLineParts.push(`Foger=${nebulizationMinutes}min`)
+      if (irrigationMinutes > 0) firstLineParts.push(`Irrigation=${irrigationMinutes}min`)
+      if (soilWettingMinutes > 0) firstLineParts.push(`Soil_Wet=${soilWettingMinutes}min`)
+
+      const secondLineParts: string[] = []
+
+      if (fertigationMinutes > 0) secondLineParts.push(`Fertirrigation=${fertigationMinutes}min`)
+      if (fumigationMinutes > 0) secondLineParts.push(`Fumigation=${fumigationMinutes}min`)
+
+      if (firstLineParts.length > 0) {
+        Logger.success(`[${dayLabel}] ${firstLineParts.join(' | ')}`)
+      }
+      if (secondLineParts.length > 0) {
+        Logger.success(`[${dayLabel}] ${secondLineParts.join(' | ')}`)
+      }
+    }
   }
 
   return true

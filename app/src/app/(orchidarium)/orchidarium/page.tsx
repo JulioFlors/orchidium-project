@@ -6,11 +6,11 @@ import { redirect } from 'next/navigation'
 import { OrchidariumView } from './ui'
 
 import { auth } from '@/lib/server'
-import { getLatestOracleForecast } from '@/actions'
 
 export const metadata: Metadata = {
-  title: 'Centro de Inteligencia Agronómica',
-  description: 'Salud botánica, insights agronómicos y oráculo climático.',
+  title: 'Orquideario Inteligente',
+  description:
+    'Sistema de gestión automatizado, control de inventario y optimización biológica para el cultivo de orquídeas de PristinoPlant.',
 }
 
 export default async function OrchidariumDashboardPage() {
@@ -22,13 +22,5 @@ export default async function OrchidariumDashboardPage() {
     redirect('/auth/login?callbackUrl=/orchidarium')
   }
 
-  // Obtenemos el pronóstico satelital
-  const oracleRes = await getLatestOracleForecast()
-
-  return (
-    <OrchidariumView
-      error={oracleRes.success ? undefined : oracleRes.error}
-      forecast={oracleRes.success ? oracleRes.data : undefined}
-    />
-  )
+  return <OrchidariumView />
 }

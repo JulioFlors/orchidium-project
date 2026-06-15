@@ -376,6 +376,8 @@ export async function cleanupExpiredTasks() {
         { notes: { contains: 'Sin respuesta del Nodo Actuador' } },
         { notes: { contains: 'El Nodo Actuador No Responde' } },
         { notes: { contains: 'Ejecución manual' } },
+        { notes: { contains: 'Nodo Actuador inicializándose' } },
+        { notes: { contains: 'Estabilizando Nodo Actuador tras reinicio' } },
       ],
     },
   })

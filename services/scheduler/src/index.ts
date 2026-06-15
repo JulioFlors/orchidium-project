@@ -114,10 +114,13 @@ async function init() {
     process.exit(1)
   }
 
-  // 1. Cargar y programar rutinas primero (Prioridad estética)
+  // 1. Hidratar estado de eventos de lluvia desde Postgres (resiliencia ante reinicios)
+  await hydrateRainEventsState()
+
+  // 2. Cargar y programar rutinas primero (Prioridad estética)
   await initScheduler()
 
-  // 2. Iniciar escucha de eventos MQTT
+  // 3. Iniciar escucha de eventos MQTT
   setupMqttHandlers()
 }
 
@@ -185,7 +188,8 @@ let lastFirmwareHeartbeat: number = 0
 let isEmaSleeping = false
 let lastSyncTimestamp: number = 0
 let lastTimeSyncSent: number = 0
-let openRainEventId: string | null = null // ID del RainEvent abierto en Postgres
+let openPhysicalRainEventId: string | null = null // ID del RainEvent físico abierto en Postgres
+let openVirtualRainEventId: string | null = null // ID del RainEvent virtual abierto en Postgres
 
 // ---- Sincronización de Clima (DHT22) ----
 let climateSyncTimer: NodeJS.Timeout | null = null
@@ -214,6 +218,7 @@ let baselineHum: number | null = null
 let isRainOverridden = false
 let rainStartedAt: number | null = null
 let lastVetoAt: number | null = null
+let lastRainClosedAt: number | null = null
 let isWaitingForBaselineFallback = false
 let lastSentRainInterval: 'INTERVAL_BURST' | 'INTERVAL_NORMAL' = 'INTERVAL_NORMAL'
 let lastKnownLux: number | null = null
@@ -231,34 +236,94 @@ export function isCurrentlyRaining(): boolean {
   return (lastRainState === 'Raining' || isTelemetryRainActive) && !isRainOverridden
 }
 
+// Registrar el callback de lluvia en el Motor de Inferencia para romper la dependencia circular
+InferenceEngine.registerRainCheck(isCurrentlyRaining)
+
+/**
+ * Hidrata el estado de eventos de lluvia abiertos desde Postgres al arrancar.
+ * Garantiza resiliencia ante reinicios del Scheduler o redespliegues.
+ */
+async function hydrateRainEventsState() {
+  try {
+    const openPhysical = await prisma.rainEvent.findFirst({
+      where: { zone: 'EXTERIOR', endedAt: null, isVirtual: false },
+      orderBy: { startedAt: 'desc' },
+    })
+
+    if (openPhysical) {
+      openPhysicalRainEventId = openPhysical.id
+      lastRainState = 'Raining'
+      Logger.rain(`Evento físico huérfano recuperado (ID: ${openPhysical.id.slice(0, 8)})`)
+    }
+
+    const openVirtual = await prisma.rainEvent.findFirst({
+      where: { zone: 'EXTERIOR', endedAt: null, isVirtual: true },
+      orderBy: { startedAt: 'desc' },
+    })
+
+    if (openVirtual) {
+      openVirtualRainEventId = openVirtual.id
+      Logger.rain(`Evento virtual huérfano recuperado (ID: ${openVirtual.id.slice(0, 8)})`)
+    }
+  } catch (err) {
+    Logger.error('Error hidratando estado de lluvia desde Postgres:', err)
+  }
+}
+
 let rainEventMutex = Promise.resolve()
 
 /**
  * Abre un nuevo evento de lluvia en PostgreSQL o reanuda uno existente.
+ * @param isVirtual true para eventos detectados por correlación climática
  */
-async function openRainEvent(timestamp: Date = new Date()) {
+async function openRainEvent(
+  timestamp: Date = new Date(),
+  isVirtual: boolean = false,
+  baselines?: { temp: number | null; hum: number | null; lux: number | null },
+  triggerReason?: string,
+) {
   rainEventMutex = rainEventMutex
     .then(async () => {
-      if (!openRainEventId) {
+      const currentId = isVirtual ? openVirtualRainEventId : openPhysicalRainEventId
+      const label = isVirtual ? 'inferido' : 'físico'
+
+      if (!currentId) {
         try {
           const existing = await prisma.rainEvent.findFirst({
-            where: { zone: 'EXTERIOR', endedAt: null },
+            where: { zone: 'EXTERIOR', endedAt: null, isVirtual },
             orderBy: { startedAt: 'desc' },
           })
 
           if (existing) {
-            openRainEventId = existing.id
-            Logger.rain(`Evento de lluvia reanudado (ID: ${existing.id.slice(0, 8)})`)
+            if (isVirtual) {
+              openVirtualRainEventId = existing.id
+            } else {
+              openPhysicalRainEventId = existing.id
+            }
+            Logger.rain(`Evento de lluvia ${label} reanudado (ID: ${existing.id.slice(0, 8)})`)
           } else {
             const newEvent = await prisma.rainEvent.create({
-              data: { startedAt: timestamp, zone: 'EXTERIOR' },
+              data: {
+                startedAt: timestamp,
+                zone: 'EXTERIOR',
+                isVirtual,
+                isInfered: isVirtual,
+                baselineTemp: baselines?.temp ?? null,
+                baselineHum: baselines?.hum ?? null,
+                baselineLux: baselines?.lux ?? null,
+                triggerReason: triggerReason ?? null,
+              },
             })
 
-            openRainEventId = newEvent.id
-            Logger.rain(`Evento de lluvia abierto (ID: ${newEvent.id.slice(0, 8)})`)
+            if (isVirtual) {
+              openVirtualRainEventId = newEvent.id
+            } else {
+              openPhysicalRainEventId = newEvent.id
+            }
+            Logger.rain(`Evento de lluvia ${label} abierto (ID: ${newEvent.id.slice(0, 8)})`)
           }
         } catch (err) {
-          Logger.error('Error abriendo RainEvent en Postgres:', err)
+          Logger.error(`Error abriendo RainEvent ${label} en Postgres:`, err)
         }
       }
     })
@@ -272,28 +337,41 @@ async function openRainEvent(timestamp: Date = new Date()) {
  * Cierra el evento de lluvia abierto en Postgres y calcula la duración.
  * @param reason Motivo de cierre: "Dry", "ORPHAN_TIMEOUT", "REBOOT", "SCHEDULER_OVERRIDE"
  * @param endTime Timestamp de cierre (por defecto: ahora)
+ * @param isVirtual true para eventos detectados por correlación climática
  */
-async function closeRainEvent(reason: string, endTime: Date = new Date()) {
+async function closeRainEvent(
+  reason: string,
+  endTime: Date = new Date(),
+  isVirtual: boolean = false,
+  closeReason?: string,
+) {
   rainEventMutex = rainEventMutex
     .then(async () => {
-      if (!openRainEventId) {
+      let eventId = isVirtual ? openVirtualRainEventId : openPhysicalRainEventId
+      const label = isVirtual ? 'inferido' : 'físico'
+
+      if (!eventId) {
         // Buscar en DB por si el Scheduler se reinició con un evento huérfano
         const existing = await prisma.rainEvent
           .findFirst({
-            where: { zone: 'EXTERIOR', endedAt: null },
+            where: { zone: 'EXTERIOR', endedAt: null, isVirtual },
             orderBy: { startedAt: 'desc' },
           })
           .catch(() => null)
 
         if (!existing) return
-        openRainEventId = existing.id
+        eventId = existing.id
       }
 
       try {
-        const event = await prisma.rainEvent.findUnique({ where: { id: openRainEventId } })
+        const event = await prisma.rainEvent.findUnique({ where: { id: eventId } })
 
         if (!event || event.endedAt) {
-          openRainEventId = null
+          if (isVirtual) {
+            openVirtualRainEventId = null
+          } else {
+            openPhysicalRainEventId = null
+          }
 
           return
         }
@@ -324,14 +402,15 @@ async function closeRainEvent(reason: string, endTime: Date = new Date()) {
           Logger.warn('No se pudo recuperar la intensidad de lluvia de InfluxDB:', err)
         }
 
-        if (!openRainEventId) return
+        if (!eventId) return
 
         await prisma.rainEvent.update({
-          where: { id: openRainEventId },
+          where: { id: eventId },
           data: {
             endedAt: endTime,
             durationSeconds,
             closedBy: reason,
+            closeReason: closeReason ?? reason,
             avgIntensity,
             peakIntensity,
           },
@@ -340,12 +419,20 @@ async function closeRainEvent(reason: string, endTime: Date = new Date()) {
         const intensityLog = avgIntensity ? ` | Int. Promedio: ${Math.round(avgIntensity)}%` : ''
 
         Logger.rain(
-          `Evento de lluvia cerrado (${reason}) — Duración: ${Math.round(durationSeconds / 60)} min${intensityLog} (ID: ${openRainEventId.slice(0, 8)})`,
+          `Evento de lluvia ${label} cerrado (${reason}) — Duración: ${Math.round(durationSeconds / 60)} min${intensityLog} (ID: ${eventId.slice(0, 8)})`,
         )
+
+        if (isVirtual) {
+          lastRainClosedAt = endTime.getTime()
+        }
       } catch (err) {
-        Logger.error('Error cerrando RainEvent en Postgres:', err)
+        Logger.error(`Error cerrando RainEvent ${label} en Postgres:`, err)
       } finally {
-        openRainEventId = null
+        if (isVirtual) {
+          openVirtualRainEventId = null
+        } else {
+          openPhysicalRainEventId = null
+        }
       }
     })
     .catch((err) => {
@@ -387,8 +474,10 @@ function flushBootLog(nodeSource: string) {
       hour12: false,
     }).format(now)
     const [caracasHour, caracasMinute] = caracasTimeStr.split(':').map(Number)
+    const minutesSinceMidnight = caracasHour * 60 + caracasMinute
 
-    if (caracasHour === 5 && caracasMinute >= 0 && caracasMinute <= 15) {
+    // 04:59 = 299 minutos, 05:15 = 315 minutos
+    if (minutesSinceMidnight >= 299 && minutesSinceMidnight <= 315) {
       isTransitionalDawn = true
     }
   }
@@ -913,7 +1002,11 @@ function setupMqttHandlers() {
         }
 
         if (!isActuator) {
-          if (message !== 'sleep') {
+          if (message === 'sleep') {
+            isEmaSleeping = true
+            emaManager.setOffline()
+            saveDeviceLog('Weather_Station_ZONA_A', 'SLEEP', 'Suspendido (ACK)')
+          } else {
             checkAndSleepEma()
           }
         }
@@ -1387,6 +1480,10 @@ function checkAndSleepEma() {
 
   if (pendingCount === 0 && !hasRequestedAudits && !hasActiveAudits && !isBooting) {
     executeEmaCommand('sleep', true)
+    isEmaSleeping = true
+    emaManager.setOffline()
+    saveDeviceLog('Weather_Station_ZONA_A', 'SLEEP', 'Suspendido (Proactivo)')
+    Logger.rain('EMA marcado proactivamente en SLEEP al enviar comando')
   }
 }
 
@@ -1901,6 +1998,7 @@ async function initScheduler() {
 
   // 0. Limpieza de tareas interrumpidas (Solo al arrancar el scheduler)
   await resumeInterruptedTasks()
+  await cleanupExpiredTasks()
 
   // 0.1. Verificación retroactiva de estadísticas diarias (últimos 7 días)
   await checkAndRecoverMissingStats()
@@ -1940,11 +2038,11 @@ async function initScheduler() {
     syncNodeSampling('off')
   })
 
-  // Cron de Evaluación Diaria de la Máquina de Estados (8:00 PM)
-  new Cron('0 20 * * *', { timezone: 'America/Caracas' }, async () => {
+  // Cron de Evaluación Diaria de la Máquina de Estados (5:50 AM)
+  new Cron('50 5 * * *', { timezone: 'America/Caracas' }, async () => {
     try {
       Logger.cron(
-        'Ejecutando evaluación diaria de la máquina de estados del scheduler (8:00 PM)...',
+        'Ejecutando evaluación diaria de la máquina de estados del scheduler (5:50 AM)...',
       )
       await InferenceEngine.evaluateDailyRules()
     } catch (error) {
@@ -1972,7 +2070,7 @@ async function initScheduler() {
   // Cron de cierre oficial diario (Media noche 12:01 AM)
   new Cron('1 0 * * *', { timezone: 'America/Caracas' }, async () => {
     try {
-      Logger.telemetry('Procesando Telemetría de las Estaciones Meteorológicas.')
+      Logger.telemetry('Procesando Telemetrías del Día.')
       const yesterday = new Date()
 
       yesterday.setDate(yesterday.getDate() - 1)
@@ -2251,36 +2349,43 @@ async function runTask(scheduleId: string) {
 }
 
 async function evaluateClimateTrends(lux: number, temp: number, hum: number, nowMs: number) {
-  // 1. Añadir al buffer continuo history
+  // 1. Añadir al buffer continuo history (guardamos hasta 100 muestras para cubrir 90m+)
   exteriorHistory.push({ lux, temp, hum, timestamp: nowMs })
-  if (exteriorHistory.length > 60) exteriorHistory.shift()
+  if (exteriorHistory.length > 100) exteriorHistory.shift()
 
-  // 2. Buscar la muestra más cercana a hace 15 minutos (rango de 12 a 18 minutos)
-  const targetTime = nowMs - 15 * 60 * 1000
+  // Mantener un buffer deslizante local en telemetryBuffer para baselines (hasta 100 muestras)
+  const lastSample = telemetryBuffer[telemetryBuffer.length - 1]
+
+  if (!lastSample || nowMs - lastSample.timestamp >= 30000) {
+    telemetryBuffer.push({
+      lux,
+      temp,
+      hum,
+      timestamp: nowMs,
+    })
+    if (telemetryBuffer.length > 120) telemetryBuffer.shift()
+  }
+
+  // 2. Buscar la muestra más cercana a hace 30 minutos (rango de 25 a 35 minutos)
+  const targetTime = nowMs - 30 * 60 * 1000
   let prevSample: { lux: number; temp: number; hum: number; timestamp: number } | null = null
   let minDiff = Infinity
 
   for (const sample of exteriorHistory) {
     const diff = Math.abs(sample.timestamp - targetTime)
 
-    if (diff < minDiff && diff <= 3 * 60 * 1000) {
-      // Tolerancia de +/- 3 min
+    if (diff < minDiff && diff <= 5 * 60 * 1000) {
+      // Tolerancia de +/- 5 min
       minDiff = diff
       prevSample = sample
     }
   }
 
-  // 3. Si no hay muestra de hace 15m, no podemos evaluar derivadas de 15m
+  // 3. Si no hay muestra de hace 30m, no podemos evaluar derivadas de 30m
   if (!prevSample) return
 
-  const dt = (nowMs - prevSample.timestamp) / 60000 // en minutos
-
-  if (dt <= 0) return
-
-  const dT_dt = (temp - prevSample.temp) / dt
-  const dL_dt = (lux - prevSample.lux) / dt
-  const dH_dt = (hum - prevSample.hum) / dt
-  const deltaH15 = hum - prevSample.hum
+  const deltaTemp30 = temp - prevSample.temp
+  const deltaHum30 = hum - prevSample.hum
 
   // Horario Caracas
   const now = new Date()
@@ -2293,113 +2398,201 @@ async function evaluateClimateTrends(lux: number, temp: number, hum: number, now
   const isDay = caracasHour >= 8 && caracasHour < 16 // Día Botánico
 
   // Detección de inicio de lluvia
-  if (!isCurrentlyRaining()) {
+  if (!isTelemetryRainActive) {
+    // Histéresis de 15 minutos tras el cierre
+    if (lastRainClosedAt !== null && nowMs - lastRainClosedAt < 15 * 60 * 1000) {
+      return
+    }
+
+    // Calcular baselines pre-lluvia basados en el lote previo (antigüedad de 10 a 22 minutos)
+    const tenMinMs = 10 * 60 * 1000
+    const twentyTwoMinMs = 22 * 60 * 1000
+
+    let baselineSamples = telemetryBuffer.filter((s) => {
+      const age = nowMs - s.timestamp
+
+      return age >= tenMinMs && age < twentyTwoMinMs
+    })
+
+    // Fallback: si no hay suficientes muestras por desfase o inicio, usar rango amplio (10 a 45 minutos)
+    if (baselineSamples.length === 0) {
+      baselineSamples = telemetryBuffer.filter((s) => {
+        const age = nowMs - s.timestamp
+
+        return age >= tenMinMs && age < 45 * 60 * 1000
+      })
+    }
+
+    let currentBaselineLux = lux
+    let currentBaselineTemp = temp
+    let currentBaselineHum = hum
+
+    if (baselineSamples.length > 0) {
+      // Baselines basados en el lote previo: máximo de lux y temp, mínimo de humedad
+      currentBaselineLux = Math.max(...baselineSamples.map((s) => s.lux))
+      currentBaselineTemp = Math.max(...baselineSamples.map((s) => s.temp))
+      currentBaselineHum = Math.min(...baselineSamples.map((s) => s.hum))
+    }
+
     if (isDay) {
-      // Caso A: Caída Drástica Cruzada
-      const caseA =
-        dT_dt <= -0.08 && (dL_dt <= -1000 || lux < 10000) && (hum >= 98.0 || dH_dt >= 0.2)
-      // Caso A.2: Subida rápida por lote (Lluvia Inminente)
-      const caseA2 = deltaH15 >= 10.0 && hum >= 85.0
-      // Caso B: Subida Abrupta de Humedad
-      const caseB = dH_dt >= 1.3 && lux < 15000
-      // Caso C: Lluvia sobre terreno húmedo (Clima Lluvioso Intermitente)
-      let caseC = false
-      const samplesLast20 = exteriorHistory.filter((s) => nowMs - s.timestamp <= 20 * 60 * 1000)
+      // Caída de lux a menos del 40% del valor baseline previo (si el baseline era > 10000 lux)
+      let luxCondition = true
 
-      if (samplesLast20.length >= 2) {
-        const allInWetRange = samplesLast20
-          .slice(0, -1)
-          .every((s) => s.hum >= 90.0 && s.hum <= 96.99)
-        const lastSample = samplesLast20[samplesLast20.length - 2]
-        const currentSample = samplesLast20[samplesLast20.length - 1]
-
-        if (allInWetRange && currentSample.hum - lastSample.hum >= 2.0) {
-          caseC = true
-        }
+      if (currentBaselineLux > 10000) {
+        luxCondition = lux < currentBaselineLux * 0.4
       }
 
-      if (caseA || caseA2 || caseB || caseC) {
-        let reason = ''
+      const isRainTriggered = deltaHum30 >= 12.0 && deltaTemp30 <= -3.0 && luxCondition
 
-        if (caseA) reason = 'Caso A (Caída Drástica Cruzada)'
-        else if (caseA2) reason = 'Caso A.2 (Subida Rápida de Humedad)'
-        else if (caseB) reason = 'Caso B (Subida Abrupta de Humedad)'
-        else if (caseC) reason = 'Caso C (Lluvia Intermitente)'
+      if (isRainTriggered) {
+        const dropPct =
+          currentBaselineLux > 0 ? ((currentBaselineLux - lux) / currentBaselineLux) * 100 : 0
 
         Logger.rain(
-          `Detección de Lluvia por Software [DÍA]: ${reason}. dT/dt=${dT_dt.toFixed(3)}°C/min, dL/dt=${dL_dt.toFixed(0)}lx/min, dH/dt=${dH_dt.toFixed(2)}%/min.`,
+          `Lluvia Inferida [DÍA]: deltaHR=${deltaHum30.toFixed(1)}%, deltaTemp=${deltaTemp30.toFixed(1)}°C, Lux actual: ${lux.toFixed(0)}lx vs baseline: ${currentBaselineLux.toFixed(0)}lx (caída del ${dropPct.toFixed(0)}%).`,
         )
 
         isTelemetryRainActive = true
         isRainOverridden = false
         rainStartedAt = nowMs
-
-        // Guardar baseline (mínimos de los últimos 45 minutos)
-        const freshSamples = telemetryBuffer.filter((s) => nowMs - s.timestamp < 45 * 60 * 1000)
-
-        if (freshSamples.length > 0) {
-          baselineLux = Math.min(...freshSamples.map((s) => s.lux))
-          baselineTemp = Math.min(...freshSamples.map((s) => s.temp))
-          baselineHum = Math.min(...freshSamples.map((s) => s.hum))
-          isWaitingForBaselineFallback = false
-        } else {
-          baselineLux = lux
-          baselineTemp = temp
-          baselineHum = hum
-          isWaitingForBaselineFallback = true
-        }
-
+        baselineLux = currentBaselineLux
+        baselineTemp = currentBaselineTemp
+        baselineHum = currentBaselineHum
         minLuxInRain = lux
         minTempInRain = temp
 
-        await openRainEvent()
+        await openRainEvent(
+          new Date(),
+          true,
+          { temp: baselineTemp, hum: baselineHum, lux: baselineLux },
+          `Inferencia de Día: Incremento de +${deltaHum30.toFixed(1)}% HR y caída térmica de ${deltaTemp30.toFixed(1)}°C en 30m (iluminancia cayó un ${dropPct.toFixed(0)}% a ${Math.round(lux).toLocaleString()} lx).`,
+        )
       }
     } else {
-      // Noche (4:01 PM - 7:59 AM)
-      const caseNocturnal = dT_dt <= -0.067 && hum >= 98.0 && deltaH15 >= 10.0
+      // Noche (4:00 PM - 8:00 AM)
+      const isRainTriggered = deltaHum30 >= 10.0 && deltaTemp30 <= -2.0
 
-      if (caseNocturnal) {
+      if (isRainTriggered) {
         Logger.rain(
-          `Detección de Lluvia por Software [NOCHE]: dT/dt=${dT_dt.toFixed(3)}°C/min, dH/dt=${dH_dt.toFixed(2)}%/min.`,
+          `Lluvia Inferida [NOCHE]: deltaHR=${deltaHum30.toFixed(1)}%, deltaTemp=${deltaTemp30.toFixed(1)}°C.`,
         )
+
         isTelemetryRainActive = true
         isRainOverridden = false
         rainStartedAt = nowMs
-        baselineTemp = temp
-        baselineHum = hum
+        baselineLux = currentBaselineLux
+        baselineTemp = currentBaselineTemp
+        baselineHum = currentBaselineHum
+        minLuxInRain = lux
         minTempInRain = temp
-        await openRainEvent()
+
+        await openRainEvent(
+          new Date(),
+          true,
+          { temp: baselineTemp, hum: baselineHum, lux: baselineLux },
+          `Inferencia de Noche: Incremento de +${deltaHum30.toFixed(1)}% HR y caída térmica de ${deltaTemp30.toFixed(1)}°C en 30m.`,
+        )
       }
     }
   } else {
-    // Si ya está lloviendo y es de día (8:00 AM - 4:00 PM), evaluamos la recuperación inteligente
-    if (isDay && isTelemetryRainActive) {
-      if (minLuxInRain === null || lux < minLuxInRain) minLuxInRain = lux
-      if (minTempInRain === null || temp < minTempInRain) minTempInRain = temp
+    // Si ya está lloviendo, evaluamos el cierre del evento
+    if (rainStartedAt !== null) {
+      const durationMin = (nowMs - rainStartedAt) / 60000
 
-      if (baselineTemp !== null && minTempInRain !== null) {
-        const preLux = baselineLux !== null ? baselineLux : 15000
-        const minLux = minLuxInRain !== null ? minLuxInRain : lux
-        const relativeDrop = Math.min(1.0, (preLux - minLux) / preLux)
-        const alpha = 1.0 - 0.3 * relativeDrop
-        const luxRecoveryThreshold = minLux + alpha * (preLux - minLux)
+      // 1. Timeout Absoluto (120 minutos)
+      if (durationMin >= 120) {
+        Logger.rain(`Cierre por Timeout Absoluto de 120 minutos.`)
+        isTelemetryRainActive = false
+        isRainOverridden = true
+        await closeRainEvent(
+          'TIMEOUT',
+          new Date(),
+          true,
+          'Lluvia finalizada tras timeout absoluto de 120 minutos.',
+        )
 
-        const preTemp = baselineTemp
-        const minTemp = minTempInRain
-        const tempRecoveryThreshold = minTemp + Math.max(0.5, 0.5 * (preTemp - minTemp))
+        return
+      }
 
-        const luxRecovery = lux >= luxRecoveryThreshold
-        const tempRecovery = temp >= tempRecoveryThreshold
-        const humRecovery = hum <= 95.0 && dH_dt <= 0.05
+      // 2. Atascamiento de Variables tras 60 minutos (Humedad Var <=1% y Temp Var <=0.4°C)
+      if (durationMin >= 60) {
+        const samplesLast60 = exteriorHistory.filter((s) => nowMs - s.timestamp <= 60 * 60 * 1000)
 
-        if (luxRecovery && tempRecovery && humRecovery) {
-          Logger.rain(
-            `Veto de lluvia inteligente (software): Recuperación detectada. Lux actual: ${lux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx, Temp actual: ${temp.toFixed(1)}°C >= ${tempRecoveryThreshold.toFixed(1)}°C, Hum actual: ${hum.toFixed(1)}% <= 95% (dH/dt=${dH_dt.toFixed(3)}%/min).`,
-          )
-          isTelemetryRainActive = false
-          isRainOverridden = true
-          lastVetoAt = nowMs
-          await closeRainEvent('SCHEDULER_OVERRIDE')
+        if (samplesLast60.length >= 45) {
+          const hums60 = samplesLast60.map((s) => s.hum)
+          const temps60 = samplesLast60.map((s) => s.temp)
+          const diffHum = Math.max(...hums60) - Math.min(...hums60)
+          const diffTemp = Math.max(...temps60) - Math.min(...temps60)
+
+          if (diffHum <= 1.0 && diffTemp <= 0.4) {
+            Logger.rain(
+              `Cierre por Atascamiento de Variables: Rango HR: ${diffHum.toFixed(1)}% <= 1.0%, Rango Temp: ${diffTemp.toFixed(1)}°C <= 0.4°C.`,
+            )
+            isTelemetryRainActive = false
+            isRainOverridden = true
+            await closeRainEvent(
+              'STAGNANT',
+              new Date(),
+              true,
+              `Estancamiento térmico (variación ≤0.4°C) e hídrico (variación ≤1.0% HR) en los últimos 60 minutos.`,
+            )
+
+            return
+          }
+        }
+      }
+
+      // Actualizar mínimos durante el evento de lluvia
+      minLuxInRain = Math.min(minLuxInRain ?? lux, lux)
+      minTempInRain = Math.min(minTempInRain ?? temp, temp)
+
+      // Criterios de cierre diurnos
+      if (isDay) {
+        // 3. Recuperación Hacia Baselines (Día)
+        if (baselineTemp !== null && baselineHum !== null) {
+          const tempRecovered = temp >= baselineTemp - 1.0
+          const humRecovered = hum <= baselineHum + 5.0
+
+          if (tempRecovered && humRecovered) {
+            Logger.rain(
+              `Cierre por Recuperación Hacia Baselines: Temp: ${temp.toFixed(1)}°C >= ${(baselineTemp - 1.0).toFixed(1)}°C, Hum: ${hum.toFixed(1)}% <= ${(baselineHum + 5.0).toFixed(1)}%.`,
+            )
+            isTelemetryRainActive = false
+            isRainOverridden = true
+            await closeRainEvent(
+              'BASELINE_RECOVERY',
+              new Date(),
+              true,
+              `Retorno a condiciones pre-lluvia: temperatura ≥ ${(baselineTemp - 1.0).toFixed(1)}°C y humedad ≤ ${(baselineHum + 5.0).toFixed(1)}% HR.`,
+            )
+
+            return
+          }
+        }
+
+        // 4. Recuperación Solar adaptativa por despeje (Día)
+        if (baselineLux !== null) {
+          const preLux = baselineLux
+          const minLux = minLuxInRain ?? lux
+          const relativeDrop = Math.min(1.0, (preLux - minLux) / preLux)
+          const alpha = 1.0 - 0.65 * relativeDrop
+          const luxRecoveryThreshold = minLux + alpha * (preLux - minLux)
+
+          if (lux >= luxRecoveryThreshold) {
+            Logger.rain(
+              `Cierre por Recuperación Solar: Lux: ${lux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx (Umbral adaptativo con alpha=${alpha.toFixed(2)}).`,
+            )
+            isTelemetryRainActive = false
+            isRainOverridden = true
+            await closeRainEvent(
+              'SOLAR_RECOVERY',
+              new Date(),
+              true,
+              `Despeje solar: iluminancia subió a ${Math.round(lux).toLocaleString()} lx (superó el umbral adaptativo de ${Math.round(luxRecoveryThreshold).toLocaleString()} lx, requiriendo un ${Math.round(alpha * 100)}% de recuperación de la caída de luz de ${Math.round(preLux - minLux).toLocaleString()} lx).`,
+            )
+
+            return
+          }
         }
       }
     }

@@ -8,7 +8,7 @@
   :root {
     /* ---- Light Mode ---- */
     /* black */
-    --color-black-and-white: black;
+    --color-black-and-white: oklch(0.2173 0.0127 264.27);
 
     /* Azul Tesla Principal: #3e6ae1 */
     --color-action: oklch(0.5605 0.1879 265.4);

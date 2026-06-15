@@ -25,7 +25,7 @@ export function buttonVariants({
     secondary: 'btn-secondary',
     ghost: 'btn-border-none', // Se comporta como ghost
     destructive:
-      'bg-red-600 text-white hover:bg-red-700 focus:shadow-[inset_0_0_0_2px_white] disabled:bg-red-400',
+      'bg-red-500/75 text-white hover:bg-red-500/85 focus:shadow-[inset_0_0_0_2px_white] disabled:bg-red-400',
   }
 
   const sizes = {
@@ -54,7 +54,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           size,
           className: clsx(className, {
             'cursor-wait opacity-70': isLoading,
-            'cursor-not-allowed opacity-80': disabled && !isLoading && variant === 'primary',
+            'cursor-not-allowed opacity-80': disabled && !isLoading,
           }),
         })}
         disabled={isDisabled}

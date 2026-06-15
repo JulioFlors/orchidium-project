@@ -875,3 +875,25 @@ Si utilizas Windows y PowerShell, puedes automatizar todo el flujo agregando est
    # o también
    git-merge-push
    ```
+
+┌────────────────────────────────────────────────────────┐
+│ Martes, 09 Jun. 2026                                   │
+├────────────────────────────────────────────────────────┤
+│ 🌄 Amanener (5:00 am - 8:00 am)                         │
+│                                                        │
+│ Máximo                Promedio     Minimo              │
+│ 18 klx 7:30 am        8.4 klx       0.1 klx 5:34 am    │
+│                                                        │
+├────────────────────────────────────────────────────────┤
+│ ☀️ Fotoperíodo (08:00 am - 04:00 pm)                    │
+│                                                        │
+│ Máximo                Promedio     Minimo              │
+│ 82.2 klx 12:34 am     40.4 klx     15.2 klx 8:00 am    │
+│                                                        │
+├────────────────────────────────────────────────────────┤
+│ 🌙 Atardecer (4:00 am - 7:00 am)                        │
+│                                                        │
+│ Máximo                Promedio     Minimo              │
+│ 12.2 klx 4:43 pm      4.4 klx      0.0 klx 6:50 pm     │
+│                                                        │
+└────────────────────────────────────────────────────────┘

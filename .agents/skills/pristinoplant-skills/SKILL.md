@@ -7,11 +7,25 @@ description: Protocolo maestro de desarrollo. Define convenciones git, manejo de
 
 > [!IMPORTANT]
 > **ACTIVACIONES OBLIGATORIAS AL INVOCAR**:
+>
 > - Activar `/caveman ultra`.
 > - Activar modo planificación.
 > - Se requiere autorización explícita para proceder con el plan.
 > - Cada modificación debe de planificarse previamente.
-
+>
+> [!IMPORTANT]
+> **HOOK DE INICIALIZACIÓN DE SPEC-DRIVEN DEVELOPMENT (SDD)**:
+>
+> Al instanciar esta skill, el agente asume la **responsabilidad autónoma de rastrear, controlar y guiar el avance del ciclo SDD**:
+>
+> 1. El agente debe detectar activamente la fase del ciclo en la que se encuentra el proyecto leyendo la existencia y estado de los artefactos en `.specify/features/<feature-active>/` (`spec.md`, `plan.md`, `tasks.md`).
+> 2. Si no hay una feature activa, el agente listará las carpetas en `.specify/features/` y consultará al usuario si desea **crear una nueva** o **retomar una existente**.
+> 3. Si hay una feature activa, el agente no debe esperar a que el usuario le indique qué comando correr. Debe auto-detectar:
+>    - Si `spec.md` existe pero no `plan.md` ➔ Avanzar automáticamente a proponer el **Plan de Implementación** (Fase 3: `plan.md`).
+>    - Si `plan.md` existe pero no `tasks.md` o no está aprobado ➔ Guiar al usuario hacia la aprobación e inicialización de la lista de **Tareas** (Fase 4: `tasks.md`).
+>    - Si `tasks.md` tiene tareas pendientes ➔ Proponer la continuación y ejecución de la siguiente tarea del checklist (Fase 5: **Implementar**).
+> 4. El agente presentará un resumen del estado del ciclo en cada interacción y propondrá el siguiente paso lógico para avanzar en el flujo.
+>
 > [!IMPORTANT]
 > **ESTÁNDARES DE MARKDOWN (PASO 8)**: Es mandatorio cumplir con el espaciado de encabezados y listas. El sistema de linting ahora está unificado bajo ESLint; asegúrate de ejecutar `pnpm lint:fix` antes de cualquier entrega importante.
 >

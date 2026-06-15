@@ -297,6 +297,24 @@ model DailyEnvironmentStat {
   minIllumTime        String?
   minIlluminance      Float?
   minTempTime         String?
+  minTempDay          Float?
+  minTempDayTime      String?
+  maxTempDay          Float?
+  maxTempDayTime      String?
+  avgHumDay           Float?
+  minHumDay           Float?
+  minHumDayTime       String?
+  maxHumDay           Float?
+  maxHumDayTime       String?
+  minTempNight        Float?
+  minTempNightTime    String?
+  maxTempNight        Float?
+  maxTempNightTime    String?
+  avgHumNight         Float?
+  minHumNight         Float?
+  minHumNightTime     String?
+  maxHumNight         Float?
+  maxHumNightTime     String?
   /// Balance hídrico: minutos totales de nebulización ejecutada en el día
   nebulizationMinutes Int?
   /// Conteo total de eventos de agua (riego + lluvia + nebulización)
@@ -307,6 +325,27 @@ model DailyEnvironmentStat {
   vpdMin              Float?
   /// Clasificación del tipo de día: EXTREMELY_SUNNY, SUNNY, TEMPERATE, OVERCAST, RAINY
   dayType             String?
+
+  // Iluminancia - Amanecer (05:00 am - 07:59 am)
+  avgIllumDawn        Float?
+  minIllumDawn        Float?
+  minIllumDawnTime    String?
+  maxIllumDawn        Float?
+  maxIllumDawnTime    String?
+
+  // Iluminancia - Fotoperíodo (08:00 am - 04:00 pm)
+  avgIllumDay         Float?
+  minIllumDay         Float?
+  minIllumDayTime     String?
+  maxIllumDay         Float?
+  maxIllumDayTime     String?
+
+  // Iluminancia - Atardecer (04:01 pm - 07:00 pm)
+  avgIllumDusk        Float?
+  minIllumDusk        Float?
+  minIllumDuskTime    String?
+  maxIllumDusk        Float?
+  maxIllumDuskTime    String?
 
   @@unique([date, zone])
   @@index([date])
@@ -328,6 +367,15 @@ model RainEvent {
   zone            ZoneType  @default(EXTERIOR)
   /// Motivo de cierre: "Dry" (normal), "ORPHAN_TIMEOUT" (sin señal 10min), "REBOOT" (boot con Dry)
   closedBy        String?
+  /// Indica si el evento fue detectado de forma inferida por las reglas climáticas cruzadas
+  isInfered       Boolean   @default(false)
+  /// Baselines de contorno previos al inicio del evento
+  baselineTemp    Float?
+  baselineHum     Float?
+  baselineLux     Float?
+  /// Registro de diagnóstico de apertura y cierre
+  triggerReason   String?
+  closeReason     String?
 
   @@unique([zone, startedAt])
   @@index([startedAt])

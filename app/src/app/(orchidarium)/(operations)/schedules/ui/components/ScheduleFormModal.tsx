@@ -14,6 +14,7 @@ import {
 } from './PlannerInputs'
 
 import { Modal, Button, FormField, Input } from '@/components/ui'
+import { useFormDraftStore } from '@/store'
 import { upsertSchedule } from '@/actions/planner/schedule-actions'
 import { getPrograms } from '@/actions/lab/programs'
 import { ZoneType, ZoneTypeLabels } from '@/config/mappings'
@@ -110,6 +111,9 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
     },
   })
 
+  const draftKey = 'schedule-form-draft'
+  const isRestoringRef = React.useRef(false)
+
   // Watch del propósito para mostrar cargadores/selectores dinámicos
   const currentPurpose = useWatch({ control, name: 'purpose' })
 
@@ -141,9 +145,11 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
     fetchPrograms()
   }, [isOpen])
 
+  // Cargar borrador/initialData al abrir
   useEffect(() => {
     if (isOpen) {
       if (initialData) {
+        isRestoringRef.current = true
         reset({
           id: initialData.id,
           name: initialData.name,
@@ -155,21 +161,52 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
           phytosanitaryProgramId: initialData.phytosanitaryProgramId || '',
           days: cronToDays(initialData.cronTrigger),
         })
+        requestAnimationFrame(() => {
+          isRestoringRef.current = false
+        })
       } else {
-        reset({
-          id: undefined,
-          name: '',
-          purpose: '' as 'HUMIDIFICATION',
-          time: '',
-          duration: '' as unknown as number,
-          zone: ZoneType.ZONA_A,
-          fertilizationProgramId: '',
-          phytosanitaryProgramId: '',
-          days: [],
-        } as ProgramFormInputs)
+        const savedDraft = useFormDraftStore.getState().getDraft(draftKey) as
+          | ProgramFormInputs
+          | undefined
+
+        isRestoringRef.current = true
+        reset(
+          savedDraft ?? {
+            id: undefined,
+            name: '',
+            purpose: '' as 'HUMIDIFICATION',
+            time: '',
+            duration: '' as unknown as number,
+            zone: ZoneType.ZONA_A,
+            fertilizationProgramId: '',
+            phytosanitaryProgramId: '',
+            days: [],
+          },
+        )
+        requestAnimationFrame(() => {
+          isRestoringRef.current = false
+        })
       }
     }
   }, [isOpen, initialData, reset])
+
+  // Persistir cambios del formulario de rutina
+  const watchedValues = useWatch({ control })
+  const watchedString = JSON.stringify(watchedValues)
+
+  useEffect(() => {
+    if (!isOpen || isRestoringRef.current || !!initialData) return
+
+    const currentDraft = useFormDraftStore.getState().getDraft(draftKey) as
+      | ProgramFormInputs
+      | undefined
+
+    if (JSON.stringify(currentDraft) !== watchedString) {
+      useFormDraftStore
+        .getState()
+        .setDraft(draftKey, JSON.parse(watchedString) as ProgramFormInputs)
+    }
+  }, [watchedString, isOpen, initialData])
 
   const onSubmit = async (data: ProgramFormInputs) => {
     try {
@@ -186,6 +223,7 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
       })
 
       if (res.success) {
+        useFormDraftStore.getState().clearDraft(draftKey)
         onSuccess()
         onClose()
       } else {

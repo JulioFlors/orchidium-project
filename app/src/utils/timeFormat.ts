@@ -19,11 +19,12 @@ export function formatTime12h(
 
     let formatted = formatter.format(date).toLowerCase()
 
-    // Normalizar a minúsculas y añadir espacio si es necesario
-    if (formatted.includes('a.m.')) formatted = formatted.replace('a.m.', 'a. m.')
-    if (formatted.includes('p.m.')) formatted = formatted.replace('p.m.', 'p. m.')
-    if (formatted.includes('am')) formatted = formatted.replace('am', 'a. m.')
-    if (formatted.includes('pm')) formatted = formatted.replace('pm', 'p. m.')
+    // Normalizar a minúsculas y eliminar espacios y puntos
+    formatted = formatted
+      .replace(/a\.\s*m\./gi, 'am')
+      .replace(/p\.\s*m\./gi, 'pm')
+      .replace(/a\s*m/gi, 'am')
+      .replace(/p\s*m/gi, 'pm')
 
     return formatted
   } catch {
@@ -79,7 +80,7 @@ export function formatRelativeHeartbeat(dateValue: string | Date | number): stri
   }
 
   if (diffHoursRaw < 48) {
-    return `Ayer, ${formatTime12h(date)}`
+    return 'Ayer'
   }
 
   const day = date.getDate().toString().padStart(2, '0')

@@ -290,7 +290,9 @@ def load_rtc_buffer():
         "is_sampling_lux": False,
         "wifi_failures": 0,
         "dht_failures": 0,
-        "lux_failures": 0
+        "lux_failures": 0,
+        "drift_rate": 0.0,
+        "last_sync_time": 0
     }
 
 def save_rtc_buffer(buffer_data):
@@ -310,6 +312,13 @@ def save_rtc_buffer(buffer_data):
 illuminance_Batch = RingBuffer(BATCH_SIZE)
 temperature_Batch = RingBuffer(BATCH_SIZE)
 humidity_Batch    = RingBuffer(BATCH_SIZE)
+
+# ---- Estructura de lotes de telemetría ----
+METRIC_BATCHES = [
+    ("illuminance", illuminance_Batch),
+    ("temperature", temperature_Batch),
+    ("humidity", humidity_Batch)
+]
 
 # ---- Función Auxiliar: Sincronizar Estado de RAM (Audit Mode) ----
 async def publish_audit_state():
@@ -759,13 +768,47 @@ async def mqtt_processor_task():
                 elif msg.startswith(b'{"time"'):
                     try:
                         import json
+                        import utime
                         from machine import RTC
                         data = json.loads(msg.decode('utf-8'))
                         if "time" in data:
-                            RTC().datetime(data["time"])
-                            if DEBUG: print(f"    └─ RTC Sincronizado: {data['time']}")
+                            t = data["time"]
+                            # Convertir tupla horaria del scheduler a epoch real
+                            # utime.mktime recibe: (year, month, day, hour, minute, second, weekday, yearday)
+                            real_epoch = utime.mktime((t[0], t[1], t[2], t[4], t[5], t[6], t[3], 0))
+                            local_epoch = utime.time()
+
+                            # Sincronizar el reloj físico
+                            RTC().datetime(t)
+                            if DEBUG: print(f"    └─ RTC Sincronizado: {t}")
+
+                            # Calcular error térmico acumulado
+                            rtc_data = load_rtc_buffer()
+                            if "drift_rate" not in rtc_data:
+                                rtc_data["drift_rate"] = 0.0
+                            if "last_sync_time" not in rtc_data:
+                                rtc_data["last_sync_time"] = 0
+
+                            last_sync = rtc_data["last_sync_time"]
+                            if last_sync > 0:
+                                elapsed_real = real_epoch - last_sync
+                                if elapsed_real > 300: # Ventana mínima de 5 minutos
+                                    error_sec = real_epoch - local_epoch
+                                    measured_drift_rate = error_sec / elapsed_real
+
+                                    # Filtrar valores espurios (límite +/- 10%)
+                                    if -0.1 <= measured_drift_rate <= 0.1:
+                                        old_drift = rtc_data["drift_rate"]
+                                        # EMA de 80% peso histórico, 20% peso actual
+                                        rtc_data["drift_rate"] = 0.8 * old_drift + 0.2 * measured_drift_rate
+                                        if DEBUG:
+                                            print(f"       ├─ Desviación medida: {error_sec}s en {elapsed_real}s")
+                                            print(f"       └─ drift_rate (EMA): {rtc_data['drift_rate']:.6f}")
+
+                            rtc_data["last_sync_time"] = real_epoch
+                            save_rtc_buffer(rtc_data)
                     except Exception as e:
-                        if DEBUG: print(f"    └─ ❌ Error sincronizando RTC: {e}")
+                        if DEBUG: print(f"    └─ ❌ Error sincronizando RTC y drift: {e}")
 
                 # 4. Control de Muestreo de Iluminancia (Día/Noche)
                 elif m_low.startswith(b"lux_sampling:"):
@@ -1089,35 +1132,15 @@ async def flush_telemetry_batches_async():
     if not (client and getattr(client, 'sock', None) and wlan and wlan.isconnected()):
         return
 
-    # 1. Illuminance
-    try:
-        async with mqtt_lock:
-            if client and getattr(client, 'sock', None):
-                if publish_single_batch("illuminance", illuminance_Batch):
-                    await asyncio.sleep_ms(500)
-    except Exception as e:
-        if DEBUG: print(f"⚠️ Fallo publicando illuminance batch: {e}")
-        await check_critical_mqtt_errors(e)
-
-    # 2. Temperature
-    try:
-        async with mqtt_lock:
-            if client and getattr(client, 'sock', None):
-                if publish_single_batch("temperature", temperature_Batch):
-                    await asyncio.sleep_ms(500)
-    except Exception as e:
-        if DEBUG: print(f"⚠️ Fallo publicando temperature batch: {e}")
-        await check_critical_mqtt_errors(e)
-
-    # 3. Humidity
-    try:
-        async with mqtt_lock:
-            if client and getattr(client, 'sock', None):
-                if publish_single_batch("humidity", humidity_Batch):
-                    await asyncio.sleep_ms(500)
-    except Exception as e:
-        if DEBUG: print(f"⚠️ Fallo publicando humidity batch: {e}")
-        await check_critical_mqtt_errors(e)
+    for name, batch in METRIC_BATCHES:
+        try:
+            async with mqtt_lock:
+                if client and getattr(client, 'sock', None):
+                    if publish_single_batch(name, batch):
+                        await asyncio.sleep_ms(500)
+        except Exception as e:
+            if DEBUG: print(f"⚠️ Fallo publicando {name} batch: {e}")
+            await check_critical_mqtt_errors(e)
 
 # ---- Utilidades de Telemetría: Publica de manera sincrona todos los batches ----
 def flush_telemetry_batches():
@@ -1126,29 +1149,32 @@ def flush_telemetry_batches():
         return
     from utime import sleep_ms
 
-    # 1. Illuminance
-    try:
-        if client and getattr(client, 'sock', None):
-            if publish_single_batch("illuminance", illuminance_Batch):
-                sleep_ms(300)
-    except Exception as e:
-        if DEBUG: print(f"⚠️ Fallo publicando illuminance batch (síncrono): {e}")
+    for name, batch in METRIC_BATCHES:
+        try:
+            if client and getattr(client, 'sock', None):
+                if publish_single_batch(name, batch):
+                    sleep_ms(300)
+        except Exception as e:
+            if DEBUG: print(f"⚠️ Fallo publicando {name} batch (síncrono): {e}")
 
-    # 2. Temperature
-    try:
-        if client and getattr(client, 'sock', None):
-            if publish_single_batch("temperature", temperature_Batch):
-                sleep_ms(300)
-    except Exception as e:
-        if DEBUG: print(f"⚠️ Fallo publicando temperature batch (síncrono): {e}")
-
-    # 3. Humidity
-    try:
-        if client and getattr(client, 'sock', None):
-            if publish_single_batch("humidity", humidity_Batch):
-                sleep_ms(300)
-    except Exception as e:
-        if DEBUG: print(f"⚠️ Fallo publicando humidity batch (síncrono): {e}")
+# ---- FUNCIÓN AUXILIAR: Backoff Adaptativo MQTT (DRY) ----
+def handle_mqtt_backoff(failures_count, context="conexion"):
+    """
+    Calcula y aplica el backoff exponencial de red.
+    Libera memoria RAM antes de retornar el retardo.
+    """
+    from gc import collect
+    
+    wait_time = min(30 * failures_count, 120)
+    if DEBUG:
+        if context == "conexion":
+            print(f"⚠️  {Colors.YELLOW}Backoff:{Colors.RESET} {failures_count} fallos de conexión seguidos.")
+            print(f"    └─ Esperando {wait_time}s para liberar RAM y estabilizar red.")
+        else:
+            print(f"⚠️  Sesión MQTT perdida. Esperando {wait_time}s.")
+            
+    collect()
+    return wait_time
 
 # ---- CORRUTINA: Gestión de Conexión MQTT (Nodo EMA) ----
 async def mqtt_connector_task(client_id):
@@ -1289,13 +1315,8 @@ async def mqtt_connector_task(client_id):
                 force_disconnect_mqtt()
                 wifi_reset_event.set()
 
-                # ---- Backoff Adaptativo Unificado ----
-                wait_time = min(30 * consecutive_mqtt_failures, 120)
-                if DEBUG:
-                    print(f"⚠️  {Colors.YELLOW}Backoff:{Colors.RESET} {consecutive_mqtt_failures} fallos de conexión seguidos.")
-                    print(f"    └─ Esperando {wait_time}s para liberar RAM y estabilizar red.")
-                
-                collect()
+                # ---- Backoff Adaptativo Unificado (DRY) ----
+                wait_time = handle_mqtt_backoff(consecutive_mqtt_failures, context="conexion")
                 await asyncio.sleep(wait_time)
                 while wlan is None or not wlan.isconnected():
                     await asyncio.sleep(1)
@@ -1347,13 +1368,50 @@ async def mqtt_connector_task(client_id):
                 await check_critical_mqtt_errors(e)
                 force_disconnect_mqtt()
                 consecutive_mqtt_failures += 1
-                wait_time = min(30 * consecutive_mqtt_failures, 120)
-                if DEBUG:
-                    print(f"⚠️  Sesión MQTT perdida. Esperando {wait_time}s.")
+                
+                # ---- Backoff Adaptativo Unificado (DRY) ----
+                wait_time = handle_mqtt_backoff(consecutive_mqtt_failures, context="perdida_sesion")
                 await asyncio.sleep(wait_time)
                 continue
 
         await asyncio.sleep(MQTT_CHECK_INTERVAL)
+
+# ---- FUNCIÓN AUXILIAR: Espera de Ventana de Sincronización ----
+async def wait_for_sync_window(timeout_ms, wdt=None):
+    """
+    Espera comandos del Scheduler en un bucle cooperativo hasta recibir sleep o alcanzar el timeout.
+    Permite alimentar el watchdog de hardware de forma regular y extiende la ventana al recibir comandos.
+    """
+    global sync_event, sleep_received
+    from utime import ticks_ms, ticks_diff
+    import uasyncio as asyncio
+
+    sync_event.clear()
+    start_time = ticks_ms()
+
+    while not sleep_received:
+        elapsed = ticks_diff(ticks_ms(), start_time)
+        remaining_ms = timeout_ms - elapsed
+        if remaining_ms <= 0:
+            if DEBUG: print(f"\n⚠️  Timeout de sincronización con el Scheduler ({timeout_ms // 1000}s)")
+            break
+
+        sync_event.clear()
+        try:
+            # Esperamos al evento en segundos
+            await asyncio.wait_for(sync_event.wait(), remaining_ms / 1000.0)
+            if wdt: wdt.feed()
+
+            # Si se recibió un comando que no es sleep, extendemos la ventana de vigilia
+            if not sleep_received:
+                if DEBUG: print(f"\n🔄 Extendiendo ventana de sincronización por {timeout_ms // 1000} segundos.")
+                start_time = ticks_ms()
+        except asyncio.TimeoutError:
+            if DEBUG: print(f"\n⚠️  Timeout de sincronización con el Scheduler ({timeout_ms // 1000}s)")
+            break
+        except Exception as e:
+            if DEBUG: print(f"⚠️  Error esperando comandos en ventana: {e}")
+            break
 
 # ---- CORUTINA AUXILIAR: Transmisión y Sincronización ----
 async def transmit_and_sync():
@@ -1385,32 +1443,7 @@ async def transmit_and_sync():
         await flush_telemetry_batches_async()
         
         # Ventana de sincronización de 60s
-        sync_event.clear()
-        start_time = ticks_ms()
-        timeout_ms = const(60000)
-
-        while not sleep_received:
-            elapsed = ticks_diff(ticks_ms(), start_time)
-            remaining_ms = timeout_ms - elapsed
-            if remaining_ms <= 0:
-                if DEBUG: print("\n⚠️  Timeout de sincronización con el Scheduler (30s)")
-                break
-                
-            sync_event.clear()
-            try:
-                # Esperamos al evento en segundos
-                await asyncio.wait_for(sync_event.wait(), remaining_ms / 1000.0)
-                
-                # Si se recibió un comando que no es sleep, extendemos la ventana de vigilia
-                if not sleep_received:
-                    if DEBUG: print("🔄 Comando recibido. Extendiendo ventana de sincronización por 60 segundos.")
-                    start_time = ticks_ms()
-            except asyncio.TimeoutError:
-                if DEBUG: print("\n⚠️  Timeout de sincronización con el Scheduler")
-                break
-            except Exception as e:
-                if DEBUG: print(f"⚠️  Error esperando comandos: {e}")
-                break
+        await wait_for_sync_window(60000)
 
     except asyncio.TimeoutError:
         if DEBUG: print("\n⚠️  No se pudo establecer conexión (Timeout 45s)")
@@ -1644,7 +1677,6 @@ async def main_transmission():
         # leemos los sensores físicos para presentarnos al Scheduler con telemetrías válidas.
         from machine import RTC
         if RTC().datetime()[0] < 2026:
-            if DEBUG: print("\n🌡️  Primer boot: Inicializando y leyendo sensores físicos de prueba...")
             global IS_SAMPLING_LUX
             old_sampling = IS_SAMPLING_LUX
             IS_SAMPLING_LUX = True
@@ -1659,44 +1691,16 @@ async def main_transmission():
 
         # Esperar conexión MQTT
         await asyncio.wait_for(mqtt_connected_event.wait(), 60)
-        if DEBUG: print("\n📡 Conectado a MQTT. Esperando que finalice el envío de batches...")
 
         # Esperar que los RingBuffers de batches se vacíen
         for _ in range(30):
             if temperature_Batch.count == 0 and humidity_Batch.count == 0 and (not IS_SAMPLING_LUX or illuminance_Batch.count == 0):
-                if DEBUG: print("📊 Telemetrías enviadas con éxito a Ingest.")
                 break
             await asyncio.sleep(1)
             if wdt: wdt.feed()
 
-        # Ventana de sincronización inteligente (espera a sleep o timeout de 20s)
-        if DEBUG: print("⏰ Ventana de sincronización abierta...")
-        sync_event.clear()
-        start_time = utime.ticks_ms()
-        sync_timeout_ms = 20000
-
-        while not sleep_received:
-            elapsed = utime.ticks_diff(utime.ticks_ms(), start_time)
-            remaining_ms = sync_timeout_ms - elapsed
-            if remaining_ms <= 0:
-                if DEBUG: print("\n⚠️  Timeout de ventana de sincronización con el Scheduler")
-                break
-                
-            sync_event.clear()
-            try:
-                # Esperamos al evento en segundos
-                await asyncio.wait_for(sync_event.wait(), remaining_ms / 1000.0)
-                if wdt: wdt.feed()
-                
-                # Si se recibió un comando que no es sleep, extendemos la ventana de vigilia
-                if not sleep_received:
-                    if DEBUG: print("🔄 Comando recibido. Extendiendo ventana de sincronización por 20 segundos.")
-                    start_time = utime.ticks_ms()
-            except asyncio.TimeoutError:
-                break
-            except Exception as e:
-                if DEBUG: print(f"⚠️  Error esperando comandos en ventana: {e}")
-                break
+        # Ventana de sincronización inteligente (espera a sleep o timeout de 30s)
+        await wait_for_sync_window(30000, wdt)
 
         # Limpiar buffers de telemetría transmitida en el RTC RAM
         rtc_data = load_rtc_buffer()
@@ -1719,10 +1723,23 @@ async def main_transmission():
         if sec_to_next < 30:
             sec_to_next += 300
 
-        if DEBUG: print(f"💤 Transmisión terminada. Entrando en Deep Sleep por {sec_to_next} segundos.")
+        # Compensar drift térmico del oscilador RC interno
+        rtc_data = load_rtc_buffer()
+        drift_rate = rtc_data.get("drift_rate", 0.0)
+        if not (-0.1 <= drift_rate <= 0.1):
+            drift_rate = 0.0
+
+        sec_to_sleep = int(sec_to_next * (1.0 + drift_rate))
+        if sec_to_sleep < 10:
+            sec_to_sleep = sec_to_next
+
+        if DEBUG:
+            print(f"💤 Transmisión terminada. sec_to_next={sec_to_next}s | drift_rate={drift_rate:.6f}")
+            print(f"💤 Entrando en Deep Sleep por {sec_to_sleep} segundos reales de hardware.")
+
         await asyncio.sleep_ms(200) # Flush sockets
         import machine
-        machine.deepsleep(sec_to_next * 1000)
+        machine.deepsleep(sec_to_sleep * 1000)
 
 # ---- CORUTINA: Modo Continuo (Auditoría) ----
 async def main_async():
@@ -1802,7 +1819,6 @@ def run_cycle():
     # Si el reloj no está sincronizado, forzamos una conexión inmediata no bloqueante para
     # presentarnos al Scheduler, sincronizar el RTC y obtener el estado real de is_sampling_lux.
     if not is_clock_synced:
-        if DEBUG: print("🚀 Primer arranque o desincronización horaria detectada. Conectando al Scheduler...")
         try:
             asyncio.run(main_transmission())
             # Recargar estados del RTC tras sincronización exitosa
@@ -1851,7 +1867,7 @@ def run_cycle():
         return
 
     # CASO B: Muestreo en Deep Sleep (Bajo Consumo)
-    if DEBUG: print(f"\n💤 [Bajo Consumo] Iniciando toma de muestras offline... Lux sampling: {should_sample_lux} (RTC hora: {current_hour}h)")
+    if DEBUG: print(f"\n💤 [Bajo Consumo] Iniciando toma de muestras offline. Lux sampling: {should_sample_lux} (RTC hora: {current_hour}h)")
 
     # Configurar y energizar sensores
     Pin(PIN_DHT_VCC, Pin.OUT).value(1)
@@ -1901,7 +1917,7 @@ def run_cycle():
     dht_fail = rtc_data.get("dht_failures", 0)
     lux_fail = rtc_data.get("lux_failures", 0)
     if dht_fail >= 3 or (should_sample_lux and lux_fail >= 3):
-        if DEBUG: print("⚠️ Fallos de sensores consecutivos. Ejecutando Hard Reset Físico...")
+        if DEBUG: print("⚠️ Fallos de sensores consecutivos. Ejecutando Hard Reset Físico.")
         utime.sleep_ms(2000)
         # Volver a alimentar
         Pin(PIN_DHT_VCC, Pin.OUT).value(1)
@@ -1960,7 +1976,7 @@ def run_cycle():
 
     is_top_of_hour = (dt[5] == 0) if is_clock_synced else False
     if samples_count >= BATCH_SIZE or (is_top_of_hour and samples_count > 0):
-        if DEBUG: print("🚀 Límite de muestras o alineación horaria alcanzado. Iniciando transmisión asíncrona...")
+        if DEBUG: print("🚀 Límite de muestras o alineación horaria alcanzado. Iniciando transmisión asíncrona.")
         
         # Hidratar colas globales de RingBuffer para transmisión
         for ts, val in rtc_data["temp"]:
@@ -1990,9 +2006,21 @@ def run_cycle():
         if sec_to_next < 30:
             sec_to_next += 300
 
-        if DEBUG: print(f"💤 Ciclo finalizado. Entrando en Deep Sleep por {sec_to_next} segundos.")
+        # Compensar drift térmico del oscilador RC interno
+        drift_rate = rtc_data.get("drift_rate", 0.0)
+        if not (-0.1 <= drift_rate <= 0.1):
+            drift_rate = 0.0
+
+        sec_to_sleep = int(sec_to_next * (1.0 + drift_rate))
+        if sec_to_sleep < 10:
+            sec_to_sleep = sec_to_next
+
+        if DEBUG:
+            print(f"💤 Ciclo finalizado. sec_to_next={sec_to_next}s | drift_rate={drift_rate:.6f}")
+            print(f"💤 Entrando en Deep Sleep por {sec_to_sleep} segundos reales de hardware.")
+
         utime.sleep_ms(100) # Pausa breve para vaciar UART
-        machine.deepsleep(sec_to_next * 1000)
+        machine.deepsleep(sec_to_sleep * 1000)
 
 # ---- Detener Programa (Ctrl+C) ----
 def stopped_program():

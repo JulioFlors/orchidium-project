@@ -147,7 +147,7 @@ export const ZoneCapabilities: Record<TaskPurpose, ZoneType[]> = {
  */
 export const TaskStatusStyles: Record<TaskStatus, string> = {
   // 1. Fase de Gestación (Azules y Violetas)
-  [TaskStatus.PENDING]: 'text-blue-500',
+  [TaskStatus.PENDING]: 'text-blue-600 dark:text-blue-400',
   [TaskStatus.WAITING_CONFIRMATION]: 'text-violet-500',
 
   // 2. Fase de Conectividad (Indigo y Cian)

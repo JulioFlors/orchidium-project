@@ -58,11 +58,12 @@ function formatTimeLabel(raw: unknown): string {
 
     let formatted = formatter.format(d).toLowerCase()
 
-    // Normalizar a minúsculas y añadir espacio si es necesario
-    if (formatted.includes('a.m.')) formatted = formatted.replace('a.m.', 'a. m.')
-    if (formatted.includes('p.m.')) formatted = formatted.replace('p.m.', 'p. m.')
-    if (formatted.includes('am')) formatted = formatted.replace('am', 'a. m.')
-    if (formatted.includes('pm')) formatted = formatted.replace('pm', 'p. m.')
+    // Normalizar a minúsculas y eliminar espacios y puntos
+    formatted = formatted
+      .replace(/a\.\s*m\./gi, 'am')
+      .replace(/p\.\s*m\./gi, 'pm')
+      .replace(/a\s*m/gi, 'am')
+      .replace(/p\s*m/gi, 'pm')
 
     return formatted
   } catch {
@@ -329,6 +330,20 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
         entry.max_temperature = stat.maxTemperature
         entry.min_temperature_time = stat.minTempTime
         entry.max_temperature_time = stat.maxTempTime
+
+        // Diurnas (08:00 AM - 04:00 PM)
+        entry.min_temp_day = stat.minTempDay
+        entry.min_temp_day_time = stat.minTempDayTime
+        entry.max_temp_day = stat.maxTempDay
+        entry.max_temp_day_time = stat.maxTempDayTime
+        entry.avg_temp_day = stat.avgTempDay
+
+        // Nocturnas (07:00 PM - 05:59 AM)
+        entry.min_temp_night = stat.minTempNight
+        entry.min_temp_night_time = stat.minTempNightTime
+        entry.max_temp_night = stat.maxTempNight
+        entry.max_temp_night_time = stat.maxTempNightTime
+        entry.avg_temp_night = stat.avgTempNight
       }
       if (fieldsToQuery.includes('humidity')) {
         entry.humidity = stat.avgHumidity
@@ -336,6 +351,20 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
         entry.max_humidity = stat.maxHumidity
         entry.min_humidity_time = stat.minHumTime
         entry.max_humidity_time = stat.maxHumTime
+
+        // Diurnas (08:00 AM - 04:00 PM)
+        entry.avg_hum_day = stat.avgHumDay
+        entry.min_hum_day = stat.minHumDay
+        entry.min_hum_day_time = stat.minHumDayTime
+        entry.max_hum_day = stat.maxHumDay
+        entry.max_hum_day_time = stat.maxHumDayTime
+
+        // Nocturnas (07:00 PM - 05:59 AM)
+        entry.avg_hum_night = stat.avgHumNight
+        entry.min_hum_night = stat.minHumNight
+        entry.min_hum_night_time = stat.minHumNightTime
+        entry.max_hum_night = stat.maxHumNight
+        entry.max_hum_night_time = stat.maxHumNightTime
       }
       if (fieldsToQuery.includes('illuminance')) {
         entry.illuminance = stat.avgIlluminance
@@ -343,6 +372,25 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
         entry.max_illuminance = stat.maxIlluminance
         entry.min_illuminance_time = stat.minIllumTime
         entry.max_illuminance_time = stat.maxIllumTime
+
+        // Nuevos campos de Iluminancia Desglosada
+        entry.avg_illum_dawn = stat.avgIllumDawn
+        entry.min_illum_dawn = stat.minIllumDawn
+        entry.min_illum_dawn_time = stat.minIllumDawnTime
+        entry.max_illum_dawn = stat.maxIllumDawn
+        entry.max_illum_dawn_time = stat.maxIllumDawnTime
+
+        entry.avg_illum_day = stat.avgIllumDay
+        entry.min_illum_day = stat.minIllumDay
+        entry.min_illum_day_time = stat.minIllumDayTime
+        entry.max_illum_day = stat.maxIllumDay
+        entry.max_illum_day_time = stat.maxIllumDayTime
+
+        entry.avg_illum_dusk = stat.avgIllumDusk
+        entry.min_illum_dusk = stat.minIllumDusk
+        entry.min_illum_dusk_time = stat.minIllumDuskTime
+        entry.max_illum_dusk = stat.maxIllumDusk
+        entry.max_illum_dusk_time = stat.maxIllumDuskTime
       }
       if (fieldsToQuery.includes('rain_intensity')) {
         entry.rain_intensity = stat.avgRainIntensity ?? (stat.totalRainDuration > 0 ? 100 : 0)
@@ -389,10 +437,12 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
           }
 
           fieldsToQuery.forEach((f) => {
-            let values = rawRows
+            const rawValues = rawRows
               .filter((r) => r[f] != null && r[f] !== '')
               .map((r) => ({ val: Number(r[f]), time: r.time }))
               .filter((v) => !isNaN(v.val))
+
+            let values = [...rawValues]
 
             // Aplicar filtro botánico (08:00:00 - 16:00:59) solo para Iluminancia en el punto de "Hoy"
             if (f === 'illuminance') {
@@ -428,6 +478,179 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
               todayEntry[`max_${f}`] = maxV
               todayEntry[`min_${f}_time`] = formatTimeLabel(minT)
               todayEntry[`max_${f}_time`] = formatTimeLabel(maxT)
+
+              // Calcular sub-desgloses para Temperatura y Humedad
+              if (f === 'temperature' || f === 'humidity') {
+                const valuesDay = values.filter((v) => {
+                  const dDate = new Date(safeTimeToISO(v.time))
+                  const hour = (dDate.getUTCHours() - 4 + 24) % 24
+                  const min = dDate.getUTCMinutes()
+
+                  return (hour >= 8 && hour < 16) || (hour === 16 && min === 0)
+                })
+
+                const valuesNight = values.filter((v) => {
+                  const dDate = new Date(safeTimeToISO(v.time))
+                  const hour = (dDate.getUTCHours() - 4 + 24) % 24
+
+                  return hour >= 19 || hour <= 5
+                })
+
+                if (valuesDay.length > 0) {
+                  let minVD = valuesDay[0].val,
+                    maxVD = valuesDay[0].val,
+                    sumD = 0
+                  let minTD = valuesDay[0].time,
+                    maxTD = valuesDay[0].time
+
+                  valuesDay.forEach((v) => {
+                    if (v.val < minVD) {
+                      minVD = v.val
+                      minTD = v.time
+                    }
+                    if (v.val > maxVD) {
+                      maxVD = v.val
+                      maxTD = v.time
+                    }
+                    sumD += v.val
+                  })
+                  todayEntry[`min_${f}_day`] = minVD
+                  todayEntry[`max_${f}_day`] = maxVD
+                  todayEntry[`avg_${f}_day`] = sumD / valuesDay.length
+                  todayEntry[`min_${f}_day_time`] = formatTimeLabel(minTD)
+                  todayEntry[`max_${f}_day_time`] = formatTimeLabel(maxTD)
+                }
+
+                if (valuesNight.length > 0) {
+                  let minVN = valuesNight[0].val,
+                    maxVN = valuesNight[0].val,
+                    sumN = 0
+                  let minTN = valuesNight[0].time,
+                    maxTN = valuesNight[0].time
+
+                  valuesNight.forEach((v) => {
+                    if (v.val < minVN) {
+                      minVN = v.val
+                      minTN = v.time
+                    }
+                    if (v.val > maxVN) {
+                      maxVN = v.val
+                      maxTN = v.time
+                    }
+                    sumN += v.val
+                  })
+                  todayEntry[`min_${f}_night`] = minVN
+                  todayEntry[`max_${f}_night`] = maxVN
+                  todayEntry[`avg_${f}_night`] = sumN / valuesNight.length
+                  todayEntry[`min_${f}_night_time`] = formatTimeLabel(minTN)
+                  todayEntry[`max_${f}_night_time`] = formatTimeLabel(maxTN)
+                }
+              }
+
+              // Calcular sub-desgloses para Iluminancia
+              if (f === 'illuminance') {
+                const valuesDawn = rawValues.filter((v) => {
+                  const dDate = new Date(safeTimeToISO(v.time))
+                  const hour = (dDate.getUTCHours() - 4 + 24) % 24
+
+                  return hour >= 6 && hour < 8
+                })
+
+                const valuesDay = rawValues.filter((v) => {
+                  const dDate = new Date(safeTimeToISO(v.time))
+                  const hour = (dDate.getUTCHours() - 4 + 24) % 24
+                  const min = dDate.getUTCMinutes()
+
+                  return (hour >= 8 && hour < 16) || (hour === 16 && min === 0)
+                })
+
+                const valuesDusk = rawValues.filter((v) => {
+                  const dDate = new Date(safeTimeToISO(v.time))
+                  const hour = (dDate.getUTCHours() - 4 + 24) % 24
+                  const min = dDate.getUTCMinutes()
+
+                  return (
+                    (hour === 16 && min > 0) ||
+                    (hour >= 17 && hour < 18) ||
+                    (hour === 18 && min === 0)
+                  )
+                })
+
+                if (valuesDawn.length > 0) {
+                  let minVDawn = valuesDawn[0].val,
+                    maxVDawn = valuesDawn[0].val,
+                    sumDawn = 0
+                  let minTDawn = valuesDawn[0].time,
+                    maxTDawn = valuesDawn[0].time
+
+                  valuesDawn.forEach((v) => {
+                    if (v.val < minVDawn) {
+                      minVDawn = v.val
+                      minTDawn = v.time
+                    }
+                    if (v.val > maxVDawn) {
+                      maxVDawn = v.val
+                      maxTDawn = v.time
+                    }
+                    sumDawn += v.val
+                  })
+                  todayEntry[`min_illum_dawn`] = minVDawn
+                  todayEntry[`max_illum_dawn`] = maxVDawn
+                  todayEntry[`avg_illum_dawn`] = sumDawn / valuesDawn.length
+                  todayEntry[`min_illum_dawn_time`] = formatTimeLabel(minTDawn)
+                  todayEntry[`max_illum_dawn_time`] = formatTimeLabel(maxTDawn)
+                }
+
+                if (valuesDay.length > 0) {
+                  let minVDay = valuesDay[0].val,
+                    maxVDay = valuesDay[0].val,
+                    sumDay = 0
+                  let minTDay = valuesDay[0].time,
+                    maxTDay = valuesDay[0].time
+
+                  valuesDay.forEach((v) => {
+                    if (v.val < minVDay) {
+                      minVDay = v.val
+                      minTDay = v.time
+                    }
+                    if (v.val > maxVDay) {
+                      maxVDay = v.val
+                      maxTDay = v.time
+                    }
+                    sumDay += v.val
+                  })
+                  todayEntry[`min_illum_day`] = minVDay
+                  todayEntry[`max_illum_day`] = maxVDay
+                  todayEntry[`avg_illum_day`] = sumDay / valuesDay.length
+                  todayEntry[`min_illum_day_time`] = formatTimeLabel(minTDay)
+                  todayEntry[`max_illum_day_time`] = formatTimeLabel(maxTDay)
+                }
+
+                if (valuesDusk.length > 0) {
+                  let minVDusk = valuesDusk[0].val,
+                    maxVDusk = valuesDusk[0].val,
+                    sumDusk = 0
+                  let minTDusk = valuesDusk[0].time,
+                    maxTDusk = valuesDusk[0].time
+
+                  valuesDusk.forEach((v) => {
+                    if (v.val < minVDusk) {
+                      minVDusk = v.val
+                      minTDusk = v.time
+                    }
+                    if (v.val > maxVDusk) {
+                      maxVDusk = v.val
+                      maxTDusk = v.time
+                    }
+                    sumDusk += v.val
+                  })
+                  todayEntry[`min_illum_dusk`] = minVDusk
+                  todayEntry[`max_illum_dusk`] = maxVDusk
+                  todayEntry[`avg_illum_dusk`] = sumDusk / valuesDusk.length
+                  todayEntry[`min_illum_dusk_time`] = formatTimeLabel(minTDusk)
+                  todayEntry[`max_illum_dusk_time`] = formatTimeLabel(maxTDusk)
+                }
+              }
             }
           })
           allData.push(todayEntry)
@@ -593,9 +816,17 @@ export async function getRainSummaryInternal(range: string, zone: ZoneType) {
     })
 
     const events = rainEvents.map((ev) => ({
+      id: ev.id,
       time: ev.startedAt.toISOString(),
       duration: ev.durationSeconds || 0,
       intensity: ev.avgIntensity || ev.peakIntensity || 0,
+      isInfered: ev.isInfered,
+      isVirtual: ev.isInfered, // Retrocompatibilidad
+      baselineTemp: ev.baselineTemp,
+      baselineHum: ev.baselineHum,
+      baselineLux: ev.baselineLux,
+      triggerReason: ev.triggerReason,
+      closeReason: ev.closeReason,
     }))
 
     const totalDuration = rainEvents.reduce((acc, ev) => acc + (ev.durationSeconds || 0), 0)
@@ -604,14 +835,17 @@ export async function getRainSummaryInternal(range: string, zone: ZoneType) {
       0,
     )
 
-    const activeEvent = rainEvents.find((ev) => ev.endedAt === null)
+    const activePhysicalEvent = rainEvents.find((ev) => ev.endedAt === null && !ev.isInfered)
+    const activeInferredEvent = rainEvents.find((ev) => ev.endedAt === null && ev.isInfered)
 
     return {
       totalDurationSeconds: totalDuration,
       averageIntensity: rainEvents.length > 0 ? Math.round(totalIntensity / rainEvents.length) : 0,
       eventCount: rainEvents.length,
-      isActive: !!activeEvent,
-      activeEventId: activeEvent?.id || null,
+      isActive: !!activePhysicalEvent,
+      activeEventId: activePhysicalEvent?.id || null,
+      activeInferredEventId: activeInferredEvent?.id || null,
+      isInferredActive: !!activeInferredEvent,
       events,
     }
   } catch (error: unknown) {
@@ -622,6 +856,76 @@ export async function getRainSummaryInternal(range: string, zone: ZoneType) {
       averageIntensity: 0,
       eventCount: 0,
       events: [],
+      isActive: false,
+      activeEventId: null,
+      activeInferredEventId: null,
+      isInferredActive: false,
     }
+  }
+}
+
+/**
+ * Obtiene la telemetría detallada de InfluxDB correspondiente a un evento de lluvia.
+ * Retorna datos desde startedAt - 15m hasta endedAt + 15m para graficación cruzada.
+ */
+export async function getRainEventTelemetryInternal(eventId: string) {
+  try {
+    const event = await prisma.rainEvent.findUnique({
+      where: { id: eventId },
+    })
+
+    if (!event) {
+      Logger.error(`Evento de lluvia ${eventId} no encontrado en Postgres`)
+
+      return null
+    }
+
+    const startedAtMs = event.startedAt.getTime()
+    const endedAtMs = event.endedAt ? event.endedAt.getTime() : Date.now()
+
+    // Margen de 15 minutos antes y después para ver la dinámica previa/posterior
+    const startIso = new Date(startedAtMs - 15 * 60 * 1000).toISOString()
+    const endIso = new Date(endedAtMs + 15 * 60 * 1000).toISOString()
+
+    const query = `
+      SELECT time, temperature, humidity, illuminance
+      FROM environment_metrics
+      WHERE zone = 'EXTERIOR'
+        AND time >= TIMESTAMP '${startIso}'
+        AND time <= TIMESTAMP '${endIso}'
+      ORDER BY time ASC
+    `
+
+    const reader = influxClient.query(query)
+    const data: Record<string, unknown>[] = []
+
+    for await (const row of reader as AsyncIterable<InfluxRow>) {
+      data.push({
+        time: new Date(safeTimeToISO(row.time)).toISOString(),
+        temperature: row.temperature != null ? Number(row.temperature) : null,
+        humidity: row.humidity != null ? Number(row.humidity) : null,
+        illuminance: row.illuminance != null ? Number(row.illuminance) : null,
+      })
+    }
+
+    return {
+      event: {
+        id: event.id,
+        startedAt: event.startedAt.toISOString(),
+        endedAt: event.endedAt ? event.endedAt.toISOString() : null,
+        durationSeconds: event.durationSeconds,
+        isInfered: event.isInfered,
+        baselineTemp: event.baselineTemp,
+        baselineHum: event.baselineHum,
+        baselineLux: event.baselineLux,
+        triggerReason: event.triggerReason,
+        closeReason: event.closeReason,
+      },
+      telemetry: data,
+    }
+  } catch (error) {
+    Logger.error(`Error al obtener telemetría del evento de lluvia ${eventId}:`, error)
+
+    return null
   }
 }

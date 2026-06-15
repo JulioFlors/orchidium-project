@@ -1,6 +1,10 @@
 'use server'
 
-import { getSensorDataInternal, getRainSummaryInternal } from '@/lib/server/environment'
+import {
+  getSensorDataInternal,
+  getRainSummaryInternal,
+  getRainEventTelemetryInternal,
+} from '@/lib/server/environment'
 import { ZoneType } from '@/config/mappings'
 
 /**
@@ -45,6 +49,23 @@ export async function getSensorData(
 export async function getRainData(range: string = 'today', zone: ZoneType = ZoneType.EXTERIOR) {
   try {
     const data = await getRainSummaryInternal(range, zone)
+
+    return { success: true, data }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+}
+
+/**
+ * Obtiene la telemetría detallada de un evento de lluvia para graficación cruzada.
+ */
+export async function getRainEventTelemetry(eventId: string) {
+  try {
+    const data = await getRainEventTelemetryInternal(eventId)
+
+    if (!data) {
+      return { success: false, error: 'Evento de lluvia no encontrado' }
+    }
 
     return { success: true, data }
   } catch (error) {

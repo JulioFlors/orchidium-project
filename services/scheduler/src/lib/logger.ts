@@ -40,12 +40,61 @@ const getLogTime = () => {
  * El tag se justifica a la derecha dentro de un ancho fijo para alinear
  * el cuerpo del mensaje independientemente de la longitud del tag.
  */
-const formatLog = (icon: string, tag: string, color: string, msg: string) => {
+const formatLog = (icon: string, tag: string, color: string, msg: string): string => {
   const time = getLogTime()
-  // Alineación: padding de 4 caracteres exactos.
   const paddedTag = tag.toUpperCase().slice(0, 4).padEnd(4)
 
-  return `${colors.white}[ ${time} ]${colors.reset} ${color}${icon} [ ${paddedTag} ]${colors.reset} ${msg}`
+  // La cabecera visible sin colores es: "[ DD/MM/YYYY, HH:MM pm ] X [ TAG ] "
+  // Nota: Algunos iconos emoji pueden ocupar 2 posiciones de caracter en consola.
+  const headerText = `[ ${time} ] ${icon} [ ${paddedTag} ] `
+  const headerColor = `${colors.white}[ ${time} ]${colors.reset} ${color}${icon} [ ${paddedTag} ]${colors.reset} `
+
+  const headerLen = headerText.length
+  const maxMsgLen = Math.max(20, 80 - headerLen)
+
+  // Separar por saltos de línea preexistentes primero para respetar formato multilínea
+  const rawParagraphs = msg.split('\n')
+  const formattedLines: string[] = []
+
+  for (const paragraph of rawParagraphs) {
+    if (!paragraph.trim()) {
+      formattedLines.push('')
+      continue
+    }
+
+    const words = paragraph.split(' ')
+    let currentLine = ''
+
+    for (const word of words) {
+      if (word.length > maxMsgLen) {
+        if (currentLine) {
+          formattedLines.push(currentLine)
+          currentLine = ''
+        }
+        let remaining = word
+
+        while (remaining.length > maxMsgLen) {
+          formattedLines.push(remaining.slice(0, maxMsgLen))
+          remaining = remaining.slice(maxMsgLen)
+        }
+        currentLine = remaining
+      } else if ((currentLine ? currentLine + ' ' + word : word).length > maxMsgLen) {
+        formattedLines.push(currentLine)
+        currentLine = word
+      } else {
+        currentLine = currentLine ? currentLine + ' ' + word : word
+      }
+    }
+    if (currentLine) {
+      formattedLines.push(currentLine)
+    }
+  }
+
+  if (formattedLines.length === 0) {
+    return headerColor
+  }
+
+  return formattedLines.map((line) => `${headerColor}${line}`).join('\n')
 }
 
 export const Logger = {

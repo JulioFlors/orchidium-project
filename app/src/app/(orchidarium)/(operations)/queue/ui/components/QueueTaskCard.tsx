@@ -10,7 +10,7 @@ import { useSWRConfig } from 'swr'
 
 import { TaskStatusBadge } from './TaskStatusBadge'
 
-import { Badge, StatusCircleIcon, ActionMenu, ActionMenuItem, Button } from '@/components/ui'
+import { StatusCircleIcon, ActionMenu, ActionMenuItem, Button } from '@/components/ui'
 import { formatTime12h } from '@/utils'
 import { useToast } from '@/hooks'
 import { TaskPurpose, ZoneType, TaskPurposeLabels, ZoneTypeLabels } from '@/config/mappings'
@@ -76,9 +76,10 @@ export function QueueTaskCard({ task, onCancel, icon, colorClassName }: QueueTas
   }
 
   const menuItems: ActionMenuItem[] = [
-    ...(task.status === 'WAITING_CONFIRMATION' ||
-    task.status === 'PENDING' ||
-    task.status === 'AUTHORIZED'
+    ...((task.status === 'WAITING_CONFIRMATION' ||
+      task.status === 'PENDING' ||
+      task.status === 'AUTHORIZED') &&
+    (task.purpose === 'FERTIGATION' || task.purpose === 'FUMIGATION')
       ? [
           {
             label: 'Posponer 24h',
@@ -116,6 +117,22 @@ export function QueueTaskCard({ task, onCancel, icon, colorClassName }: QueueTas
     },
   ]
 
+  // Estructuración del subtítulo dinámico
+  const hasDbId = !!(task.id && !task.id.startsWith('routine-'))
+  const idDisplay = hasDbId ? ` #${task.id.substring(0, 8)}` : ''
+  let labelText = ''
+
+  if (task.source === 'ROUTINE' || task.isRoutine) {
+    labelText = `Rutina${idDisplay} ${task.routineName || ''}`
+  } else if (task.source === 'DEFERRED' || task.isRoutine === false) {
+    labelText = `Diferido${idDisplay} ${task.notes || ''}`
+  } else if (task.source === 'INFERENCE') {
+    labelText = `Inferencia${idDisplay} ${task.notes || ''}`
+  } else {
+    // Fallback general en caso de que no coincida exactamente
+    labelText = `${task.source || 'Manual'}${idDisplay} ${task.notes || ''}`
+  }
+
   return (
     <motion.div
       animate={{ opacity: 1, y: 0 }}
@@ -141,9 +158,8 @@ export function QueueTaskCard({ task, onCancel, icon, colorClassName }: QueueTas
                 {actionLabel}
               </h3>
               <div className="order-3 flex items-center gap-2">
-                <SourceBadge isRoutine={task.isRoutine} />
                 <TaskStatusBadge
-                  isPast={isPast}
+                  hasDbId={hasDbId}
                   status={
                     task.status as
                       | 'PENDING'
@@ -158,21 +174,7 @@ export function QueueTaskCard({ task, onCancel, icon, colorClassName }: QueueTas
             </div>
 
             <div className="text-secondary tds-xs:mt-1 order-2 flex items-center gap-2 text-[11px] font-medium opacity-60">
-              {task.isRoutine ? (
-                <span className="truncate">{task.routineName}</span>
-              ) : task.agrochemicalName ? (
-                <span className="truncate">{task.agrochemicalName}</span>
-              ) : (
-                <>
-                  <span className="font-mono text-[10px]">#{task.id.substring(0, 8)}</span>
-                  {task.notes && (
-                    <>
-                      <span className="opacity-40">•</span>
-                      <span className="line-clamp-1 italic">{task.notes}</span>
-                    </>
-                  )}
-                </>
-              )}
+              <span className="truncate">{labelText}</span>
             </div>
           </div>
         </div>
@@ -253,36 +255,5 @@ export function QueueTaskCard({ task, onCancel, icon, colorClassName }: QueueTas
         </div>
       </div>
     </motion.div>
-  )
-}
-
-/**
- * Badge de Origen de Tarea
- *
- * Clasifica visualmente de dónde proviene la tarea:
- * - Rutina: Verde (Programación automática establecida).
- * - Diferida: Azul (Acción manual postergada por el usuario).
- * - Inferencia: Ámbar (Sugerencia inteligente del motor de reglas).
- */
-function SourceBadge({ isRoutine }: { isRoutine?: boolean }) {
-  if (isRoutine) {
-    return (
-      <Badge size="sm" variant="success">
-        Rutina
-      </Badge>
-    )
-  }
-  if (isRoutine === false) {
-    return (
-      <Badge size="sm" variant="info">
-        Diferida
-      </Badge>
-    )
-  }
-
-  return (
-    <Badge size="sm" variant="warning">
-      Inferencia
-    </Badge>
   )
 }

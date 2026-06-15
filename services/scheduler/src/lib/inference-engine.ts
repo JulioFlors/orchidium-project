@@ -7,11 +7,11 @@ import {
   TaskPurpose,
 } from '@package/database'
 
-import { isCurrentlyRaining } from '../index'
-
 import { Logger } from './logger'
 import { classifyCurrentDay } from './day-classifier'
 import { influxClient } from './influx'
+
+let isRainingCallback: (() => boolean) | null = null
 
 /**
  * Umbrales Botánicos (Orquídeas Epífitas Tropicales - Cattleya).
@@ -77,8 +77,8 @@ const THRESHOLDS = {
   HUMIDITY_VETO_4H_CLOUDY: 91.0,
   /** Umbral de veto de 4h en día templado/soleado */
   HUMIDITY_VETO_4H_SUNNY: 85.0,
-  /** Temperatura promedio mínima en 4h bajo la cual se cancelan las tareas (evitando shock por frío y exceso hídrico) */
-  TEMPERATURE_MIN_VETO_4H: 30.9, // <= 30.9°C
+  /** Temperatura promedio mínima en 4h bajo la cual se pueden cancelar las tareas (evitando shock por frío y exceso hídrico) */
+  TEMPERATURE_MIN_VETO_4H: 30.0, // <= 30.0°C
 
   // ==========================================
   // 5. VENTANAS BIOLÓGICAS Y SEGURIDAD NOCTURNA
@@ -153,6 +153,10 @@ export interface InferenceResult {
  * - Pulverización/Nebulización: máx 3 min, la línea gotea y moja plantas debajo.
  */
 export class InferenceEngine {
+  static registerRainCheck(cb: () => boolean) {
+    isRainingCallback = cb
+  }
+
   static async evaluate(schedule: AutomationSchedule): Promise<InferenceResult> {
     try {
       const now = new Date()
@@ -205,19 +209,22 @@ export class InferenceEngine {
 
       const dataUsed = isFallback ? 'EXT' : 'INT'
 
-      Logger.inference(
-        `Evaluando "${schedule.name}" (${purpose}) → HR: ${interiorHum.toFixed(0)}% | Temp: ${interiorTemp.toFixed(1)}°C | Día: ${dayClass.type} | Datos: ${dataUsed}`,
-      )
-
       // ── 3. HARD BLOCK: Lluvia Real en Curso ──
+      const isRainActive = isRainingCallback ? isRainingCallback() : false
       const currentlyRaining =
-        isCurrentlyRaining() ||
+        isRainActive ||
         (localConditions.exterior.rain_intensity && localConditions.exterior.rain_intensity > 0)
+
+      Logger.inference(`Evaluando: ${schedule.name} (${purpose})`)
+      Logger.inference(
+        `HR: ${interiorHum.toFixed(0)}% | Temp: ${interiorTemp.toFixed(1)}°C | Día: ${dayClass.type}`,
+      )
+      Logger.inference(`Datos: ${dataUsed} | Lluvia: ${currentlyRaining ? 'SÍ' : 'NO'}`)
 
       if (currentlyRaining) {
         return {
           shouldCancel: true,
-          reason: `Está lloviendo ahora (sensor activo: ${isCurrentlyRaining()}, intensidad: ${localConditions.exterior.rain_intensity || 0}).`,
+          reason: `Está lloviendo ahora (sensor activo: ${isRainActive}, intensidad: ${localConditions.exterior.rain_intensity || 0}).`,
           action: 'SKIP',
           metadata: { localConditions },
         }
@@ -330,9 +337,8 @@ export class InferenceEngine {
         const avgHum = humData.average
         const avgTemp = tempData.average
 
-        Logger.inference(
-          `Evaluando regla de 4h para ${purpose} → HR promedio: ${avgHum.toFixed(1)}% | Temp promedio: ${avgTemp.toFixed(1)}°C | Datos: ${dataUsed}`,
-        )
+        Logger.inference(`Regla 4h para ${purpose} [${dataUsed}]:`)
+        Logger.inference(`HR Prom: ${avgHum.toFixed(1)}% | Temp Prom: ${avgTemp.toFixed(1)}°C`)
 
         if (avgHum >= THRESHOLD_4H) {
           return {
@@ -343,12 +349,18 @@ export class InferenceEngine {
           }
         }
 
-        if (avgTemp <= THRESHOLDS.TEMPERATURE_MIN_VETO_4H) {
+        if (avgTemp <= THRESHOLDS.TEMPERATURE_MIN_VETO_4H && avgHum >= 80.0) {
           return {
             shouldCancel: true,
-            reason: `VETO CLIMÁTICO ${purpose} (4h): Temperatura promedio ${avgTemp.toFixed(1)}°C ≤ ${THRESHOLDS.TEMPERATURE_MIN_VETO_4H}°C (Datos: ${dataUsed}).`,
+            reason: `VETO CLIMÁTICO ${purpose} (4h): Temperatura promedio ${avgTemp.toFixed(1)}°C ≤ ${THRESHOLDS.TEMPERATURE_MIN_VETO_4H}°C con HR promedio ${avgHum.toFixed(1)}% ≥ 80.0% (Datos: ${dataUsed}).`,
             action: 'SKIP',
-            metadata: { avgTemp, thresholdTemp: THRESHOLDS.TEMPERATURE_MIN_VETO_4H, dataUsed },
+            metadata: {
+              avgTemp,
+              thresholdTemp: THRESHOLDS.TEMPERATURE_MIN_VETO_4H,
+              avgHum,
+              humidityCoupledThreshold: 80.0,
+              dataUsed,
+            },
           }
         }
       }
@@ -1312,7 +1324,8 @@ export class InferenceEngine {
     const target = new Date(from)
 
     target.setDate(target.getDate() + daysAhead)
-    target.setHours(6, 0, 0, 0)
+    // 6:00 AM Caracas = 10:00 AM UTC (Caracas es UTC-4)
+    target.setUTCHours(10, 0, 0, 0)
 
     return target
   }
@@ -1345,7 +1358,7 @@ export class InferenceEngine {
           status: TaskStatus.PENDING,
           source: TaskSource.INFERENCE,
           purpose: TaskPurpose.IRRIGATION,
-          zones: [ZoneType.ZONA_A, ZoneType.ZONA_B, ZoneType.ZONA_C, ZoneType.ZONA_D],
+          zones: [ZoneType.ZONA_A],
           duration: 15,
           notes: `[ DAILY RULES ] ${reason}`,
         },
@@ -1366,51 +1379,10 @@ export class InferenceEngine {
       const yesterday = new Date(now)
 
       yesterday.setDate(yesterday.getDate() - 1)
-      const dayBefore = new Date(now)
-
-      dayBefore.setDate(dayBefore.getDate() - 2)
 
       const regadoHoy = await this.checkRiegoCompleto(today)
-      const regadoAyer = await this.checkRiegoCompleto(yesterday)
-      const regadoAnteayer = await this.checkRiegoCompleto(dayBefore)
 
-      // ---- 1. Límite de Emergencia (3 días sin riego completo) ----
-      if (!regadoHoy && !regadoAyer && !regadoAnteayer) {
-        Logger.cron('Límite de Emergencia: 3 días consecutivos sin riego completo detectado.')
-
-        // Exclusión 1: Lluvia acumulada en las últimas 24h >= 20 min (1200s)
-        const rain24h = await this.getRecentRainAccumulation(
-          THRESHOLDS.RAIN_LOOKBACK_IRRIGATION_HOURS,
-        )
-        const rainExclusion = rain24h.durationSeconds >= THRESHOLDS.MIN_RAIN_DURATION_IRRIGATION_24H
-
-        // Exclusión 2: Promedio de 3h de humedad >= 98% en exterior o interior
-        const avgExtHum3h = await this.getExternalRecentAverageHumidity(
-          THRESHOLDS.LOOKBACK_MINUTES_3H,
-        )
-        const avgIntHum3h = await this.getInteriorRecentAverageHumidity(
-          THRESHOLDS.LOOKBACK_MINUTES_3H,
-        )
-        const humExclusion =
-          avgExtHum3h >= THRESHOLDS.HUMIDITY_SATURATION_THRESHOLD ||
-          avgIntHum3h >= THRESHOLDS.HUMIDITY_SATURATION_THRESHOLD
-
-        if (rainExclusion || humExclusion) {
-          Logger.cron(
-            `Límite de Emergencia ANULADO por exclusión hídrica: Lluvia 24h: ${Math.round(rain24h.durationSeconds / 60)}m, Promedio Hum Exterior 3h: ${avgExtHum3h.toFixed(1)}%, Interior 3h: ${avgIntHum3h.toFixed(1)}%.`,
-          )
-        } else {
-          Logger.cron(
-            `Programando Riego Diferido de Emergencia (${THRESHOLDS.IRRIGATION_DURATION_MINUTES} min) para mañana a las 6:00 AM.`,
-          )
-          await this.createDeferredIrrigation(
-            this.getNext6am(now, 1),
-            'Riego diferido de emergencia por límite de 3 días secos.',
-          )
-        }
-      }
-
-      // ---- 2. Transición y Lógica de Estados ----
+      // ---- 1. Transición y Lógica de Estados ----
       if (state === 'STANDARD_CRON') {
         const startYesterday = new Date(yesterday)
 
@@ -1536,10 +1508,10 @@ export class InferenceEngine {
           const dayClass = await classifyCurrentDay()
 
           const isDryAndSunny =
-            rainToday.durationSeconds < THRESHOLDS.MIN_RAIN_DURATION_IRRIGATION_24H &&
+            rainToday.eventCount === 0 &&
             avgLuxToday > 13000 &&
-            dayClass.type !== 'OVERCAST' &&
-            dayClass.type !== 'RAINY'
+            dayClass.type !== 'NUBLADO' &&
+            dayClass.type !== 'LLUVIOSO'
 
           if (isDryAndSunny) {
             Logger.cron(

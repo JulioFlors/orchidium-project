@@ -1085,3 +1085,22 @@ Si está activo, el sistema funciona comparando la versión del **Manifiesto Loc
 * **Descarga Atómica**: Los archivos se descargan con extensión `.new`. Solo se sobrescriben tras verificar que la descarga fue exitosa, evitando "brickear" el dispositivo por un fallo de red.
 
 ---
+
+[ 06/06/2026, 11:00 am ] ☀️ [ DAYC ] SOLEADO → Prom (8am-11am): 32229 lux → 11am: 59225 lux
+[ 06/06/2026, 11:00 am ] ☀️ [ DAYC ] Nublado: 9min && Nubes Grises: 9min
+[ 06/06/2026, 11:00 am ] 🔮 [ INFR ] H → 4h >=90% || Temp: 30.9°C → EMA: INT
+[ 06/06/2026, 11:00 am ] 🔮 [ INFR ] T → 4h >=90% || Temp: 30.9°C → EMA: INT
+[ 06/06/2026, 11:00 am ] 🔮 [ INFR ] H → 4h >=90% || Temp: 30.9°C → EMA: EXT
+[ 06/06/2026, 11:00 am ] 🔮 [ INFR ] T → 4h >=90% || Temp: 30.9°C → EMA: EXT
+[ 06/06/2026, 11:00 am ] 🔮 [ INFR ] Humedad Diaria Sostenida: 7 bloques de 1h saturados (>=98%) hoy (límite: 6)
+[ 06/06/2026, 11:00 am ] 🔮 [ INFR ] Cancelada: Humidificación del Suelo (11:00)
+[ 06/06/2026, 11:00 am ] 🔮 [ INFR ] Motivo: Lluvia persistente || día muy húmedo
+
+---
+
+[ 07/06/2026, 12:01 am ] 📊 [ TLMT ] Procesando Telemetrías del Día.
+[ 07/06/2026, 12:01 am ] ✅ [ DONE ] [2026-06-06] [EXTERIOR] rows=2796 DLI=14.57 VPD=1.459 DIF=8.23
+[ 07/06/2026, 12:01 am ] ✅ [ DONE ] [2026-06-06] [ZONA_A] rows=288 DLI=1.92 VPD=0.521 DIF=3.63
+[ 07/06/2026, 12:01 am ] ✅ [ DONE ] [2026-06-06] Foger=Xmin | Irrigation=Ymin | Soil_Wet=Zmin
+[ 07/06/2026, 12:01 am ] ✅ [ DONE ] [2026-06-06] Fertirrigation=Wmin | Fumigation=Kminx
+[ 07/06/2026, 12:01 am ] 📊 [ TLMT ] Cierre diario completado.

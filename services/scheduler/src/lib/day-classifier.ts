@@ -147,7 +147,6 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
       SELECT AVG(illuminance) as avg_lux, COUNT(illuminance) as count_lux
       FROM "environment_metrics"
       WHERE time >= '${startISO}' AND time <= '${endISO}'
-      AND source = 'Weather_Station'
       AND zone = 'EXTERIOR'
     `
     const avgStream = influxClient.query(avgQuery)
@@ -185,7 +184,6 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
       FROM "environment_metrics"
       WHERE time <= '${endISO}'
         AND time >= '${fifteenMinutesAgo}'
-        AND source = 'Weather_Station'
         AND zone = 'EXTERIOR'
         AND illuminance IS NOT NULL
       ORDER BY time DESC
@@ -205,7 +203,6 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
       SELECT illuminance, time
       FROM "environment_metrics"
       WHERE time >= '${twoHoursAgo}'
-      AND source = 'Weather_Station'
       AND zone = 'EXTERIOR'
       ORDER BY time DESC
     `
@@ -240,12 +237,12 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
             // Primera muestra: sumamos tiempo desde el dato hasta "ahora"
             const ageMs = now.getTime() - rowTime.getTime()
 
-            overcastMinutes += Math.min(ageMs, 30 * 60000) / 60000
+            overcastMinutes += Math.min(ageMs, 70 * 60000) / 60000
             lastTime = rowTime
           } else {
             const jumpMs = lastTime.getTime() - rowTime.getTime()
 
-            if (jumpMs > 30 * 60000) {
+            if (jumpMs > 70 * 60000) {
               standardBroken = true
             } else {
               overcastMinutes += jumpMs / 60000
@@ -264,12 +261,12 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
             // Primera muestra: sumamos tiempo desde el dato hasta "ahora"
             const ageMs = now.getTime() - rowTime.getTime()
 
-            overcastHeavyMinutes += Math.min(ageMs, 30 * 60000) / 60000
+            overcastHeavyMinutes += Math.min(ageMs, 70 * 60000) / 60000
             lastTimeHeavy = rowTime
           } else {
             const jumpMs = lastTimeHeavy.getTime() - rowTime.getTime()
 
-            if (jumpMs > 30 * 60000) {
+            if (jumpMs > 70 * 60000) {
               heavyBroken = true
             } else {
               overcastHeavyMinutes += jumpMs / 60000
@@ -303,9 +300,8 @@ export async function classifyCurrentDay(): Promise<DayClassification> {
       type = 'LLUVIOSO'
     }
 
-    Logger.dayClass(
-      `Tipo: ${type} | Lux promedio (8am-ahora): ${avgLux.toFixed(0)} | Lux actual: ${currentLux.toFixed(0)} | <= 26k lux -> Nublado: ${overcastMinutes}min | <= 10k lux -> Nubes Grises: ${overcastHeavyMinutes}min`,
-    )
+    Logger.dayClass(`Día: ${type} (Avg: ${avgLux.toFixed(0)} lx, Act: ${currentLux.toFixed(0)} lx)`)
+    Logger.dayClass(`Nublado: ${overcastMinutes} min | Nubes Grises: ${overcastHeavyMinutes} min`)
 
     return {
       type,

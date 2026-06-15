@@ -7,6 +7,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -29,27 +30,9 @@ interface EnvironmentDataChartProps {
 }
 
 interface TooltipItem {
-  payload: Record<string, string | number | boolean | undefined>
+  payload: Record<string, string | number | boolean | null | undefined>
   dataKey: string
   value: string | number
-}
-
-/**
- * Genera escala monocromática (claro → medio → oscuro) a partir de un color hex.
- */
-function getMonochromaticScale(hex: string): { light: string; mid: string; dark: string } {
-  // Mapa de colores conocidos → escala Tailwind equivalente
-  const colorMap: Record<string, { light: string; mid: string; dark: string }> = {
-    '#eab308': { light: '#fde047', mid: '#eab308', dark: '#a16207' }, // yellow 300/500/700
-    '#f97316': { light: '#fdba74', mid: '#f97316', dark: '#c2410c' }, // orange 300/500/700
-    '#3b82f6': { light: '#93c5fd', mid: '#3b82f6', dark: '#1d4ed8' }, // blue 300/500/700
-    '#22c55e': { light: '#86efac', mid: '#22c55e', dark: '#15803d' }, // green 300/500/700
-    '#ef4444': { light: '#fca5a5', mid: '#ef4444', dark: '#b91c1c' }, // red 300/500/700
-    '#a855f7': { light: '#d8b4fe', mid: '#a855f7', dark: '#7e22ce' }, // purple 300/500/700
-    '#06b6d4': { light: '#67e8f9', mid: '#06b6d4', dark: '#0e7490' }, // cyan 300/500/700
-  }
-
-  return colorMap[hex] || { light: hex + 'aa', mid: hex, dark: hex + '88' }
 }
 
 /**
@@ -75,17 +58,129 @@ interface CustomTooltipProps {
   dataKey: string
   title: string
   unit: string
+  range?: string
+}
+
+function getCaracasYMD(date: Date): string {
+  try {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Caracas',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    })
+    const parts = formatter.formatToParts(date)
+    const month = parts.find((p) => p.type === 'month')?.value
+    const day = parts.find((p) => p.type === 'day')?.value
+    const year = parts.find((p) => p.type === 'year')?.value
+
+    return `${year}-${month}-${day}`
+  } catch {
+    return date.toISOString().split('T')[0]
+  }
+}
+
+function formatTooltipHeader(timeVal: string | number | Date, hasHour: boolean): string {
+  try {
+    const d = timeVal instanceof Date ? timeVal : new Date(timeVal)
+
+    if (isNaN(d.getTime())) return ''
+
+    const eventYMD = getCaracasYMD(d)
+    const todayYMD = getCaracasYMD(new Date())
+    const yesterday = new Date()
+
+    yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayYMD = getCaracasYMD(yesterday)
+
+    let dayLabel = ''
+
+    if (eventYMD === todayYMD) {
+      dayLabel = 'Hoy'
+    } else if (eventYMD === yesterdayYMD) {
+      dayLabel = 'Ayer'
+    } else {
+      const weekday = d.toLocaleDateString('es-VE', {
+        weekday: 'long',
+        timeZone: 'America/Caracas',
+      })
+      const day = d.toLocaleDateString('es-VE', { day: 'numeric', timeZone: 'America/Caracas' })
+      const month = d.toLocaleDateString('es-VE', { month: 'long', timeZone: 'America/Caracas' })
+
+      const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
+
+      dayLabel = `${capitalize(weekday)}, ${day} ${capitalize(month)}`
+    }
+
+    if (!hasHour) {
+      return dayLabel
+    }
+
+    // 2. Formatear la hora local de Caracas: "7:15 am"
+    const timeStr = d
+      .toLocaleTimeString('es-VE', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZone: 'America/Caracas',
+      })
+      .toLowerCase()
+
+    const cleanedTime = timeStr
+      .replace(/a\.\s*m\./gi, 'am')
+      .replace(/p\.\s*m\./gi, 'pm')
+      .replace(/a\s*m/gi, 'am')
+      .replace(/p\s*m/gi, 'pm')
+      .trim()
+
+    return `${dayLabel}, ${cleanedTime}`
+  } catch {
+    return ''
+  }
+}
+
+function cleanTimeStr(val: unknown): string {
+  if (!val) return ''
+  let str = String(val).toLowerCase()
+
+  str = str
+    .replace(/a\.\s*m\./gi, 'am')
+    .replace(/p\.\s*m\./gi, 'pm')
+    .replace(/a\s*m/gi, 'am')
+    .replace(/p\s*m/gi, 'pm')
+    .trim()
+
+  return str
+}
+
+function formatTooltipStat(val: unknown, unit: string): string {
+  const num = Number(val)
+
+  if (isNaN(num)) return '--'
+  if (unit !== 'min') return `${formatTooltipValue(val, unit)} ${unit}`.trim()
+
+  const roundedVal = Math.round(num)
+
+  if (roundedVal < 60) {
+    return `${roundedVal} min`
+  }
+
+  const hours = Math.floor(roundedVal / 60)
+  const remaining = roundedVal % 60
+
+  if (remaining === 0) return `${hours}h`
+
+  return `${hours}h ${remaining}min`
 }
 
 function CustomTooltip({
   active,
   payload,
   label,
-  formatTime,
   color,
   dataKey,
-  title,
   unit,
+  range,
 }: CustomTooltipProps) {
   if (active && payload && payload.length) {
     // Buscamos el item que corresponde a la métrica principal (evitante el de la banda estadística)
@@ -98,80 +193,425 @@ function CustomTooltip({
     const minValue = formatTooltipValue(data[`min_${dataKey}`], unit)
     const maxValue = formatTooltipValue(data[`max_${dataKey}`], unit)
 
-    // Escala monocromática basada en el color de la métrica
-    const scale = getMonochromaticScale(color)
-
     // Formateo seguro de fecha para el tooltip
     let formattedTime = ''
 
-    if (data.time) {
-      // Priorizar el campo 'time' del objeto de datos sobre el 'label' de Recharts
+    if (data.time && typeof data.time !== 'boolean') {
       try {
-        const dateObj = new Date(String(data.time))
+        const isMacroRange = range === '7d' || range === '30d' || range === 'all'
 
-        formattedTime = isNaN(dateObj.getTime()) ? '' : formatTime(dateObj)
+        formattedTime = formatTooltipHeader(data.time as string | number | Date, !isMacroRange)
       } catch {
         formattedTime = ''
       }
     } else if (label !== undefined) {
       try {
         const dateObj = typeof label === 'string' ? new Date(label) : new Date(Number(label))
+        const isMacroRange = range === '7d' || range === '30d' || range === 'all'
 
-        formattedTime = isNaN(dateObj.getTime()) ? '' : formatTime(dateObj)
+        formattedTime = formatTooltipHeader(dateObj, !isMacroRange)
       } catch {
         formattedTime = ''
       }
     }
+    if (data.isVirtual) {
+      return (
+        <div className="bg-surface border-input-outline relative z-50 flex max-w-[340px] flex-col gap-3 overflow-visible rounded-lg border p-3 text-xs shadow-md outline-none">
+          {/* Encabezado: Fecha y Duración */}
+          <div className="flex flex-col gap-1">
+            <span className="text-foreground flex items-center gap-1.5 text-xs font-bold">
+              📅 {formattedTime} | ⏱️ Duración: {formatTooltipStat(data[dataKey], unit)}
+            </span>
+          </div>
 
-    return (
-      <div className="bg-surface border-input-outline relative z-50 flex flex-col overflow-visible rounded-lg border p-3 text-sm shadow-md outline-none">
-        {!data.dateLabel && formattedTime && (
-          <span className="text-secondary mb-2 block text-xs font-semibold tracking-wider uppercase">
-            {formattedTime}
-          </span>
-        )}
+          {/* Condiciones Climáticas Previas (10-20 min antes) */}
+          <div className="border-input-outline/30 flex flex-col gap-1 border-t pt-2">
+            <span className="text-foreground font-bold">
+              Condiciones Climáticas Previas (10-20 min antes)
+            </span>
+            <span className="text-foreground/80 font-medium">
+              🌡️ Temp:{' '}
+              {data.baselineTemp !== undefined && data.baselineTemp !== null
+                ? `${Number(data.baselineTemp).toFixed(1)}°C`
+                : '--'}{' '}
+              | 💧 Hum:{' '}
+              {data.baselineHum !== undefined && data.baselineHum !== null
+                ? `${Number(data.baselineHum).toFixed(1)}%`
+                : '--'}{' '}
+              | ☀️ Ilum:{' '}
+              {data.baselineLux !== undefined && data.baselineLux !== null
+                ? formatTooltipValue(data.baselineLux, 'lx')
+                : '--'}{' '}
+              lx
+            </span>
+          </div>
 
-        {hasStats ? (
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-col gap-0.5">
-              <div className="flex justify-between gap-4">
-                <span className="text-secondary font-medium">Máximo:</span>
-                <span className="font-bold" style={{ color: scale.light }}>
-                  {maxValue} {unit}
-                </span>
-              </div>
-              {data[`max_${dataKey}_time`] && (
-                <span className="text-secondary/70 text-right text-[10px]">
-                  (a las {String(data[`max_${dataKey}_time`])})
-                </span>
-              )}
-            </div>
-
-            <div className="flex justify-between gap-4 border-t border-white/5 pt-1">
-              <span className="text-secondary font-medium">Promedio:</span>
-              <span className="font-bold" style={{ color: scale.mid }}>
-                {avgValue} {unit}
+          {/* Inicio */}
+          {data.triggerReason && (
+            <div className="border-input-outline/30 flex flex-col gap-1 border-t pt-2">
+              <span className="font-bold text-purple-400">Inicio</span>
+              <span className="text-foreground/80 leading-relaxed font-medium">
+                {data.triggerReason}
               </span>
             </div>
+          )}
 
-            <div className="flex flex-col gap-0.5 border-t border-white/5 pt-1">
-              <div className="flex justify-between gap-4">
-                <span className="text-secondary font-medium">Mínimo:</span>
-                <span className="font-bold" style={{ color: scale.dark }}>
-                  {minValue} {unit}
+          {/* Cierre */}
+          {data.closeReason && (
+            <div className="border-input-outline/30 flex flex-col gap-1 border-t pt-2">
+              <span className="font-bold text-purple-400">Cierre</span>
+              <span className="text-foreground/80 leading-relaxed font-medium">
+                {data.closeReason}
+              </span>
+            </div>
+          )}
+        </div>
+      )
+    }
+
+    return (
+      <div className="bg-surface border-input-outline relative z-50 flex flex-col overflow-visible rounded-lg border p-3 text-xs shadow-md outline-none">
+        {hasStats ? (
+          dataKey === 'temperature' || dataKey === 'humidity' ? (
+            <div className="flex min-w-[280px] flex-col gap-3">
+              {/* Bloque 1: Consolidado 24h */}
+              <div className="flex flex-col gap-1">
+                <span className="text-foreground flex items-center gap-1 text-xs font-bold">
+                  📊 {formattedTime}
+                </span>
+                <div className="flex items-center justify-between gap-4 text-xs font-semibold">
+                  <div className="flex flex-col">
+                    <span className="text-foreground text-[10px] font-semibold">Máx</span>
+                    <span>
+                      <span style={{ color }}>
+                        {maxValue} {unit}
+                      </span>
+                      {data[`max_${dataKey}_time`] && (
+                        <span className="text-foreground ml-1 text-[10px] font-normal">
+                          {cleanTimeStr(data[`max_${dataKey}_time`])}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-foreground text-[10px] font-semibold">Prom</span>
+                    <span style={{ color }}>
+                      {avgValue} {unit}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-foreground text-[10px] font-semibold">Mín</span>
+                    <span>
+                      <span style={{ color }}>
+                        {minValue} {unit}
+                      </span>
+                      {data[`min_${dataKey}_time`] && (
+                        <span className="text-foreground ml-1 text-[10px] font-normal">
+                          {cleanTimeStr(data[`min_${dataKey}_time`])}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bloque 2: Fase Diurna */}
+              <div className="border-input-outline/30 flex flex-col gap-1 border-t pt-2">
+                <span className="text-foreground flex items-center gap-1 text-xs font-bold">
+                  ☀️ Fase diurna (08:00 am - 04:00 pm)
+                </span>
+                <div className="flex items-center justify-between gap-4 text-xs font-semibold">
+                  <div className="flex flex-col">
+                    <span className="text-foreground text-[10px] font-semibold">Máx</span>
+                    <span>
+                      <span style={{ color }}>
+                        {data[`max_${dataKey}_day`] !== undefined &&
+                        data[`max_${dataKey}_day`] !== null
+                          ? `${formatTooltipValue(data[`max_${dataKey}_day`], unit)} ${unit}`
+                          : '--'}
+                      </span>
+                      {data[`max_${dataKey}_day_time`] && (
+                        <span className="text-foreground ml-1 text-[10px] font-normal">
+                          {cleanTimeStr(data[`max_${dataKey}_day_time`])}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-foreground text-[10px] font-semibold">Prom</span>
+                    <span style={{ color }}>
+                      {data[`avg_${dataKey}_day`] !== undefined &&
+                      data[`avg_${dataKey}_day`] !== null
+                        ? `${formatTooltipValue(data[`avg_${dataKey}_day`], unit)} ${unit}`
+                        : '--'}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-foreground text-[10px] font-semibold">Mín</span>
+                    <span>
+                      <span style={{ color }}>
+                        {data[`min_${dataKey}_day`] !== undefined &&
+                        data[`min_${dataKey}_day`] !== null
+                          ? `${formatTooltipValue(data[`min_${dataKey}_day`], unit)} ${unit}`
+                          : '--'}
+                      </span>
+                      {data[`min_${dataKey}_day_time`] && (
+                        <span className="text-foreground ml-1 text-[10px] font-normal">
+                          {cleanTimeStr(data[`min_${dataKey}_day_time`])}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bloque 3: Fase Nocturna */}
+              <div className="border-input-outline/30 flex flex-col gap-1 border-t pt-2">
+                <span className="text-foreground flex items-center gap-1 text-xs font-bold">
+                  🌙 Fase nocturna (07:00 pm - 05:59 am)
+                </span>
+                <div className="flex items-center justify-between gap-4 text-xs font-semibold">
+                  <div className="flex flex-col">
+                    <span className="text-foreground text-[10px] font-semibold">Máx</span>
+                    <span>
+                      <span style={{ color }}>
+                        {data[`max_${dataKey}_night`] !== undefined &&
+                        data[`max_${dataKey}_night`] !== null
+                          ? `${formatTooltipValue(data[`max_${dataKey}_night`], unit)} ${unit}`
+                          : '--'}
+                      </span>
+                      {data[`max_${dataKey}_night_time`] && (
+                        <span className="text-foreground ml-1 text-[10px] font-normal">
+                          {cleanTimeStr(data[`max_${dataKey}_night_time`])}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-foreground text-[10px] font-semibold">Prom</span>
+                    <span style={{ color }}>
+                      {data[`avg_${dataKey}_night`] !== undefined &&
+                      data[`avg_${dataKey}_night`] !== null
+                        ? `${formatTooltipValue(data[`avg_${dataKey}_night`], unit)} ${unit}`
+                        : '--'}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-foreground text-[10px] font-semibold">Mín</span>
+                    <span>
+                      <span style={{ color }}>
+                        {data[`min_${dataKey}_night`] !== undefined &&
+                        data[`min_${dataKey}_night`] !== null
+                          ? `${formatTooltipValue(data[`min_${dataKey}_night`], unit)} ${unit}`
+                          : '--'}
+                      </span>
+                      {data[`min_${dataKey}_night_time`] && (
+                        <span className="text-foreground ml-1 text-[10px] font-normal">
+                          {cleanTimeStr(data[`min_${dataKey}_night_time`])}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : dataKey === 'illuminance' ? (
+            <div className="flex min-w-[280px] flex-col gap-3">
+              {/* Cabecera de fecha */}
+              <div className="flex flex-col gap-1">
+                <span className="text-foreground flex items-center gap-1 text-xs font-bold">
+                  📊 {formattedTime}
                 </span>
               </div>
-              {data[`min_${dataKey}_time`] && (
-                <span className="text-secondary/70 text-right text-[10px]">
-                  (a las {String(data[`min_${dataKey}_time`])})
+
+              {/* Bloque 1: Amanecer */}
+              <div className="border-input-outline/30 flex flex-col gap-1 border-t pt-2">
+                <span className="text-foreground flex items-center gap-1 text-xs font-bold">
+                  🌄 Amanecer (06:00 am - 08:00 am)
                 </span>
-              )}
+                <div className="flex items-center justify-between gap-4 text-xs font-semibold">
+                  <div className="flex flex-col">
+                    <span className="text-foreground text-[10px] font-semibold">Máx</span>
+                    <span>
+                      <span style={{ color }}>
+                        {data.max_illum_dawn !== undefined && data.max_illum_dawn !== null
+                          ? `${formatTooltipValue(data.max_illum_dawn, unit)} ${unit}`
+                          : '--'}
+                      </span>
+                      {data.max_illum_dawn_time && (
+                        <span className="text-foreground ml-1 text-[10px] font-normal">
+                          {cleanTimeStr(data.max_illum_dawn_time)}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-foreground text-[10px] font-semibold">Prom</span>
+                    <span style={{ color }}>
+                      {data.avg_illum_dawn !== undefined && data.avg_illum_dawn !== null
+                        ? `${formatTooltipValue(data.avg_illum_dawn, unit)} ${unit}`
+                        : '--'}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-foreground text-[10px] font-semibold">Mín</span>
+                    <span>
+                      <span style={{ color }}>
+                        {data.min_illum_dawn !== undefined && data.min_illum_dawn !== null
+                          ? `${formatTooltipValue(data.min_illum_dawn, unit)} ${unit}`
+                          : '--'}
+                      </span>
+                      {data.min_illum_dawn_time && (
+                        <span className="text-foreground ml-1 text-[10px] font-normal">
+                          {cleanTimeStr(data.min_illum_dawn_time)}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bloque 2: Fotoperíodo */}
+              <div className="border-input-outline/30 flex flex-col gap-1 border-t pt-2">
+                <span className="text-foreground flex items-center gap-1 text-xs font-bold">
+                  ☀️ Fotoperiodo (08:00 am - 04:00 pm)
+                </span>
+                <div className="flex items-center justify-between gap-4 text-xs font-semibold">
+                  <div className="flex flex-col">
+                    <span className="text-foreground text-[10px] font-semibold">Máx</span>
+                    <span>
+                      <span style={{ color }}>
+                        {data.max_illum_day !== undefined && data.max_illum_day !== null
+                          ? `${formatTooltipValue(data.max_illum_day, unit)} ${unit}`
+                          : '--'}
+                      </span>
+                      {data.max_illum_day_time && (
+                        <span className="text-foreground ml-1 text-[10px] font-normal">
+                          {cleanTimeStr(data.max_illum_day_time)}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-foreground text-[10px] font-semibold">Prom</span>
+                    <span style={{ color }}>
+                      {data.avg_illum_day !== undefined && data.avg_illum_day !== null
+                        ? `${formatTooltipValue(data.avg_illum_day, unit)} ${unit}`
+                        : '--'}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-foreground text-[10px] font-semibold">Mín</span>
+                    <span>
+                      <span style={{ color }}>
+                        {data.min_illum_day !== undefined && data.min_illum_day !== null
+                          ? `${formatTooltipValue(data.min_illum_day, unit)} ${unit}`
+                          : '--'}
+                      </span>
+                      {data.min_illum_day_time && (
+                        <span className="text-foreground ml-1 text-[10px] font-normal">
+                          {cleanTimeStr(data.min_illum_day_time)}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bloque 3: Atardecer */}
+              <div className="border-input-outline/30 flex flex-col gap-1 border-t pt-2">
+                <span className="text-foreground flex items-center gap-1 text-xs font-bold">
+                  🌙 Atardecer (04:01 pm - 06:00 pm)
+                </span>
+                <div className="flex items-center justify-between gap-4 text-xs font-semibold">
+                  <div className="flex flex-col">
+                    <span className="text-foreground text-[10px] font-semibold">Máx</span>
+                    <span>
+                      <span style={{ color }}>
+                        {data.max_illum_dusk !== undefined && data.max_illum_dusk !== null
+                          ? `${formatTooltipValue(data.max_illum_dusk, unit)} ${unit}`
+                          : '--'}
+                      </span>
+                      {data.max_illum_dusk_time && (
+                        <span className="text-foreground ml-1 text-[10px] font-normal">
+                          {cleanTimeStr(data.max_illum_dusk_time)}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-foreground text-[10px] font-semibold">Prom</span>
+                    <span style={{ color }}>
+                      {data.avg_illum_dusk !== undefined && data.avg_illum_dusk !== null
+                        ? `${formatTooltipValue(data.avg_illum_dusk, unit)} ${unit}`
+                        : '--'}
+                    </span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-foreground text-[10px] font-semibold">Mín</span>
+                    <span>
+                      <span style={{ color }}>
+                        {data.min_illum_dusk !== undefined && data.min_illum_dusk !== null
+                          ? `${formatTooltipValue(data.min_illum_dusk, unit)} ${unit}`
+                          : '--'}
+                      </span>
+                      {data.min_illum_dusk_time && (
+                        <span className="text-foreground ml-1 text-[10px] font-normal">
+                          {cleanTimeStr(data.min_illum_dusk_time)}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="flex flex-col gap-2 text-xs">
+              <div className="flex flex-col gap-0.5">
+                <div className="flex justify-between gap-4">
+                  <span className="text-foreground font-semibold">Máximo:</span>
+                  <span className="font-bold" style={{ color }}>
+                    {formatTooltipStat(data[`max_${dataKey}`], unit)}
+                  </span>
+                </div>
+                {data[`max_${dataKey}_time`] && (
+                  <span className="text-foreground text-right text-[10px]">
+                    {cleanTimeStr(data[`max_${dataKey}_time`])}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex justify-between gap-4 border-t border-white/5 pt-1">
+                <span className="text-foreground font-semibold">Promedio:</span>
+                <span className="font-bold" style={{ color }}>
+                  {formatTooltipStat(data[dataKey], unit)}
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-0.5 border-t border-white/5 pt-1">
+                <div className="flex justify-between gap-4">
+                  <span className="text-foreground font-semibold">Mínimo:</span>
+                  <span className="font-bold" style={{ color }}>
+                    {formatTooltipStat(data[`min_${dataKey}`], unit)}
+                  </span>
+                </div>
+                {data[`min_${dataKey}_time`] && (
+                  <span className="text-foreground text-right text-[10px]">
+                    {cleanTimeStr(data[`min_${dataKey}_time`])}
+                  </span>
+                )}
+              </div>
+            </div>
+          )
         ) : (
-          <span className="font-semibold" style={{ color }}>
-            {title.replace('Histórico ', '')}: {formatTooltipValue(data[dataKey], unit)} {unit}
-          </span>
+          <div className="flex flex-col gap-1">
+            {!data.dateLabel && formattedTime && (
+              <span className="text-foreground mb-1 block text-xs font-bold">{formattedTime}</span>
+            )}
+            <span className="text-xs font-bold" style={{ color }}>
+              {formatTooltipStat(data[dataKey], unit)}
+            </span>
+          </div>
         )}
 
         {data.intensity !== undefined && (
@@ -180,14 +620,18 @@ function CustomTooltip({
           </span>
         )}
 
-        {data.startTime && data.endTime && (
-          <span className="text-primary mt-1 font-semibold">
-            {data.startTime} - {data.endTime}
+        {data.typeLabel && (
+          <span
+            className={`mt-1 block text-xs font-semibold ${data.isVirtual ? 'text-amber-400' : 'text-cyan-400'}`}
+          >
+            {data.typeLabel}
           </span>
         )}
 
-        {data.dateLabel && (
-          <span className="text-primary mt-0.5 block font-semibold">{data.dateLabel}</span>
+        {data.startTime && data.endTime && (
+          <span className="text-primary mt-1 text-xs font-semibold">
+            {data.startTime} - {data.endTime}
+          </span>
         )}
       </div>
     )
@@ -245,7 +689,7 @@ export function EnvironmentDataChart({
       if (isNaN(d.getTime())) return ''
       const str = timeFormatter.format(d)
 
-      return str.replace(/A\.?\s*M\.?/i, 'a. m.').replace(/P\.?\s*M\.?/i, 'p. m.')
+      return str.replace(/A\.?\s*M\.?/i, 'am').replace(/P\.?\s*M\.?/i, 'pm')
     } catch {
       return ''
     }
@@ -271,41 +715,331 @@ export function EnvironmentDataChart({
     let max = 0
     let avg = 0
 
-    if (count > 0) {
-      let statsData = validPoints
+    let dayStats = { min: 0, max: 0, avg: 0, count: 0 }
+    let nightStats = { min: 0, max: 0, avg: 0, count: 0 }
+    let illumDawnStats = { min: 0, max: 0, avg: 0, count: 0 }
+    let illumDayStats = { min: 0, max: 0, avg: 0, count: 0 }
+    let illumDuskStats = { min: 0, max: 0, avg: 0, count: 0 }
+    let isDetailed = false
 
-      if (dataKey === 'illuminance' && !isMacroDetected) {
-        if (range === '12h' || range === '24h') {
-          // Filtrar por horario diurno (08:00:00 - 16:00:59) para evitar sesgar el promedio con valores nocturnos de 0 lx
-          statsData = validPoints.filter((d) => {
+    if (count > 0) {
+      const isRealtimeRange =
+        range === '24h' ||
+        range === '1D' ||
+        range === 'today' ||
+        range === 'yesterday' ||
+        range === '8-16h' ||
+        range === '5-19h'
+      const isTargetMetric = dataKey === 'temperature' || dataKey === 'humidity'
+
+      if (isRealtimeRange && isTargetMetric) {
+        isDetailed = true
+
+        // 1. General (24h)
+        const generalValues = validPoints.map((d) => Number(d[dataKey]))
+
+        min = Math.min(...generalValues)
+        max = Math.max(...generalValues)
+        avg = generalValues.reduce((sum, val) => sum + val, 0) / generalValues.length
+
+        // 2. Fase Diurna (08:00 AM - 04:00 PM)
+        const dayPoints = validPoints.filter((d) => {
+          const dDate = new Date(String(d.time))
+          const hour = (dDate.getUTCHours() - 4 + 24) % 24
+          const minVal = dDate.getUTCMinutes()
+
+          return (hour >= 8 && hour < 16) || (hour === 16 && minVal === 0)
+        })
+
+        if (dayPoints.length > 0) {
+          const dayValues = dayPoints.map((d) => Number(d[dataKey]))
+
+          dayStats = {
+            min: Math.min(...dayValues),
+            max: Math.max(...dayValues),
+            avg: dayValues.reduce((sum, val) => sum + val, 0) / dayValues.length,
+            count: dayPoints.length,
+          }
+        }
+
+        // 3. Fase Nocturna (07:00 PM - 05:59 AM)
+        const nightPoints = validPoints.filter((d) => {
+          const dDate = new Date(String(d.time))
+          const hour = (dDate.getUTCHours() - 4 + 24) % 24
+
+          return hour >= 19 || hour <= 5
+        })
+
+        if (nightPoints.length > 0) {
+          const nightValues = nightPoints.map((d) => Number(d[dataKey]))
+
+          nightStats = {
+            min: Math.min(...nightValues),
+            max: Math.max(...nightValues),
+            avg: nightValues.reduce((sum, val) => sum + val, 0) / nightValues.length,
+            count: nightPoints.length,
+          }
+        }
+      } else if (isRealtimeRange && dataKey === 'illuminance') {
+        if (range !== '8-16h') {
+          isDetailed = true
+
+          // Calcular bloques de iluminancia al vuelo
+          const dawnPoints = validPoints.filter((d) => {
             const dDate = new Date(String(d.time))
             const hour = (dDate.getUTCHours() - 4 + 24) % 24
-            const min = dDate.getUTCMinutes()
 
-            return (hour >= 8 && hour < 16) || (hour === 16 && min === 0)
+            return hour >= 5 && hour < 8
           })
+
+          const dayPoints = validPoints.filter((d) => {
+            const dDate = new Date(String(d.time))
+            const hour = (dDate.getUTCHours() - 4 + 24) % 24
+            const minVal = dDate.getUTCMinutes()
+
+            return (hour >= 8 && hour < 16) || (hour === 16 && minVal === 0)
+          })
+
+          const duskPoints = validPoints.filter((d) => {
+            const dDate = new Date(String(d.time))
+            const hour = (dDate.getUTCHours() - 4 + 24) % 24
+            const minVal = dDate.getUTCMinutes()
+
+            return (
+              (hour === 16 && minVal > 0) ||
+              (hour >= 17 && hour < 19) ||
+              (hour === 19 && minVal === 0)
+            )
+          })
+
+          if (dawnPoints.length > 0) {
+            const values = dawnPoints.map((d) => Number(d[dataKey]))
+
+            illumDawnStats = {
+              min: Math.min(...values),
+              max: Math.max(...values),
+              avg: values.reduce((sum, val) => sum + val, 0) / values.length,
+              count: dawnPoints.length,
+            }
+          }
+
+          if (dayPoints.length > 0) {
+            const values = dayPoints.map((d) => Number(d[dataKey]))
+
+            illumDayStats = {
+              min: Math.min(...values),
+              max: Math.max(...values),
+              avg: values.reduce((sum, val) => sum + val, 0) / values.length,
+              count: dayPoints.length,
+            }
+          }
+
+          if (duskPoints.length > 0) {
+            const values = duskPoints.map((d) => Number(d[dataKey]))
+
+            illumDuskStats = {
+              min: Math.min(...values),
+              max: Math.max(...values),
+              avg: values.reduce((sum, val) => sum + val, 0) / values.length,
+              count: duskPoints.length,
+            }
+          }
+
+          // Para promedio general de iluminancia, excluimos la noche para evitar sesgar a cero
+          const activeIllumPoints = validPoints.filter((d) => {
+            const dDate = new Date(String(d.time))
+            const hour = (dDate.getUTCHours() - 4 + 24) % 24
+            const minVal = dDate.getUTCMinutes()
+
+            return (hour >= 8 && hour < 16) || (hour === 16 && minVal === 0)
+          })
+          const activeVals =
+            activeIllumPoints.length > 0
+              ? activeIllumPoints.map((d) => Number(d[dataKey]))
+              : validPoints.map((d) => Number(d[dataKey]))
+
+          min = Math.min(...validPoints.map((d) => Number(d[dataKey])))
+          max = Math.max(...validPoints.map((d) => Number(d[dataKey])))
+          avg = activeVals.reduce((sum, val) => sum + val, 0) / activeVals.length
+        } else {
+          isDetailed = false
+          // Si el rango es 8h (8-16h), mostramos el valor general del periodo
+          const values = validPoints.map((d) => Number(d[dataKey]))
+
+          min = Math.min(...values)
+          max = Math.max(...values)
+          avg = values.reduce((sum, val) => sum + val, 0) / values.length
         }
-      }
+      } else {
+        let statsData = validPoints
 
-      const values = statsData.map((d) => Number(d[dataKey]))
-      const minValues = isMacroDetected
-        ? statsData.map((d) => Number(d[`min_${dataKey}`] ?? d[dataKey]))
-        : values
-      const maxValues = isMacroDetected
-        ? statsData.map((d) => Number(d[`max_${dataKey}`] ?? d[dataKey]))
-        : values
+        if (dataKey === 'illuminance' && !isMacroDetected) {
+          if (range === '12h' || range === '24h' || range === '8-16h' || range === '5-19h') {
+            // Filtrar por horario diurno para evitar sesgar el promedio con valores nocturnos de 0 lx
+            statsData = validPoints.filter((d) => {
+              const dDate = new Date(String(d.time))
+              const hour = (dDate.getUTCHours() - 4 + 24) % 24
+              const minVal = dDate.getUTCMinutes()
 
-      if (values.length > 0) {
-        min = Math.min(...minValues)
-        max = Math.max(...maxValues)
-        avg = values.reduce((sum, val) => sum + val, 0) / values.length
+              return (hour >= 8 && hour < 16) || (hour === 16 && minVal === 0)
+            })
+          }
+        }
+
+        const values = statsData.map((d) => Number(d[dataKey]))
+        const minValues = isMacroDetected
+          ? statsData.map((d) => Number(d[`min_${dataKey}`] ?? d[dataKey]))
+          : values
+        const maxValues = isMacroDetected
+          ? statsData.map((d) => Number(d[`max_${dataKey}`] ?? d[dataKey]))
+          : values
+
+        if (values.length > 0) {
+          min = Math.min(...minValues)
+          max = Math.max(...maxValues)
+          avg = values.reduce((sum, val) => sum + val, 0) / values.length
+        }
+
+        // Si tenemos datos macroprocesados (Postgres), calcular los desgloses agregados para el footer
+        if (isMacroDetected) {
+          const isTargetMetric = dataKey === 'temperature' || dataKey === 'humidity'
+
+          if (isTargetMetric) {
+            isDetailed = true
+            const dayMins = validPoints
+              .map((d) => d[`min_${dataKey}_day`] ?? d[`min_${dataKey}`])
+              .filter((v) => v != null)
+              .map(Number)
+            const dayMaxs = validPoints
+              .map((d) => d[`max_${dataKey}_day`] ?? d[`max_${dataKey}`])
+              .filter((v) => v != null)
+              .map(Number)
+            const dayAvgs = validPoints
+              .map((d) => d[`avg_${dataKey}_day`])
+              .filter((v) => v != null)
+              .map(Number)
+
+            const nightMins = validPoints
+              .map((d) => d[`min_${dataKey}_night`] ?? d[`min_${dataKey}`])
+              .filter((v) => v != null)
+              .map(Number)
+            const nightMaxs = validPoints
+              .map((d) => d[`max_${dataKey}_night`] ?? d[`max_${dataKey}`])
+              .filter((v) => v != null)
+              .map(Number)
+            const nightAvgs = validPoints
+              .map((d) => d[`avg_${dataKey}_night`])
+              .filter((v) => v != null)
+              .map(Number)
+
+            dayStats = {
+              min: dayMins.length > 0 ? Math.min(...dayMins) : 0,
+              max: dayMaxs.length > 0 ? Math.max(...dayMaxs) : 0,
+              avg: dayAvgs.length > 0 ? dayAvgs.reduce((s, v) => s + v, 0) / dayAvgs.length : 0,
+              count: dayAvgs.length,
+            }
+
+            nightStats = {
+              min: nightMins.length > 0 ? Math.min(...nightMins) : 0,
+              max: nightMaxs.length > 0 ? Math.max(...nightMaxs) : 0,
+              avg:
+                nightAvgs.length > 0 ? nightAvgs.reduce((s, v) => s + v, 0) / nightAvgs.length : 0,
+              count: nightAvgs.length,
+            }
+          } else if (dataKey === 'illuminance') {
+            isDetailed = true
+            const dawnMins = validPoints
+              .map((d) => d.min_illum_dawn)
+              .filter((v) => v != null)
+              .map(Number)
+            const dawnMaxs = validPoints
+              .map((d) => d.max_illum_dawn)
+              .filter((v) => v != null)
+              .map(Number)
+            const dawnAvgs = validPoints
+              .map((d) => d.avg_illum_dawn)
+              .filter((v) => v != null)
+              .map(Number)
+
+            const dayMins = validPoints
+              .map((d) => d.min_illum_day)
+              .filter((v) => v != null)
+              .map(Number)
+            const dayMaxs = validPoints
+              .map((d) => d.max_illum_day)
+              .filter((v) => v != null)
+              .map(Number)
+            const dayAvgs = validPoints
+              .map((d) => d.avg_illum_day)
+              .filter((v) => v != null)
+              .map(Number)
+
+            const duskMins = validPoints
+              .map((d) => d.min_illum_dusk)
+              .filter((v) => v != null)
+              .map(Number)
+            const duskMaxs = validPoints
+              .map((d) => d.max_illum_dusk)
+              .filter((v) => v != null)
+              .map(Number)
+            const duskAvgs = validPoints
+              .map((d) => d.avg_illum_dusk)
+              .filter((v) => v != null)
+              .map(Number)
+
+            illumDawnStats = {
+              min: dawnMins.length > 0 ? Math.min(...dawnMins) : 0,
+              max: dawnMaxs.length > 0 ? Math.max(...dawnMaxs) : 0,
+              avg: dawnAvgs.length > 0 ? dawnAvgs.reduce((s, v) => s + v, 0) / dawnAvgs.length : 0,
+              count: dawnAvgs.length,
+            }
+
+            illumDayStats = {
+              min: dayMins.length > 0 ? Math.min(...dayMins) : 0,
+              max: dayMaxs.length > 0 ? Math.max(...dayMaxs) : 0,
+              avg: dayAvgs.length > 0 ? dayAvgs.reduce((s, v) => s + v, 0) / dayAvgs.length : 0,
+              count: dayAvgs.length,
+            }
+
+            illumDuskStats = {
+              min: duskMins.length > 0 ? Math.min(...duskMins) : 0,
+              max: duskMaxs.length > 0 ? Math.max(...duskMaxs) : 0,
+              avg: duskAvgs.length > 0 ? duskAvgs.reduce((s, v) => s + v, 0) / duskAvgs.length : 0,
+              count: duskAvgs.length,
+            }
+          }
+        }
       }
     }
 
-    return { isMacro: isMacroDetected, count, min, max, avg }
+    return {
+      isMacro: isMacroDetected,
+      count,
+      min,
+      max,
+      avg,
+      dayStats,
+      nightStats,
+      illumDawnStats,
+      illumDayStats,
+      illumDuskStats,
+      isDetailed,
+    }
   }, [dataKey, chartDataFiltered, range])
 
-  const { isMacro, count, min, max, avg } = stats
+  const {
+    isMacro,
+    count,
+    min,
+    max,
+    avg,
+    dayStats,
+    nightStats,
+    illumDawnStats,
+    illumDayStats,
+    illumDuskStats,
+    isDetailed,
+  } = stats
 
   const totalRainAccumulated = useMemo(() => {
     if (dataKey !== 'duration') return 0
@@ -318,6 +1052,23 @@ export function EnvironmentDataChart({
     if (unit === 'min' && Number.isInteger(val)) return val.toString()
 
     return val.toFixed(1)
+  }
+
+  const formatStatValue = (val: number) => {
+    if (unit !== 'min') return `${formatStat(val)} ${unit}`.trim()
+
+    const roundedVal = Math.round(val)
+
+    if (roundedVal < 60) {
+      return `${roundedVal} min`
+    }
+
+    const hours = Math.floor(roundedVal / 60)
+    const remaining = roundedVal % 60
+
+    if (remaining === 0) return `${hours}h`
+
+    return `${hours}h ${remaining}min`
   }
 
   const getRangeLabel = (r: string) => {
@@ -432,6 +1183,7 @@ export function EnvironmentDataChart({
                     color={color}
                     dataKey={dataKey}
                     formatTime={formatLabelTime}
+                    range={range}
                     title={title}
                     unit={unit}
                   />
@@ -498,6 +1250,7 @@ export function EnvironmentDataChart({
                     color={color}
                     dataKey={dataKey}
                     formatTime={formatLabelTime}
+                    range={range}
                     title={title}
                     unit={unit}
                   />
@@ -506,7 +1259,11 @@ export function EnvironmentDataChart({
                 isAnimationActive={false}
                 wrapperStyle={{ outline: 'none' }}
               />
-              <Bar animationDuration={200} dataKey={dataKey} fill={color} radius={[4, 4, 0, 0]} />
+              <Bar animationDuration={200} dataKey={dataKey} radius={[4, 4, 0, 0]}>
+                {chartDataFiltered.map((entry) => (
+                  <Cell key={`cell-${String(entry.time)}`} fill={color} fillOpacity={1} />
+                ))}
+              </Bar>
             </BarChart>
           )}
         </ResponsiveContainer>
@@ -520,43 +1277,221 @@ export function EnvironmentDataChart({
           dataKey === 'duration' ? 'tds-sm:grid-cols-5' : 'tds-sm:grid-cols-4',
         )}
       >
-        <div className="bg-hover-overlay/50 flex flex-col items-center justify-center rounded-md py-3">
-          <span className="text-secondary text-[10px] font-bold tracking-wider uppercase">
-            Mínimo
-          </span>
-          <span className="text-primary mt-1 text-sm font-semibold">
-            {count > 0 ? `${formatStat(min)} ${unit}` : '--'}
-          </span>
+        {/* Card Mínimo */}
+        <div className="bg-hover-overlay/50 flex min-h-24 flex-col items-center justify-center rounded-md px-2 py-3 text-center">
+          <span className="text-secondary mb-1 text-xs font-bold">Mínimo</span>
+          {isDetailed && count > 0 ? (
+            dataKey === 'illuminance' ? (
+              <div className="flex w-full flex-col gap-0.5 px-2 text-xs">
+                <div className="flex w-full justify-between">
+                  <span className="text-foreground font-semibold">🌄 Amanecer</span>
+                  <span className="text-primary font-bold">
+                    {illumDawnStats.count > 0 ? `${formatStat(illumDawnStats.min)} ${unit}` : '--'}
+                  </span>
+                </div>
+                <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
+                  <span className="text-foreground font-semibold">☀️ Fotoperiodo</span>
+                  <span className="text-primary font-bold">
+                    {illumDayStats.count > 0 ? `${formatStat(illumDayStats.min)} ${unit}` : '--'}
+                  </span>
+                </div>
+                <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
+                  <span className="text-foreground font-semibold">🌙 Atardecer</span>
+                  <span className="text-primary font-bold">
+                    {illumDuskStats.count > 0 ? `${formatStat(illumDuskStats.min)} ${unit}` : '--'}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex w-full flex-col gap-0.5 px-2 text-xs">
+                <div className="flex w-full justify-between">
+                  <span className="text-foreground font-semibold">📊 General</span>
+                  <span className="text-primary font-bold">
+                    {formatStat(min)} {unit}
+                  </span>
+                </div>
+                <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
+                  <span className="text-foreground font-semibold">☀️ Fase Diurna</span>
+                  <span className="text-primary font-bold">
+                    {dayStats.count > 0 ? `${formatStat(dayStats.min)} ${unit}` : '--'}
+                  </span>
+                </div>
+                <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
+                  <span className="text-foreground font-semibold">🌙 Fase Nocturna</span>
+                  <span className="text-primary font-bold">
+                    {nightStats.count > 0 ? `${formatStat(nightStats.min)} ${unit}` : '--'}
+                  </span>
+                </div>
+              </div>
+            )
+          ) : (
+            <span className="text-primary text-xs font-semibold">
+              {count > 0 ? formatStatValue(min) : '--'}
+            </span>
+          )}
         </div>
-        <div className="bg-hover-overlay/50 flex flex-col items-center justify-center rounded-md py-3">
-          <span className="text-secondary text-[10px] font-bold tracking-wider uppercase">
-            Máximo
-          </span>
-          <span className="text-primary mt-1 text-sm font-semibold">
-            {count > 0 ? `${formatStat(max)} ${unit}` : '--'}
-          </span>
+
+        {/* Card Máximo */}
+        <div className="bg-hover-overlay/50 flex min-h-24 flex-col items-center justify-center rounded-md px-2 py-3 text-center">
+          <span className="text-secondary mb-1 text-xs font-bold">Máximo</span>
+          {isDetailed && count > 0 ? (
+            dataKey === 'illuminance' ? (
+              <div className="flex w-full flex-col gap-0.5 px-2 text-xs">
+                <div className="flex w-full justify-between">
+                  <span className="text-foreground font-semibold">🌄 Amanecer</span>
+                  <span className="text-primary font-bold">
+                    {illumDawnStats.count > 0 ? `${formatStat(illumDawnStats.max)} ${unit}` : '--'}
+                  </span>
+                </div>
+                <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
+                  <span className="text-foreground font-semibold">☀️ Fotoperiodo</span>
+                  <span className="text-primary font-bold">
+                    {illumDayStats.count > 0 ? `${formatStat(illumDayStats.max)} ${unit}` : '--'}
+                  </span>
+                </div>
+                <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
+                  <span className="text-foreground font-semibold">🌙 Atardecer</span>
+                  <span className="text-primary font-bold">
+                    {illumDuskStats.count > 0 ? `${formatStat(illumDuskStats.max)} ${unit}` : '--'}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex w-full flex-col gap-0.5 px-2 text-xs">
+                <div className="flex w-full justify-between">
+                  <span className="text-foreground font-semibold">📊 General</span>
+                  <span className="text-primary font-bold">
+                    {formatStat(max)} {unit}
+                  </span>
+                </div>
+                <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
+                  <span className="text-foreground font-semibold">☀️ Fase Diurna</span>
+                  <span className="text-primary font-bold">
+                    {dayStats.count > 0 ? `${formatStat(dayStats.max)} ${unit}` : '--'}
+                  </span>
+                </div>
+                <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
+                  <span className="text-foreground font-semibold">🌙 Fase Nocturna</span>
+                  <span className="text-primary font-bold">
+                    {nightStats.count > 0 ? `${formatStat(nightStats.max)} ${unit}` : '--'}
+                  </span>
+                </div>
+              </div>
+            )
+          ) : (
+            <span className="text-primary text-xs font-semibold">
+              {count > 0 ? formatStatValue(max) : '--'}
+            </span>
+          )}
         </div>
-        <div className="bg-hover-overlay/50 flex flex-col items-center justify-center rounded-md py-3">
-          <span className="text-secondary text-[10px] font-bold tracking-wider uppercase">
-            Promedio
-          </span>
-          <span className="text-primary mt-1 text-sm font-semibold">
-            {count > 0 ? `${formatStat(avg)} ${unit}` : '--'}
-          </span>
+
+        {/* Card Promedio */}
+        <div className="bg-hover-overlay/50 flex min-h-24 flex-col items-center justify-center rounded-md px-2 py-3 text-center">
+          <span className="text-secondary mb-1 text-xs font-bold">Promedio</span>
+          {isDetailed && count > 0 ? (
+            dataKey === 'illuminance' ? (
+              <div className="flex w-full flex-col gap-0.5 px-2 text-xs">
+                <div className="flex w-full justify-between">
+                  <span className="text-foreground font-semibold">🌄 Amanecer</span>
+                  <span className="text-primary font-bold">
+                    {illumDawnStats.count > 0 ? `${formatStat(illumDawnStats.avg)} ${unit}` : '--'}
+                  </span>
+                </div>
+                <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
+                  <span className="text-foreground font-semibold">☀️ Fotoperiodo</span>
+                  <span className="text-primary font-bold">
+                    {illumDayStats.count > 0 ? `${formatStat(illumDayStats.avg)} ${unit}` : '--'}
+                  </span>
+                </div>
+                <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
+                  <span className="text-foreground font-semibold">🌙 Atardecer</span>
+                  <span className="text-primary font-bold">
+                    {illumDuskStats.count > 0 ? `${formatStat(illumDuskStats.avg)} ${unit}` : '--'}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex w-full flex-col gap-0.5 px-2 text-xs">
+                <div className="flex w-full justify-between">
+                  <span className="text-foreground font-semibold">📊 General</span>
+                  <span className="text-primary font-bold">
+                    {formatStat(avg)} {unit}
+                  </span>
+                </div>
+                <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
+                  <span className="text-foreground font-semibold">☀️ Fase Diurna</span>
+                  <span className="text-primary font-bold">
+                    {dayStats.count > 0 ? `${formatStat(dayStats.avg)} ${unit}` : '--'}
+                  </span>
+                </div>
+                <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
+                  <span className="text-foreground font-semibold">🌙 Fase Nocturna</span>
+                  <span className="text-primary font-bold">
+                    {nightStats.count > 0 ? `${formatStat(nightStats.avg)} ${unit}` : '--'}
+                  </span>
+                </div>
+              </div>
+            )
+          ) : (
+            <span className="text-primary text-xs font-semibold">
+              {count > 0 ? formatStatValue(avg) : '--'}
+            </span>
+          )}
         </div>
-        <div className="bg-hover-overlay/50 flex flex-col items-center justify-center rounded-md py-3">
-          <span className="text-secondary text-[10px] font-bold tracking-wider uppercase">
+
+        {/* Card Registros */}
+        <div className="bg-hover-overlay/50 flex min-h-24 flex-col items-center justify-center rounded-md px-2 py-3 text-center">
+          <span className="text-secondary mb-1 text-xs font-bold">
             {dataKey === 'duration' ? 'Eventos' : 'Registros'}
           </span>
-          <span className="text-primary mt-1 text-sm font-semibold">{count}</span>
+          {isDetailed && count > 0 ? (
+            dataKey === 'illuminance' ? (
+              <div className="flex w-full flex-col gap-0.5 px-2 text-xs">
+                <div className="flex w-full justify-between">
+                  <span className="text-foreground font-semibold">🌄 Amanecer</span>
+                  <span className="text-primary font-bold">{illumDawnStats.count}</span>
+                </div>
+                <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
+                  <span className="text-foreground font-semibold">☀️ Fotoperiodo</span>
+                  <span className="text-primary font-bold">{illumDayStats.count}</span>
+                </div>
+                <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
+                  <span className="text-foreground font-semibold">🌙 Atardecer</span>
+                  <span className="text-primary font-bold">{illumDuskStats.count}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex w-full flex-col gap-0.5 px-2 text-xs">
+                <div className="flex w-full justify-between">
+                  <span className="text-foreground font-semibold">📊 General</span>
+                  <span className="text-primary font-bold">{count}</span>
+                </div>
+                <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
+                  <span className="text-foreground font-semibold">☀️ Fase Diurna</span>
+                  <span className="text-primary font-bold">{dayStats.count}</span>
+                </div>
+                <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
+                  <span className="text-foreground font-semibold">🌙 Fase Nocturna</span>
+                  <span className="text-primary font-bold">{nightStats.count}</span>
+                </div>
+              </div>
+            )
+          ) : (
+            <span className="text-primary text-xs font-semibold">{count}</span>
+          )}
         </div>
         {dataKey === 'duration' && (
           <div className="bg-hover-overlay/50 flex flex-col items-center justify-center rounded-md py-3">
-            <span className="text-secondary text-[10px] font-bold tracking-wider uppercase">
-              Lluvia Acumulada
-            </span>
-            <span className="text-primary mt-1 text-sm font-semibold">
-              {totalRainAccumulated} min
+            <span className="text-secondary text-xs font-bold">Lluvia acumulada</span>
+            <span className="text-primary mt-1 text-xs font-semibold">
+              {(() => {
+                if (totalRainAccumulated < 60) return `${totalRainAccumulated} min`
+
+                const hours = Math.floor(totalRainAccumulated / 60)
+                const remainingMins = totalRainAccumulated % 60
+
+                return remainingMins > 0 ? `${hours}h ${remainingMins}min` : `${hours}h`
+              })()}
             </span>
           </div>
         )}

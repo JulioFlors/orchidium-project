@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react'
 import useSWR from 'swr'
 import {
-  IoCloseOutline,
-  IoWarningOutline,
   IoAddOutline,
   IoFlaskOutline,
   IoWaterOutline,
+  IoCalendarOutline,
+  IoWarningOutline,
 } from 'react-icons/io5'
 import { MdDewPoint, MdOutlineHistoryToggleOff } from 'react-icons/md'
 import { PiSprayBottle } from 'react-icons/pi'
@@ -16,6 +16,8 @@ import { DeferredTaskModal, QueueTaskCard, type PlannerFormInputs } from './comp
 
 import { Modal, Button, Heading } from '@/components/ui'
 import { useToast } from '@/hooks'
+import { useFormDraftStore } from '@/store'
+import { formatTime12h } from '@/utils'
 import { TaskPurpose, TaskPurposeLabels, ZoneType } from '@/config/mappings'
 import { type GlowVariant } from '@/components/ui/status-circle/StatusCircleIcon'
 
@@ -131,10 +133,17 @@ export function QueueView() {
     isRoutine?: boolean
     scheduledAt?: string
   } | null>(null)
-  const [cancelReason, setCancelReason] = useState('')
+
+  const { drafts, setDraft, clearDraft } = useFormDraftStore()
+  const cancelReasonKey = cancelTarget ? `cancel-task-${cancelTarget.id}` : ''
+  const cancelReason = cancelTarget ? ((drafts[cancelReasonKey] as string | undefined) ?? '') : ''
+
+  const [isCancelling, setIsCancelling] = useState(false)
 
   const handleCancelConfirm = async () => {
     if (!cancelTarget || !cancelReason.trim()) return
+
+    setIsCancelling(true)
 
     try {
       const res = await fetch(`/api/tasks/${cancelTarget.id}`, {
@@ -148,7 +157,7 @@ export function QueueView() {
 
       if (res.ok) {
         success('Tarea cancelada correctamente')
-
+        clearDraft(cancelReasonKey)
         mutate()
       } else {
         const errorData = await res.json().catch(() => ({}))
@@ -161,8 +170,8 @@ export function QueueView() {
           (err instanceof Error ? err.message : 'Error desconocido'),
       )
     } finally {
+      setIsCancelling(false)
       setCancelTarget(null)
-      setCancelReason('')
     }
   }
 
@@ -218,29 +227,32 @@ export function QueueView() {
       </div>
 
       <Modal
-        icon={
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-500/10">
-            <IoCloseOutline className="text-lg text-red-500" />
-          </div>
-        }
         isOpen={!!cancelTarget}
-        size="sm"
-        title="Cancelar Tarea"
+        size="md"
+        title={
+          cancelTarget
+            ? `${cancelTarget.label}${cancelTarget.id && !cancelTarget.id.startsWith('routine-') ? ` #${cancelTarget.id.substring(0, 8)}` : ''}`
+            : 'Cancelar Tarea'
+        }
         onClose={() => {
           setCancelTarget(null)
-          setCancelReason('')
         }}
       >
-        <div className="flex flex-col gap-4">
-          <p className="text-secondary text-sm">
-            Estás a punto de cancelar la tarea de{' '}
-            <span className="text-primary font-semibold">{cancelTarget?.label}</span>.
-            {cancelTarget?.isRoutine && (
-              <span className="mt-1 block text-xs text-orange-500 italic">
-                Esta tarea fue generada automáticamente por una rutina programada.
+        <div className="flex flex-col gap-5">
+          {cancelTarget?.scheduledAt && (
+            <div className="flex items-center gap-1.5 text-xs font-semibold">
+              <IoCalendarOutline className="text-primary h-4 w-4 font-bold" />
+              <span className="text-secondary">Programada para el </span>
+              <span className="text-primary font-mono font-bold">
+                {new Date(cancelTarget.scheduledAt).toLocaleDateString('es-VE', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                })}{' '}
+                - {formatTime12h(new Date(cancelTarget.scheduledAt))}
               </span>
-            )}
-          </p>
+            </div>
+          )}
 
           <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
             <p className="flex items-center gap-2 text-xs font-medium text-red-500">
@@ -259,26 +271,26 @@ export function QueueView() {
               placeholder="Ej: Cambio de prioridades, clima adverso..."
               rows={3}
               value={cancelReason}
-              onChange={(e) => setCancelReason(e.target.value)}
+              onChange={(e) => setDraft(cancelReasonKey, e.target.value)}
             />
           </div>
 
-          <div className="border-input-outline -mx-6 mt-2 -mb-6 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+          <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
             <Button
               variant="ghost"
               onClick={() => {
                 setCancelTarget(null)
-                setCancelReason('')
               }}
             >
               Volver
             </Button>
             <Button
               disabled={!cancelReason.trim()}
+              isLoading={isCancelling}
               variant="destructive"
               onClick={handleCancelConfirm}
             >
-              Cancelar Tarea
+              {isCancelling ? 'Cancelando' : 'Cancelar Tarea'}
             </Button>
           </div>
         </div>

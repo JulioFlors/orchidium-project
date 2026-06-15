@@ -9,6 +9,7 @@ import * as z from 'zod'
 
 import { upsertFertilizationProgram, upsertPhytosanitaryProgram } from '@/actions'
 import { FormField, Button, SelectDropdown, Input, Modal } from '@/components/ui'
+import { useFormDraftStore } from '@/store'
 
 const cycleSchema = z.object({
   agrochemicalId: z.string().min(1, 'Debe seleccionar un insumo'),
@@ -54,11 +55,15 @@ export function ProgramForm({
   availableAgrochemicals,
 }: Props) {
   const [isPending, startTransition] = useTransition()
+  const draftKey = `program-draft-${type}`
+  const isRestoringRef = React.useRef(false)
 
   const {
     register,
     handleSubmit,
     control,
+    reset,
+    watch,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(programSchema),
@@ -79,17 +84,83 @@ export function ProgramForm({
         },
   })
 
+  // Cargar borrador al abrir el modal (solo para creación, es decir, cuando no hay initialData)
+  React.useEffect(() => {
+    if (isOpen && !initialData) {
+      const savedDraft = useFormDraftStore.getState().getDraft(draftKey) as FormValues | undefined
+
+      isRestoringRef.current = true
+      reset(
+        savedDraft ?? {
+          name: '',
+          frequency: 1,
+          cycles: [{ agrochemicalId: '', sequence: 1 }],
+        },
+      )
+      requestAnimationFrame(() => {
+        isRestoringRef.current = false
+      })
+    } else if (isOpen && initialData) {
+      // Si estamos editando, cargar los datos iniciales
+      isRestoringRef.current = true
+      reset({
+        name: initialData.name,
+        frequency:
+          type === 'fertilization' ? initialData.weeklyFrequency : initialData.monthlyFrequency,
+        cycles: initialData.productsCycle.map((pc) => ({
+          agrochemicalId: pc.agrochemicalId,
+          sequence: pc.sequence,
+        })),
+      })
+      requestAnimationFrame(() => {
+        isRestoringRef.current = false
+      })
+    }
+  }, [isOpen, initialData, reset, draftKey, type])
+
+  // Persistir cambios en tiempo real
+  const watchedValues = watch()
+  const watchedString = JSON.stringify(watchedValues)
+
+  React.useEffect(() => {
+    if (!isOpen || isRestoringRef.current || !!initialData) return
+
+    const currentDraft = useFormDraftStore.getState().getDraft(draftKey) as FormValues | undefined
+
+    if (JSON.stringify(currentDraft) !== watchedString) {
+      useFormDraftStore.getState().setDraft(draftKey, JSON.parse(watchedString) as FormValues)
+    }
+  }, [watchedString, isOpen, draftKey, initialData])
+
   const { fields, append, remove, move } = useFieldArray({
     control,
     name: 'cycles',
   })
 
   const agroOptions = React.useMemo(() => {
-    return availableAgrochemicals.map((a) => ({
+    // Filtrar agroquímicos según el tipo de programa
+    const filtered = availableAgrochemicals.filter((a) => {
+      if (type === 'fertilization') {
+        // Nutrición/Fertilización
+        return (
+          a.purpose === 'DESARROLLO' || a.purpose === 'FLORACION' || a.purpose === 'MANTENIMIENTO'
+        )
+      } else {
+        // Protección Fitosanitaria
+        return (
+          a.purpose === 'ACARICIDA' ||
+          a.purpose === 'BACTERICIDA' ||
+          a.purpose === 'FUNGICIDA' ||
+          a.purpose === 'INSECTICIDA'
+        )
+      }
+    })
+
+    return filtered.map((a) => ({
       label: `${a.name} (${a.purpose})`,
       value: a.id,
     }))
-  }, [availableAgrochemicals])
+  }, [availableAgrochemicals, type])
 
   const onSubmit = (values: FormValues) => {
     startTransition(async () => {
@@ -125,6 +196,7 @@ export function ProgramForm({
             )
 
       if (result.ok) {
+        useFormDraftStore.getState().clearDraft(draftKey)
         onSuccess()
         onClose()
       } else {
