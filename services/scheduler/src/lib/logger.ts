@@ -21,6 +21,10 @@ function cleanAmPm(str: string): string {
     .replace(/p\s*m/gi, 'pm')
 }
 
+function cleanAnsi(str: string): string {
+  return str.replace(/\x1b\[[0-9;]*m/g, '')
+}
+
 const getLogTime = () => {
   const formatted = new Intl.DateTimeFormat('es-VE', {
     timeZone: 'America/Caracas',
@@ -44,13 +48,9 @@ const formatLog = (icon: string, tag: string, color: string, msg: string): strin
   const time = getLogTime()
   const paddedTag = tag.toUpperCase().slice(0, 4).padEnd(4)
 
-  // La cabecera visible sin colores es: "[ DD/MM/YYYY, HH:MM pm ] X [ TAG ] "
-  // Nota: Algunos iconos emoji pueden ocupar 2 posiciones de caracter en consola.
-  const headerText = `[ ${time} ] ${icon} [ ${paddedTag} ] `
   const headerColor = `${colors.white}[ ${time} ]${colors.reset} ${color}${icon} [ ${paddedTag} ]${colors.reset} `
 
-  const headerLen = headerText.length
-  const maxMsgLen = Math.max(20, 80 - headerLen)
+  const maxMsgLen = 80 // Límite de 80 caracteres de contenido real (limpio) del mensaje
 
   // Separar por saltos de línea preexistentes primero para respetar formato multilínea
   const rawParagraphs = msg.split('\n')
@@ -66,23 +66,32 @@ const formatLog = (icon: string, tag: string, color: string, msg: string): strin
     let currentLine = ''
 
     for (const word of words) {
-      if (word.length > maxMsgLen) {
+      const wordCleanLen = cleanAnsi(word).length
+
+      if (wordCleanLen > maxMsgLen) {
         if (currentLine) {
           formattedLines.push(currentLine)
           currentLine = ''
         }
         let remaining = word
 
-        while (remaining.length > maxMsgLen) {
+        while (cleanAnsi(remaining).length > maxMsgLen) {
           formattedLines.push(remaining.slice(0, maxMsgLen))
           remaining = remaining.slice(maxMsgLen)
         }
         currentLine = remaining
-      } else if ((currentLine ? currentLine + ' ' + word : word).length > maxMsgLen) {
-        formattedLines.push(currentLine)
-        currentLine = word
       } else {
-        currentLine = currentLine ? currentLine + ' ' + word : word
+        const currentLineCleanLen = cleanAnsi(currentLine).length
+        const combinedCleanLen = currentLine ? currentLineCleanLen + 1 + wordCleanLen : wordCleanLen
+
+        if (combinedCleanLen > maxMsgLen) {
+          if (currentLine) {
+            formattedLines.push(currentLine)
+          }
+          currentLine = word
+        } else {
+          currentLine = currentLine ? currentLine + ' ' + word : word
+        }
       }
     }
     if (currentLine) {

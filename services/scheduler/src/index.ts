@@ -295,7 +295,7 @@ async function openRainEvent(
       if (!currentId) {
         try {
           const existing = await prisma.rainEvent.findFirst({
-            where: { zone: 'EXTERIOR', endedAt: null, isVirtual },
+            where: { zone: 'EXTERIOR', endedAt: null, isInfered: isVirtual },
             orderBy: { startedAt: 'desc' },
           })
 
@@ -1489,7 +1489,7 @@ function checkAndSleepEma() {
     isEmaSleeping = true
     emaManager.setOffline()
     saveDeviceLog('Weather_Station_ZONA_A', 'SLEEP', 'Suspendido (Proactivo)')
-    Logger.rain('EMA marcado proactivamente en SLEEP al enviar comando')
+    Logger.info('EMA marcado proactivamente en SLEEP al enviar comando')
   }
 }
 
