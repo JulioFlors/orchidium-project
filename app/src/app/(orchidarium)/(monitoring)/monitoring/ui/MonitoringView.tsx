@@ -50,7 +50,6 @@ interface RainEvent {
   duration: number
   intensity: number
   isInfered: boolean
-  isVirtual: boolean
   baselineTemp: number | null
   baselineHum: number | null
   baselineLux: number | null
@@ -269,8 +268,8 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
   }, [cardStatusError, chartError, physicalRainError, inferredRainError, notifyError])
 
   const parsedRainData = useMemo(() => {
-    const physicalEvents = (physicalRainData?.events || []).filter((e) => !e.isVirtual)
-    const inferredEvents = (inferredRainData?.events || []).filter((e) => e.isVirtual)
+    const physicalEvents = (physicalRainData?.events || []).filter((e) => !e.isInfered)
+    const inferredEvents = (inferredRainData?.events || []).filter((e) => e.isInfered)
 
     const isPhysicalActive = physicalRainData?.isActive || false
     const isInferredActive = inferredRainData?.isInferredActive || false
@@ -555,7 +554,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
           chartType: 'bar' as const,
           customData:
             (physicalRainData?.events || [])
-              .filter((ev: RainEvent) => !ev.isVirtual)
+              .filter((ev: RainEvent) => !ev.isInfered)
               .map((ev: RainEvent) => {
                 const startDate = new Date(ev.time)
                 const endDate = new Date(startDate.getTime() + ev.duration * 1000)
@@ -567,7 +566,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
                   startTime: formatTime12h(startDate),
                   endTime: formatTime12h(endDate),
                   dateLabel: formatDateLong(startDate),
-                  isVirtual: ev.isVirtual,
+                  isInfered: ev.isInfered,
                 }
               }) || [],
         }
@@ -581,7 +580,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
           chartType: 'bar' as const,
           customData:
             (inferredRainData?.events || [])
-              .filter((ev: RainEvent) => ev.isVirtual)
+              .filter((ev: RainEvent) => ev.isInfered)
               .map((ev: RainEvent) => {
                 const startDate = new Date(ev.time)
                 const endDate = new Date(startDate.getTime() + ev.duration * 1000)
@@ -593,7 +592,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
                   startTime: formatTime12h(startDate),
                   endTime: formatTime12h(endDate),
                   dateLabel: formatDateLong(startDate),
-                  isVirtual: ev.isVirtual,
+                  isInfered: ev.isInfered,
                   baselineTemp: ev.baselineTemp ?? undefined,
                   baselineHum: ev.baselineHum ?? undefined,
                   baselineLux: ev.baselineLux ?? undefined,

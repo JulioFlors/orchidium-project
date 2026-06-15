@@ -246,7 +246,7 @@ InferenceEngine.registerRainCheck(isCurrentlyRaining)
 async function hydrateRainEventsState() {
   try {
     const openPhysical = await prisma.rainEvent.findFirst({
-      where: { zone: 'EXTERIOR', endedAt: null, isVirtual: false },
+      where: { zone: 'EXTERIOR', endedAt: null, isInfered: false },
       orderBy: { startedAt: 'desc' },
     })
 
@@ -257,7 +257,7 @@ async function hydrateRainEventsState() {
     }
 
     const openVirtual = await prisma.rainEvent.findFirst({
-      where: { zone: 'EXTERIOR', endedAt: null, isVirtual: true },
+      where: { zone: 'EXTERIOR', endedAt: null, isInfered: true },
       orderBy: { startedAt: 'desc' },
     })
 
@@ -274,11 +274,11 @@ let rainEventMutex = Promise.resolve()
 
 /**
  * Abre un nuevo evento de lluvia en PostgreSQL o reanuda uno existente.
- * @param isVirtual true para eventos detectados por correlación climática
+ * @param isInfered true para eventos detectados por correlación climática
  */
 async function openRainEvent(
   timestamp: Date = new Date(),
-  isVirtual: boolean = false,
+  isInfered: boolean = false,
   baselines?: {
     temp: number | null
     hum: number | null
@@ -289,18 +289,18 @@ async function openRainEvent(
 ) {
   rainEventMutex = rainEventMutex
     .then(async () => {
-      const currentId = isVirtual ? openVirtualRainEventId : openPhysicalRainEventId
-      const label = isVirtual ? 'inferido' : 'físico'
+      const currentId = isInfered ? openVirtualRainEventId : openPhysicalRainEventId
+      const label = isInfered ? 'inferido' : 'físico'
 
       if (!currentId) {
         try {
           const existing = await prisma.rainEvent.findFirst({
-            where: { zone: 'EXTERIOR', endedAt: null, isInfered: isVirtual },
+            where: { zone: 'EXTERIOR', endedAt: null, isInfered },
             orderBy: { startedAt: 'desc' },
           })
 
           if (existing) {
-            if (isVirtual) {
+            if (isInfered) {
               openVirtualRainEventId = existing.id
             } else {
               openPhysicalRainEventId = existing.id
@@ -311,8 +311,7 @@ async function openRainEvent(
               data: {
                 startedAt: timestamp,
                 zone: 'EXTERIOR',
-                isVirtual,
-                isInfered: isVirtual,
+                isInfered,
                 baselineTemp: baselines?.temp ?? null,
                 baselineHum: baselines?.hum ?? null,
                 baselineLux: baselines?.lux ?? null,
@@ -321,7 +320,7 @@ async function openRainEvent(
               },
             })
 
-            if (isVirtual) {
+            if (isInfered) {
               openVirtualRainEventId = newEvent.id
             } else {
               openPhysicalRainEventId = newEvent.id
@@ -343,24 +342,24 @@ async function openRainEvent(
  * Cierra el evento de lluvia abierto en Postgres y calcula la duración.
  * @param reason Motivo de cierre: "Dry", "ORPHAN_TIMEOUT", "REBOOT", "SCHEDULER_OVERRIDE"
  * @param endTime Timestamp de cierre (por defecto: ahora)
- * @param isVirtual true para eventos detectados por correlación climática
+ * @param isInfered true para eventos detectados por correlación climática
  */
 async function closeRainEvent(
   reason: string,
   endTime: Date = new Date(),
-  isVirtual: boolean = false,
+  isInfered: boolean = false,
   closeReason?: string,
 ) {
   rainEventMutex = rainEventMutex
     .then(async () => {
-      let eventId = isVirtual ? openVirtualRainEventId : openPhysicalRainEventId
-      const label = isVirtual ? 'inferido' : 'físico'
+      let eventId = isInfered ? openVirtualRainEventId : openPhysicalRainEventId
+      const label = isInfered ? 'inferido' : 'físico'
 
       if (!eventId) {
         // Buscar en DB por si el Scheduler se reinició con un evento huérfano
         const existing = await prisma.rainEvent
           .findFirst({
-            where: { zone: 'EXTERIOR', endedAt: null, isVirtual },
+            where: { zone: 'EXTERIOR', endedAt: null, isInfered },
             orderBy: { startedAt: 'desc' },
           })
           .catch(() => null)
@@ -373,7 +372,7 @@ async function closeRainEvent(
         const event = await prisma.rainEvent.findUnique({ where: { id: eventId } })
 
         if (!event || event.endedAt) {
-          if (isVirtual) {
+          if (isInfered) {
             openVirtualRainEventId = null
           } else {
             openPhysicalRainEventId = null
@@ -428,13 +427,13 @@ async function closeRainEvent(
           `Evento de lluvia ${label} cerrado (${reason}) — Duración: ${Math.round(durationSeconds / 60)} min${intensityLog} (ID: ${eventId.slice(0, 8)})`,
         )
 
-        if (isVirtual) {
+        if (isInfered) {
           lastRainClosedAt = endTime.getTime()
         }
       } catch (err) {
         Logger.error(`Error cerrando RainEvent ${label} en Postgres:`, err)
       } finally {
-        if (isVirtual) {
+        if (isInfered) {
           openVirtualRainEventId = null
         } else {
           openPhysicalRainEventId = null

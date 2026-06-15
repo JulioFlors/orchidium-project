@@ -821,7 +821,6 @@ export async function getRainSummaryInternal(range: string, zone: ZoneType) {
       duration: ev.durationSeconds || 0,
       intensity: ev.avgIntensity || ev.peakIntensity || 0,
       isInfered: ev.isInfered,
-      isVirtual: ev.isInfered, // Retrocompatibilidad
       baselineTemp: ev.baselineTemp,
       baselineHum: ev.baselineHum,
       baselineLux: ev.baselineLux,

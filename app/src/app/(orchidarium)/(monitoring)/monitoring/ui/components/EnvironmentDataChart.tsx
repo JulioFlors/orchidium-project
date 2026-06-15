@@ -214,7 +214,7 @@ function CustomTooltip({
         formattedTime = ''
       }
     }
-    if (data.isVirtual) {
+    if (data.isInfered) {
       return (
         <div className="bg-surface border-input-outline relative z-50 flex max-w-[340px] flex-col gap-3 overflow-visible rounded-lg border p-3 text-xs shadow-md outline-none">
           {/* Encabezado: Fecha y Duración */}
@@ -625,7 +625,7 @@ function CustomTooltip({
 
         {data.typeLabel && (
           <span
-            className={`mt-1 block text-xs font-semibold ${data.isVirtual ? 'text-amber-400' : 'text-cyan-400'}`}
+            className={`mt-1 block text-xs font-semibold ${data.isInfered ? 'text-amber-400' : 'text-cyan-400'}`}
           >
             {data.typeLabel}
           </span>
