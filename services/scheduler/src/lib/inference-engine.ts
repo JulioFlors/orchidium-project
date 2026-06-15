@@ -11,8 +11,6 @@ import { Logger } from './logger'
 import { classifyCurrentDay } from './day-classifier'
 import { influxClient } from './influx'
 
-let isRainingCallback: (() => boolean) | null = null
-
 /**
  * Umbrales Botánicos (Orquídeas Epífitas Tropicales - Cattleya).
  *
@@ -153,10 +151,6 @@ export interface InferenceResult {
  * - Pulverización/Nebulización: máx 3 min, la línea gotea y moja plantas debajo.
  */
 export class InferenceEngine {
-  static registerRainCheck(cb: () => boolean) {
-    isRainingCallback = cb
-  }
-
   static async evaluate(schedule: AutomationSchedule): Promise<InferenceResult> {
     try {
       const now = new Date()
@@ -183,11 +177,47 @@ export class InferenceEngine {
         }
       }
 
+      const purpose = schedule.purpose
+
+      // ── 1.B: Veto Riego Interdiario (solo IRRIGATION) ──
+      if (purpose === 'IRRIGATION') {
+        const yesterday = new Date(now)
+
+        yesterday.setDate(yesterday.getDate() - 1)
+        const regadoAyer = await this.checkRiegoCompleto(yesterday)
+
+        if (regadoAyer) {
+          const yesterdayRain = await this.getRainAccumulationForDate(yesterday)
+          const startYesterday = new Date(yesterday)
+
+          startYesterday.setHours(0, 0, 0, 0)
+          const endYesterday = new Date(yesterday)
+
+          endYesterday.setHours(23, 59, 59, 999)
+
+          const yesterdayAsp = await prisma.taskLog.aggregate({
+            where: {
+              purpose: TaskPurpose.IRRIGATION,
+              status: TaskStatus.COMPLETED,
+              scheduledAt: { gte: startYesterday, lte: endYesterday },
+            },
+            _sum: { duration: true },
+          })
+          const aspMins = yesterdayAsp._sum.duration ?? 0
+          const rainMins = Math.round(yesterdayRain.durationSeconds / 60)
+
+          return {
+            shouldCancel: true,
+            reason: `VETO RIEGO INTERDIARIO: Ayer ya se registró un riego completo (Aspersión: ${aspMins} min, Lluvia: ${rainMins} min). Manteniendo alternancia.`,
+            action: 'SKIP',
+            metadata: { regadoAyer },
+          }
+        }
+      }
+
       // ── 2. Obtener Telemetría Real + Clasificación del Día ──
       const localConditions = await this.getLatestLocalConditions()
       const dayClass = await classifyCurrentDay()
-
-      const purpose = schedule.purpose
 
       // ── Lógica de Fallback (Exterior si Interior falla) ──
       const isFallback = !localConditions.foundInterior && localConditions.foundExterior
@@ -209,24 +239,26 @@ export class InferenceEngine {
 
       const dataUsed = isFallback ? 'EXT' : 'INT'
 
-      // ── 3. HARD BLOCK: Lluvia Real en Curso ──
-      const isRainActive = isRainingCallback ? isRainingCallback() : false
-      const currentlyRaining =
-        isRainActive ||
-        (localConditions.exterior.rain_intensity && localConditions.exterior.rain_intensity > 0)
+      // ── 3. HARD BLOCK: Lluvia Real / Inferida en Curso (Evento Activo en Postgres) ──
+      const openRainEvent = await prisma.rainEvent.findFirst({
+        where: { zone: 'EXTERIOR', endedAt: null },
+      })
+      const currentlyRaining = !!openRainEvent
 
       Logger.inference(`Evaluando: ${schedule.name} (${purpose})`)
       Logger.inference(
         `HR: ${interiorHum.toFixed(0)}% | Temp: ${interiorTemp.toFixed(1)}°C | Día: ${dayClass.type}`,
       )
-      Logger.inference(`Datos: ${dataUsed} | Lluvia: ${currentlyRaining ? 'SÍ' : 'NO'}`)
+      Logger.inference(
+        `Datos: ${dataUsed} | Lluvia en curso (DB): ${currentlyRaining ? 'SÍ' : 'NO'}`,
+      )
 
       if (currentlyRaining) {
         return {
           shouldCancel: true,
-          reason: `Está lloviendo ahora (sensor activo: ${isRainActive}, intensidad: ${localConditions.exterior.rain_intensity || 0}).`,
+          reason: `Está lloviendo ahora (evento de lluvia en curso en Postgres).`,
           action: 'SKIP',
-          metadata: { localConditions },
+          metadata: { openRainEventId: openRainEvent?.id },
         }
       }
 
@@ -284,21 +316,19 @@ export class InferenceEngine {
         }
       }
 
-      // ── 3.2: Veto Respaldo Nocturno — HR exterior promedio >= 98.0% (solo IRRIGATION) ──
+      // ── 3.2: Veto Respaldo Nocturno — HR exterior promedio >= 98.0% (segmentos de 1h en las últimas 6 horas) (solo IRRIGATION) ──
       if (purpose === 'IRRIGATION') {
-        const isNocturnalWindow = localHour >= 19 || localHour < 6
+        const isNocturnalWindow = localHour >= 19 || localHour < 8
 
         if (isNocturnalWindow) {
-          const avgExtHum = await this.getExternalRecentAverageHumidity(
-            THRESHOLDS.BACKUP_NOCTURNAL_LOOKBACK_MIN,
-          )
+          const saturatedBlocks = await this.getNocturnalSaturatedBlocks(6)
 
-          if (avgExtHum >= THRESHOLDS.BACKUP_NOCTURNAL_HR_THRESHOLD) {
+          if (saturatedBlocks >= 6) {
             return {
               shouldCancel: true,
-              reason: `VETO RESPALDO NOCTURNO: HR exterior promedio ${avgExtHum.toFixed(1)}% ≥ ${THRESHOLDS.BACKUP_NOCTURNAL_HR_THRESHOLD}% en las últimas 3 horas (posible lluvia sin registro del sensor físico).`,
+              reason: `VETO RESPALDO NOCTURNO: Se registraron 6 horas (bloques de 1h) continuas con HR exterior promedio ≥ ${THRESHOLDS.HUMIDITY_SATURATION_THRESHOLD}% (madrugada saturada / llovizna).`,
               action: 'SKIP',
-              metadata: { avgExtHum },
+              metadata: { saturatedBlocks },
             }
           }
         }
@@ -1054,6 +1084,50 @@ export class InferenceEngine {
     }
   }
 
+  /**
+   * Divide las últimas N horas retrospectivas en bloques de 1 hora.
+   * Cuenta cuántos de estos bloques tuvieron humedad exterior promedio >= 98.0%.
+   * Usado para el veto de respaldo nocturno de 6h.
+   */
+  private static async getNocturnalSaturatedBlocks(lookbackHours: number = 6): Promise<number> {
+    try {
+      const now = new Date()
+      const blocks: { start: Date; end: Date }[] = []
+
+      for (let i = 0; i < lookbackHours; i++) {
+        const blockStart = new Date(now.getTime() - (i + 1) * 60 * 60 * 1000)
+        const blockEnd = new Date(now.getTime() - i * 60 * 60 * 1000)
+
+        blocks.push({
+          start: blockStart,
+          end: blockEnd,
+        })
+      }
+
+      const promises = blocks.map(async (block) => {
+        const extRes = await this.getAverageHumidityInWindow(block.start, block.end, 'EXTERIOR')
+
+        return (
+          extRes.count >= THRESHOLDS.MIN_SAMPLES_PER_HOUR_BLOCK &&
+          extRes.average >= THRESHOLDS.HUMIDITY_SATURATION_THRESHOLD
+        )
+      })
+
+      const results = await Promise.all(promises)
+      const saturatedCount = results.filter(Boolean).length
+
+      Logger.inference(
+        `Humedad Nocturna Sostenida: ${saturatedCount} bloques de 1h saturados (>=${THRESHOLDS.HUMIDITY_SATURATION_THRESHOLD}%) en las últimas ${lookbackHours}h.`,
+      )
+
+      return saturatedCount
+    } catch (err) {
+      Logger.error('Error al calcular los bloques de humedad nocturna sostenida:', err)
+
+      return 0
+    }
+  }
+
   private static async getRecentAverageHumidity(
     lookbackMinutes: number,
     zone: 'ZONA_A' | 'EXTERIOR',
@@ -1375,29 +1449,35 @@ export class InferenceEngine {
       const now = new Date()
       const state = await this.getOrInitSchedulerState()
 
-      const today = new Date(now)
-      const yesterday = new Date(now)
+      // A las 12:05 AM, evaluamos el día que acaba de terminar (ayer)
+      const evalDate = new Date(now)
 
-      yesterday.setDate(yesterday.getDate() - 1)
+      evalDate.setDate(evalDate.getDate() - 1)
 
-      const regadoHoy = await this.checkRiegoCompleto(today)
+      const prevEvalDate = new Date(now)
+
+      prevEvalDate.setDate(prevEvalDate.getDate() - 2)
+
+      const targetDate = new Date(now) // Hoy (el día que está iniciando, el riego es a las 6:00 AM)
+
+      const regadoEvalDate = await this.checkRiegoCompleto(evalDate)
 
       // ---- 1. Transición y Lógica de Estados ----
       if (state === 'STANDARD_CRON') {
-        const startYesterday = new Date(yesterday)
+        const startPrevEval = new Date(prevEvalDate)
 
-        startYesterday.setHours(0, 0, 0, 0)
-        const endToday = new Date(today)
+        startPrevEval.setHours(0, 0, 0, 0)
+        const endEval = new Date(evalDate)
 
-        endToday.setHours(23, 59, 59, 999)
+        endEval.setHours(23, 59, 59, 999)
 
-        // Si se canceló alguna aspersión por clima/lluvia hoy o ayer, cambiamos de estado
+        // Si se canceló alguna aspersión por clima/lluvia ayer o anteayer, cambiamos de estado
         const cancelledTasks = await prisma.taskLog.findFirst({
           where: {
             purpose: TaskPurpose.IRRIGATION,
             status: TaskStatus.CANCELLED,
-            scheduledAt: { gte: startYesterday, lte: endToday },
-            notes: { contains: 'VETO' }, // o simplemente cancelada por clima
+            scheduledAt: { gte: startPrevEval, lte: endEval },
+            notes: { contains: 'VETO' },
           },
         })
 
@@ -1413,12 +1493,12 @@ export class InferenceEngine {
 
       if (updatedState === 'DIFERIDO_SCHEDULER') {
         // Lluvia por 2 días consecutivos -> RAIN_SUSPENSION
-        const rainToday = await this.getRainAccumulationForDate(today)
-        const rainYesterday = await this.getRainAccumulationForDate(yesterday)
+        const rainEval = await this.getRainAccumulationForDate(evalDate)
+        const rainPrevEval = await this.getRainAccumulationForDate(prevEvalDate)
 
         if (
-          rainToday.durationSeconds >= THRESHOLDS.MIN_RAIN_DURATION_IRRIGATION_24H &&
-          rainYesterday.durationSeconds >= THRESHOLDS.MIN_RAIN_DURATION_IRRIGATION_24H
+          rainEval.durationSeconds >= THRESHOLDS.MIN_RAIN_DURATION_IRRIGATION_24H &&
+          rainPrevEval.durationSeconds >= THRESHOLDS.MIN_RAIN_DURATION_IRRIGATION_24H
         ) {
           Logger.cron(
             `Lluvia >= ${Math.round(THRESHOLDS.MIN_RAIN_DURATION_IRRIGATION_24H / 60)} min registrada por 2 días consecutivos. Activando RAIN_SUSPENSION.`,
@@ -1428,40 +1508,41 @@ export class InferenceEngine {
           return
         }
 
-        // Reset por Riego Doble: hoy y ayer aspersión completada >= IRRIGATION_DURATION_MINUTES min en cada día
-        const startToday = new Date(today)
+        // Reset por Riego Doble: ayer y anteayer aspersión completada >= IRRIGATION_DURATION_MINUTES min en cada día
+        const startEval = new Date(evalDate)
 
-        startToday.setHours(0, 0, 0, 0)
-        const endToday = new Date(today)
+        startEval.setHours(0, 0, 0, 0)
+        const endEval = new Date(evalDate)
 
-        endToday.setHours(23, 59, 59, 999)
-        const startYesterday = new Date(yesterday)
+        endEval.setHours(23, 59, 59, 999)
 
-        startYesterday.setHours(0, 0, 0, 0)
-        const endYesterday = new Date(yesterday)
+        const startPrevEval = new Date(prevEvalDate)
 
-        endYesterday.setHours(23, 59, 59, 999)
+        startPrevEval.setHours(0, 0, 0, 0)
+        const endPrevEval = new Date(prevEvalDate)
 
-        const aspToday = await prisma.taskLog.aggregate({
+        endPrevEval.setHours(23, 59, 59, 999)
+
+        const aspEval = await prisma.taskLog.aggregate({
           where: {
             purpose: TaskPurpose.IRRIGATION,
             status: TaskStatus.COMPLETED,
-            scheduledAt: { gte: startToday, lte: endToday },
+            scheduledAt: { gte: startEval, lte: endEval },
           },
           _sum: { duration: true },
         })
-        const aspYesterday = await prisma.taskLog.aggregate({
+        const aspPrevEval = await prisma.taskLog.aggregate({
           where: {
             purpose: TaskPurpose.IRRIGATION,
             status: TaskStatus.COMPLETED,
-            scheduledAt: { gte: startYesterday, lte: endYesterday },
+            scheduledAt: { gte: startPrevEval, lte: endPrevEval },
           },
           _sum: { duration: true },
         })
 
         if (
-          (aspToday._sum.duration ?? 0) >= THRESHOLDS.IRRIGATION_DURATION_MINUTES &&
-          (aspYesterday._sum.duration ?? 0) >= THRESHOLDS.IRRIGATION_DURATION_MINUTES
+          (aspEval._sum.duration ?? 0) >= THRESHOLDS.IRRIGATION_DURATION_MINUTES &&
+          (aspPrevEval._sum.duration ?? 0) >= THRESHOLDS.IRRIGATION_DURATION_MINUTES
         ) {
           Logger.cron(
             'Intervención manual de riego doble detectada (2 días seguidos de aspersión). Reseteando a STANDARD_CRON.',
@@ -1472,13 +1553,13 @@ export class InferenceEngine {
         }
 
         // Reglas de alternancia
-        if (regadoHoy) {
+        if (regadoEvalDate) {
           Logger.cron(
-            'Hoy hubo riego completo. Cancelando preventivamente riego diferido de mañana para mantener alternancia.',
+            'Ayer hubo riego completo. Cancelando preventivamente riego diferido de hoy para mantener alternancia.',
           )
-          const tomorrow6am = this.getNext6am(now, 1)
-          const startOfSlot = new Date(tomorrow6am.getTime() - 30 * 60000)
-          const endOfSlot = new Date(tomorrow6am.getTime() + 30 * 60000)
+          const target6am = this.getNext6am(targetDate, 0) // Hoy a las 6:00 AM
+          const startOfSlot = new Date(target6am.getTime() - 30 * 60000)
+          const endOfSlot = new Date(target6am.getTime() + 30 * 60000)
 
           const existing = await prisma.taskLog.findFirst({
             where: {
@@ -1494,56 +1575,56 @@ export class InferenceEngine {
               data: {
                 status: TaskStatus.CANCELLED,
                 notes:
-                  '[ MÁQUINA ESTADOS ] Cancelado preventivamente: Riego completo detectado hoy.',
+                  '[ MÁQUINA ESTADOS ] Cancelado preventivamente: Riego completo detectado ayer.',
               },
             })
             Logger.cron(
-              `Tarea diferida del ${tomorrow6am.toLocaleString()} cancelada preventivamente.`,
+              `Tarea diferida del ${target6am.toLocaleString()} cancelada preventivamente.`,
             )
           }
         } else {
-          // No se regó hoy, evaluar si reprogramamos para mañana
-          const rainToday = await this.getRainAccumulationForDate(today)
-          const avgLuxToday = await this.getTodayAverageLux(now)
-          const dayClass = await classifyCurrentDay()
+          // No se regó ayer, evaluar si reprogramamos para hoy
+          const rainEval = await this.getRainAccumulationForDate(evalDate)
+          const avgLuxEval = await this.getTodayAverageLux(evalDate)
+          const dayClassEval = await classifyCurrentDay(evalDate)
 
           const isDryAndSunny =
-            rainToday.eventCount === 0 &&
-            avgLuxToday > 13000 &&
-            dayClass.type !== 'NUBLADO' &&
-            dayClass.type !== 'LLUVIOSO'
+            rainEval.eventCount === 0 &&
+            avgLuxEval > 13000 &&
+            dayClassEval.type !== 'NUBLADO' &&
+            dayClassEval.type !== 'LLUVIOSO'
 
           if (isDryAndSunny) {
             Logger.cron(
-              `Hoy no se regó pero el clima fue seco/soleado (Lux prom: ${avgLuxToday.toFixed(0)}). Reprogramando riego diferido para mañana a las 6:00 AM.`,
+              `Ayer no se regó pero el clima fue seco/soleado (Lux prom: ${avgLuxEval.toFixed(0)}). Reprogramando riego diferido para hoy a las 6:00 AM.`,
             )
             await this.createDeferredIrrigation(
-              this.getNext6am(now, 1),
-              'Reprogramación interdiaria: Hoy fue seco/soleado sin riego.',
+              this.getNext6am(targetDate, 0),
+              'Reprogramación interdiaria: Ayer fue seco/soleado sin riego.',
             )
           } else {
             Logger.cron(
-              `Hoy no se regó y el día fue nublado extremo o lluvioso. Suspendiendo reprogramación de mañana.`,
+              `Ayer no se regó y el día fue nublado extremo o lluvioso. Suspendiendo reprogramación de hoy.`,
             )
           }
         }
       }
 
       if (updatedState === 'RAIN_SUSPENSION') {
-        const rainToday = await this.getRainAccumulationForDate(today)
-        const avgLuxToday = await this.getTodayAverageLux(now)
+        const rainEval = await this.getRainAccumulationForDate(evalDate)
+        const avgLuxEval = await this.getTodayAverageLux(evalDate)
         const isSoleado =
-          avgLuxToday > 20000 &&
-          rainToday.durationSeconds < THRESHOLDS.MIN_RAIN_DURATION_IRRIGATION_24H
+          avgLuxEval > 20000 &&
+          rainEval.durationSeconds < THRESHOLDS.MIN_RAIN_DURATION_IRRIGATION_24H
 
         if (isSoleado) {
           Logger.cron(
-            'Clima seco y soleado restablecido. Saliendo de RAIN_SUSPENSION. Reactivando y agendando aspersión diferida para mañana.',
+            'Clima seco y soleado restablecido ayer. Saliendo de RAIN_SUSPENSION. Reactivando y agendando aspersión diferida para hoy.',
           )
           await this.updateSchedulerState('STANDARD_CRON')
           await this.createDeferredIrrigation(
-            this.getNext6am(now, 1),
-            'Reactivación tras suspensión por lluvias: Primer día soleado.',
+            this.getNext6am(targetDate, 0),
+            'Reactivación tras suspensión por lluvias: Primer día soleado ayer.',
           )
         } else {
           Logger.cron('Clima sigue húmedo/nublado. Manteniendo RAIN_SUSPENSION.')

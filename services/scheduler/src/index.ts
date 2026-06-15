@@ -229,15 +229,8 @@ let lastKnownHum: number | null = null
  * Devuelve el estado actual de lluvia considerando el veto por humedad residual.
  */
 export function isCurrentlyRaining(): boolean {
-  if (lastKnownHum !== null && lastKnownHum >= 98.0) {
-    return true
-  }
-
   return (lastRainState === 'Raining' || isTelemetryRainActive) && !isRainOverridden
 }
-
-// Registrar el callback de lluvia en el Motor de Inferencia para romper la dependencia circular
-InferenceEngine.registerRainCheck(isCurrentlyRaining)
 
 /**
  * Hidrata el estado de eventos de lluvia abiertos desde Postgres al arrancar.
@@ -2043,11 +2036,11 @@ async function initScheduler() {
     syncNodeSampling('off')
   })
 
-  // Cron de Evaluación Diaria de la Máquina de Estados (5:50 AM)
-  new Cron('50 5 * * *', { timezone: 'America/Caracas' }, async () => {
+  // Cron de Evaluación Diaria de la Máquina de Estados (12:05 AM)
+  new Cron('5 0 * * *', { timezone: 'America/Caracas' }, async () => {
     try {
       Logger.cron(
-        'Ejecutando evaluación diaria de la máquina de estados del scheduler (5:50 AM)...',
+        'Ejecutando evaluación diaria de la máquina de estados del scheduler (12:05 AM)...',
       )
       await InferenceEngine.evaluateDailyRules()
     } catch (error) {

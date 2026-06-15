@@ -88,9 +88,9 @@ const HEAVY_OVERCAST_LUX_THRESHOLD = 10000
  * Fuera de ese rango retorna DESCONOCIDO porque la iluminancia no es
  * representativa del estado del cielo.
  */
-export async function classifyCurrentDay(): Promise<DayClassification> {
-  const now = new Date()
-  const currentCaracasHour = (now.getUTCHours() - 4 + 24) % 24
+export async function classifyCurrentDay(targetDate?: Date): Promise<DayClassification> {
+  const now = targetDate ? new Date(targetDate) : new Date()
+  const currentCaracasHour = targetDate ? 17 : (now.getUTCHours() - 4 + 24) % 24
 
   // Determinar la ventana de evaluación usando la fecha en Caracas local
   const caracasTime = new Date(now.getTime() - 4 * 60 * 60000)
