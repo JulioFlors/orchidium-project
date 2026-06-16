@@ -122,6 +122,9 @@ async function init() {
 
   // 3. Iniciar escucha de eventos MQTT
   setupMqttHandlers()
+
+  // 4. Inicializar el estado de muestreo de iluminancia según la hora actual de Caracas
+  syncNodeSampling()
 }
 
 /**
@@ -208,7 +211,6 @@ let lastLuxBatchAt = Date.now()
 
 // Buffers para validación inteligente de lluvia (Humedad Residual)
 const telemetryBuffer: { lux: number; temp: number; hum: number; timestamp: number }[] = []
-const exteriorHistory: { lux: number; temp: number; hum: number; timestamp: number }[] = []
 let isTelemetryRainActive = false
 let minLuxInRain: number | null = null
 let minTempInRain: number | null = null
@@ -224,6 +226,32 @@ let lastSentRainInterval: 'INTERVAL_BURST' | 'INTERVAL_NORMAL' = 'INTERVAL_NORMA
 let lastKnownLux: number | null = null
 let lastKnownTemp: number | null = null
 let lastKnownHum: number | null = null
+
+interface BatchSummary {
+  min: number
+  max: number
+  timestamp: number
+}
+
+const tempBatches: BatchSummary[] = []
+const humBatches: BatchSummary[] = []
+const luxBatches: BatchSummary[] = []
+
+function pushBatchMetrics(queue: BatchSummary[], values: number[]) {
+  if (values.length === 0) return
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const now = Date.now()
+
+  if (queue.length > 0 && now - queue[0].timestamp < 5 * 60 * 1000) {
+    queue[0].min = Math.min(queue[0].min, min)
+    queue[0].max = Math.max(queue[0].max, max)
+    queue[0].timestamp = now
+  } else {
+    queue.unshift({ min, max, timestamp: now })
+    if (queue.length > 6) queue.pop()
+  }
+}
 
 /**
  * Devuelve el estado actual de lluvia considerando el veto por humedad residual.
@@ -1097,50 +1125,62 @@ function setupMqttHandlers() {
           let temp: number | null = null
           let hum: number | null = null
 
+          const tempValues: number[] = []
+          const humValues: number[] = []
+          const luxValues: number[] = []
+
           let hasTemp = false
           let hasHum = false
           let hasLux = false
 
           // Caso A: Formato Batch unificado emitido por flush_telemetry_batches_async()
           if (data.data && Array.isArray(data.data)) {
-            let minLuxInBatch: number | null = null
-
             for (const entry of data.data) {
               const metrics = entry[1]
 
-              if (metrics.temperature !== undefined) {
-                temp = Number(metrics.temperature)
+              if (metrics.temperature !== undefined && metrics.temperature !== null) {
+                const tVal = Number(metrics.temperature)
+
+                tempValues.push(tVal)
+                temp = tVal
                 hasTemp = true
               }
-              if (metrics.humidity !== undefined) {
-                hum = Number(metrics.humidity)
+              if (metrics.humidity !== undefined && metrics.humidity !== null) {
+                const hVal = Number(metrics.humidity)
+
+                humValues.push(hVal)
+                hum = hVal
                 hasHum = true
               }
-              if (metrics.illuminance !== undefined) {
-                const currentLux = Number(metrics.illuminance)
+              if (metrics.illuminance !== undefined && metrics.illuminance !== null) {
+                const lVal = Number(metrics.illuminance)
 
+                luxValues.push(lVal)
+                lux = lVal
                 hasLux = true
-                if (minLuxInBatch === null || currentLux < minLuxInBatch) {
-                  minLuxInBatch = currentLux
-                }
               }
-            }
-
-            if (minLuxInBatch !== null) {
-              lux = minLuxInBatch
             }
           } else {
             // Caso B: Fallback para mantener compatibilidad con mensajes planos directos (Legacy / Otros Nodos)
-            if (data.temperature !== undefined) {
-              temp = Number(data.temperature)
+            if (data.temperature !== undefined && data.temperature !== null) {
+              const tVal = Number(data.temperature)
+
+              tempValues.push(tVal)
+              temp = tVal
               hasTemp = true
             }
-            if (data.humidity !== undefined) {
-              hum = Number(data.humidity)
+            if (data.humidity !== undefined && data.humidity !== null) {
+              const hVal = Number(data.humidity)
+
+              humValues.push(hVal)
+              hum = hVal
               hasHum = true
             }
-            if (data.illuminance !== undefined) {
-              lux = Number(data.illuminance)
+            if (data.illuminance !== undefined && data.illuminance !== null) {
+              const lVal = Number(data.illuminance)
+
+              luxValues.push(lVal)
+              lux = lVal
               hasLux = true
             }
           }
@@ -1160,44 +1200,48 @@ function setupMqttHandlers() {
               illuminancePresent = true
               illuminanceAlive = true
               lastLuxBatchAt = Date.now()
+              if (lux !== null) lastKnownLux = lux
+            }
 
-              if (lux !== null) {
-                lastKnownLux = lux // Guardar último valor conocido
+            // Encolar los resúmenes de lote correspondientes
+            if (tempValues.length > 0) pushBatchMetrics(tempBatches, tempValues)
+            if (humValues.length > 0) pushBatchMetrics(humBatches, humValues)
+            if (luxValues.length > 0) pushBatchMetrics(luxBatches, luxValues)
 
-                const now = new Date()
-                const caracasHour = parseInt(
-                  new Intl.DateTimeFormat('en-US', {
-                    timeZone: 'America/Caracas',
-                    hour: 'numeric',
-                    hour12: false,
-                  }).format(now),
-                )
+            if (hasLux && lux !== null) {
+              const now = new Date()
+              const caracasHour = parseInt(
+                new Intl.DateTimeFormat('en-US', {
+                  timeZone: 'America/Caracas',
+                  hour: 'numeric',
+                  hour12: false,
+                }).format(now),
+              )
 
-                const isInBurstWindow = caracasHour >= 8 && caracasHour < 16
-                const isBurstLux = lux <= 10000
+              const isInBurstWindow = caracasHour >= 8 && caracasHour < 16
+              const isBurstLux = lux <= 10000
 
-                if (isInBurstWindow && isBurstLux) {
-                  // Debe ir a ráfaga
-                  if (lastSentRainInterval !== 'INTERVAL_BURST') {
-                    lastSentRainInterval = 'INTERVAL_BURST'
-                    Logger.rain(
-                      `Ajustando intervalo de chequeo de lluvia a 1 minuto (Ráfaga) por iluminancia (${lux.toFixed(0)} lx) a las ${caracasHour}h.`,
-                    )
-                    executeSystemCommand('INTERVAL_BURST', true)
-                  }
-                } else {
-                  // Debe ir a normal, pero ÚNICAMENTE si previamente lo habíamos cambiado a BURST
-                  if (lastSentRainInterval === 'INTERVAL_BURST') {
-                    lastSentRainInterval = 'INTERVAL_NORMAL'
-                    const reason = !isInBurstWindow
-                      ? `fin de ventana horaria (hora: ${caracasHour}h)`
-                      : `iluminancia recuperada (${lux.toFixed(0)} lx)`
+              if (isInBurstWindow && isBurstLux) {
+                // Debe ir a ráfaga
+                if (lastSentRainInterval !== 'INTERVAL_BURST') {
+                  lastSentRainInterval = 'INTERVAL_BURST'
+                  Logger.rain(
+                    `Ajustando intervalo de chequeo de lluvia a 1 minuto (Ráfaga) por iluminancia (${lux.toFixed(0)} lx) a las ${caracasHour}h.`,
+                  )
+                  executeSystemCommand('INTERVAL_BURST', true)
+                }
+              } else {
+                // Debe ir a normal, pero ÚNICAMENTE si previamente lo habíamos cambiado a BURST
+                if (lastSentRainInterval === 'INTERVAL_BURST') {
+                  lastSentRainInterval = 'INTERVAL_NORMAL'
+                  const reason = !isInBurstWindow
+                    ? `fin de ventana horaria (hora: ${caracasHour}h)`
+                    : `iluminancia recuperada (${lux.toFixed(0)} lx)`
 
-                    Logger.rain(
-                      `Restableciendo intervalo de chequeo de lluvia a 5 minutos (Vigía) por ${reason}.`,
-                    )
-                    executeSystemCommand('INTERVAL_NORMAL', true)
-                  }
+                  Logger.rain(
+                    `Restableciendo intervalo de chequeo de lluvia a 5 minutos (Vigía) por ${reason}.`,
+                  )
+                  executeSystemCommand('INTERVAL_NORMAL', true)
                 }
               }
             }
@@ -1225,9 +1269,7 @@ function setupMqttHandlers() {
           if (!isEma) {
             clearSyncTimerIfHealthy()
 
-            if (lux !== null && temp !== null && hum !== null) {
-              await evaluateClimateTrends(lux, temp, hum, Date.now())
-            }
+            await evaluateClimateBatches()
 
             if (
               lastRainState === 'Dry' &&
@@ -1847,7 +1889,8 @@ function sendCaracasTimeToEma(): void {
     const minute = getPart('minute')
     const second = getPart('second')
 
-    const jsDay = now.getDay()
+    const caracasDateStr = now.toLocaleDateString('en-US', { timeZone: 'America/Caracas' })
+    const jsDay = new Date(caracasDateStr).getDay()
     const weekday = jsDay === 0 ? 6 : jsDay - 1
 
     const payload = JSON.stringify({
@@ -2346,44 +2389,25 @@ async function runTask(scheduleId: string) {
   }
 }
 
-async function evaluateClimateTrends(lux: number, temp: number, hum: number, nowMs: number) {
-  // 1. Añadir al buffer continuo history (guardamos hasta 100 muestras para cubrir 90m+)
-  exteriorHistory.push({ lux, temp, hum, timestamp: nowMs })
-  if (exteriorHistory.length > 100) exteriorHistory.shift()
+async function evaluateClimateBatches() {
+  const nowMs = Date.now()
 
-  // Mantener un buffer deslizante local en telemetryBuffer para baselines (hasta 100 muestras)
-  const lastSample = telemetryBuffer[telemetryBuffer.length - 1]
-
-  if (!lastSample || nowMs - lastSample.timestamp >= 30000) {
-    telemetryBuffer.push({
-      lux,
-      temp,
-      hum,
-      timestamp: nowMs,
-    })
-    if (telemetryBuffer.length > 120) telemetryBuffer.shift()
+  // 1. Necesitamos al menos 3 batches en cada cola para poder evaluar derivadas de 10-30 min
+  if (tempBatches.length < 3 || humBatches.length < 3 || luxBatches.length < 3) {
+    return
   }
 
-  // 2. Buscar la muestra más cercana a hace 30 minutos (rango de 25 a 35 minutos)
-  const targetTime = nowMs - 30 * 60 * 1000
-  let prevSample: { lux: number; temp: number; hum: number; timestamp: number } | null = null
-  let minDiff = Infinity
+  // 2. Extraer extremos
+  const currentMinTemp = tempBatches[0].min
+  const currentMaxHum = humBatches[0].max
+  const currentMinLux = luxBatches[0].min
 
-  for (const sample of exteriorHistory) {
-    const diff = Math.abs(sample.timestamp - targetTime)
+  const historicMaxTemp = Math.max(tempBatches[1].max, tempBatches[2].max)
+  const historicMinHum = Math.min(humBatches[1].min, humBatches[2].min)
+  const historicMaxLux = Math.max(luxBatches[1].max, luxBatches[2].max)
 
-    if (diff < minDiff && diff <= 5 * 60 * 1000) {
-      // Tolerancia de +/- 5 min
-      minDiff = diff
-      prevSample = sample
-    }
-  }
-
-  // 3. Si no hay muestra de hace 30m, no podemos evaluar derivadas de 30m
-  if (!prevSample) return
-
-  const deltaTemp30 = temp - prevSample.temp
-  const deltaHum30 = hum - prevSample.hum
+  const deltaTemp = currentMinTemp - historicMaxTemp
+  const deltaHum = currentMaxHum - historicMinHum
 
   // Horario Caracas
   const now = new Date()
@@ -2402,57 +2426,31 @@ async function evaluateClimateTrends(lux: number, temp: number, hum: number, now
       return
     }
 
-    // Calcular baselines pre-lluvia basados en el lote previo (antigüedad de 10 a 22 minutos)
-    const tenMinMs = 10 * 60 * 1000
-    const twentyTwoMinMs = 22 * 60 * 1000
-
-    let baselineSamples = telemetryBuffer.filter((s) => {
-      const age = nowMs - s.timestamp
-
-      return age >= tenMinMs && age < twentyTwoMinMs
-    })
-
-    // Fallback: si no hay suficientes muestras por desfase o inicio, usar rango amplio (10 a 45 minutos)
-    if (baselineSamples.length === 0) {
-      baselineSamples = telemetryBuffer.filter((s) => {
-        const age = nowMs - s.timestamp
-
-        return age >= tenMinMs && age < 45 * 60 * 1000
-      })
-    }
-
-    let currentBaselineLux = lux
-    let currentBaselineTemp = temp
-    let currentBaselineHum = hum
-    let baselineAgeMinutes: number | null = null
-
-    if (baselineSamples.length > 0) {
-      // Baselines basados en el lote previo: máximo de lux y temp, mínimo de humedad
-      currentBaselineLux = Math.max(...baselineSamples.map((s) => s.lux))
-      currentBaselineTemp = Math.max(...baselineSamples.map((s) => s.temp))
-      currentBaselineHum = Math.min(...baselineSamples.map((s) => s.hum))
-
-      const totalAgeMs = baselineSamples.reduce((sum, s) => sum + (nowMs - s.timestamp), 0)
-
-      baselineAgeMinutes = Math.round(totalAgeMs / baselineSamples.length / (60 * 1000))
-    }
+    // Baselines basados en los lotes previos (2 y 3)
+    const currentBaselineLux = historicMaxLux
+    const currentBaselineTemp = historicMaxTemp
+    const currentBaselineHum = historicMinHum
+    // Asumimos 20 minutos de antigüedad promedio de los lotes históricos 2 y 3 (10 a 30 min atrás)
+    const baselineAgeMinutes = 20
 
     if (isDay) {
       // Caída de lux a menos del 40% del valor baseline previo (si el baseline era > 10000 lux)
       let luxCondition = true
 
       if (currentBaselineLux > 10000) {
-        luxCondition = lux < currentBaselineLux * 0.4
+        luxCondition = currentMinLux < currentBaselineLux * 0.4
       }
 
-      const isRainTriggered = deltaHum30 >= 12.0 && deltaTemp30 <= -3.0 && luxCondition
+      const isRainTriggered = deltaHum >= 12.0 && deltaTemp <= -3.0 && luxCondition
 
       if (isRainTriggered) {
         const dropPct =
-          currentBaselineLux > 0 ? ((currentBaselineLux - lux) / currentBaselineLux) * 100 : 0
+          currentBaselineLux > 0
+            ? ((currentBaselineLux - currentMinLux) / currentBaselineLux) * 100
+            : 0
 
         Logger.rain(
-          `Lluvia Inferida [DÍA]: deltaHR=${deltaHum30.toFixed(1)}%, deltaTemp=${deltaTemp30.toFixed(1)}°C, Lux actual: ${lux.toFixed(0)}lx vs baseline: ${currentBaselineLux.toFixed(0)}lx (caída del ${dropPct.toFixed(0)}%).`,
+          `Lluvia Inferida [DÍA]: deltaHR=${deltaHum.toFixed(1)}%, deltaTemp=${deltaTemp.toFixed(1)}°C, Lux min actual: ${currentMinLux.toFixed(0)}lx vs baseline: ${currentBaselineLux.toFixed(0)}lx (caída del ${dropPct.toFixed(0)}%).`,
         )
 
         isTelemetryRainActive = true
@@ -2461,8 +2459,8 @@ async function evaluateClimateTrends(lux: number, temp: number, hum: number, now
         baselineLux = currentBaselineLux
         baselineTemp = currentBaselineTemp
         baselineHum = currentBaselineHum
-        minLuxInRain = lux
-        minTempInRain = temp
+        minLuxInRain = currentMinLux
+        minTempInRain = currentMinTemp
 
         await openRainEvent(
           new Date(),
@@ -2473,16 +2471,16 @@ async function evaluateClimateTrends(lux: number, temp: number, hum: number, now
             lux: baselineLux,
             ageMinutes: baselineAgeMinutes,
           },
-          `Inferencia de Día: Incremento de +${deltaHum30.toFixed(1)}% HR y caída térmica de ${deltaTemp30.toFixed(1)}°C en 30m (iluminancia cayó un ${dropPct.toFixed(0)}% a ${Math.round(lux).toLocaleString()} lx).`,
+          `Inferencia de Día: Incremento de +${deltaHum.toFixed(1)}% HR y caída térmica de ${deltaTemp.toFixed(1)}°C en 30m (iluminancia cayó un ${dropPct.toFixed(0)}% a ${Math.round(currentMinLux).toLocaleString()} lx).`,
         )
       }
     } else {
       // Noche (4:00 PM - 8:00 AM)
-      const isRainTriggered = deltaHum30 >= 10.0 && deltaTemp30 <= -2.0
+      const isRainTriggered = deltaHum >= 10.0 && deltaTemp <= -2.0
 
       if (isRainTriggered) {
         Logger.rain(
-          `Lluvia Inferida [NOCHE]: deltaHR=${deltaHum30.toFixed(1)}%, deltaTemp=${deltaTemp30.toFixed(1)}°C.`,
+          `Lluvia Inferida [NOCHE]: deltaHR=${deltaHum.toFixed(1)}%, deltaTemp=${deltaTemp.toFixed(1)}°C.`,
         )
 
         isTelemetryRainActive = true
@@ -2491,8 +2489,8 @@ async function evaluateClimateTrends(lux: number, temp: number, hum: number, now
         baselineLux = currentBaselineLux
         baselineTemp = currentBaselineTemp
         baselineHum = currentBaselineHum
-        minLuxInRain = lux
-        minTempInRain = temp
+        minLuxInRain = currentMinLux
+        minTempInRain = currentMinTemp
 
         await openRainEvent(
           new Date(),
@@ -2503,7 +2501,7 @@ async function evaluateClimateTrends(lux: number, temp: number, hum: number, now
             lux: baselineLux,
             ageMinutes: baselineAgeMinutes,
           },
-          `Inferencia de Noche: Incremento de +${deltaHum30.toFixed(1)}% HR y caída térmica de ${deltaTemp30.toFixed(1)}°C en 30m.`,
+          `Inferencia de Noche: Incremento de +${deltaHum.toFixed(1)}% HR y caída térmica de ${deltaTemp.toFixed(1)}°C en 30m.`,
         )
       }
     }
@@ -2527,48 +2525,50 @@ async function evaluateClimateTrends(lux: number, temp: number, hum: number, now
         return
       }
 
-      // 2. Atascamiento de Variables tras 60 minutos (Humedad Var <=1% y Temp Var <=0.4°C)
-      if (durationMin >= 60) {
-        const samplesLast60 = exteriorHistory.filter((s) => nowMs - s.timestamp <= 60 * 60 * 1000)
+      // 2. Atascamiento de Variables tras 60 minutos (Evaluando los últimos 6 batches que cubren 60m)
+      if (durationMin >= 60 && tempBatches.length >= 6 && humBatches.length >= 6) {
+        const recentTemp = tempBatches.slice(0, 6)
+        const recentHum = humBatches.slice(0, 6)
 
-        if (samplesLast60.length >= 45) {
-          const hums60 = samplesLast60.map((s) => s.hum)
-          const temps60 = samplesLast60.map((s) => s.temp)
-          const diffHum = Math.max(...hums60) - Math.min(...hums60)
-          const diffTemp = Math.max(...temps60) - Math.min(...temps60)
+        const diffHum =
+          Math.max(...recentHum.map((b) => b.max)) - Math.min(...recentHum.map((b) => b.min))
+        const diffTemp =
+          Math.max(...recentTemp.map((b) => b.max)) - Math.min(...recentTemp.map((b) => b.min))
 
-          if (diffHum <= 1.0 && diffTemp <= 0.4) {
-            Logger.rain(
-              `Cierre por Atascamiento de Variables: Rango HR: ${diffHum.toFixed(1)}% <= 1.0%, Rango Temp: ${diffTemp.toFixed(1)}°C <= 0.4°C.`,
-            )
-            isTelemetryRainActive = false
-            isRainOverridden = true
-            await closeRainEvent(
-              'STAGNANT',
-              new Date(),
-              true,
-              `Estancamiento térmico (variación ≤0.4°C) e hídrico (variación ≤1.0% HR) en los últimos 60 minutos.`,
-            )
+        if (diffHum <= 1.0 && diffTemp <= 0.4) {
+          Logger.rain(
+            `Cierre por Atascamiento de Variables: Rango HR: ${diffHum.toFixed(1)}% <= 1.0%, Rango Temp: ${diffTemp.toFixed(1)}°C <= 0.4°C (últimos 60 min).`,
+          )
+          isTelemetryRainActive = false
+          isRainOverridden = true
+          await closeRainEvent(
+            'STAGNANT',
+            new Date(),
+            true,
+            `Estancamiento térmico (variación ≤0.4°C) e hídrico (variación ≤1.0% HR) en los últimos 60 minutos.`,
+          )
 
-            return
-          }
+          return
         }
       }
 
       // Actualizar mínimos durante el evento de lluvia
-      minLuxInRain = Math.min(minLuxInRain ?? lux, lux)
-      minTempInRain = Math.min(minTempInRain ?? temp, temp)
+      minLuxInRain = Math.min(minLuxInRain ?? currentMinLux, currentMinLux)
+      minTempInRain = Math.min(minTempInRain ?? currentMinTemp, currentMinTemp)
 
       // Criterios de cierre diurnos
       if (isDay) {
         // 3. Recuperación Hacia Baselines (Día)
         if (baselineTemp !== null && baselineHum !== null) {
-          const tempRecovered = temp >= baselineTemp - 1.0
-          const humRecovered = hum <= baselineHum + 5.0
+          const currentTemp = tempBatches[0].max
+          const currentHum = humBatches[0].min
+
+          const tempRecovered = currentTemp >= baselineTemp - 1.0
+          const humRecovered = currentHum <= baselineHum + 5.0
 
           if (tempRecovered && humRecovered) {
             Logger.rain(
-              `Cierre por Recuperación Hacia Baselines: Temp: ${temp.toFixed(1)}°C >= ${(baselineTemp - 1.0).toFixed(1)}°C, Hum: ${hum.toFixed(1)}% <= ${(baselineHum + 5.0).toFixed(1)}%.`,
+              `Cierre por Recuperación Hacia Baselines: Temp actual max: ${currentTemp.toFixed(1)}°C >= ${(baselineTemp - 1.0).toFixed(1)}°C, Hum actual min: ${currentHum.toFixed(1)}% <= ${(baselineHum + 5.0).toFixed(1)}%.`,
             )
             isTelemetryRainActive = false
             isRainOverridden = true
@@ -2586,14 +2586,16 @@ async function evaluateClimateTrends(lux: number, temp: number, hum: number, now
         // 4. Recuperación Solar adaptativa por despeje (Día)
         if (baselineLux !== null) {
           const preLux = baselineLux
-          const minLux = minLuxInRain ?? lux
+          const minLux = minLuxInRain ?? currentMinLux
           const relativeDrop = Math.min(1.0, (preLux - minLux) / preLux)
           const alpha = 1.0 - 0.65 * relativeDrop
           const luxRecoveryThreshold = minLux + alpha * (preLux - minLux)
 
-          if (lux >= luxRecoveryThreshold) {
+          const currentMaxLux = luxBatches[0].max
+
+          if (currentMaxLux >= luxRecoveryThreshold) {
             Logger.rain(
-              `Cierre por Recuperación Solar: Lux: ${lux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx (Umbral adaptativo con alpha=${alpha.toFixed(2)}).`,
+              `Cierre por Recuperación Solar: Lux max: ${currentMaxLux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx (Umbral adaptativo con alpha=${alpha.toFixed(2)}).`,
             )
             isTelemetryRainActive = false
             isRainOverridden = true
@@ -2601,7 +2603,7 @@ async function evaluateClimateTrends(lux: number, temp: number, hum: number, now
               'SOLAR_RECOVERY',
               new Date(),
               true,
-              `Despeje solar: iluminancia subió a ${Math.round(lux).toLocaleString()} lx (superó el umbral adaptativo de ${Math.round(luxRecoveryThreshold).toLocaleString()} lx, requiriendo un ${Math.round(alpha * 100)}% de recuperación de la caída de luz de ${Math.round(preLux - minLux).toLocaleString()} lx).`,
+              `Despeje solar: iluminancia subió a ${Math.round(currentMaxLux).toLocaleString()} lx (superó el umbral adaptativo de ${Math.round(luxRecoveryThreshold).toLocaleString()} lx, requiriendo un ${Math.round(alpha * 100)}% de recuperación de la caída de luz de ${Math.round(preLux - minLux).toLocaleString()} lx).`,
             )
 
             return

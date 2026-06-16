@@ -522,6 +522,37 @@ def setup_bh1750_sync():
         bh1750_sensor = None
         i2c_bus = None
 
+def read_bh1750_offline():
+    """Lee el BH1750 en ciclo offline probando Hardware I2C primero por compatibilidad de drivers."""
+    from machine import I2C, Pin, SoftI2C
+    from utime import sleep_ms
+    addr = 0x23
+    BUS_CONFIGS = [
+        ("hw",   100000,   0),
+        ("soft", 50000,    200000),
+        ("soft", 10000,    500000),
+    ]
+    for bus_type, freq, timeout in BUS_CONFIGS:
+        try:
+            if bus_type == "soft":
+                i2c = SoftI2C(scl=Pin(PIN_I2C_SCL), sda=Pin(PIN_I2C_SDA), freq=freq, timeout=timeout)
+            else:
+                i2c = I2C(0, scl=Pin(PIN_I2C_SCL), sda=Pin(PIN_I2C_SDA), freq=freq)
+            sleep_ms(150)
+            i2c.writeto(addr, b'')
+            try: from bh1750 import BH1750 # type: ignore
+            except ImportError: return None
+            b_sensor = BH1750(bus=i2c, addr=addr)
+            sleep_ms(200)
+            lux_val = b_sensor.get_auto_luminance()
+            if lux_val is not None:
+                return round(lux_val, 1)
+        except OSError:
+            continue
+        except Exception:
+            continue
+    return None
+
 async def hard_reset_sensors_physical():
     from machine import Pin
     import uasyncio as asyncio
@@ -793,7 +824,7 @@ async def mqtt_processor_task():
                             if last_sync > 0:
                                 elapsed_real = real_epoch - last_sync
                                 if elapsed_real > 300: # Ventana mínima de 5 minutos
-                                    error_sec = real_epoch - local_epoch
+                                    error_sec = local_epoch - real_epoch
                                     measured_drift_rate = error_sec / elapsed_real
 
                                     # Filtrar valores espurios (límite +/- 10%)
@@ -1896,17 +1927,10 @@ def run_cycle():
     # Leer BH1750
     lux = None
     if should_sample_lux:
-        try:
-            from machine import SoftI2C
-            from bh1750 import BH1750
-            i2c = SoftI2C(scl=Pin(PIN_I2C_SCL), sda=Pin(PIN_I2C_SDA), freq=100000)
-            utime.sleep_ms(100)
-            b_sensor = BH1750(bus=i2c, addr=0x23)
-            utime.sleep_ms(200)
-            lux = round(b_sensor.get_auto_luminance(), 1)
+        lux = read_bh1750_offline()
+        if lux is not None:
             rtc_data["lux_failures"] = 0
-        except Exception as e:
-            if DEBUG: print("⚠️ Fallo lectura BH1750:", e)
+        else:
             rtc_data["lux_failures"] = rtc_data.get("lux_failures", 0) + 1
 
     # Apagar alimentación de sensores
@@ -1940,17 +1964,9 @@ def run_cycle():
 
         # Reintento BH1750
         if should_sample_lux:
-            try:
-                from machine import SoftI2C
-                from bh1750 import BH1750
-                i2c = SoftI2C(scl=Pin(PIN_I2C_SCL), sda=Pin(PIN_I2C_SDA), freq=100000)
-                utime.sleep_ms(100)
-                b_sensor = BH1750(bus=i2c, addr=0x23)
-                utime.sleep_ms(200)
-                lux = round(b_sensor.get_auto_luminance(), 1)
+            lux = read_bh1750_offline()
+            if lux is not None:
                 rtc_data["lux_failures"] = 0
-            except Exception as e:
-                if DEBUG: print("⚠️ Reintento BH1750 fallido tras reset:", e)
 
         # Apagar alimentación nuevamente
         Pin(PIN_DHT_VCC, Pin.OUT).value(0)

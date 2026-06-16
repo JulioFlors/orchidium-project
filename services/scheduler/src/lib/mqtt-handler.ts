@@ -508,7 +508,8 @@ export function syncNodeSampling(
   if (lastSamplingState === targetState && !forcedState && !forcePublish && !targetNode) return
 
   // Solo actualizamos el estado global si no está dirigido a un nodo en particular
-  if (!targetNode) {
+  // o si el estado global aún no ha sido inicializado (es decir, es null).
+  if (!targetNode || lastSamplingState === null) {
     lastSamplingState = targetState
   }
 
