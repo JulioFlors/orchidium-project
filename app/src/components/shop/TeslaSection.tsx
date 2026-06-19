@@ -45,7 +45,7 @@ export function TeslaSection({
       <div className="relative z-10 flex w-full flex-col items-center px-4 text-center">
         {/* Título */}
         <motion.h2
-          className="text-white text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl"
+          className="text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl"
           initial={{ opacity: 0, y: -20 }}
           transition={{ duration: 0.6, delay: 0.1 }}
           viewport={{ once: true }}
@@ -56,7 +56,7 @@ export function TeslaSection({
 
         {/* Subtítulo */}
         <motion.p
-          className="text-white/90 mx-auto mt-4 max-w-2xl text-lg leading-relaxed font-medium sm:text-xl sm:font-semibold lg:text-2xl"
+          className="mx-auto mt-4 max-w-2xl text-lg leading-relaxed font-medium text-white/90 sm:text-xl sm:font-semibold lg:text-2xl"
           initial={{ opacity: 0, y: -10 }}
           transition={{ duration: 0.6, delay: 0.2 }}
           viewport={{ once: true }}

@@ -46,7 +46,7 @@ interface SpeciesWithStoreData {
   name: string
   genus: { name: string }
   variants: Variant[]
-  isFeatured: boolean
+  isFeatured?: boolean
   _count: {
     plants: number
   }

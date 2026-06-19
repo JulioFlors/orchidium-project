@@ -207,16 +207,22 @@ export async function deleteSpeciesImage(imageId: string) {
 /** Alterna el estado destacado de una especie */
 export async function toggleSpeciesFeatured(id: string, isFeatured: boolean) {
   try {
+    // Comentado temporalmente porque no existe isFeatured en BD de producción
+    /*
     const species = await prisma.species.update({
       where: { id },
       data: { isFeatured },
     })
+    */
+    Logger.info(
+      `[Species] toggleSpeciesFeatured llamado para ID ${id} con valor ${isFeatured} (deshabilitado en producción)`,
+    )
 
     revalidatePath('/species')
     revalidatePath('/')
     revalidatePath('/shop-manager')
 
-    return { ok: true, species }
+    return { ok: true, species: null }
   } catch (err) {
     Logger.error('[Species] Error al alternar destacado:', err)
 

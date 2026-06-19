@@ -32,7 +32,7 @@ interface LandingSpecies {
   name: string
   slug: string
   description: string | null
-  isFeatured: boolean
+  isFeatured?: boolean
   genus: {
     id: string
     name: string
