@@ -666,6 +666,7 @@ function setupMqttHandlers() {
             await handleNodeSync('ping', previousHeartbeat)
             irrigationRetryManager.setReady()
             systemRetryManager.setReady()
+            isSystemReady = true
           }
 
           return
@@ -2043,6 +2044,23 @@ async function checkAndRecoverMissingStats(daysToLookBack = 7) {
   }
 }
 
+let bcvRetryCount = 0
+
+function getCaracasTodayMidnight(): Date {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Caracas',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  const parts = formatter.formatToParts(new Date())
+  const month = parts.find((p) => p.type === 'month')?.value
+  const day = parts.find((p) => p.type === 'day')?.value
+  const year = parts.find((p) => p.type === 'year')?.value
+
+  return new Date(`${year}-${month}-${day}T00:00:00.000Z`)
+}
+
 // ---- Lógica de Rutinas (Crons) ----
 async function initScheduler() {
   await waitForPostgres()
@@ -2151,37 +2169,59 @@ async function initScheduler() {
   // 1. Cron principal de BCV: cada día a las 8:30 PM (hora de Caracas)
   new Cron('30 20 * * *', { timezone: 'America/Caracas' }, async () => {
     Logger.cron('Iniciando tarea diaria programada de scraping del BCV...')
+    bcvRetryCount = 0
     await syncBcvExchangeRate()
   })
 
-  // 2. Cron de reintento horario del BCV: al inicio de cada hora (* 0 * * * *)
-  // Si la tasa del día de mañana no está registrada, reintenta.
+  // 2. Cron de reintento horario del BCV: al inicio de cada hora (0 * * * *)
   new Cron('0 * * * *', { timezone: 'America/Caracas' }, async () => {
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    tomorrow.setHours(0, 0, 0, 0)
+    const today = getCaracasTodayMidnight()
+    const tomorrow = new Date(today)
+
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
 
     const tomorrowRate = await prisma.exchangeRate.findUnique({
       where: { date: tomorrow },
     })
 
     if (!tomorrowRate) {
-      Logger.cron('Tasa del día de mañana ausente. Ejecutando reintento horario del BCV...')
-      await syncBcvExchangeRate()
+      const nowCaracas = new Date(
+        new Date().toLocaleString('en-US', { timeZone: 'America/Caracas' }),
+      )
+      const hours = nowCaracas.getHours()
+      const minutes = nowCaracas.getMinutes()
+
+      // Rango de reintento nocturno: de 8:30 PM (20:30) en adelante hasta las 11:59 PM
+      const isNightRange = hours > 20 || (hours === 20 && minutes >= 30)
+
+      if (isNightRange) {
+        if (bcvRetryCount < 3) {
+          bcvRetryCount++
+          Logger.cron(
+            `[Reintento ${bcvRetryCount}/3] Tasa del día de mañana ausente en horario de publicación. Ejecutando reintento horario del BCV...`,
+          )
+          await syncBcvExchangeRate()
+        } else {
+          Logger.warn(
+            'Se alcanzó el límite máximo de 3 reintentos para la tasa de mañana. Se desistirá hasta el próximo cron principal.',
+          )
+        }
+      }
     }
   })
 
   // 3. Ejecutar sincronización inicial en background al arrancar para asegurar tasa vigente de hoy
   Promise.resolve().then(async () => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = getCaracasTodayMidnight()
 
     const todayRate = await prisma.exchangeRate.findUnique({
       where: { date: today },
     })
 
     if (!todayRate) {
-      Logger.cron('Base de datos inicializada o tasa del día ausente. Iniciando scraping BCV de arranque...')
+      Logger.cron(
+        'Base de datos inicializada o tasa del día de hoy ausente. Iniciando scraping BCV de arranque...',
+      )
       await syncBcvExchangeRate()
     }
   })
@@ -2205,6 +2245,66 @@ async function runTask(scheduleId: string) {
 
     if (!schedule.isEnabled) return
 
+    // [🛡️ IDEMPOTENCIA]: Verificar si ya existe una ejecución (real o cancelada) para esta ventana horaria
+    // Evita que tareas canceladas manualmente "resuciten" o que se dupliquen ejecuciones por lag del cron.
+    const existingTask = await prisma.taskLog.findFirst({
+      where: {
+        scheduleId: schedule.id,
+        scheduledAt: {
+          gte: new Date(Date.now() - 10 * 60000), // Ventana de 10 min
+          lte: new Date(Date.now() + 10 * 60000),
+        },
+      },
+    })
+
+    if (existingTask) {
+      if (existingTask.status === TaskStatus.CANCELLED) {
+        Logger.cron(
+          `"${schedule.name}" fue cancelada previamente por el usuario. Respetando decisión.`,
+        )
+
+        return
+      }
+
+      if (schedule.purpose !== 'FERTIGATION' && schedule.purpose !== 'FUMIGATION') {
+        Logger.cron(`Ya existe una ejecución para "${schedule.name}". Saltando.`)
+
+        return
+      }
+      // Para agroquímicos, el código de abajo ya maneja el taskLog existente.
+    }
+
+    // 1. Evaluar si la rutina debe proceder mediante el Motor de Inferencia (Veto Climático)
+    const inference = await InferenceEngine.evaluate(schedule)
+
+    if (inference.shouldCancel) {
+      Logger.cron(
+        `Rutina CANCELADA por veto climático: ${schedule.name}. Motivo: ${inference.reason}`,
+      )
+
+      await prisma.taskLog.create({
+        data: {
+          scheduleId: schedule.id,
+          purpose: schedule.purpose,
+          zones: schedule.zones,
+          status: TaskStatus.CANCELLED,
+          source: 'ROUTINE',
+          scheduledAt: new Date(),
+          duration: schedule.durationMinutes,
+          notes: `Cancelación automática (Inferencia): ${inference.reason}`,
+          events: {
+            create: {
+              status: TaskStatus.CANCELLED,
+              notes: inference.reason,
+            },
+          },
+        },
+      })
+
+      return
+    }
+
+    // 2. Verificar estado de disponibilidad del nodo actuador y sistema
     if (!isSystemReady) {
       Logger.cron(`Rutina POSTERGADA: ${schedule.name}. Motivo: Nodo Actuador inicializándose.`)
 
@@ -2262,38 +2362,6 @@ async function runTask(scheduleId: string) {
       })
 
       return
-    }
-
-    // 1. Evaluar si la rutina debe proceder mediante el Motor de Inferencia
-    const inference = await InferenceEngine.evaluate(schedule)
-
-    // [🛡️ IDEMPOTENCIA]: Verificar si ya existe una ejecución (real o cancelada) para esta ventana horaria
-    // Evita que tareas canceladas manualmente "resuciten" o que se dupliquen ejecuciones por lag del cron.
-    const existingTask = await prisma.taskLog.findFirst({
-      where: {
-        scheduleId: schedule.id,
-        scheduledAt: {
-          gte: new Date(Date.now() - 10 * 60000), // Ventana de 10 min
-          lte: new Date(Date.now() + 10 * 60000),
-        },
-      },
-    })
-
-    if (existingTask) {
-      if (existingTask.status === TaskStatus.CANCELLED) {
-        Logger.cron(
-          `"${schedule.name}" fue cancelada previamente por el usuario. Respetando decisión.`,
-        )
-
-        return
-      }
-
-      if (schedule.purpose !== 'FERTIGATION' && schedule.purpose !== 'FUMIGATION') {
-        Logger.cron(`Ya existe una ejecución para "${schedule.name}". Saltando.`)
-
-        return
-      }
-      // Para agroquímicos, el código de abajo ya maneja el taskLog existente.
     }
 
     // Lógica especial para Agroquímicos
@@ -2666,7 +2734,7 @@ async function evaluateClimateBatches() {
  * Scraping del Banco Central de Venezuela y almacenamiento en base de datos.
  * Guarda la tasa oficial y asocia su vigencia basándose en la fecha reportada.
  */
-async function syncBcvExchangeRate() {
+async function syncBcvExchangeRate(): Promise<boolean> {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
   const url = 'https://www.bcv.org.ve/'
 
@@ -2692,31 +2760,28 @@ async function syncBcvExchangeRate() {
     const matchDolar = html.match(
       /id=["']dolar["'][\s\S]*?<strong[^>]*?>\s*([\d,.]+)\s*<\/strong>/i,
     )
+
     if (!matchDolar) {
       throw new Error('No se pudo encontrar la tasa del dólar en el HTML del BCV.')
     }
 
     const rate = parseFloat(matchDolar[1].trim().replace(',', '.'))
+
     if (isNaN(rate) || rate <= 0) {
       throw new Error(`Tasa inválida analizada del BCV: ${rate}`)
     }
 
     // 2. Extraer fecha valor reportada
     const matchDate = html.match(/class=["']date-display-single["'][^>]*?content=["']([^"']+)["']/i)
+
     if (!matchDate) {
       throw new Error('No se pudo encontrar la fecha valor en el HTML del BCV.')
     }
 
-    const bcvDate = new Date(matchDate[1])
-    if (isNaN(bcvDate.getTime())) {
-      throw new Error(`Fecha inválida analizada del BCV: ${matchDate[1]}`)
-    }
+    const bcvDateStr = matchDate[1].split('T')[0] // Obtener YYYY-MM-DD
+    const dateValue = new Date(`${bcvDateStr}T00:00:00.000Z`)
 
-    // Normalizar a medianoche local para la clave única por día
-    const dateValue = new Date(bcvDate)
-    dateValue.setHours(0, 0, 0, 0)
-
-    Logger.info(`Tasa obtenida: ${rate} Bs/USD con fecha valor: ${dateValue.toISOString().slice(0, 10)}`, 'BCV')
+    Logger.info(`Tasa obtenida: ${rate} Bs/USD con fecha valor: ${bcvDateStr}`, 'BCV')
 
     // 3. Upsert de la tasa en base de datos para la fecha de vigencia
     await prisma.exchangeRate.upsert({
@@ -2729,18 +2794,19 @@ async function syncBcvExchangeRate() {
       },
     })
 
-    Logger.success(`Tasa de cambio guardada en base de datos para el día: ${dateValue.toISOString().slice(0, 10)}`, 'BCV')
+    Logger.success(`Tasa de cambio guardada en base de datos para el día: ${bcvDateStr}`, 'BCV')
 
     // 4. Lógica de rellenado para el día de hoy (para asegurar datos retroactivos inmediatos en desarrollo)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = getCaracasTodayMidnight()
 
     const todayRate = await prisma.exchangeRate.findUnique({
       where: { date: today },
     })
 
     if (!todayRate) {
-      Logger.info(`Rellenando tasa de hoy (${today.toISOString().slice(0, 10)}) con el valor actual: ${rate}`, 'BCV')
+      const todayStr = today.toISOString().slice(0, 10)
+
+      Logger.info(`Rellenando tasa de hoy (${todayStr}) con el valor actual: ${rate}`, 'BCV')
       await prisma.exchangeRate.create({
         data: {
           rate,
@@ -2750,10 +2816,19 @@ async function syncBcvExchangeRate() {
       })
     }
 
-  } catch (error: any) {
-    Logger.error(`Error durante sincronización BCV: ${error.message}`)
+    // Determinar si la tasa guardada corresponde al día de mañana (o posterior)
+    const tomorrow = new Date(today)
+
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
+
+    return dateValue.getTime() >= tomorrow.getTime()
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error)
+
+    Logger.error(`Error durante sincronización BCV: ${errMsg}`)
+
+    return false
   }
 }
 
 init()
-

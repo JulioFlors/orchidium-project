@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { ProductVariant, Species } from '@/interfaces/'
 import { StockLabel, FloweringLabel } from '@/components'
 import { useImageColor } from '@/hooks/useImageColor'
-import { getImageUrl } from '@/lib'
+import { getImageUrl, useFormatPrice } from '@/lib'
 
 interface Props {
   product: Species
@@ -33,8 +33,6 @@ const getProductDisplayInfo = (variants: ProductVariant[]) => {
     hasStock,
   }
 }
-
-import { useFormatPrice } from '@/lib'
 
 export function ProductGridItem({ product, index }: Props) {
   const { minPrice, maxPrice, hasStock } = getProductDisplayInfo(product.variants)

@@ -341,6 +341,19 @@ export async function processPostponedTasks() {
     Logger.task(`${introText}.`)
 
     for (const task of postponed) {
+      // Evaluar veto de inferencia climática de último minuto para tareas automáticas postergadas
+      if (task.schedule && task.source !== 'MANUAL') {
+        const inference = await InferenceEngine.evaluate(task.schedule)
+
+        if (inference.shouldCancel) {
+          Logger.inference(
+            `Veto ambiental aplicado a tarea postergada reactivada: ${inference.reason}`,
+          )
+          await recordTaskEvent(task.id, TaskStatus.CANCELLED, inference.reason)
+          continue
+        }
+      }
+
       await processTaskLog(task)
     }
   }

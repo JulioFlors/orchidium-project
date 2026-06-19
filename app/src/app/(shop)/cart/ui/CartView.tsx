@@ -7,7 +7,7 @@ import clsx from 'clsx'
 import { initialData } from '@service/seeding'
 
 import { QuantityDropdown, buttonVariants } from '@/components'
-import { getImageUrl } from '@/lib'
+import { getImageUrl, useFormatPrice } from '@/lib'
 
 const productsInCart = [
   initialData.species[3],
@@ -20,8 +20,6 @@ const productsInCart = [
   initialData.species[6],
   initialData.species[12],
 ]
-
-import { useFormatPrice } from '@/lib'
 
 export function CartView() {
   const [quantity, setQuantity] = useState<number>(1)
