@@ -273,7 +273,7 @@ export function ShopView({ initialData }: ShopViewProps) {
                           : 'Destacar especie (más vendidos)'
                       }
                       type="button"
-                      onClick={() => handleToggleFeatured(species.id, species.isFeatured)}
+                      onClick={() => handleToggleFeatured(species.id, species.isFeatured ?? false)}
                     >
                       {species.isFeatured ? (
                         <PiStarFill className="h-4 w-4" />
