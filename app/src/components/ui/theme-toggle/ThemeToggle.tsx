@@ -1,19 +1,10 @@
 'use client'
 
-import { useRef } from 'react'
 import { useTheme } from 'next-themes'
-import clsx from 'clsx'
-import dynamic from 'next/dynamic'
-import { VscColorMode } from 'react-icons/vsc'
+import React, { useRef } from 'react'
+import { IoMoonOutline, IoSunnyOutline } from 'react-icons/io5'
 
-// Importamos el icono SIN SSR.
-// Esto significa que el servidor renderizará el botón vacío (o con el loading),
-// y el cliente inyectará el icono después.
-const ThemeIcon = dynamic(() => import('@/components').then((mod) => mod.ThemeIcon), {
-  ssr: false,
-  // Un placeholder invisible del mismo tamaño para evitar saltos de layout
-  loading: () => <VscColorMode className="text-primary h-5 w-5 animate-pulse" />,
-})
+import { ToggleSwitch } from '@/components'
 
 interface Props {
   className?: string
@@ -35,7 +26,7 @@ export function ThemeToggle({
   const toggleRef = useRef<HTMLButtonElement>(null)
 
   /* ---- Bloqueamos las Transiciones (Kill Switch) ---- */
-  const toggleTheme = () => {
+  const toggleTheme = (nextTheme: string) => {
     // Creamos una etiqueta <style>
     const css = document.createElement('style')
 
@@ -56,11 +47,7 @@ export function ThemeToggle({
     document.head.appendChild(css)
 
     // Forzamos que el navegador se de cuenta de que hay nuevos estilos antes de seguir.
-    // Acceder a window.getComputedStyle cumple con el objetivo.
     void window.getComputedStyle(css).opacity
-
-    // Logica del Toggle: (Claro <-> Oscuro)
-    const nextTheme = resolvedTheme === 'dark' ? 'light' : 'dark'
 
     setTheme(nextTheme)
 
@@ -76,22 +63,27 @@ export function ThemeToggle({
     }, 75)
   }
 
-  return (
-    <button
-      ref={toggleRef}
-      aria-label="Alternar tema claro/oscuro"
-      className={clsx(
-        className,
-        isSidebar ? 'focus-sidebar-content' : 'focus-link-hover toolbar-icon',
-      )}
-      type="button"
-      onClick={toggleTheme}
-    >
-      {/* El contenido es dinámico */}
-      <ThemeIcon className={iconClassName} />
+  const optionA = {
+    label: label || '',
+    icon: <IoSunnyOutline className={iconClassName} />,
+    value: 'light',
+  }
 
-      {/* 🆕 Etiqueta opcional (para el Sidebar) */}
-      {label && <span className="ml-2 font-semibold">{label}</span>}
-    </button>
+  const optionB = {
+    label: label || '',
+    icon: <IoMoonOutline className={iconClassName} />,
+    value: 'dark',
+  }
+
+  return (
+    <ToggleSwitch
+      activeValue={resolvedTheme || 'light'}
+      ariaLabel="Alternar tema claro/oscuro"
+      className={className}
+      isSidebar={isSidebar}
+      optionA={optionA}
+      optionB={optionB}
+      onChange={toggleTheme}
+    />
   )
 }

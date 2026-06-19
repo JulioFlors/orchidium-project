@@ -14,6 +14,7 @@ import 'swiper/css/thumbs'
 
 import './slideshow.css'
 import { StockLabel } from '@/components'
+import { getImageUrl } from '@/lib'
 
 interface Props {
   isAvailable: boolean
@@ -63,7 +64,7 @@ export function Slideshow({ isAvailable, className, images, title }: Props) {
                 className="object-cover"
                 height={2000}
                 priority={index === 0}
-                src={`/plants/${image}`}
+                src={getImageUrl(image)}
                 width={2000}
               />
 
@@ -93,7 +94,7 @@ export function Slideshow({ isAvailable, className, images, title }: Props) {
                 alt={`${title} thumbnail`}
                 className="rounded object-cover"
                 height={1000}
-                src={`/plants/${image}`}
+                src={getImageUrl(image)}
                 width={1000}
               />
             </SwiperSlide>

@@ -301,6 +301,9 @@ importers:
 
   services/seed:
     dependencies:
+      '@aws-sdk/client-s3':
+        specifier: 3.1032.0
+        version: 3.1032.0
       '@package/database':
         specifier: workspace:*
         version: link:../../packages/database

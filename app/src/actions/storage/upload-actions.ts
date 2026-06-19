@@ -26,14 +26,17 @@ export async function generateUploadPresignedUrl(key: string, contentType: strin
       ContentType: contentType,
     })
 
-    const presignedUrl = await getSignedUrl(r2, command, { expiresIn: 60 })
+    const presignedUrl = await getSignedUrl(r2, command, { expiresIn: 900 })
     const publicUrl = `${R2_PUBLIC_URL}/${key}`
 
     return { ok: true, presignedUrl, publicUrl }
   } catch (err) {
     Logger.error('[R2] Error generando presigned URL:', err)
 
-    return { ok: false, message: 'Error generando URL de subida.' }
+    return {
+      ok: false,
+      message: `Error generando URL de subida: ${err instanceof Error ? err.message : String(err)}`,
+    }
   }
 }
 

@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 import { headers } from 'next/headers'
 
 import { auth } from '@/lib/server'
-import { Footer, Sidebar, Header } from '@/components'
+import { Footer, Sidebar, AdaptiveHeader } from '@/components'
 import { Logger } from '@/lib'
 import {
   getPlantsNavigation,
@@ -40,7 +40,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <Header plantsNavData={plantsNavData || []} suggestions={suggestions || []} />
+      <AdaptiveHeader plantsNavData={plantsNavData || []} suggestions={suggestions || []} />
 
       <Sidebar session={session} suggestions={suggestions || []} />
 

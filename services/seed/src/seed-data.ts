@@ -44,6 +44,7 @@ interface SeedSpecies {
   description?: string
   images: string[]
   variants: SeedVariant[]
+  isFeatured?: boolean
 }
 
 interface SeedPlant {
@@ -178,7 +179,8 @@ export const initialData: SeedData = {
       variants: [
         { size: 'NRO_10', price: 35, quantity: 5, available: true },
         { size: 'NRO_14', price: 45, quantity: 2, available: true },
-      ]
+      ],
+      isFeatured: true
     },
     {
       name: 'Cattlianthe Mary Elizabeth Bohn',

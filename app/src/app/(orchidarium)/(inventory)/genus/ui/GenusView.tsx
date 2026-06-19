@@ -9,8 +9,8 @@ import { MdEdit, MdDelete, MdAdd } from 'react-icons/md'
 import {
   Modal,
   Button,
-  Badge,
   Heading,
+  Title,
   Card,
   CardHeader,
   CardTitle,
@@ -144,9 +144,28 @@ export function GenusView({ initialGenera }: GenusViewProps) {
     })
   }
 
+  // ── Agrupamiento ─────────────────────────────────────────────
+  const generaByType = genera.reduce<Record<PlantType, Genus[]>>(
+    (acc, genus) => {
+      const type = genus.type
+
+      if (!acc[type]) {
+        acc[type] = []
+      }
+      acc[type].push(genus)
+
+      return acc
+    },
+    {} as Record<PlantType, Genus[]>,
+  )
+
+  const sortedTypes = (Object.keys(generaByType) as PlantType[]).sort((a, b) =>
+    PLANT_TYPE_LABELS[a].localeCompare(PLANT_TYPE_LABELS[b]),
+  )
+
   // ── Render ───────────────────────────────────────────────────
   return (
-    <div className="flex flex-col gap-8">
+    <div className="tds-sm:px-0 mx-auto mt-9 flex w-full max-w-7xl flex-col gap-8 px-4 pb-12">
       {/* Header Limpio */}
       <Heading
         action={
@@ -159,61 +178,75 @@ export function GenusView({ initialGenera }: GenusViewProps) {
         title="Géneros"
       />
 
-      {/* Grid de Cards */}
-      <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-3 grid grid-cols-1 gap-6">
-        {genera.length === 0 ? (
-          <div className="bg-canvas border-input-outline tds-sm:col-span-2 tds-lg:col-span-3 rounded-xl border border-dashed py-24 text-center">
-            <span className="text-secondary text-sm">No hay géneros registrados.</span>
-          </div>
-        ) : (
-          genera.map((genus) => (
-            <Card
-              key={genus.id}
-              className="bg-canvas border-input-outline group relative overflow-hidden"
-            >
-              <CardHeader className="flex flex-row items-start justify-between border-none pb-2">
-                <div className="flex flex-col gap-1">
-                  <Badge className="w-fit" variant="secondary">
-                    {PLANT_TYPE_LABELS[genus.type]}
-                  </Badge>
-                  <CardTitle className="text-primary text-xl">{genus.name}</CardTitle>
-                </div>
+      {genera.length === 0 ? (
+        <div className="bg-canvas border-input-outline rounded-xl border border-dashed py-24 text-center">
+          <span className="text-secondary text-sm">No hay géneros registrados.</span>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-10">
+          {sortedTypes.map((type) => {
+            const generaList = generaByType[type]
 
-                <ActionMenu
-                  items={[
-                    {
-                      label: 'Editar',
-                      icon: <MdEdit />,
-                      onClick: () => openEdit(genus),
-                    },
-                    {
-                      label: 'Eliminar',
-                      icon: <MdDelete />,
-                      onClick: () => handleDelete(genus),
-                      variant: 'destructive',
-                    },
-                  ]}
-                />
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-2">
-                  <span className="text-primary font-mono text-xl font-bold">
-                    {genus._count.species}
-                  </span>
-                  <span className="text-secondary text-xs tracking-wider uppercase opacity-60">
-                    Especies asociadas
-                  </span>
-                </div>
-              </CardContent>
+            return (
+              <div
+                key={type}
+                className="flex flex-col border-b border-zinc-100 pb-8 last:border-none last:pb-0 dark:border-zinc-800/50"
+              >
+                {/* Título del Tipo de Planta */}
+                <Title className="ml-1" title={PLANT_TYPE_LABELS[type]} />
 
-              {/* Decoración sutil */}
-              <div className="text-primary absolute right-[-10%] bottom-[-10%] rotate-12 opacity-[0.03] transition-transform group-hover:scale-110">
-                <PiPlantFill size={100} />
+                {/* Grid de Cards de Géneros */}
+                <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-3 tds-2xl:grid-cols-4 mt-9 grid gap-x-4 gap-y-2">
+                  {generaList.map((genus) => (
+                    <div key={genus.id} className="group relative flex flex-col px-1 pt-1 pb-1">
+                      <Card className="bg-canvas border-input-outline relative z-1 flex h-full flex-col overflow-hidden transition-all duration-300 hover:border-emerald-500/50 hover:shadow-lg dark:hover:shadow-emerald-950/20">
+                        <CardHeader className="flex flex-row items-start justify-between border-none pb-2">
+                          <div className="flex flex-col gap-1">
+                            <CardTitle className="text-primary text-xl font-bold">
+                              {genus.name}
+                            </CardTitle>
+                          </div>
+
+                          <ActionMenu
+                            items={[
+                              {
+                                label: 'Editar',
+                                icon: <MdEdit />,
+                                onClick: () => openEdit(genus),
+                              },
+                              {
+                                label: 'Eliminar',
+                                icon: <MdDelete />,
+                                onClick: () => handleDelete(genus),
+                                variant: 'destructive',
+                              },
+                            ]}
+                          />
+                        </CardHeader>
+                        <CardContent>
+                          <div className="flex items-center gap-2">
+                            <span className="text-primary font-mono text-xl font-bold">
+                              {genus._count.species}
+                            </span>
+                            <span className="text-secondary text-xs tracking-wider uppercase opacity-60">
+                              Especies asociadas
+                            </span>
+                          </div>
+                        </CardContent>
+
+                        {/* Decoración sutil */}
+                        <div className="text-primary absolute right-[-10%] bottom-[-10%] rotate-12 opacity-[0.03] transition-transform group-hover:scale-110">
+                          <PiPlantFill size={100} />
+                        </div>
+                      </Card>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </Card>
-          ))
-        )}
-      </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* Modal Crear/Editar */}
       <Modal

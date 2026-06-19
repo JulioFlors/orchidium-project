@@ -92,18 +92,8 @@ export function PestSightingModal({ isOpen, onClose }: PestSightingModalProps) {
 
   return (
     <Modal
-      footer={
-        <div className="flex gap-3">
-          <Button disabled={isSubmitting} variant="secondary" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button isLoading={isSubmitting} onClick={handleSubmit}>
-            Registrar Reporte
-          </Button>
-        </div>
-      }
-      icon={<Bug className="h-5 w-5 text-orange-500" />}
       isOpen={isOpen}
+      size="md"
       subtitle="Captura evidencia para la base de conocimientos fitosanitarios."
       title="Reportar Avistamiento de Plaga"
       onClose={onClose}
@@ -137,7 +127,7 @@ export function PestSightingModal({ isOpen, onClose }: PestSightingModalProps) {
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
             <label className="text-secondary text-sm font-medium">
@@ -175,6 +165,16 @@ export function PestSightingModal({ isOpen, onClose }: PestSightingModalProps) {
               onChange={(e) => setNotes(e.target.value)}
             />
           </label>
+        </div>
+
+        <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+          <Button disabled={isSubmitting} variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button isLoading={isSubmitting} onClick={handleSubmit}>
+            <Bug className="mr-1.5 h-4 w-4" />
+            Registrar Reporte
+          </Button>
         </div>
       </div>
     </Modal>

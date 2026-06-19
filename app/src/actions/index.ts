@@ -44,4 +44,6 @@ export * from './product/get-species-by-type'
 
 export * from './product/get-stock-by-slug'
 
+export * from './product/get-exchange-rate'
+
 export * from './storage/upload-actions'

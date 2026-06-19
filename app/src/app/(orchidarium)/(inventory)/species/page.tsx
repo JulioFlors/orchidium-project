@@ -15,9 +15,5 @@ export default async function SpeciesPage() {
   const species = speciesRes.species || []
   const genera = generaRes.genera || []
 
-  return (
-    <main className="p-4 sm:p-8">
-      <SpeciesView genera={genera} initialSpecies={species} />
-    </main>
-  )
+  return <SpeciesView genera={genera} initialSpecies={species} />
 }

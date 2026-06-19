@@ -7,6 +7,7 @@ import clsx from 'clsx'
 import { initialData } from '@service/seeding'
 
 import { QuantityDropdown, buttonVariants } from '@/components'
+import { getImageUrl } from '@/lib'
 
 const productsInCart = [
   initialData.species[3],
@@ -20,24 +21,14 @@ const productsInCart = [
   initialData.species[12],
 ]
 
+import { useFormatPrice } from '@/lib'
+
 export function CartView() {
   const [quantity, setQuantity] = useState<number>(1)
+  const { format: formatPrice } = useFormatPrice()
 
   // Todo -> Usando la data del seed por ahora
   const itemsInCart = productsInCart.length
-
-  // ---- Formatear el precio con coma decimal y símbolo de moneda ---- //
-  const formatPrice = (price: number) => {
-    const formattedNumber = new Intl.NumberFormat('es-VE', {
-      style: 'decimal',
-      useGrouping: true,
-      maximumFractionDigits: 2,
-      minimumFractionDigits: 2,
-    }).format(price)
-
-    // Añade manualmente el símbolo '$' al principio
-    return `$${formattedNumber}`
-  }
 
   // ---- Renderizado del carrito con items ---- //
   return (
@@ -121,7 +112,7 @@ export function CartView() {
                               alt={product.name}
                               className="tds-lg:h-[90px] tds-lg:w-[90px] tds-lg:min-w-[90px] tds-lg:mb-0 mb-[5px] aspect-square h-20 w-20 min-w-20 rounded object-cover"
                               height={80}
-                              src={`/plants/${product.images[0]}`}
+                              src={getImageUrl(product.images[0])}
                               width={80}
                             />
                           </Link>

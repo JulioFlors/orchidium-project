@@ -119,6 +119,53 @@ Al final del archivo `.env`, encontrarás la sección **"APP NEXT.JS"**. Aquí d
 
 > **Nota:** Esto solo afecta a la App Web. Los servicios de backend (ingesta/scheduler) se controlan por separado usando **Docker Profiles** (ver paso 3).
 
+#### 📦 Configuración de Cloudflare R2 (Almacenamiento de Imágenes)
+
+La plataforma utiliza Cloudflare R2 para la carga y renderizado de imágenes. Asegúrate de agregar las siguientes variables en tu archivo `.env`:
+
+```env
+NEXT_PUBLIC_R2_PUBLIC_URL=https://storage.tu-dominio.com
+R2_ACCESS_KEY_ID=tu_access_key_id
+R2_ACCOUNT_ID=tu_account_id
+R2_BUCKET_NAME=pristinoplant
+R2_PUBLIC_URL=https://storage.tu-dominio.com
+R2_SECRET_ACCESS_KEY=tu_secret_access_key
+```
+
+##### 🔒 Regla de Política CORS en Cloudflare R2
+
+Para permitir la subida directa (`PUT`) desde el navegador sin que sea bloqueada por CORS (`Failed to fetch`), debes definir la siguiente regla JSON en la consola de Cloudflare R2 (pestaña **Settings** > **CORS Policy** de tu bucket):
+
+```json
+[
+  {
+    "AllowedOrigins": [
+      "http://localhost:3000",
+      "https://pristinoplant.vercel.app"
+    ],
+    "AllowedMethods": [
+      "GET",
+      "PUT",
+      "POST",
+      "DELETE",
+      "HEAD"
+    ],
+    "AllowedHeaders": [
+      "*"
+    ],
+    "ExposeHeaders": [],
+    "MaxAgeSeconds": 3000
+  }
+]
+```
+
+##### ⏰ Desfase Horario de la Máquina Local (Clock Skew)
+
+> [!NOTE]
+> Si el reloj de tu máquina local de desarrollo está desincronizado con respecto al de Cloudflare (incluso por 2 o 3 minutos), las peticiones de subida fallarán silenciosamente en el navegador con un error de CORS o de red (`Failed to fetch`) debido a que R2 detecta la firma como ya expirada (`ExpiredRequest`).
+>
+> Para mitigar este comportamiento en entornos locales, la expiración de las firmas en `upload-actions.ts` se ha configurado en **15 minutos (900 segundos)**. De todas formas, se recomienda sincronizar el reloj de tu sistema operativo con un servidor de hora NTP activo.
+
 ### 2. Instalar Dependencias
 
 Instala las dependencias del proyecto utilizando pnpm.

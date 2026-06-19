@@ -10,6 +10,7 @@ import 'swiper/css/pagination'
 
 import './slideshow.css'
 import { StockLabel } from '@/components'
+import { getImageUrl } from '@/lib'
 
 interface Props {
   isAvailable: boolean
@@ -45,7 +46,7 @@ export function MobileSlideshow({ isAvailable, className, images, title }: Props
               className="object-cover"
               height={2000}
               priority={index === 0}
-              src={`/plants/${image}`}
+              src={getImageUrl(image)}
               width={2000}
             />
 

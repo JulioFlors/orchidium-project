@@ -5,7 +5,7 @@ import { IoChevronForwardOutline, IoStorefrontOutline } from 'react-icons/io5'
 import useSWR from 'swr'
 
 import { adminRoutes } from '@/config'
-import { PersonIcon, ThemeToggle } from '@/components'
+import { PersonIcon, ThemeToggle, CurrencyToggle } from '@/components'
 import { useUIStore } from '@/store'
 
 export function OrchidariumSidebar() {
@@ -117,13 +117,11 @@ export function OrchidariumSidebar() {
               <span className="ml-2 font-semibold">Tienda</span>
             </Link>
 
+            {/* ---- Currency ----*/}
+            <CurrencyToggle isSidebar className="mt-4" />
+
             {/* ---- Theme ----*/}
-            <ThemeToggle
-              isSidebar
-              className="justify-start! px-3 py-2"
-              iconClassName="h-5 w-5"
-              label="Tema"
-            />
+            <ThemeToggle isSidebar className="px-3 py-2" iconClassName="h-5 w-5" label="Tema" />
 
             {/* ---- Account ----*/}
             <Link

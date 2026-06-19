@@ -12,7 +12,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import useSWR from 'swr'
 
 import { authClient } from '@/lib'
-import { PersonIcon, SearchBox, ThemeToggle, buttonVariants } from '@/components'
+import { PersonIcon, SearchBox, ThemeToggle, CurrencyToggle, buttonVariants } from '@/components'
 import { shopRoutes } from '@/config'
 import { useUIStore } from '@/store'
 
@@ -222,11 +222,14 @@ export function ShopSidebar({ suggestions = [] }: Props) {
               </Link>
             )}
 
+            {/* ---- Currency ----*/}
+            <CurrencyToggle isSidebar className="mt-4" />
+
             {/* ---- Theme ----*/}
             <ThemeToggle
               isSidebar
-              className={clsx('justify-start! px-3 py-2', {
-                'mt-4 mb-4!': !isAuthenticated,
+              className={clsx('px-3 py-2', {
+                'mb-4!': !isAuthenticated,
               })}
               iconClassName="h-5 w-5"
               label="Tema"

@@ -90,24 +90,14 @@ export function FloweringModal({ isOpen, onClose }: FloweringModalProps) {
 
   return (
     <Modal
-      footer={
-        <div className="flex gap-3">
-          <Button disabled={isSubmitting} variant="secondary" onClick={onClose}>
-            Cancelar
-          </Button>
-          <Button isLoading={isSubmitting} onClick={handleSubmit}>
-            Registrar Inicio
-          </Button>
-        </div>
-      }
-      icon={<Flower2 className="h-5 w-5 text-pink-500" />}
       isOpen={isOpen}
+      size="md"
       subtitle="Marca el inicio del ciclo de floración para el seguimiento botánico."
       title="Registrar Floración"
       onClose={onClose}
     >
       <div className="flex flex-col gap-6">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-2">
             {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
             <label className="text-secondary text-sm font-medium">
@@ -161,6 +151,16 @@ export function FloweringModal({ isOpen, onClose }: FloweringModalProps) {
             de floración, el gemelo digital ajustará automáticamente las métricas de DLI y DIF
             deseadas para esta planta en los reportes de salud.
           </p>
+        </div>
+
+        <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+          <Button disabled={isSubmitting} variant="ghost" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button isLoading={isSubmitting} onClick={handleSubmit}>
+            <Flower2 className="mr-1.5 h-4 w-4" />
+            Registrar Inicio
+          </Button>
         </div>
       </div>
     </Modal>

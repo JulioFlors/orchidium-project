@@ -25,6 +25,7 @@ description: Protocolo maestro de desarrollo. Define convenciones git, manejo de
 >    - Si `plan.md` existe pero no `tasks.md` o no está aprobado ➔ Guiar al usuario hacia la aprobación e inicialización de la lista de **Tareas** (Fase 4: `tasks.md`).
 >    - Si `tasks.md` tiene tareas pendientes ➔ Proponer la continuación y ejecución de la siguiente tarea del checklist (Fase 5: **Implementar**).
 > 4. El agente presentará un resumen del estado del ciclo en cada interacción y propondrá el siguiente paso lógico para avanzar en el flujo.
+> 5. El agente DEBE obligatoriamente mostrar al final de cada respuesta los enlaces directos y clicables a `spec.md`, `plan.md` y `tasks.md` de la feature activa.
 >
 > [!IMPORTANT]
 > **ESTÁNDARES DE MARKDOWN (PASO 8)**: Es mandatorio cumplir con el espaciado de encabezados y listas. El sistema de linting ahora está unificado bajo ESLint; asegúrate de ejecutar `pnpm lint:fix` antes de cualquier entrega importante.

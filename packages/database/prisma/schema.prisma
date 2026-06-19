@@ -93,7 +93,7 @@ model Species {
 model ProductVariant {
   id        String   @id @default(uuid())
   size      PotSize
-  price     Int
+  price     Float
   quantity  Int      @default(0)
   available Boolean  @default(false)
   speciesId String
@@ -633,4 +633,14 @@ model SchedulerState {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
+
+model ExchangeRate {
+  id        String   @id @default(uuid())
+  rate      Float    // Tasa USD/VES
+  currency  String   @default("USD")
+  date      DateTime @unique // Fecha de vigencia de la tasa (normalizada)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 

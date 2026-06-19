@@ -4,9 +4,11 @@
   "private": true,
   "description": "Script para poblar la base de datos con datos iniciales",
   "scripts": {
-    "start": "dotenv -e ../../.env -- tsx src/seed-database.ts && dotenv -e ../../.env -- tsx ../scheduler/src/scripts/backfill-rain-events.ts && dotenv -e ../../.env -- tsx ../scheduler/src/scripts/backfill-history.ts"
+    "start": "dotenv -e ../../.env -- tsx src/seed-database.ts && dotenv -e ../../.env -- tsx ../scheduler/src/scripts/backfill-rain-events.ts && dotenv -e ../../.env -- tsx ../scheduler/src/scripts/backfill-history.ts",
+    "migrate-images": "dotenv -e ../../.env -- tsx src/scripts/migrate-images-to-r2.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1032.0",
     "@package/database": "workspace:*",
     "better-auth": "1.6.11"
   }

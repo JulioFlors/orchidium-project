@@ -32,6 +32,7 @@ Implementación de sistemas CRUD completos para modelar la realidad biológica y
 - **Pipeline de Imágenes (AOT):** Sistema de compresión en Cliente (`browser` -> `WebP` sub-300KB) -> Hosting Dedicado en VPS. Cero consumo Vercel Image Optimization quota.
 - **Activos Vivos:** Gestión de Plantas individuales (Gemelos Digitales) con rastreo de estado e ID (`Plant`).
 - [x] **Diario Biológico:** Registro de eventos del ciclo de vida (Floraciones, Plagas) cruzados con los Gemelos Digitales para análisis ambiental.
+- [x] **Tienda (Landing Page):** Diseñado e implementado el landing page premium de la tienda (`/`) con animaciones de entrada, características de valor, colecciones destacadas y listado de productos.
 - **Tienda (E-commerce):** Gestión de Variantes Comerciales (`ProductVariant`), cruzando Taxonomía con Ventas.
 - [x] **Tienda (Sync):** Integración de estados biológicos en el catálogo comercial (Etiquetas y secciones dinámicas).
 

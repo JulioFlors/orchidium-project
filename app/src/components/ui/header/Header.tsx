@@ -142,7 +142,7 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
           'bg-canvas',
           'top-0 w-full',
           isAuthLayout ? 'tds-sm:fixed' : 'fixed',
-          isSubMenuOpen ? 'z-20' : 'z-10',
+          isSubMenuOpen ? 'z-30' : 'z-20',
         )}
         style={{ paddingRight: 'var(--scrollbar-width, 0.4px)' }}
         onMouseEnter={handleSubMenuMouseEnter}
@@ -253,7 +253,6 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
           </div>
         </div>
 
-        {/* ---- NavbarDropdown.tsx (Desktop) ---- */}
         <AnimatePresence>
           {isSubMenuOpen && activeItem && (
             <motion.div
@@ -261,8 +260,8 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
               layout
               animate="animate"
               className={clsx(
-                'aceleracion-hardware top-0 left-0 w-full pt-14',
-                'bg-canvas absolute',
+                'aceleracion-hardware top-0 left-0 -z-10 w-full pt-14',
+                'bg-canvas border-input-outline/20 absolute border-b shadow-md',
                 'tds-xl:block hidden',
               )}
               exit="exit"
@@ -270,7 +269,7 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
               style={{ paddingRight: 'var(--scrollbar-width, 0px)' }}
               variants={motionDropdown}
               onMouseEnter={handleSubMenuMouseEnter}
-              onMouseLeave={() => handleSubMenuMouseLeave}
+              onMouseLeave={() => handleSubMenuMouseLeave()}
             >
               {/* Inner Wrapper para el Cross-fade de contenido.
                   Aquí usamos la KEY dinámica para que React detecte el cambio de ítem.

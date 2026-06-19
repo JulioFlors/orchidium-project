@@ -2,8 +2,17 @@
 
 import type { PotSize } from '@package/database/enums'
 
+import clsx from 'clsx'
 import { useState, useTransition } from 'react'
-import { PiStorefrontFill, PiWarningFill, PiCheckCircleFill } from 'react-icons/pi'
+import {
+  PiStorefrontFill,
+  PiWarningFill,
+  PiCheckCircleFill,
+  PiCoinsFill,
+  PiPackageFill,
+  PiStarBold,
+  PiStarFill,
+} from 'react-icons/pi'
 import { MdEdit, MdDelete, MdAdd } from 'react-icons/md'
 
 import {
@@ -17,7 +26,7 @@ import {
   CardContent,
   ActionMenu,
 } from '@/components'
-import { upsertVariant, deleteVariant, updateVariantStock } from '@/actions'
+import { upsertVariant, deleteVariant, updateVariantStock, toggleSpeciesFeatured } from '@/actions'
 import { useToastStore } from '@/store/toast/toast.store'
 
 // ─────────────────────────────────────────────────────────────
@@ -37,6 +46,7 @@ interface SpeciesWithStoreData {
   name: string
   genus: { name: string }
   variants: Variant[]
+  isFeatured: boolean
   _count: {
     plants: number
   }
@@ -47,6 +57,13 @@ interface ShopViewProps {
 }
 
 const POT_SIZES: PotSize[] = ['NRO_5', 'NRO_7', 'NRO_10', 'NRO_14']
+
+const POT_SIZE_LABELS: Record<PotSize, string> = {
+  NRO_5: 'Maceta Nro 5',
+  NRO_7: 'Maceta Nro 7',
+  NRO_10: 'Maceta Nro 10',
+  NRO_14: 'Maceta Nro 14',
+}
 
 // ─────────────────────────────────────────────────────────────
 // Componente
@@ -193,36 +210,86 @@ export function ShopView({ initialData }: ShopViewProps) {
     })
   }
 
+  // ── Alternar Destacado ─────────────────────────────────────
+  function handleToggleFeatured(speciesId: string, currentFeatured: boolean) {
+    const nextFeatured = !currentFeatured
+
+    // Actualización optimista
+    setData((prev) =>
+      prev.map((s) => (s.id === speciesId ? { ...s, isFeatured: nextFeatured } : s)),
+    )
+
+    startTransition(async () => {
+      const result = await toggleSpeciesFeatured(speciesId, nextFeatured)
+
+      if (!result.ok) {
+        // Rollback en caso de error
+        setData((prev) =>
+          prev.map((s) => (s.id === speciesId ? { ...s, isFeatured: currentFeatured } : s)),
+        )
+        addToast(result.message ?? 'Error al actualizar destacado.', 'error')
+      } else {
+        addToast(
+          nextFeatured ? 'Especie destacada (más vendida).' : 'Especie quitada de destacados.',
+          'success',
+        )
+      }
+    })
+  }
+
   // ── Render ───────────────────────────────────────────────────
   return (
-    <div className="flex flex-col gap-8">
-      {/* Header Limpio */}
+    <div className="tds-sm:px-0 mx-auto mt-9 flex w-full max-w-7xl flex-col gap-8 px-4 pb-12">
+      {/* Header */}
       <Heading
         description="Administra precios, existencias y visibilidad online por especie"
         title="Gestor de Tienda"
       />
 
-      <div className="text-secondary grid grid-cols-1 gap-6">
+      <div className="flex flex-col gap-8">
         {data.map((species) => (
-          <Card key={species.id} className="bg-canvas border-input-outline group overflow-hidden">
-            <CardHeader className="bg-surface border-input-outline border-b py-4">
-              <div className="flex items-center justify-between">
+          <Card key={species.id} className="bg-canvas border-input-outline overflow-hidden">
+            <CardHeader className="bg-surface/50 border-input-outline border-b px-6 py-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex flex-col gap-1">
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary">{species.genus.name}</Badge>
-                    <span className="text-secondary text-xs opacity-60">
+                    <span className="text-secondary font-mono text-[10px] opacity-40">
                       ID: {species.id.slice(-6).toUpperCase()}
                     </span>
                   </div>
-                  <CardTitle className="text-primary text-xl">{species.name}</CardTitle>
+                  <div className="flex items-center gap-3">
+                    <CardTitle className="text-primary text-xl font-bold">{species.name}</CardTitle>
+                    <button
+                      className={clsx(
+                        'flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border transition-all duration-200',
+                        species.isFeatured
+                          ? 'border-yellow-400 bg-yellow-400/10 text-yellow-500 dark:border-yellow-500/50 dark:bg-yellow-500/10 dark:text-yellow-400'
+                          : 'border-input-outline text-secondary opacity-60 hover:border-zinc-300 hover:bg-zinc-100 hover:opacity-100 dark:hover:border-zinc-700 dark:hover:bg-zinc-800',
+                      )}
+                      title={
+                        species.isFeatured
+                          ? 'Quitar de destacados (más vendidos)'
+                          : 'Destacar especie (más vendidos)'
+                      }
+                      type="button"
+                      onClick={() => handleToggleFeatured(species.id, species.isFeatured)}
+                    >
+                      {species.isFeatured ? (
+                        <PiStarFill className="h-4 w-4" />
+                      ) : (
+                        <PiStarBold className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
                 <div className="flex items-center gap-4">
-                  <div className="tds-sm:flex hidden flex-col items-end">
+                  <div className="flex flex-col items-end">
                     <span className="text-primary font-mono text-sm font-bold">
                       {species._count.plants}
                     </span>
-                    <span className="text-secondary text-[10px] uppercase opacity-60">
-                      Inventario Real
+                    <span className="text-secondary text-[10px] font-semibold tracking-wider uppercase opacity-55">
+                      Inventario Físico
                     </span>
                   </div>
                   <Button size="sm" variant="secondary" onClick={() => openCreate(species)}>
@@ -233,115 +300,127 @@ export function ShopView({ initialData }: ShopViewProps) {
               </div>
             </CardHeader>
 
-            <CardContent className="p-0">
-              <div className="flex flex-col">
-                {species.variants.length === 0 ? (
-                  <div className="text-secondary/40 py-12 text-center text-sm italic">
-                    No hay ofertas comerciales definidas para esta especie.
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse">
-                      <thead>
-                        <tr className="border-input-outline border-b">
-                          <th className="text-secondary px-6 py-4 text-left text-xs font-black tracking-widest uppercase opacity-60">
-                            Tamaño
-                          </th>
-                          <th className="text-secondary px-6 py-4 text-left text-xs font-black tracking-widest uppercase opacity-60">
-                            Precio
-                          </th>
-                          <th className="text-secondary px-6 py-4 text-left text-xs font-black tracking-widest uppercase opacity-60">
-                            Stock Online
-                          </th>
-                          <th className="text-secondary px-6 py-4 text-left text-xs font-black tracking-widest uppercase opacity-60">
-                            Estatus
-                          </th>
-                          <th className="px-6 py-4" />
-                        </tr>
-                      </thead>
-                      <tbody className="divide-input-outline divide-y">
-                        {species.variants.map((v) => (
-                          <tr
-                            key={v.id}
-                            className="hover:bg-hover-overlay group/row transition-colors"
-                          >
-                            <td className="px-6 py-4">
-                              <Badge className="font-mono" variant="secondary">
-                                {v.size}
-                              </Badge>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex flex-col">
-                                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                                  ${(v.price / 100).toLocaleString()}
-                                </span>
-                                <span className="text-secondary text-[10px] opacity-40">USD</span>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex items-center gap-3">
-                                <span
-                                  className={`font-mono text-sm ${v.quantity < 5 ? 'font-black text-red-500' : 'text-primary font-bold'}`}
-                                >
-                                  {v.quantity} uds.
-                                </span>
-                                <div className="flex gap-1">
-                                  <button
-                                    className="focus-visible:ring-accessibility bg-hover-overlay hover:bg-hover rounded p-1.5 transition-colors focus-visible:ring-2 focus-visible:outline-none"
-                                    type="button"
-                                    onClick={() => handleQuickStock(v.id, species.id, -1)}
-                                  >
-                                    <span className="block h-3 w-3 text-center leading-none">
-                                      -
-                                    </span>
-                                  </button>
-                                  <button
-                                    className="focus-visible:ring-accessibility bg-hover-overlay hover:bg-hover rounded p-1.5 transition-colors focus-visible:ring-2 focus-visible:outline-none"
-                                    type="button"
-                                    onClick={() => handleQuickStock(v.id, species.id, 1)}
-                                  >
-                                    <span className="block h-3 w-3 text-center leading-none">
-                                      +
-                                    </span>
-                                  </button>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              {v.available ? (
-                                <Badge className="gap-1.5" variant="green">
-                                  <PiCheckCircleFill className="h-3.5 w-3.5" /> Visible
-                                </Badge>
-                              ) : (
-                                <Badge className="gap-1.5" variant="destructive">
-                                  <PiWarningFill className="h-3.5 w-3.5" /> Pausado
-                                </Badge>
-                              )}
-                            </td>
-                            <td className="px-6 py-4 text-right">
-                              <ActionMenu
-                                items={[
-                                  {
-                                    label: 'Editar Precios/Stock',
-                                    icon: <MdEdit />,
-                                    onClick: () => openEdit(species, v),
-                                  },
-                                  {
-                                    label: 'Eliminar Variante',
-                                    icon: <MdDelete />,
-                                    onClick: () => handleDelete(species.id, v),
-                                    variant: 'destructive',
-                                  },
-                                ]}
-                              />
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
+            <CardContent className="p-6">
+              {species.variants.length === 0 ? (
+                <div className="text-secondary/50 py-8 text-center text-sm italic">
+                  No hay ofertas comerciales configuradas para esta especie.
+                </div>
+              ) : (
+                /* Grid de Variantes en lugar de tabla */
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {species.variants.map((v) => (
+                    <div
+                      key={v.id}
+                      className="border-input-outline bg-surface/20 flex flex-col justify-between rounded-xl border p-4 transition-all duration-300 hover:border-zinc-300 hover:shadow-md dark:hover:border-zinc-700"
+                    >
+                      {/* Fila Superior: Tamaño y Menu de Acciones */}
+                      <div className="flex items-center justify-between border-b border-zinc-100 pb-3 dark:border-zinc-800/50">
+                        <Badge className="text-xs font-semibold" variant="secondary">
+                          {POT_SIZE_LABELS[v.size]}
+                        </Badge>
+                        <div className="flex items-center gap-2">
+                          {v.available ? (
+                            <span className="relative flex h-2 w-2">
+                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                            </span>
+                          ) : (
+                            <span className="h-2 w-2 rounded-full bg-red-400" />
+                          )}
+                          <ActionMenu
+                            items={[
+                              {
+                                label: 'Editar Variante',
+                                icon: <MdEdit />,
+                                onClick: () => openEdit(species, v),
+                              },
+                              {
+                                label: 'Eliminar Variante',
+                                icon: <MdDelete />,
+                                onClick: () => handleDelete(species.id, v),
+                                variant: 'destructive',
+                              },
+                            ]}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Cuerpo: Precio y Stock */}
+                      <div className="flex flex-col gap-4 py-4">
+                        {/* Precio */}
+                        <div className="flex items-center gap-2">
+                          <PiCoinsFill className="text-lg text-emerald-500 opacity-80" />
+                          <div className="flex flex-col">
+                            <span className="font-mono text-lg font-extrabold text-emerald-600 dark:text-emerald-400">
+                              $
+                              {(v.price / 100).toLocaleString('en-US', {
+                                minimumFractionDigits: 2,
+                              })}
+                            </span>
+                            <span className="text-secondary text-[9px] font-semibold uppercase opacity-40">
+                              Precio Online
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Stock */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <PiPackageFill
+                              className={`text-lg opacity-80 ${v.quantity < 5 ? 'text-red-500' : 'text-zinc-500'}`}
+                            />
+                            <div className="flex flex-col">
+                              <span
+                                className={`font-mono text-sm font-bold ${v.quantity < 5 ? 'font-black text-red-500' : 'text-primary'}`}
+                              >
+                                {v.quantity} unidades
+                              </span>
+                              <span className="text-secondary text-[9px] font-semibold uppercase opacity-40">
+                                Stock Digital
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Controles rápidos de Stock */}
+                          <div className="bg-canvas flex items-center gap-1 rounded-lg border border-zinc-200 p-0.5 shadow-sm dark:border-zinc-800">
+                            <button
+                              className="hover:bg-hover-overlay text-secondary flex h-7 w-7 items-center justify-center rounded font-mono text-sm font-bold transition-colors focus:outline-none"
+                              type="button"
+                              onClick={() => handleQuickStock(v.id, species.id, -1)}
+                            >
+                              -
+                            </button>
+                            <span className="h-4 w-px bg-zinc-200 dark:bg-zinc-800" />
+                            <button
+                              className="hover:bg-hover-overlay text-secondary flex h-7 w-7 items-center justify-center rounded font-mono text-sm font-bold transition-colors focus:outline-none"
+                              type="button"
+                              onClick={() => handleQuickStock(v.id, species.id, 1)}
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Estatus */}
+                      <div className="flex items-center justify-between border-t border-zinc-100 pt-2 dark:border-zinc-800/50">
+                        <span className="text-secondary text-[10px] font-medium opacity-50">
+                          Visibilidad
+                        </span>
+                        {v.available ? (
+                          <span className="flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                            <PiCheckCircleFill className="h-3.5 w-3.5" /> Visible
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-xs font-bold text-red-500">
+                            <PiWarningFill className="h-3.5 w-3.5" /> Pausado
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}
@@ -383,7 +462,7 @@ export function ShopView({ initialData }: ShopViewProps) {
               >
                 {POT_SIZES.map((s) => (
                   <option key={s} value={s}>
-                    {s}
+                    {POT_SIZE_LABELS[s]}
                   </option>
                 ))}
               </select>

@@ -12,7 +12,7 @@ import {
   StockLabel,
   Button,
 } from '@/components'
-import { Logger } from '@/lib'
+import { Logger, useFormatPrice } from '@/lib'
 
 interface Props {
   product: Species
@@ -25,6 +25,7 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
   // Estado local para este formulario
   const [quantity, setQuantity] = useState<number>(1)
   const [posted, setPosted] = useState(false)
+  const { format, formatRange } = useFormatPrice()
 
   // 1. ¿Existe algo que vender en general?
   const hasGlobalStock = product.variants.some((v) => v.available && v.quantity > 0)
@@ -32,7 +33,7 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
   // 2. Lógica de Precio Dinámico
   const getPriceLabel = () => {
     // Caso A: Variante seleccionada -> Precio específico
-    if (selectedVariant) return `$${selectedVariant.price}`
+    if (selectedVariant) return format(selectedVariant.price)
 
     // Caso B: Nada seleccionado -> Rango de Precios
     const availableVariants = product.variants.filter((v) => v.available && v.quantity > 0)
@@ -40,11 +41,11 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
     const targetVariants = availableVariants.length > 0 ? availableVariants : product.variants
     const prices = targetVariants.map((v) => v.price)
 
-    if (prices.length === 0) return '$0'
+    if (prices.length === 0) return format(0)
     const min = Math.min(...prices)
     const max = Math.max(...prices)
 
-    return min === max ? `$${min}` : `$${min} - $${max}`
+    return formatRange(min, max)
   }
 
   // 3. Acción de Agregar al Carrito

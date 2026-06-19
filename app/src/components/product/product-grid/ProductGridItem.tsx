@@ -6,51 +6,43 @@ import Link from 'next/link'
 import { ProductVariant, Species } from '@/interfaces/'
 import { StockLabel, FloweringLabel } from '@/components'
 import { useImageColor } from '@/hooks/useImageColor'
+import { getImageUrl } from '@/lib'
 
 interface Props {
   product: Species
   index: number
 }
 
-// Calculamos el precio a mostrar y si hay stock disponible basado en las variantes.
+// Calculamos si hay stock disponible y extraemos los límites del rango.
 const getProductDisplayInfo = (variants: ProductVariant[]) => {
-  // Filtramos las variantes disponibles
   const availableVariants = variants.filter((variant) => variant.available && variant.quantity > 0)
-
-  // Validamos que el producto NO este totalmente agotado
   const hasStock = availableVariants.length > 0
-
-  // Definimos qué variantes usar para el cálculo de precio
-  // - Si hay stock: Usamos SOLO las disponibles.
-  // - Si NO hay stock: Usamos TODAS como referencia.
   const targetVariants = hasStock ? availableVariants : variants
-
-  // Extraemos los precios de las variantes seleccionadas
   const prices = targetVariants.map((variant) => variant.price)
 
-  // Evitamos calcular Math.min() con un array vacío
   if (prices.length === 0) {
-    return { priceLabel: '$0', hasStock: false }
+    return { minPrice: 0, maxPrice: 0, hasStock: false }
   }
 
-  // Calculamos Min y Max
   const minPrice = Math.min(...prices)
   const maxPrice = Math.max(...prices)
 
-  // Formateamos la etiqueta
-  const priceLabel = minPrice === maxPrice ? `$${minPrice}` : `$${minPrice} - $${maxPrice}`
-
   return {
-    priceLabel,
+    minPrice,
+    maxPrice,
     hasStock,
   }
 }
 
+import { useFormatPrice } from '@/lib'
+
 export function ProductGridItem({ product, index }: Props) {
-  const { priceLabel, hasStock } = getProductDisplayInfo(product.variants)
+  const { minPrice, maxPrice, hasStock } = getProductDisplayInfo(product.variants)
+  const { formatRange } = useFormatPrice()
+  const priceLabel = formatRange(minPrice, maxPrice)
 
   // Obtenemos dinámicamente el color dominante vibrante de la primera imagen
-  const { color } = useImageColor(`/plants/${product.images[0]}`)
+  const { color } = useImageColor(getImageUrl(product.images[0]))
 
   // Color RGB para el background del glow
   const glowColor = color ? `rgb(${color.r}, ${color.g}, ${color.b})` : 'rgb(128, 128, 128)'
@@ -87,7 +79,7 @@ export function ProductGridItem({ product, index }: Props) {
               alt={product.name}
               className="rounded-xl object-cover transition-transform duration-500 group-hover:scale-[1.02]"
               sizes="(min-width: 1280px) 25vw, (min-width: 640px) 33vw, 50vw"
-              src={`/plants/${product.images[0]}`}
+              src={getImageUrl(product.images[0])}
               title={product.name}
               {...(index <= 5 ? { priority: true } : {})}
             />

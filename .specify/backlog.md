@@ -54,6 +54,7 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
   * [ ] Integración Uploader Múltiple: Dropzone con Compresión Cliente WebP -> POST a VPS -> Prisma `SpeciesImage`.
 * [ ] **Gestión de Tienda (`ProductVariant`):**
   * [ ] CRUD en `/store`. Vinculación Taxonomía -> Variantes comerciales (Precio, Stock Crítico).
+  * [x] **Landing Page Comercial (`/`)**: Diseñar e implementar landing page comercial premium con Hero, propuesta de valor, colecciones destacadas y listado de productos.
 * [ ] **Sistema de Plantas (`Plant`):** CRUD Activos (Gemelo Digital) en `/plants`.
 * [ ] **Diario Biológico (Eventos):** CRUD completo para registrar "Avistamientos de Plagas" y "Floraciones". Incluye búsqueda in-situ y persistencia atómica.
 * [ ] **Cierre de Ciclos:** Implementar lógica para marcar el fin de una floración (endDate) y resolución de plagas.
@@ -66,6 +67,7 @@ Este documento centraliza todas las tareas del proyecto, fusionando la Estrategi
   * [x] Filtro/sección para agrupar plantas con **Floración Activa** (Sincronizado con el Diario Biológico).
   * [x] Aplicar label "Floración" (FloweringLabel) a los productos correspondientes.
   * [x] Distintivo visual en la card de producto.
+  * [x] **Destacados en Gestor (más vendidos):** Toggle interactivo de destacado `isFeatured` en `/shop-manager` para curar la sección "Los más vendidos" en la landing page.
 
 ### 🧪 1.3 Gestión de Laboratorio (Insumos y Recetas)
 

@@ -1,7 +1,71 @@
+import * as fs from 'fs'
+import * as path from 'path'
+import { S3Client, HeadObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
+import { hashPassword } from 'better-auth/crypto'
+import { prisma, ZoneType, TableType, PotSize, PlantStatus, PlantType } from '@package/database'
 import { Logger } from './lib/logger'
 import { initialData, SeedFertilizationCycle, SeedPhytosanitaryCycle } from './seed-data'
-import { prisma, ZoneType, TableType, PotSize, PlantStatus, PlantType } from '@package/database'
-import { hashPassword } from 'better-auth/crypto'
+
+// ---- Configuración de R2 ----
+const r2 = new S3Client({
+  region: 'auto',
+  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID ?? '',
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? '',
+  },
+  forcePathStyle: true,
+})
+
+const R2_BUCKET = process.env.R2_BUCKET_NAME ?? ''
+const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL ?? ''
+
+async function uploadImageIfMissing(imageRelativePath: string): Promise<string> {
+  const key = `plants/${imageRelativePath}`
+  const publicUrl = `${R2_PUBLIC_URL}/${key}`
+
+  if (!process.env.R2_ACCOUNT_ID || !R2_BUCKET || !R2_PUBLIC_URL) {
+    return imageRelativePath
+  }
+
+  try {
+    // 1. Verificar si la imagen ya existe en R2
+    await r2.send(new HeadObjectCommand({ Bucket: R2_BUCKET, Key: key }))
+
+    return publicUrl
+  } catch (err) {
+    const error = err as { name?: string; $metadata?: { httpStatusCode?: number } }
+
+    // 2. Si no existe (404), intentar subirla desde local
+    if (error.name === 'NotFound' || error.$metadata?.httpStatusCode === 404) {
+      const absoluteLocalPath = path.join(__dirname, '../../../app/public/plants', imageRelativePath)
+
+      if (fs.existsSync(absoluteLocalPath)) {
+        Logger.info(`  ⬆️  Subiendo imagen local a R2: ${key}`)
+        const fileBuffer = fs.readFileSync(absoluteLocalPath)
+
+        await r2.send(
+          new PutObjectCommand({
+            Bucket: R2_BUCKET,
+            Key: key,
+            Body: fileBuffer,
+            ContentType: 'image/webp',
+          })
+        )
+
+        return publicUrl
+      } else {
+        Logger.warn(`  ⚠️  Imagen local no encontrada en disco: ${absoluteLocalPath}`)
+
+        return imageRelativePath
+      }
+    }
+
+    Logger.error(`  ⚠️  Error verificando imagen ${key} en R2:`, err)
+
+    return imageRelativePath
+  }
+}
 
 // ---- Interfaz auxiliar ----
 interface ProductCycleConnect {
@@ -184,13 +248,20 @@ async function main() {
       continue
     }
 
+    const r2Images = []
+    for (const imgUrl of sp.images) {
+      const finalUrl = await uploadImageIfMissing(imgUrl)
+      r2Images.push({ url: finalUrl })
+    }
+
     const createdSpecies = await prisma.species.create({
       data: {
         ...rest,
+        isFeatured: sp.isFeatured ?? false,
         genus: { connect: { id: genusData.id } }, // Conexión con genus
         images: {
           createMany: {
-            data: sp.images.map((url) => ({ url })),
+            data: r2Images,
           },
         },
       },

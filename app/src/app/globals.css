@@ -420,13 +420,13 @@
   .focus-link,
   .focus-link-hover,
   .focus-link-visible {
-    @apply outline-none bg-canvas;
+    @apply outline-none bg-transparent;
   }
 
   .focus-link:focus,
   .focus-link-hover:focus,
   .focus-link-visible:focus-visible {
-    @apply rounded;
+    @apply rounded bg-canvas;
     /* @apply outline-2 outline-offset-2 outline-accessibility; */
     @apply ring-accessibility ring-2 ring-offset-2 ring-offset-canvas;
   }
@@ -733,4 +733,88 @@
 
   -webkit-animation-name: fadeIn;
   animation-name: fadeIn;
+}
+
+/* ---- Estilos para LandingHeader Transparente ---- */
+header.is-transparent {
+  /* [MODO CLARO] Por defecto, los elementos del header transparente se oscurecen */
+  .nav-link,
+  .menu-button,
+  .toolbar-icon,
+  .search-button,
+  .cart-link,
+  .section-label,
+  .focus-link,
+  .focus-link-hover,
+  .focus-link-visible {
+    color: var(--color-primary) !important;
+    background-color: transparent !important;
+    border-color: transparent !important;
+    transition: color 0.3s ease, background-color 0.3s ease;
+  }
+
+  /* Los SVGs heredan el color dinámico del texto */
+  svg {
+    fill: currentColor;
+    color: currentColor !important;
+  }
+
+  /* Mantener el color de los iconos del sistema */
+  .tds-icon {
+    color: currentColor !important;
+  }
+
+  /* El buscador (.header-searchbox) se vuelve transparente y con texto oscuro */
+  .header-searchbox {
+    background-color: transparent !important;
+    color: var(--color-primary) !important;
+    --tw-ring-color: rgba(23, 26, 32, 0.15) !important;
+  }
+
+  /* Hover con fondo translúcido adaptado a tonos oscuros del tema claro */
+  .menu-button:hover,
+  .toolbar-icon:hover {
+    background-color: rgba(23, 26, 32, 0.08) !important;
+    color: var(--color-primary) !important;
+  }
+
+  .search-button:hover,
+  .cart-link:hover,
+  a[href="/"]:hover {
+    background-color: transparent !important;
+    color: var(--color-primary) !important;
+  }
+}
+
+/* [MODO OSCURO] Forzamos colores blancos translúcidos para el header transparente */
+.dark header.is-transparent {
+  .nav-link,
+  .menu-button,
+  .toolbar-icon,
+  .search-button,
+  .cart-link,
+  .section-label,
+  .focus-link,
+  .focus-link-hover,
+  .focus-link-visible {
+    color: rgba(255, 255, 255, 0.9) !important;
+  }
+
+  /* El buscador (.header-searchbox) se vuelve transparente con texto e input blanco */
+  .header-searchbox {
+    color: rgba(255, 255, 255, 0.9) !important;
+    --tw-ring-color: rgba(255, 255, 255, 0.2) !important;
+  }
+
+  .search-button:hover,
+  .cart-link:hover,
+  a[href="/"]:hover {
+    color: #ffffff !important;
+  }
+
+  .menu-button:hover,
+  .toolbar-icon:hover {
+    background-color: rgba(255, 255, 255, 0.15) !important;
+    color: #ffffff !important;
+  }
 }

@@ -44,6 +44,25 @@ export async function getSpecies() {
   }
 }
 
+export async function getSpeciesById(id: string) {
+  try {
+    const species = await prisma.species.findUnique({
+      where: { id },
+      include: {
+        genus: { select: { id: true, name: true, type: true } },
+        images: { select: { id: true, url: true } },
+        _count: { select: { variants: true, plants: true } },
+      },
+    })
+
+    return { ok: true, species }
+  } catch (err) {
+    Logger.error('[Species] Error al obtener especie por ID:', err)
+
+    return { ok: false, message: 'No se pudo cargar la especie.' }
+  }
+}
+
 // ─────────────────────────────────────────────────────────────
 // CREATE
 // ─────────────────────────────────────────────────────────────
@@ -178,5 +197,83 @@ export async function deleteSpeciesImage(imageId: string) {
     Logger.error('[Species] Error al eliminar imagen:', err)
 
     return { ok: false, message: 'Error al eliminar la imagen.' }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// FEATURED & LANDING
+// ─────────────────────────────────────────────────────────────
+
+/** Alterna el estado destacado de una especie */
+export async function toggleSpeciesFeatured(id: string, isFeatured: boolean) {
+  try {
+    const species = await prisma.species.update({
+      where: { id },
+      data: { isFeatured },
+    })
+
+    revalidatePath('/species')
+    revalidatePath('/')
+    revalidatePath('/shop-manager')
+
+    return { ok: true, species }
+  } catch (err) {
+    Logger.error('[Species] Error al alternar destacado:', err)
+
+    return { ok: false, message: 'No se pudo actualizar el estado de destacado.' }
+  }
+}
+
+/** Obtiene las especies destacadas (más vendidas) y las que tienen floración activa */
+export async function getLandingSpecies() {
+  try {
+    // 1. Obtener destacadas (Los más vendidos) - comentado temporalmente porque no existe isFeatured en BD
+    /*
+    const featured = await prisma.species.findMany({
+      where: { isFeatured: true },
+      include: {
+        genus: { select: { id: true, name: true, type: true } },
+        images: { select: { id: true, url: true } },
+        variants: true,
+      },
+      take: 9,
+      orderBy: { name: 'asc' },
+    })
+    */
+    const featured: typeof flowering = []
+
+    // 2. Obtener especies con plantas en floración activa - máximo 9
+    const flowering = await prisma.species.findMany({
+      where: {
+        plants: {
+          some: {
+            status: 'AVAILABLE',
+            FloweringEvent: {
+              some: {
+                endDate: null,
+              },
+            },
+          },
+        },
+      },
+      include: {
+        genus: { select: { id: true, name: true, type: true } },
+        images: { select: { id: true, url: true } },
+        variants: true,
+      },
+      take: 9,
+      orderBy: { name: 'asc' },
+    })
+
+    return { ok: true, featured, flowering }
+  } catch (err) {
+    Logger.error('[Species] Error al obtener especies para landing:', err)
+
+    return {
+      ok: false,
+      featured: [],
+      flowering: [],
+      message: 'Error al obtener las plantas destacadas.',
+    }
   }
 }

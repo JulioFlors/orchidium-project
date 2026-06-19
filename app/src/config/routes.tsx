@@ -107,6 +107,13 @@ export const adminRoutes: AdminRoute[] = [
         description: 'Gestión taxonómica',
       },
       {
+        name: 'Géneros',
+        url: '/genus',
+        icon: <IoListOutline />,
+        image: '/imgs/psyduck_0054.webp',
+        description: 'Gestión de géneros biológicos',
+      },
+      {
         name: 'Gestión Stock',
         url: '/stock',
         icon: <IoListOutline />,

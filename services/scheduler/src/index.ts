@@ -124,7 +124,7 @@ async function init() {
   setupMqttHandlers()
 
   // 4. Inicializar el estado de muestreo de iluminancia según la hora actual de Caracas
-  syncNodeSampling()
+  syncNodeSampling(undefined, false, undefined, true)
 }
 
 /**
@@ -189,6 +189,7 @@ const EMA_HEARTBEAT_TIMEOUT_MS = 70 * 60 * 1000 // 70 minutos
 let lastRainState: 'Raining' | 'Dry' = 'Dry'
 let lastFirmwareHeartbeat: number = 0
 let isEmaSleeping = false
+let emaSleepFallbackTimer: NodeJS.Timeout | null = null
 let lastSyncTimestamp: number = 0
 let lastTimeSyncSent: number = 0
 let openPhysicalRainEventId: string | null = null // ID del RainEvent físico abierto en Postgres
@@ -662,9 +663,9 @@ function setupMqttHandlers() {
           } else if (irrigationRetryManager.connectionState === 'none') {
             // El scheduler acaba de iniciar y el nodo ya estaba operando.
             // Transicionamos a READY de inmediato sin estabilización ni sincronización redundante.
+            await handleNodeSync('ping', previousHeartbeat)
             irrigationRetryManager.setReady()
             systemRetryManager.setReady()
-            await handleNodeSync('ping', previousHeartbeat)
           }
 
           return
@@ -714,15 +715,17 @@ function setupMqttHandlers() {
 
           if (irrigationRetryManager.connectionState === 'none') {
             if (!isFreshSession) {
+              await handleNodeSync('reboot', previousHeartbeat)
               irrigationRetryManager.setReady()
               systemRetryManager.setReady()
             } else {
               irrigationRetryManager.setStabilizing()
               systemRetryManager.setStabilizing()
+              await handleNodeSync('reboot', previousHeartbeat)
             }
+          } else {
+            await handleNodeSync('reboot', previousHeartbeat)
           }
-
-          await handleNodeSync('reboot', previousHeartbeat)
         } else if (
           (message === 'lwt_disconnect' || message === 'offline') &&
           irrigationRetryManager.connectionState !== 'offline'
@@ -744,10 +747,7 @@ function setupMqttHandlers() {
         lastEmaHeartbeat = Date.now()
 
         if (message === 'ping') {
-          if (emaManager.connectionState === 'offline') {
-            await handleEmaSync('ONLINE')
-          } else if (emaManager.connectionState === 'none') {
-            emaManager.setReady()
+          if (emaManager.connectionState === 'offline' || emaManager.connectionState === 'none') {
             await handleEmaSync('ONLINE')
           }
 
@@ -1029,9 +1029,14 @@ function setupMqttHandlers() {
 
         if (!isActuator) {
           if (message === 'sleep') {
+            if (emaSleepFallbackTimer) {
+              clearTimeout(emaSleepFallbackTimer)
+              emaSleepFallbackTimer = null
+            }
             isEmaSleeping = true
             emaManager.setOffline()
             saveDeviceLog('Weather_Station_ZONA_A', 'SLEEP', 'Suspendido (ACK)')
+            Logger.info('EMA confirmado en SLEEP mediante ACK')
           } else {
             checkAndSleepEma()
           }
@@ -1520,10 +1525,15 @@ function checkAndSleepEma() {
 
   if (pendingCount === 0 && !hasRequestedAudits && !hasActiveAudits && !isBooting) {
     executeEmaCommand('sleep', true)
-    isEmaSleeping = true
-    emaManager.setOffline()
-    saveDeviceLog('Weather_Station_ZONA_A', 'SLEEP', 'Suspendido (Proactivo)')
-    Logger.info('EMA marcado proactivamente en SLEEP al enviar comando')
+    if (emaSleepFallbackTimer) clearTimeout(emaSleepFallbackTimer)
+    Logger.info('Comando sleep enviado a EMA. Esperando acuse (ACK) por 30s...')
+    emaSleepFallbackTimer = setTimeout(() => {
+      isEmaSleeping = true
+      emaManager.setOffline()
+      saveDeviceLog('Weather_Station_ZONA_A', 'SLEEP', 'Suspendido (Fallback Sleep)')
+      Logger.info('⚠️ EMA marcado en SLEEP tras timeout de acuse (Fallback)')
+      emaSleepFallbackTimer = null
+    }, 30000)
   }
 }
 
@@ -1911,15 +1921,15 @@ async function handleEmaSync(statusToSave: DeviceStatus) {
 
   const hasAccumulator = bootAccumulators.has('Weather Station Orquideario')
 
-  if (!hasAccumulator) {
-    emaManager.setReady()
-  }
-
   const notes = statusToSave === 'REBOOT' ? 'Reinicio' : 'Conectado'
 
   Logger.node(statusToSave, 'Weather Station Orquideario')
 
   await saveDeviceLog('Weather_Station_ZONA_A', statusToSave, notes)
+
+  if (!hasAccumulator) {
+    emaManager.setReady()
+  }
 }
 
 /**
@@ -2136,6 +2146,44 @@ async function initScheduler() {
     new Cron(schedule.cronTrigger, { timezone: 'America/Caracas' }, () => {
       runTask(schedule.id)
     })
+  })
+
+  // 1. Cron principal de BCV: cada día a las 8:30 PM (hora de Caracas)
+  new Cron('30 20 * * *', { timezone: 'America/Caracas' }, async () => {
+    Logger.cron('Iniciando tarea diaria programada de scraping del BCV...')
+    await syncBcvExchangeRate()
+  })
+
+  // 2. Cron de reintento horario del BCV: al inicio de cada hora (* 0 * * * *)
+  // Si la tasa del día de mañana no está registrada, reintenta.
+  new Cron('0 * * * *', { timezone: 'America/Caracas' }, async () => {
+    const tomorrow = new Date()
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    tomorrow.setHours(0, 0, 0, 0)
+
+    const tomorrowRate = await prisma.exchangeRate.findUnique({
+      where: { date: tomorrow },
+    })
+
+    if (!tomorrowRate) {
+      Logger.cron('Tasa del día de mañana ausente. Ejecutando reintento horario del BCV...')
+      await syncBcvExchangeRate()
+    }
+  })
+
+  // 3. Ejecutar sincronización inicial en background al arrancar para asegurar tasa vigente de hoy
+  Promise.resolve().then(async () => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const todayRate = await prisma.exchangeRate.findUnique({
+      where: { date: today },
+    })
+
+    if (!todayRate) {
+      Logger.cron('Base de datos inicializada o tasa del día ausente. Iniciando scraping BCV de arranque...')
+      await syncBcvExchangeRate()
+    }
   })
 }
 
@@ -2614,4 +2662,98 @@ async function evaluateClimateBatches() {
   }
 }
 
+/**
+ * Scraping del Banco Central de Venezuela y almacenamiento en base de datos.
+ * Guarda la tasa oficial y asocia su vigencia basándose en la fecha reportada.
+ */
+async function syncBcvExchangeRate() {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+  const url = 'https://www.bcv.org.ve/'
+
+  Logger.info('Iniciando sincronización de tasa BCV...', 'BCV')
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3',
+      },
+    })
+
+    if (!res.ok) {
+      throw new Error(`HTTP Error ${res.status}: ${res.statusText}`)
+    }
+
+    const html = await res.text()
+
+    // 1. Extraer tasa de cambio del dólar
+    const matchDolar = html.match(
+      /id=["']dolar["'][\s\S]*?<strong[^>]*?>\s*([\d,.]+)\s*<\/strong>/i,
+    )
+    if (!matchDolar) {
+      throw new Error('No se pudo encontrar la tasa del dólar en el HTML del BCV.')
+    }
+
+    const rate = parseFloat(matchDolar[1].trim().replace(',', '.'))
+    if (isNaN(rate) || rate <= 0) {
+      throw new Error(`Tasa inválida analizada del BCV: ${rate}`)
+    }
+
+    // 2. Extraer fecha valor reportada
+    const matchDate = html.match(/class=["']date-display-single["'][^>]*?content=["']([^"']+)["']/i)
+    if (!matchDate) {
+      throw new Error('No se pudo encontrar la fecha valor en el HTML del BCV.')
+    }
+
+    const bcvDate = new Date(matchDate[1])
+    if (isNaN(bcvDate.getTime())) {
+      throw new Error(`Fecha inválida analizada del BCV: ${matchDate[1]}`)
+    }
+
+    // Normalizar a medianoche local para la clave única por día
+    const dateValue = new Date(bcvDate)
+    dateValue.setHours(0, 0, 0, 0)
+
+    Logger.info(`Tasa obtenida: ${rate} Bs/USD con fecha valor: ${dateValue.toISOString().slice(0, 10)}`, 'BCV')
+
+    // 3. Upsert de la tasa en base de datos para la fecha de vigencia
+    await prisma.exchangeRate.upsert({
+      where: { date: dateValue },
+      update: { rate },
+      create: {
+        rate,
+        currency: 'USD',
+        date: dateValue,
+      },
+    })
+
+    Logger.success(`Tasa de cambio guardada en base de datos para el día: ${dateValue.toISOString().slice(0, 10)}`, 'BCV')
+
+    // 4. Lógica de rellenado para el día de hoy (para asegurar datos retroactivos inmediatos en desarrollo)
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    const todayRate = await prisma.exchangeRate.findUnique({
+      where: { date: today },
+    })
+
+    if (!todayRate) {
+      Logger.info(`Rellenando tasa de hoy (${today.toISOString().slice(0, 10)}) con el valor actual: ${rate}`, 'BCV')
+      await prisma.exchangeRate.create({
+        data: {
+          rate,
+          currency: 'USD',
+          date: today,
+        },
+      })
+    }
+
+  } catch (error: any) {
+    Logger.error(`Error durante sincronización BCV: ${error.message}`)
+  }
+}
+
 init()
+
