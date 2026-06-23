@@ -7,7 +7,7 @@ import {
   TaskPurpose,
 } from '@package/database'
 
-import { Logger } from './logger'
+import { Logger, formatCaracasDateTime } from './logger'
 import { classifyCurrentDay } from './day-classifier'
 import { influxClient } from './influx'
 
@@ -1395,12 +1395,11 @@ export class InferenceEngine {
   }
 
   private static getNext6am(from: Date, daysAhead: number): Date {
-    const target = new Date(from)
-
+    // Para evitar desfases por UTC/LocalTime, construimos la fecha basándonos en los componentes de Caracas (UTC-4)
+    // 6:00 AM de Caracas equivale a las 10:00 AM UTC.
+    const target = new Date(from.getTime())
     target.setDate(target.getDate() + daysAhead)
-    // 6:00 AM Caracas = 10:00 AM UTC (Caracas es UTC-4)
     target.setUTCHours(10, 0, 0, 0)
-
     return target
   }
 
@@ -1420,7 +1419,7 @@ export class InferenceEngine {
 
       if (existing) {
         Logger.inference(
-          `Ya existe tarea de aspersión diferida para ${scheduledAt.toLocaleString()}. No se crea duplicado.`,
+          `Ya existe tarea de aspersión diferida para ${formatCaracasDateTime(scheduledAt)}. No se crea duplicado.`,
         )
 
         return
@@ -1438,7 +1437,7 @@ export class InferenceEngine {
         },
       })
 
-      Logger.inference(`Tarea de aspersión diferida creada para ${scheduledAt.toLocaleString()}.`)
+      Logger.inference(`Tarea de aspersión diferida creada para ${formatCaracasDateTime(scheduledAt)}.`)
     } catch (err) {
       Logger.error('Error creando aspersión diferida:', err)
     }
@@ -1579,7 +1578,7 @@ export class InferenceEngine {
               },
             })
             Logger.cron(
-              `Tarea diferida del ${target6am.toLocaleString()} cancelada preventivamente.`,
+              `Tarea diferida del ${formatCaracasDateTime(target6am)} cancelada preventivamente.`,
             )
           }
         } else {

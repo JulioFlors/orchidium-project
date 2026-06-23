@@ -1,6 +1,6 @@
 import { prisma, TaskPurpose, TaskSource, TaskStatus, ZoneType } from '@package/database'
 
-import { Logger } from './logger'
+import { Logger, formatCaracasDateTime } from './logger'
 
 /**
  * Adaptador de Temporada de Lluvia.
@@ -227,7 +227,7 @@ async function createDeferredIrrigation(scheduledAt: Date, reason: string) {
   })
 
   if (existing) {
-    Logger.rain(`Ya existe tarea para ${scheduledAt.toLocaleString()}. No se crea duplicado.`)
+    Logger.rain(`Ya existe tarea para ${formatCaracasDateTime(scheduledAt)}. No se crea duplicado.`)
 
     return
   }
@@ -244,7 +244,7 @@ async function createDeferredIrrigation(scheduledAt: Date, reason: string) {
     },
   })
 
-  Logger.rain(`Tarea de riego diferida creada para ${scheduledAt.toLocaleString()}.`)
+  Logger.rain(`Tarea de riego diferida creada para ${formatCaracasDateTime(scheduledAt)}.`)
 }
 
 function getNext6am(from: Date, daysAhead: number): Date {

@@ -2110,9 +2110,7 @@ async function initScheduler() {
   // Cron de Evaluación Diaria de la Máquina de Estados (12:05 AM)
   new Cron('5 0 * * *', { timezone: 'America/Caracas' }, async () => {
     try {
-      Logger.cron(
-        'Ejecutando evaluación diaria de la máquina de estados del scheduler (12:05 AM)...',
-      )
+      Logger.cron('Máquina de estados de Riego Interdiario')
       await InferenceEngine.evaluateDailyRules()
     } catch (error) {
       Logger.error('Error en la evaluación diaria de la máquina de estados:', error)
@@ -2168,13 +2166,12 @@ async function initScheduler() {
 
   // 1. Cron principal de BCV: cada día a las 8:30 PM (hora de Caracas)
   new Cron('30 20 * * *', { timezone: 'America/Caracas' }, async () => {
-    Logger.cron('Iniciando tarea diaria programada de scraping del BCV...')
     bcvRetryCount = 0
-    await syncBcvExchangeRate()
+    await syncBcvExchangeRate(0)
   })
 
-  // 2. Cron de reintento horario del BCV: al inicio de cada hora (0 * * * *)
-  new Cron('0 * * * *', { timezone: 'America/Caracas' }, async () => {
+  // 2. Cron de reintento horario del BCV: al minuto 30 de cada hora (30 * * * *)
+  new Cron('30 * * * *', { timezone: 'America/Caracas' }, async () => {
     const today = getCaracasTodayMidnight()
     const tomorrow = new Date(today)
 
@@ -2189,18 +2186,14 @@ async function initScheduler() {
         new Date().toLocaleString('en-US', { timeZone: 'America/Caracas' }),
       )
       const hours = nowCaracas.getHours()
-      const minutes = nowCaracas.getMinutes()
 
-      // Rango de reintento nocturno: de 8:30 PM (20:30) en adelante hasta las 11:59 PM
-      const isNightRange = hours > 20 || (hours === 20 && minutes >= 30)
+      // Rango de reintento nocturno: de 8:30 PM (20:30) en adelante hasta las 11:59 PM (ej. reintentos a las 21:30, 22:30, 23:30)
+      const isNightRange = hours >= 21 && hours <= 23
 
       if (isNightRange) {
         if (bcvRetryCount < 3) {
           bcvRetryCount++
-          Logger.cron(
-            `[Reintento ${bcvRetryCount}/3] Tasa del día de mañana ausente en horario de publicación. Ejecutando reintento horario del BCV...`,
-          )
-          await syncBcvExchangeRate()
+          await syncBcvExchangeRate(bcvRetryCount)
         } else {
           Logger.warn(
             'Se alcanzó el límite máximo de 3 reintentos para la tasa de mañana. Se desistirá hasta el próximo cron principal.',
@@ -2219,10 +2212,7 @@ async function initScheduler() {
     })
 
     if (!todayRate) {
-      Logger.cron(
-        'Base de datos inicializada o tasa del día de hoy ausente. Iniciando scraping BCV de arranque...',
-      )
-      await syncBcvExchangeRate()
+      await syncBcvExchangeRate('startup')
     }
   })
 }
@@ -2734,11 +2724,17 @@ async function evaluateClimateBatches() {
  * Scraping del Banco Central de Venezuela y almacenamiento en base de datos.
  * Guarda la tasa oficial y asocia su vigencia basándose en la fecha reportada.
  */
-async function syncBcvExchangeRate(): Promise<boolean> {
+async function syncBcvExchangeRate(retryNum?: number | 'startup'): Promise<boolean> {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
   const url = 'https://www.bcv.org.ve/'
 
-  Logger.info('Iniciando sincronización de tasa BCV...', 'BCV')
+  if (retryNum === 'startup') {
+    Logger.bcv('Iniciando scraping BCV de arranque...')
+  } else if (retryNum !== undefined && retryNum > 0) {
+    Logger.bcv(`[Reintento ${retryNum}/3] Iniciando sincronización de tasa BCV...`)
+  } else {
+    Logger.bcv('Iniciando sincronización de tasa BCV...')
+  }
 
   try {
     const res = await fetch(url, {
@@ -2781,7 +2777,7 @@ async function syncBcvExchangeRate(): Promise<boolean> {
     const bcvDateStr = matchDate[1].split('T')[0] // Obtener YYYY-MM-DD
     const dateValue = new Date(`${bcvDateStr}T00:00:00.000Z`)
 
-    Logger.info(`Tasa obtenida: ${rate} Bs/USD con fecha valor: ${bcvDateStr}`, 'BCV')
+    Logger.debug(`Tasa obtenida: ${rate} Bs/USD con fecha valor: ${bcvDateStr}`)
 
     // 3. Upsert de la tasa en base de datos para la fecha de vigencia
     await prisma.exchangeRate.upsert({
@@ -2794,7 +2790,7 @@ async function syncBcvExchangeRate(): Promise<boolean> {
       },
     })
 
-    Logger.success(`Tasa de cambio guardada en base de datos para el día: ${bcvDateStr}`, 'BCV')
+    Logger.bcv(`Tasa obtenida: ${rate} Bs/USD con fecha valor: ${bcvDateStr}`)
 
     // 4. Lógica de rellenado para el día de hoy (para asegurar datos retroactivos inmediatos en desarrollo)
     const today = getCaracasTodayMidnight()
@@ -2806,7 +2802,7 @@ async function syncBcvExchangeRate(): Promise<boolean> {
     if (!todayRate) {
       const todayStr = today.toISOString().slice(0, 10)
 
-      Logger.info(`Rellenando tasa de hoy (${todayStr}) con el valor actual: ${rate}`, 'BCV')
+      Logger.debug(`Rellenando tasa de hoy (${todayStr}) con el valor actual: ${rate}`)
       await prisma.exchangeRate.create({
         data: {
           rate,

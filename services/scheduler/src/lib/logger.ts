@@ -25,6 +25,21 @@ function cleanAnsi(str: string): string {
   return str.replace(/\x1b\[[0-9;]*m/g, '')
 }
 
+export function formatCaracasDateTime(date: Date): string {
+  const formatted = new Intl.DateTimeFormat('es-VE', {
+    timeZone: 'America/Caracas',
+    day: 'numeric',
+    month: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  }).format(date)
+
+  return cleanAmPm(formatted)
+}
+
 const getLogTime = () => {
   const formatted = new Intl.DateTimeFormat('es-VE', {
     timeZone: 'America/Caracas',
@@ -114,6 +129,9 @@ export const Logger = {
 
   /** Operación completada exitosamente. */
   success: (msg: string) => console.log(formatLog('✅', 'DONE', colors.green, msg)),
+
+  /** Sincronización e información de la tasa BCV. */
+  bcv: (msg: string) => console.log(formatLog('💰', 'BCV ', colors.green, msg)),
 
   /** Advertencia no crítica. */
   warn: (msg: string, err?: unknown) => {
