@@ -4,6 +4,8 @@ import { motion } from 'motion/react'
 import Link from 'next/link'
 import Image from 'next/image'
 
+import { getImageUrl } from '@/lib'
+
 const categories = [
   {
     name: 'Orquídeas',
@@ -63,7 +65,7 @@ export function CategoriesSection() {
                   className="object-cover transition-transform duration-500 group-hover:scale-105"
                   priority={index === 0}
                   sizes="(max-w-768px) 100vw, 25vw"
-                  src={category.image}
+                  src={getImageUrl(category.image)}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
               </div>

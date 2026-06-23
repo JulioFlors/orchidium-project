@@ -80,17 +80,13 @@ export default function SearchPageClient({ results: initialResults, searchTerm }
 
           {/* Trigger para el Scroll Infinito */}
           <div ref={observerRef} className="mt-8 mb-12 flex justify-center">
-            {hasMore ? (
+            {hasMore && (
               <div className="flex flex-col items-center gap-3">
                 <div className="border-primary h-6 w-6 animate-spin rounded-full border-2 border-t-transparent" />
                 <span className="text-secondary animate-pulse text-[11px] font-medium">
                   Cargando
                 </span>
               </div>
-            ) : (
-              <span className="text-secondary text-[10px] font-bold tracking-widest uppercase opacity-30">
-                Fin de la colección
-              </span>
             )}
           </div>
         </>

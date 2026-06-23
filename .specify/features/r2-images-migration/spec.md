@@ -15,7 +15,7 @@ Para cumplir con esto, se establece que **todas las imágenes deben ser consumid
 - El script debe mostrar estadísticas claras de subida (exitosos, omitidos por ya existir, errores).
 
 ### 2. Exclusión de Archivos en Vercel
-- Crear un archivo `.vercelignore` para evitar que la carpeta `app/public/plants/` (de aproximadamente 1GB) sea subida o procesada por Vercel durante el deploy.
+- Crear un archivo `.vercelignore` para evitar que la carpeta `app/public/plants/` (de aproximadamente 10.7MB) sea subida o procesada por Vercel durante el deploy.
 
 ### 3. Resolución Absoluta de Imágenes en el Frontend
 - Crear una función helper centralizada `getImageUrl(url)` que formatee cualquier entrada de URL de imagen.
@@ -24,3 +24,4 @@ Para cumplir con esto, se establece que **todas las imágenes deben ser consumid
 - De esta manera, el navegador **siempre** pedirá las imágenes a R2.
 - Si la URL es inválida o vacía, devuelve el placeholder de imagen rota (`/imgs/placeholder.jpg`).
 - Actualizar los componentes del frontend para que consuman este helper centralizado.
+- **Refactorización de imágenes estáticas de navegación**: los menús (`NavbarDropdown.tsx`) y barras laterales (`ShopSidebar.tsx`) que muestran imágenes de categorías estáticas definidas en las rutas del sistema también deben resolver sus imágenes mediante `getImageUrl(url)`, delegando su servicio completamente a R2.

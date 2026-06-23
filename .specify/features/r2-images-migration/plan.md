@@ -20,7 +20,7 @@ Flujo de ejecución del script:
 
 ### 2. Exclusión de Despliegue
 Se crea un archivo `.vercelignore` en la raíz del proyecto para ignorar el directorio físico local `app/public/plants/`.
-De esta forma, las imágenes del seed de 1GB solo residen en el repositorio Git y no se despliegan ni consumen almacenamiento serverless en Vercel.
+De esta forma, las imágenes del seed solo residen en el repositorio Git y no se despliegan ni consumen almacenamiento serverless en Vercel.
 
 ### 3. Helper de Imágenes Centralizado con Resolución Absoluta de R2
 El helper se colocará en `app/src/lib/image-utils.ts` y se exportará en `app/src/lib/index.ts`.
@@ -45,6 +45,8 @@ export function getImageUrl(url?: string): string {
 - `app/src/components/product/product-grid/ProductGridItem.tsx`
 - `app/src/components/product/slideshow/MobileSlideshow.tsx`
 - `app/src/components/product/slideshow/Slideshow.tsx`
+- `app/src/components/ui/header/NavbarDropdown.tsx` [NUEVO] (imagen destacada de la categoría)
+- `app/src/components/ui/sidebar/ShopSidebar.tsx` [NUEVO] (miniaturas de categorías)
 - `app/src/app/(orchidarium)/(inventory)/species/ui/SpeciesInventoryCard.tsx`
 - `app/src/app/(orchidarium)/(inventory)/species/ui/SpeciesDetailView.tsx`
 

@@ -62,26 +62,27 @@ El administrador de la tienda entra a `/shop-manager` y puede marcar o desmarcar
 
 ### Functional Requirements
 
-- **FR-001**: La ruta raíz `/` de la tienda debe cargar la landing page estilo Tesla con Scroll Snapping en el eje Y.
+- **FR-001**: La ruta raíz `/` de la tienda debe cargar la landing page estilo Tesla que fluye a nivel de ventana de forma natural (se descartó Scroll Snapping por usabilidad con el Footer).
 - **FR-002**: El Header debe alternar sus clases CSS de transparencia y hover basándose en el estado de scroll (`scrollY > 20`) y de hover (`isHeaderHovered`).
-- **FR-003**: Se debe crear el campo `isFeatured` (boolean, default false) en el modelo `Species` de Prisma y generar su migración.
-- **FR-004**: Se debe implementar el componente reutilizable `TeslaSection` con soporte responsivo y CTAs gemelos.
-- **FR-005**: La sección "Floración Activa" debe calcularse de manera dinámica filtrando especies que tengan plantas asociadas en estado `AVAILABLE` con un `FloweringEvent` donde `endDate` sea nulo.
-- **FR-006**: La sección de gestión `/shop-manager` debe incluir la columna "Destacado" con un toggle interactivo conectado a una Server Action.
+- **FR-003**: Se definió `isFeatured` como opcional (default false) en los tipos del frontend.
+- **FR-004**: Se implementó el componente reutilizable `TeslaSection` con soporte responsivo y un único botón de acción blanco traslúcido.
+- **FR-005**: La sección "Floración Activa" se calcula de manera dinámica filtrando especies que tengan plantas asociadas en estado `AVAILABLE` con un `FloweringEvent` donde `endDate` sea nulo.
+- **FR-006**: La sección de gestión `/shop-manager` incluye la columna "Destacado" de forma visual, pero su actualización a base de datos está comentada temporalmente para evitar fallos de esquema en producción.
 
 ### Key Entities
 
-- **Species**: Atributo nuevo: `isFeatured` (Boolean).
+- **Species**: Atributo opcional: `isFeatured` (Boolean).
 - **FloweringEvent**: Atributo de cruce: `endDate` (DateTime, opcional).
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: Alineación magnética instantánea al desplazarse verticalmente.
-- **SC-002**: Tiempo de respuesta de la Server Action al actualizar destacado inferior a 200ms.
-- **SC-003**: Cero saltos de layout en el Header al alternar transparencia.
+- **SC-001**: Transición fluida del Header al hacer scroll o hover en la cabecera.
+- **SC-002**: Cero saltos de layout en el Header al alternar transparencia.
+- **SC-003**: Adaptabilidad impecable del color de textos y SearchBox del Header según el tema del sistema (Light/Dark Mode) en el estado transparente.
 
 ## Assumptions
 
-- Se asume que el Footer se integra en la base de la última sección de snapping.
+- El Footer se renderiza de forma natural al final de la página.
+- El campo `isFeatured` se migrará a base de datos en una fase posterior.

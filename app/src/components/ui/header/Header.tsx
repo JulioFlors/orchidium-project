@@ -142,7 +142,7 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
           'bg-canvas',
           'top-0 w-full',
           isAuthLayout ? 'tds-sm:fixed' : 'fixed',
-          isSubMenuOpen ? 'z-30' : 'z-20',
+          isSubMenuOpen ? 'z-20' : 'z-10',
         )}
         style={{ paddingRight: 'var(--scrollbar-width, 0.4px)' }}
         onMouseEnter={handleSubMenuMouseEnter}

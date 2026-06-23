@@ -199,8 +199,9 @@ function CustomTooltip({
     if (data.time && typeof data.time !== 'boolean') {
       try {
         const isMacroRange = range === '7d' || range === '30d' || range === 'all'
+        const showHour = !isMacroRange || !!data.isInfered || dataKey === 'duration'
 
-        formattedTime = formatTooltipHeader(data.time as string | number | Date, !isMacroRange)
+        formattedTime = formatTooltipHeader(data.time as string | number | Date, showHour)
       } catch {
         formattedTime = ''
       }
@@ -208,8 +209,9 @@ function CustomTooltip({
       try {
         const dateObj = typeof label === 'string' ? new Date(label) : new Date(Number(label))
         const isMacroRange = range === '7d' || range === '30d' || range === 'all'
+        const showHour = !isMacroRange || !!data.isInfered || dataKey === 'duration'
 
-        formattedTime = formatTooltipHeader(dateObj, !isMacroRange)
+        formattedTime = formatTooltipHeader(dateObj, showHour)
       } catch {
         formattedTime = ''
       }
@@ -608,10 +610,13 @@ function CustomTooltip({
           )
         ) : (
           <div className="flex flex-col gap-1">
-            {!data.dateLabel && formattedTime && (
-              <span className="text-foreground mb-1 block text-xs font-bold">{formattedTime}</span>
+            {(data.dateLabel || formattedTime) && (
+              <span className="text-foreground mb-1 block text-xs font-bold">
+                📅 {data.dateLabel || formattedTime}
+              </span>
             )}
             <span className="text-xs font-bold" style={{ color }}>
+              {dataKey === 'duration' ? '⏳ Duración: ' : ''}
               {formatTooltipStat(data[dataKey], unit)}
             </span>
           </div>
@@ -633,7 +638,7 @@ function CustomTooltip({
 
         {data.startTime && data.endTime && (
           <span className="text-primary mt-1 text-xs font-semibold">
-            {data.startTime} - {data.endTime}
+            🕒 {data.startTime} - {data.endTime}
           </span>
         )}
       </div>

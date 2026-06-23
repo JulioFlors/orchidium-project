@@ -9,4 +9,7 @@
 - [x] Actualizar componentes del orquideario (`SpeciesInventoryCard`, `SpeciesDetailView`) para usar el helper de `@/lib`
 - [x] Crear el script de migración masiva `migrate-images-to-r2.ts` en `services/seed/src/scripts/`
 - [x] Agregar los scripts correspondientes en `package.json` de la raíz y de `services/seed`
-- [x] Ejecutar migración y validar con el linter (`pnpm lint`)
+- [x] Ejecutar migración inicial y validar con el linter (`pnpm lint`)
+- [x] Refactorizar imagen destacada en `NavbarDropdown.tsx`
+- [x] Refactorizar miniaturas de categorías en `ShopSidebar.tsx`
+- [x] Ejecutar lint global de validación

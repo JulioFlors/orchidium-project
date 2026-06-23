@@ -11,7 +11,7 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import { AnimatePresence, motion } from 'motion/react'
 import useSWR from 'swr'
 
-import { authClient } from '@/lib'
+import { authClient, getImageUrl } from '@/lib'
 import { PersonIcon, SearchBox, ThemeToggle, CurrencyToggle, buttonVariants } from '@/components'
 import { shopRoutes } from '@/config'
 import { useUIStore } from '@/store'
@@ -123,7 +123,7 @@ export function ShopSidebar({ suggestions = [] }: Props) {
                       alt={cat.name}
                       className="rounded object-cover"
                       sizes="(max-width: 414px) calc(100vw * 0.823 - 16px), 414px"
-                      src={cat.image || '/placeholder.svg'}
+                      src={getImageUrl(cat.image) || '/placeholder.svg'}
                     />
                   </div>
                 </div>
@@ -187,7 +187,7 @@ export function ShopSidebar({ suggestions = [] }: Props) {
                     <div className="tds-xl:hidden relative">
                       {/* Botón con flecha */}
                       <button
-                        className="focus-sidebar-content group px-3 py-2"
+                        className="focus-sidebar-content group cursor-pointer px-3 py-2"
                         type="button"
                         onClick={() => setSidebarRoute(route.slug)}
                       >
@@ -223,7 +223,7 @@ export function ShopSidebar({ suggestions = [] }: Props) {
             )}
 
             {/* ---- Currency ----*/}
-            <CurrencyToggle isSidebar className="mt-4" />
+            <CurrencyToggle isSidebar className={clsx({ 'mt-4': !isAuthenticated || !isAdmin })} />
 
             {/* ---- Theme ----*/}
             <ThemeToggle

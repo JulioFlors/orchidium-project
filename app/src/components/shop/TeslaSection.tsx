@@ -5,6 +5,8 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { ChevronDown } from 'lucide-react'
 
+import { getImageUrl } from '@/lib'
+
 interface Props {
   title: string
   subtitle: string
@@ -36,7 +38,7 @@ export function TeslaSection({
           className="object-cover"
           priority={priority}
           sizes="100vw"
-          src={image}
+          src={getImageUrl(image)}
         />
         <div className="absolute inset-0 bg-black/20 dark:bg-black/35" />
       </div>

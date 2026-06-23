@@ -135,7 +135,7 @@ export function Sidebar({ suggestions = [], session }: Props) {
                   {sidebarRoute ? (
                     <button
                       aria-label="Volver al menú principal"
-                      className="focus-link-hover header-sidebar"
+                      className="focus-link-hover header-sidebar cursor-pointer"
                       type="button"
                       onClick={() => setSidebarRoute(null)}
                     >
@@ -167,7 +167,7 @@ export function Sidebar({ suggestions = [], session }: Props) {
               <div className="flex flex-1 justify-end">
                 <button
                   aria-label="Cerrar menú"
-                  className="focus-link-hover header-sidebar"
+                  className="focus-link-hover header-sidebar cursor-pointer"
                   type="button"
                   onClick={() => closeSidebar()}
                 >

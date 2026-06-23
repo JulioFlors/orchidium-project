@@ -20,12 +20,36 @@ const r2 = new S3Client({
 const R2_BUCKET = process.env.R2_BUCKET_NAME ?? ''
 const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL ?? ''
 
-async function uploadImageIfMissing(imageRelativePath: string): Promise<string> {
-  const key = `plants/${imageRelativePath}`
+const PLANT_TYPE_FOLDERS: Record<PlantType, string> = {
+  ADENIUM_OBESUM: 'adenium_obesum',
+  BROMELIAD: 'bromeliads',
+  CACTUS: 'cactus',
+  ORCHID: 'orchids',
+  SUCCULENT: 'succulents',
+}
+
+interface UploadImageParams {
+  imageRelativePath: string
+  plantType: PlantType
+  genusName: string
+  speciesSlug: string
+}
+
+async function uploadImageIfMissing({
+  imageRelativePath,
+  plantType,
+  genusName,
+  speciesSlug,
+}: UploadImageParams): Promise<string> {
+  const plantTypeFolder = PLANT_TYPE_FOLDERS[plantType] || 'others'
+  const genusSlug = genusName.toLowerCase().replace(/\s+/g, '-')
+  const filename = path.basename(imageRelativePath)
+
+  const key = `plants/${plantTypeFolder}/${genusSlug}/${speciesSlug}/${filename}`
   const publicUrl = `${R2_PUBLIC_URL}/${key}`
 
   if (!process.env.R2_ACCOUNT_ID || !R2_BUCKET || !R2_PUBLIC_URL) {
-    return imageRelativePath
+    return key
   }
 
   try {
@@ -57,13 +81,13 @@ async function uploadImageIfMissing(imageRelativePath: string): Promise<string> 
       } else {
         Logger.warn(`  ⚠️  Imagen local no encontrada en disco: ${absoluteLocalPath}`)
 
-        return imageRelativePath
+        return key
       }
     }
 
     Logger.error(`  ⚠️  Error verificando imagen ${key} en R2:`, err)
 
-    return imageRelativePath
+    return key
   }
 }
 
@@ -250,7 +274,12 @@ async function main() {
 
     const r2Images = []
     for (const imgUrl of sp.images) {
-      const finalUrl = await uploadImageIfMissing(imgUrl)
+      const finalUrl = await uploadImageIfMissing({
+        imageRelativePath: imgUrl,
+        plantType: genusData.type,
+        genusName: genus.name,
+        speciesSlug: rest.slug,
+      })
       r2Images.push({ url: finalUrl })
     }
 

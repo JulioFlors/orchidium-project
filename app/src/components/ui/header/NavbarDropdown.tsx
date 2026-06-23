@@ -6,6 +6,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 
 import { NavbarItem } from '@/interfaces'
+import { getImageUrl } from '@/lib'
 
 // Helper del Header (Hardcoded mapping for catalog layout)
 const categoryWrapper: Record<string, string> = {
@@ -81,7 +82,7 @@ export function NavbarDropdown({ activeItem, onClose, plantsNavData }: Props) {
                     unoptimized
                     alt={children.featuredItem.name}
                     className="object-cover"
-                    src={children.featuredItem.image}
+                    src={getImageUrl(children.featuredItem.image)}
                   />
                 </div>
               </div>

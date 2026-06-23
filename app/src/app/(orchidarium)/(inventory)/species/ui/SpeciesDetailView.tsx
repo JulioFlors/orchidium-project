@@ -60,10 +60,28 @@ const PLANT_TYPE_LABELS: Record<PlantType, string> = {
   SUCCULENT: 'Suculenta',
 }
 
+const PLANT_TYPE_FOLDERS: Record<PlantType, string> = {
+  ADENIUM_OBESUM: 'adenium_obesum',
+  BROMELIAD: 'bromeliads',
+  CACTUS: 'cactus',
+  ORCHID: 'orchids',
+  SUCCULENT: 'succulents',
+}
+
 export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewProps) {
   const router = useRouter()
   const { addToast } = useToastStore()
   const [isPending, startTransition] = useTransition()
+
+  // Carpeta estructurada en R2 para subidas de esta especie: plants/<tipo>/<genero>/<especie>
+  const plantTypeFolder = initialSpecies
+    ? PLANT_TYPE_FOLDERS[initialSpecies.genus.type] || 'others'
+    : 'others'
+  const genusSlug = initialSpecies
+    ? initialSpecies.genus.name.toLowerCase().replace(/\s+/g, '-')
+    : ''
+  const speciesSlug = initialSpecies ? initialSpecies.slug : ''
+  const uploaderFolder = `plants/${plantTypeFolder}/${genusSlug}/${speciesSlug}`
 
   // Estado del Tipo de Planta seleccionado
   const [selectedPlantType, setSelectedPlantType] = useState<PlantType>(() => {
@@ -363,10 +381,7 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
             </div>
           ) : (
             <div className="flex flex-col gap-6">
-              <ImageUploader
-                folder={`species/${initialSpecies.slug}`}
-                onUploaded={onImageUploaded}
-              />
+              <ImageUploader folder={uploaderFolder} onUploaded={onImageUploaded} />
 
               {images.length === 0 ? (
                 <p className="text-secondary text-center text-xs italic opacity-60">

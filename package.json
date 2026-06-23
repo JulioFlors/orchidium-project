@@ -33,6 +33,7 @@
 		"db:reset": "pnpm --filter @package/database db:reset",
 		"db:seed": "pnpm --filter @service/seeding start",
 		"db:migrate-images": "pnpm --filter @service/seeding migrate-images",
+		"db:migrate-db-urls": "pnpm --filter @service/seeding migrate-db-urls",
 		"// ---- HERRAMIENTAS DE MONOREPO ----": "",
 		"turbo:dev": "turbo dev",
 		"turbo:build": "turbo build"

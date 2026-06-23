@@ -5,7 +5,7 @@ import { IoChevronForwardOutline, IoStorefrontOutline } from 'react-icons/io5'
 import useSWR from 'swr'
 
 import { adminRoutes } from '@/config'
-import { PersonIcon, ThemeToggle, CurrencyToggle } from '@/components'
+import { PersonIcon, ThemeToggle } from '@/components'
 import { useUIStore } from '@/store'
 
 export function OrchidariumSidebar() {
@@ -93,7 +93,7 @@ export function OrchidariumSidebar() {
             {sortedAdminRoutes.map((route) => (
               <button
                 key={route.slug}
-                className="focus-sidebar-content group px-3 py-2"
+                className="focus-sidebar-content group cursor-pointer px-3 py-2"
                 type="button"
                 onClick={() => setSidebarRoute(route.slug)}
               >
@@ -116,10 +116,6 @@ export function OrchidariumSidebar() {
 
               <span className="ml-2 font-semibold">Tienda</span>
             </Link>
-
-            {/* ---- Currency ----*/}
-            <CurrencyToggle isSidebar className="mt-4" />
-
             {/* ---- Theme ----*/}
             <ThemeToggle isSidebar className="px-3 py-2" iconClassName="h-5 w-5" label="Tema" />
 

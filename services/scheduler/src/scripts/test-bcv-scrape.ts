@@ -1,4 +1,5 @@
 import { prisma } from '@package/database'
+
 import { Logger } from '../lib/logger'
 
 // Desactivar validación de certificados para el BCV (SSL del BCV suele fallar en entornos Node)
@@ -107,6 +108,7 @@ async function runTestScrape() {
     }
   } catch (error: unknown) {
     const errMsg = error instanceof Error ? error.message : String(error)
+
     Logger.error(`Fallo crítico durante la prueba de scraping: ${errMsg}`)
     if (error instanceof Error && error.stack) {
       console.error(error.stack)

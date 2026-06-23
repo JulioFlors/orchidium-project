@@ -12,6 +12,7 @@ async function main() {
     )
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err)
+
     Logger.error(`Error al limpiar la tabla ExchangeRate: ${errMsg}`)
   } finally {
     await prisma.$disconnect()
