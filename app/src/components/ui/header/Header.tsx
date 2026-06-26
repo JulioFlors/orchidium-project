@@ -1,11 +1,11 @@
 'use client'
 
-import type { PlantsNavData, SearchSuggestion } from '@/actions'
+import type { PlantsNavData, SearchSuggestion, ShopLayoutConfig } from '@/actions'
 
 import clsx from 'clsx'
 import Link from 'next/link'
 import { AnimatePresence, motion } from 'motion/react'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 
 import {
   Backdrop,
@@ -25,9 +25,14 @@ import { useScrollLock, useNavigationContext, useCloseDropdownOnBlur } from '@/h
 interface Props {
   suggestions?: SearchSuggestion[]
   plantsNavData?: PlantsNavData[]
+  layoutConfig?: ShopLayoutConfig | null
 }
 
-export function Header({ suggestions = [], plantsNavData = [] }: Props) {
+export function Header({
+  suggestions = [],
+  plantsNavData = [],
+  layoutConfig = null,
+}: Props) {
   // ----- Hooks -----
   const { isOrchidarium, isAuthLayout, pathname } = useNavigationContext()
 
@@ -44,6 +49,42 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
   // Bloqueamos el scroll cuando el menú está abierto
   useScrollLock(isSubMenuOpen)
 
+  // ---- Rutas Dinámicas de Tienda ----
+  const dynamicShopRoutes = useMemo(() => {
+    if (!layoutConfig) return shopRoutes
+
+    return shopRoutes.map((route) => {
+      if (route.slug === 'plants') {
+        const updatedCategories = route.categories?.map((cat) => {
+          let imageUrl = cat.image
+          if (cat.slug === 'orchids') imageUrl = layoutConfig.categories.orchids.imageUrl || cat.image
+          if (cat.slug === 'cactus') imageUrl = layoutConfig.categories.cactus.imageUrl || cat.image
+          if (cat.slug === 'succulents') imageUrl = layoutConfig.categories.succulents.imageUrl || cat.image
+          if (cat.slug === 'adenium_obesum')
+            imageUrl = layoutConfig.categories.adenium_obesum.imageUrl || cat.image
+
+          return { ...cat, image: imageUrl }
+        })
+
+        const featured = layoutConfig.megamenu.featuredItem
+        const featuredItem = featured.speciesId
+          ? {
+              name: featured.title || 'Destacado',
+              image: featured.imageUrl,
+              url: `/product/${featured.slug || featured.speciesId}`,
+            }
+          : route.featuredItem
+
+        return {
+          ...route,
+          categories: updatedCategories,
+          featuredItem,
+        }
+      }
+      return route
+    })
+  }, [layoutConfig])
+
   // ----------------------------------------
   // Logica de Navegacion Dinamica
   // ----------------------------------------
@@ -51,7 +92,7 @@ export function Header({ suggestions = [], plantsNavData = [] }: Props) {
     ? []
     : isOrchidarium
       ? getAdminNavItems(adminRoutes, pathname)
-      : getShopNavItems(shopRoutes, pathname)
+      : getShopNavItems(dynamicShopRoutes, pathname)
 
   // ----------------------------------------
   //  MANEJADORES DE EVENTOS (HANDLERS)

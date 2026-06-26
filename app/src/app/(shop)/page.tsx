@@ -1,8 +1,16 @@
 import type { Metadata } from 'next'
 import type { Species, PlantType } from '@/interfaces'
 
-import { getLandingSpecies } from '@/actions'
-import { ProductGrid, Title, Subtitle, TeslaSection, TeslaValuesSection } from '@/components'
+import prisma from '@package/database'
+import { getLandingSpecies, getShopLayoutConfig } from '@/actions'
+import {
+  ProductGrid,
+  Title,
+  Subtitle,
+  TeslaSection,
+  TeslaValuesSection,
+  TeslaContactSection,
+} from '@/components'
 
 export const metadata: Metadata = {
   title: 'Tienda',
@@ -80,45 +88,70 @@ export default async function HomePage() {
   const featuredProducts = (featured as unknown as LandingSpecies[]).map(mapSpeciesToProduct)
   const floweringProducts = (flowering as unknown as LandingSpecies[]).map(mapSpeciesToProduct)
 
+  // Cargar configuración de Layout
+  const layoutResult = await getShopLayoutConfig()
+  const layoutConfig = layoutResult.config
+
+  // Obtener slugs de especies del Hero
+  const heroSpeciesIds = layoutConfig?.heroSlides.map((s) => s.speciesId).filter(Boolean) || []
+  const heroSpeciesList = heroSpeciesIds.length > 0
+    ? await prisma.species.findMany({
+        where: { id: { in: heroSpeciesIds } },
+        select: { id: true, slug: true, name: true },
+      })
+    : []
+
+  const heroSlidesData = [
+    {
+      defaultTitle: 'Orquídeas de Colección',
+      defaultSubtitle: 'Cultivadas y aclimatadas al clima de Ciudad Guayana',
+      defaultImage: 'plants/orchids/orchids.webp',
+      defaultHref: '#productos-destacados',
+    },
+    {
+      defaultTitle: 'Rosas del Desierto',
+      defaultSubtitle: 'Bonsáis naturales de floración extraordinaria',
+      defaultImage: 'plants/adenium_obesum/multiple-petals/adenium-obesum-marbella/marbella_0_2000.webp',
+      defaultHref: '/category/plants/adenium_obesum',
+    },
+    {
+      defaultTitle: 'Cactus',
+      defaultSubtitle: 'Especies exóticas de colección y bajo mantenimiento',
+      defaultImage: 'plants/cactus/mammillaria/mammillaria-vetula-ssp-gracilis/mammillaria-vetula-ssp-gracilis_0_2000.webp',
+      defaultHref: '/category/plants/cactus',
+    },
+    {
+      defaultTitle: 'Suculentas',
+      defaultSubtitle: 'Geometrías botánicas y colores extraordinarios',
+      defaultImage: 'plants/succulents/crassula/crassula-capitella-campfire/crassula-capitella-campfire_0_2000.webp',
+      defaultHref: '/category/plants/succulents',
+    },
+  ].map((def, index) => {
+    const slide = layoutConfig?.heroSlides[index]
+    const species = heroSpeciesList.find((s) => s.id === slide?.speciesId)
+
+    return {
+      title: slide?.title || species?.name || def.defaultTitle,
+      subtitle: slide?.speciesId ? '' : def.defaultSubtitle, // Sin descripción si hay especie seleccionada
+      image: slide?.imageUrl || def.defaultImage,
+      href: species ? `/product/${species.slug}` : def.defaultHref,
+    }
+  })
+
   return (
     <div className="tds-sm:-mx-9 tds-xl:-mx-12 -mx-6 -mt-14">
-      {/* SECCIÓN 1: Hero Principal (Orquídeas) */}
-      <TeslaSection
-        priority
-        showScrollIndicator
-        image="/plants/orchids/orchids.webp"
-        primaryButtonHref="#productos-destacados"
-        primaryButtonText="Comprar ahora"
-        subtitle="Cultivadas y aclimatadas por nuestro orquideario familiar"
-        title="Orquídeas de Colección"
-      />
-
-      {/* SECCIÓN 2: Rosas del Desierto */}
-      <TeslaSection
-        image="/plants/adenium_obesum/marbella_0_2000.webp"
-        primaryButtonHref="/category/plants/adenium_obesum"
-        primaryButtonText="Comprar ahora"
-        subtitle="Bonsáis naturales de floración extraordinaria"
-        title="Rosas del Desierto"
-      />
-
-      {/* SECCIÓN 3: Cactus */}
-      <TeslaSection
-        image="/plants/cactus/mammillaria-vetula-ssp-gracilis_0_2000.webp"
-        primaryButtonHref="/category/plants/cactus"
-        primaryButtonText="Comprar ahora"
-        subtitle="Especies exóticas de colección y bajo mantenimiento"
-        title="Cactus"
-      />
-
-      {/* SECCIÓN 4: Suculentas */}
-      <TeslaSection
-        image="/plants/succulents/crassula-capitella-campfire_0_2000.webp"
-        primaryButtonHref="/category/plants/succulents"
-        primaryButtonText="Comprar ahora"
-        subtitle="Geometrías botánicas y colores extraordinarios"
-        title="Suculentas"
-      />
+      {heroSlidesData.map((slide, index) => (
+        <TeslaSection
+          key={index}
+          priority={index === 0}
+          showScrollIndicator={index === 0}
+          image={slide.image}
+          primaryButtonHref={slide.href}
+          primaryButtonText="Comprar ahora"
+          subtitle={slide.subtitle}
+          title={slide.title}
+        />
+      ))}
 
       {/* SECCIÓN 5: Promesas de Valor */}
       <TeslaValuesSection />
@@ -129,7 +162,7 @@ export default async function HomePage() {
           className="bg-canvas relative flex min-h-screen w-full snap-start flex-col justify-between overflow-y-auto pt-24 pb-16"
           id="productos-destacados"
         >
-          <div className="mx-auto w-full max-w-7xl flex-grow px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto w-full max-w-7xl grow px-4 sm:px-6 lg:px-8">
             <div className="mb-8 text-center">
               <Title title="Los más vendidos" />
               <Subtitle subtitle="Las especies favoritas de nuestros coleccionistas en Ciudad Guayana" />
@@ -143,7 +176,7 @@ export default async function HomePage() {
       {/* SECCIÓN 7: Floración Activa */}
       {floweringProducts.length > 0 && (
         <section className="bg-surface dark:bg-canvas relative flex min-h-screen w-full snap-start flex-col justify-between overflow-y-auto pt-24 pb-16">
-          <div className="mx-auto w-full max-w-7xl flex-grow px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto w-full max-w-7xl grow px-4 sm:px-6 lg:px-8">
             <div className="mb-8 text-center">
               <Title title="Floración Activa" />
               <Subtitle subtitle="Especies en floración real en nuestro invernadero en este momento" />
@@ -153,6 +186,9 @@ export default async function HomePage() {
           </div>
         </section>
       )}
+
+      {/* SECCIÓN 8: Contacto */}
+      <TeslaContactSection />
     </div>
   )
 }

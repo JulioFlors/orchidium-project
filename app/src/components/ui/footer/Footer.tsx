@@ -28,7 +28,7 @@ export function Footer() {
           Privacidad & Legal
         </Link> */}
 
-        <Link className="focus-link py-2" href="/">
+        <Link className="focus-link py-2" href="/#contact">
           Contacto
         </Link>
       </div>

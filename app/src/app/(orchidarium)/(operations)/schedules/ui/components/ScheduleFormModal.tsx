@@ -13,11 +13,11 @@ import {
   PlannerDaysSelector,
 } from './PlannerInputs'
 
+import { ZoneType } from '@/config/mappings'
 import { Modal, Button, FormField, Input } from '@/components/ui'
 import { useFormDraftStore } from '@/store'
 import { upsertSchedule } from '@/actions/planner/schedule-actions'
 import { getPrograms } from '@/actions/lab/programs'
-import { ZoneType, ZoneTypeLabels } from '@/config/mappings'
 
 // Zod Schema
 const programSchema = z.object({
@@ -25,15 +25,11 @@ const programSchema = z.object({
   name: z.string().min(3, 'Mínimo 3 caracteres').max(50, 'Máximo 50 caracteres'),
   purpose: z.enum(
     ['IRRIGATION', 'FERTIGATION', 'FUMIGATION', 'HUMIDIFICATION', 'SOIL_WETTING'] as const,
-    { errorMap: () => ({ message: 'Debes seleccionar un circuito' }) },
+    { message: 'Debes seleccionar un circuito' },
   ),
   time: z.string().regex(/^([01]\d|2[0-3]):?([0-5]\d)$/, 'Hora inválida (HH:mm)'),
   duration: z.coerce.number().min(1, 'Mínimo 1 minuto').max(25, 'Máximo 25 minutos'),
-  zone: z.literal(ZoneType.ZONA_A, {
-    errorMap: () => ({
-      message: `La única zona habilitada es el ${ZoneTypeLabels[ZoneType.ZONA_A]}`,
-    }),
-  }),
+  zone: z.literal(ZoneType.ZONA_A),
   fertilizationProgramId: z.string().optional(),
   phytosanitaryProgramId: z.string().optional(),
   days: z.array(z.number()).min(1, 'Selecciona al menos un día'),
@@ -97,7 +93,7 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
     register,
     formState: { errors, isSubmitting },
     setError,
-  } = useForm<ProgramFormInputs>({
+  } = useForm<z.input<typeof programSchema>>({
     resolver: zodResolver(programSchema),
     defaultValues: {
       name: '',
@@ -166,7 +162,7 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
         })
       } else {
         const savedDraft = useFormDraftStore.getState().getDraft(draftKey) as
-          | ProgramFormInputs
+          | z.input<typeof programSchema>
           | undefined
 
         isRestoringRef.current = true
@@ -198,7 +194,7 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
     if (!isOpen || isRestoringRef.current || !!initialData) return
 
     const currentDraft = useFormDraftStore.getState().getDraft(draftKey) as
-      | ProgramFormInputs
+      | z.input<typeof programSchema>
       | undefined
 
     if (JSON.stringify(currentDraft) !== watchedString) {
@@ -208,18 +204,19 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
     }
   }, [watchedString, isOpen, initialData])
 
-  const onSubmit = async (data: ProgramFormInputs) => {
+  const onSubmit = async (data: z.input<typeof programSchema>) => {
     try {
-      const cron = timeToCron(data.time, data.days)
+      const parsedData = programSchema.parse(data)
+      const cron = timeToCron(parsedData.time, parsedData.days)
       const res = await upsertSchedule({
-        id: data.id,
-        name: data.name,
-        purpose: data.purpose,
+        id: parsedData.id,
+        name: parsedData.name,
+        purpose: parsedData.purpose,
         cronTrigger: cron,
-        durationMinutes: data.duration,
-        zones: [data.zone],
-        fertilizationProgramId: data.purpose === 'FERTIGATION' ? data.fertilizationProgramId : null,
-        phytosanitaryProgramId: data.purpose === 'FUMIGATION' ? data.phytosanitaryProgramId : null,
+        durationMinutes: parsedData.duration,
+        zones: [parsedData.zone],
+        fertilizationProgramId: parsedData.purpose === 'FERTIGATION' ? parsedData.fertilizationProgramId : null,
+        phytosanitaryProgramId: parsedData.purpose === 'FUMIGATION' ? parsedData.phytosanitaryProgramId : null,
       })
 
       if (res.success) {

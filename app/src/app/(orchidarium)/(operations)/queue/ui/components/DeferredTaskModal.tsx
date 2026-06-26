@@ -9,22 +9,18 @@ import clsx from 'clsx'
 import { PlannerCircuitSelect, PlannerZoneSelect, PlannerDurationInput } from './PlannerInputs'
 
 import { useFormDraftStore } from '@/store'
-import { ZoneType, ZoneTypeLabels } from '@/config/mappings'
+import { ZoneType } from '@/config/mappings'
 import { Modal, Button, FormField, Input } from '@/components/ui'
 
 // Zod Schema idéntico al del planificador
 const plannerSchema = z.object({
   purpose: z.enum(
     ['IRRIGATION', 'FERTIGATION', 'FUMIGATION', 'HUMIDIFICATION', 'SOIL_WETTING'] as const,
-    { errorMap: () => ({ message: 'Debes seleccionar un circuito' }) },
+    { message: 'Debes seleccionar un circuito' },
   ),
-  zone: z.literal(ZoneType.ZONA_A, {
-    errorMap: () => ({
-      message: `La única zona habilitada es el ${ZoneTypeLabels[ZoneType.ZONA_A]}`,
-    }),
-  }),
+  zone: z.literal(ZoneType.ZONA_A),
   duration: z.coerce
-    .number({ invalid_type_error: 'Debe ser un número válido' })
+    .number()
     .min(1, 'Mínimo 1 minuto')
     .max(25, 'Máximo 25 minutos'),
   scheduledAt: z
@@ -46,7 +42,7 @@ const plannerSchema = z.object({
 
 export type PlannerFormInputs = z.infer<typeof plannerSchema>
 
-const DEFAULT_VALUES: PlannerFormInputs = {
+const DEFAULT_VALUES: z.input<typeof plannerSchema> = {
   purpose: 'IRRIGATION',
   zone: ZoneType.ZONA_A,
   duration: 1,
@@ -72,7 +68,7 @@ export function DeferredTaskModal({ isOpen, onClose, onSubmitSuccess }: Props) {
     reset,
     watch,
     formState: { errors, isSubmitting },
-  } = useForm<PlannerFormInputs>({
+  } = useForm<z.input<typeof plannerSchema>>({
     resolver: zodResolver(plannerSchema),
     defaultValues: DEFAULT_VALUES,
   })
@@ -81,7 +77,7 @@ export function DeferredTaskModal({ isOpen, onClose, onSubmitSuccess }: Props) {
   useEffect(() => {
     if (isOpen) {
       const savedDraft = useFormDraftStore.getState().getDraft(draftKey) as
-        | PlannerFormInputs
+        | z.input<typeof plannerSchema>
         | undefined
 
       isRestoringRef.current = true
@@ -101,7 +97,7 @@ export function DeferredTaskModal({ isOpen, onClose, onSubmitSuccess }: Props) {
     if (!isOpen || isRestoringRef.current) return
 
     const currentDraft = useFormDraftStore.getState().getDraft(draftKey) as
-      | PlannerFormInputs
+      | z.input<typeof plannerSchema>
       | undefined
 
     if (JSON.stringify(currentDraft) !== watchedString) {
@@ -115,8 +111,9 @@ export function DeferredTaskModal({ isOpen, onClose, onSubmitSuccess }: Props) {
   }
 
   // Interceptar el submit exitoso y limpiar borrador
-  const submitHandler = async (data: PlannerFormInputs) => {
-    await onSubmitSuccess(data)
+  const submitHandler = async (data: z.input<typeof plannerSchema>) => {
+    const parsedData = plannerSchema.parse(data)
+    await onSubmitSuccess(parsedData)
     clearDraft(draftKey)
     handleClose()
   }

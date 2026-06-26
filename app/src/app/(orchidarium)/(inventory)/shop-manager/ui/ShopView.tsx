@@ -1,530 +1,550 @@
 'use client'
 
-import type { PotSize } from '@package/database/enums'
-
-import clsx from 'clsx'
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useMemo } from 'react'
 import {
-  PiStorefrontFill,
-  PiWarningFill,
-  PiCheckCircleFill,
-  PiCoinsFill,
-  PiPackageFill,
-  PiStarBold,
   PiStarFill,
+  PiSlidersHorizontalFill,
+  PiFolderFill,
+  PiListFill,
 } from 'react-icons/pi'
-import { MdEdit, MdDelete, MdAdd } from 'react-icons/md'
+import clsx from 'clsx'
 
 import {
-  Modal,
-  Button,
-  Badge,
   Heading,
   Card,
   CardHeader,
   CardTitle,
   CardContent,
-  ActionMenu,
+  Button,
 } from '@/components'
-import { upsertVariant, deleteVariant, updateVariantStock, toggleSpeciesFeatured } from '@/actions'
+import { saveShopLayoutConfig, type ShopLayoutConfig } from '@/actions'
 import { useToastStore } from '@/store/toast/toast.store'
+import { MediaPicker } from './components/MediaPicker'
+import { FeaturedSpeciesManager } from './components/FeaturedSpeciesManager'
 
 // ─────────────────────────────────────────────────────────────
-// Tipos
+// Tipos e Interfaces
 // ─────────────────────────────────────────────────────────────
 
-interface Variant {
-  id: string
-  size: PotSize
-  price: number
-  quantity: number
-  available: boolean
-}
-
-interface SpeciesWithStoreData {
+interface SpeciesItem {
   id: string
   name: string
-  genus: { name: string }
-  variants: Variant[]
-  isFeatured?: boolean
-  _count: {
-    plants: number
+  slug: string
+  images: string[]
+  genus: {
+    name: string
+    type: string
   }
 }
 
 interface ShopViewProps {
-  initialData: SpeciesWithStoreData[]
+  initialData: SpeciesItem[]
+  initialLayoutConfig: ShopLayoutConfig
 }
 
-const POT_SIZES: PotSize[] = ['NRO_5', 'NRO_7', 'NRO_10', 'NRO_14']
-
-const POT_SIZE_LABELS: Record<PotSize, string> = {
-  NRO_5: 'Maceta Nro 5',
-  NRO_7: 'Maceta Nro 7',
-  NRO_10: 'Maceta Nro 10',
-  NRO_14: 'Maceta Nro 14',
+const PLANT_TYPE_LABELS: Record<string, string> = {
+  ORCHID: 'Orquídea',
+  CACTUS: 'Cactus',
+  SUCCULENT: 'Suculenta',
+  ADENIUM_OBESUM: 'Rosa del Desierto',
+  BROMELIAD: 'Bromelia',
 }
 
 // ─────────────────────────────────────────────────────────────
-// Componente
+// Subcomponente: Cascada de Selección
 // ─────────────────────────────────────────────────────────────
 
-export function ShopView({ initialData }: ShopViewProps) {
-  const [data, setData] = useState<SpeciesWithStoreData[]>(initialData)
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const [targetSpecies, setTargetSpecies] = useState<SpeciesWithStoreData | null>(null)
-  const [editingVariant, setEditingVariant] = useState<Variant | null>(null)
+interface SpeciesSelectorCascadeProps {
+  allSpecies: SpeciesItem[]
+  selectedSpeciesId: string
+  fixedType?: string
+  onChange: (speciesId: string, imageUrl: string, slug: string) => void
+}
+
+function SpeciesSelectorCascade({
+  allSpecies,
+  selectedSpeciesId,
+  fixedType,
+  onChange,
+}: SpeciesSelectorCascadeProps) {
+  const currentSpecies = useMemo(() => {
+    return allSpecies.find((s) => s.id === selectedSpeciesId)
+  }, [allSpecies, selectedSpeciesId])
+
+  const [localType, setLocalType] = useState<string>(
+    currentSpecies?.genus.type || fixedType || ''
+  )
+  const [genusName, setGenusName] = useState<string>(
+    currentSpecies?.genus.name || ''
+  )
+
+  const activeType = fixedType || localType
+
+  // Géneros disponibles filtrados por Tipo
+  const availableGenera = useMemo(() => {
+    if (!activeType) return []
+    const set = new Set<string>()
+    allSpecies.forEach((s) => {
+      if (s.genus.type === activeType) {
+        set.add(s.genus.name)
+      }
+    })
+    return Array.from(set).sort()
+  }, [allSpecies, activeType])
+
+  // Especies disponibles filtradas por Género
+  const availableSpecies = useMemo(() => {
+    if (!genusName || !activeType) return []
+    return allSpecies.filter(
+      (s) => s.genus.type === activeType && s.genus.name === genusName
+    )
+  }, [allSpecies, activeType, genusName])
+
+  const handleTypeChange = (newType: string) => {
+    setLocalType(newType)
+    setGenusName('')
+  }
+
+  const handleGenusChange = (newGenus: string) => {
+    setGenusName(newGenus)
+  }
+
+  const handleSpeciesChange = (speciesId: string) => {
+    const spec = allSpecies.find((s) => s.id === speciesId)
+    if (spec) {
+      onChange(speciesId, spec.images[0] || '', spec.slug)
+    }
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      {!fixedType && (
+        <div className="flex flex-col gap-1.5">
+          <label className="text-secondary text-xs font-semibold uppercase opacity-60">
+            Tipo de Planta
+          </label>
+          <select
+            className="input-base"
+            value={localType}
+            onChange={(e) => handleTypeChange(e.target.value)}
+          >
+            <option value="">-- Seleccionar Tipo --</option>
+            {Object.entries(PLANT_TYPE_LABELS).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-secondary text-xs font-semibold uppercase opacity-60">
+          Género
+        </label>
+        <select
+          className="input-base"
+          value={genusName}
+          disabled={!activeType}
+          onChange={(e) => handleGenusChange(e.target.value)}
+        >
+          <option value="">-- Seleccionar Género --</option>
+          {availableGenera.map((g) => (
+            <option key={g} value={g}>
+              {g}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label className="text-secondary text-xs font-semibold uppercase opacity-60">
+          Especie
+        </label>
+        <select
+          className="input-base"
+          value={selectedSpeciesId}
+          disabled={!genusName}
+          onChange={(e) => handleSpeciesChange(e.target.value)}
+        >
+          <option value="">-- Seleccionar Especie --</option>
+          {availableSpecies.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+// Componente Principal
+// ─────────────────────────────────────────────────────────────
+
+export function ShopView({ initialData, initialLayoutConfig }: ShopViewProps) {
+  const [config, setConfig] = useState<ShopLayoutConfig>(initialLayoutConfig)
+  const [activeTab, setActiveTab] = useState<'hero' | 'featured' | 'categories' | 'megamenu'>('featured')
 
   const { addToast } = useToastStore()
   const [isPending, startTransition] = useTransition()
 
-  // Form State
-  const [form, setForm] = useState({
-    size: POT_SIZES[0],
-    price: 0,
-    quantity: 0,
-    available: true,
-  })
-
-  // ── Handlers de Modal ───────────────────────────────────────
-  function openCreate(species: SpeciesWithStoreData) {
-    setTargetSpecies(species)
-    setEditingVariant(null)
-    setForm({
-      size: POT_SIZES.find((s) => !species.variants.some((v) => v.size === s)) || POT_SIZES[0],
-      price: 0,
-      quantity: 0,
-      available: true,
-    })
-    setIsModalOpen(true)
-  }
-
-  function openEdit(species: SpeciesWithStoreData, variant: Variant) {
-    setTargetSpecies(species)
-    setEditingVariant(variant)
-    setForm({
-      size: variant.size,
-      price: variant.price,
-      quantity: variant.quantity,
-      available: variant.available,
-    })
-    setIsModalOpen(true)
-  }
-
-  function closeModal() {
-    setIsModalOpen(false)
-    setTargetSpecies(null)
-    setEditingVariant(null)
-  }
-
-  // ── Guardar Variante ────────────────────────────────────────
-  function handleSave() {
-    if (!targetSpecies) return
-
+  // Guardar configuración completa en base de datos
+  const handleSaveAll = () => {
     startTransition(async () => {
-      const result = await upsertVariant({
-        id: editingVariant?.id,
-        speciesId: targetSpecies.id,
-        ...form,
-      })
-
-      if (!result.ok) {
-        addToast(result.message ?? 'Error al guardar variante.', 'error')
-
-        return
-      }
-
-      const savedVariant = result.variant as Variant
-
-      setData((prev) =>
-        prev.map((s) => {
-          if (s.id !== targetSpecies.id) return s
-
-          let newVariants = [...s.variants]
-
-          if (editingVariant) {
-            newVariants = newVariants.map((v) => (v.id === editingVariant.id ? savedVariant : v))
-          } else {
-            newVariants.push(savedVariant)
-          }
-
-          return { ...s, variants: newVariants.sort((a, b) => a.size.localeCompare(b.size)) }
-        }),
-      )
-
-      addToast(editingVariant ? 'Variante actualizada.' : 'Variante añadida.', 'success')
-      closeModal()
-    })
-  }
-
-  // ── Eliminar Variante ───────────────────────────────────────
-  function handleDelete(speciesId: string, variant: Variant) {
-    if (!confirm(`¿Eliminar la variante ${variant.size} de esta especie?`)) return
-
-    startTransition(async () => {
-      const result = await deleteVariant(variant.id)
-
-      if (!result.ok) {
-        addToast(result.message ?? 'Error al eliminar.', 'error')
-
-        return
-      }
-
-      setData((prev) =>
-        prev.map((s) =>
-          s.id === speciesId
-            ? { ...s, variants: s.variants.filter((v) => v.id !== variant.id) }
-            : s,
-        ),
-      )
-      addToast('Variante eliminada comercialmente.', 'info')
-    })
-  }
-
-  // ── Rápido Stock ───────────────────────────────────────────
-  function handleQuickStock(variantId: string, speciesId: string, delta: number) {
-    const species = data.find((s) => s.id === speciesId)
-    const variant = species?.variants.find((v) => v.id === variantId)
-
-    if (!variant) return
-
-    const newQty = Math.max(0, variant.quantity + delta)
-
-    startTransition(async () => {
-      setData((prev) =>
-        prev.map((s) => {
-          if (s.id !== speciesId) return s
-
-          return {
-            ...s,
-            variants: s.variants.map((v) => (v.id === variantId ? { ...v, quantity: newQty } : v)),
-          }
-        }),
-      )
-
-      const res = await updateVariantStock(variantId, newQty)
-
-      if (!res.ok) {
-        addToast('Error al actualizar stock sincronizado.', 'error')
-      }
-    })
-  }
-
-  // ── Alternar Destacado ─────────────────────────────────────
-  function handleToggleFeatured(speciesId: string, currentFeatured: boolean) {
-    const nextFeatured = !currentFeatured
-
-    // Actualización optimista
-    setData((prev) =>
-      prev.map((s) => (s.id === speciesId ? { ...s, isFeatured: nextFeatured } : s)),
-    )
-
-    startTransition(async () => {
-      const result = await toggleSpeciesFeatured(speciesId, nextFeatured)
-
-      if (!result.ok) {
-        // Rollback en caso de error
-        setData((prev) =>
-          prev.map((s) => (s.id === speciesId ? { ...s, isFeatured: currentFeatured } : s)),
-        )
-        addToast(result.message ?? 'Error al actualizar destacado.', 'error')
+      const result = await saveShopLayoutConfig(config)
+      if (result.ok) {
+        addToast('Configuración estética guardada con éxito.', 'success')
       } else {
-        addToast(
-          nextFeatured ? 'Especie destacada (más vendida).' : 'Especie quitada de destacados.',
-          'success',
-        )
+        addToast(result.message ?? 'Error al guardar la configuración.', 'error')
       }
     })
   }
 
-  // ── Render ───────────────────────────────────────────────────
+  // Helper para buscar imágenes de una especie seleccionada
+  const getSpeciesImages = (speciesId: string) => {
+    const spec = initialData.find((s) => s.id === speciesId)
+    return spec ? spec.images : []
+  }
+
   return (
-    <div className="tds-sm:px-0 mx-auto mt-9 flex w-full max-w-7xl flex-col gap-8 px-4 pb-12">
-      {/* Header */}
-      <Heading
-        description="Administra precios, existencias y visibilidad online por especie"
-        title="Gestor de Tienda"
-      />
+    <div className="mx-auto mt-9 flex w-full max-w-7xl flex-col gap-8 px-4 pb-12">
+      {/* Cabecera */}
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+        <Heading
+          description="Estilo, imágenes R2 de categorías, sliders principales y destacados de la landing page."
+          title="Curaduría Estética de la Tienda"
+        />
+        <Button
+          isLoading={isPending}
+          onClick={handleSaveAll}
+          className="shadow-lg shadow-emerald-500/10 font-bold self-start md:self-auto"
+        >
+          Guardar Configuración
+        </Button>
+      </div>
 
-      <div className="flex flex-col gap-8">
-        {data.map((species) => (
-          <Card key={species.id} className="bg-canvas border-input-outline overflow-hidden">
+      {/* Selector de Pestañas */}
+      <div className="border-input-outline flex gap-2 border-b pb-1">
+        <button
+          type="button"
+          onClick={() => setActiveTab('featured')}
+          className={clsx(
+            'flex items-center gap-2 px-4 py-2 text-sm font-semibold border-b-2 transition-all duration-200 focus:outline-none',
+            activeTab === 'featured'
+              ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
+              : 'border-transparent text-secondary hover:text-primary'
+          )}
+        >
+          <PiStarFill />
+          Destacados Landing
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('hero')}
+          className={clsx(
+            'flex items-center gap-2 px-4 py-2 text-sm font-semibold border-b-2 transition-all duration-200 focus:outline-none',
+            activeTab === 'hero'
+              ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
+              : 'border-transparent text-secondary hover:text-primary'
+          )}
+        >
+          <PiSlidersHorizontalFill />
+          Hero Sliders
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('categories')}
+          className={clsx(
+            'flex items-center gap-2 px-4 py-2 text-sm font-semibold border-b-2 transition-all duration-200 focus:outline-none',
+            activeTab === 'categories'
+              ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
+              : 'border-transparent text-secondary hover:text-primary'
+          )}
+        >
+          <PiFolderFill />
+          Categorías
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('megamenu')}
+          className={clsx(
+            'flex items-center gap-2 px-4 py-2 text-sm font-semibold border-b-2 transition-all duration-200 focus:outline-none',
+            activeTab === 'megamenu'
+              ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
+              : 'border-transparent text-secondary hover:text-primary'
+          )}
+        >
+          <PiListFill />
+          Megamenú Header
+        </button>
+      </div>
+
+      {/* Contenidos */}
+      <div className="flex flex-col gap-6">
+        {/* Pestaña: Destacados */}
+        {activeTab === 'featured' && (
+          <Card className="bg-canvas border-input-outline overflow-hidden">
             <CardHeader className="bg-surface/50 border-input-outline border-b px-6 py-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary">{species.genus.name}</Badge>
-                    <span className="text-secondary font-mono text-[10px] opacity-40">
-                      ID: {species.id.slice(-6).toUpperCase()}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <CardTitle className="text-primary text-xl font-bold">{species.name}</CardTitle>
-                    <button
-                      className={clsx(
-                        'flex h-7 w-7 cursor-pointer items-center justify-center rounded-lg border transition-all duration-200',
-                        species.isFeatured
-                          ? 'border-yellow-400 bg-yellow-400/10 text-yellow-500 dark:border-yellow-500/50 dark:bg-yellow-500/10 dark:text-yellow-400'
-                          : 'border-input-outline text-secondary opacity-60 hover:border-zinc-300 hover:bg-zinc-100 hover:opacity-100 dark:hover:border-zinc-700 dark:hover:bg-zinc-800',
-                      )}
-                      title={
-                        species.isFeatured
-                          ? 'Quitar de destacados (más vendidos)'
-                          : 'Destacar especie (más vendidos)'
-                      }
-                      type="button"
-                      onClick={() => handleToggleFeatured(species.id, species.isFeatured ?? false)}
-                    >
-                      {species.isFeatured ? (
-                        <PiStarFill className="h-4 w-4" />
-                      ) : (
-                        <PiStarBold className="h-4 w-4" />
-                      )}
-                    </button>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="flex flex-col items-end">
-                    <span className="text-primary font-mono text-sm font-bold">
-                      {species._count.plants}
-                    </span>
-                    <span className="text-secondary text-[10px] font-semibold tracking-wider uppercase opacity-55">
-                      Inventario Físico
-                    </span>
-                  </div>
-                  <Button size="sm" variant="secondary" onClick={() => openCreate(species)}>
-                    <MdAdd className="mr-1.5 h-4 w-4" />
-                    Añadir Variante
-                  </Button>
-                </div>
-              </div>
+              <CardTitle className="text-xl font-bold flex items-center gap-2">
+                <PiStarFill className="text-yellow-500" />
+                Los 9 Más Vendidos / Destacados
+              </CardTitle>
             </CardHeader>
-
             <CardContent className="p-6">
-              {species.variants.length === 0 ? (
-                <div className="text-secondary/50 py-8 text-center text-sm italic">
-                  No hay ofertas comerciales configuradas para esta especie.
-                </div>
-              ) : (
-                /* Grid de Variantes en lugar de tabla */
-                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                  {species.variants.map((v) => (
-                    <div
-                      key={v.id}
-                      className="border-input-outline bg-surface/20 flex flex-col justify-between rounded-xl border p-4 transition-all duration-300 hover:border-zinc-300 hover:shadow-md dark:hover:border-zinc-700"
-                    >
-                      {/* Fila Superior: Tamaño y Menu de Acciones */}
-                      <div className="flex items-center justify-between border-b border-zinc-100 pb-3 dark:border-zinc-800/50">
-                        <Badge className="text-xs font-semibold" variant="secondary">
-                          {POT_SIZE_LABELS[v.size]}
-                        </Badge>
-                        <div className="flex items-center gap-2">
-                          {v.available ? (
-                            <span className="relative flex h-2 w-2">
-                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                            </span>
-                          ) : (
-                            <span className="h-2 w-2 rounded-full bg-red-400" />
-                          )}
-                          <ActionMenu
-                            items={[
-                              {
-                                label: 'Editar Variante',
-                                icon: <MdEdit />,
-                                onClick: () => openEdit(species, v),
-                              },
-                              {
-                                label: 'Eliminar Variante',
-                                icon: <MdDelete />,
-                                onClick: () => handleDelete(species.id, v),
-                                variant: 'destructive',
-                              },
-                            ]}
-                          />
-                        </div>
-                      </div>
+              <FeaturedSpeciesManager
+                allSpecies={initialData}
+                featuredIds={config.featuredSpeciesIds}
+                onChange={(newIds) => setConfig((prev) => ({ ...prev, featuredSpeciesIds: newIds }))}
+              />
+            </CardContent>
+          </Card>
+        )}
 
-                      {/* Cuerpo: Precio y Stock */}
-                      <div className="flex flex-col gap-4 py-4">
-                        {/* Precio */}
-                        <div className="flex items-center gap-2">
-                          <PiCoinsFill className="text-lg text-emerald-500 opacity-80" />
-                          <div className="flex flex-col">
-                            <span className="font-mono text-lg font-extrabold text-emerald-600 dark:text-emerald-400">
-                              $
-                              {(v.price / 100).toLocaleString('en-US', {
-                                minimumFractionDigits: 2,
-                              })}
-                            </span>
-                            <span className="text-secondary text-[9px] font-semibold uppercase opacity-40">
-                              Precio Online
-                            </span>
-                          </div>
-                        </div>
+        {/* Pestaña: Hero Slider */}
+        {activeTab === 'hero' && (
+          <div className="flex flex-col gap-6">
+            <div className="text-secondary text-sm italic">
+              Configura las 4 especies destacadas del Hero de la landing page. Debe haber 1 por cada tipo de planta principal.
+            </div>
 
-                        {/* Stock */}
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <PiPackageFill
-                              className={`text-lg opacity-80 ${v.quantity < 5 ? 'text-red-500' : 'text-zinc-500'}`}
-                            />
-                            <div className="flex flex-col">
-                              <span
-                                className={`font-mono text-sm font-bold ${v.quantity < 5 ? 'font-black text-red-500' : 'text-primary'}`}
-                              >
-                                {v.quantity} unidades
-                              </span>
-                              <span className="text-secondary text-[9px] font-semibold uppercase opacity-40">
-                                Stock Digital
-                              </span>
-                            </div>
-                          </div>
+            {config.heroSlides.map((slide, index) => {
+              const types = ['ORCHID', 'CACTUS', 'SUCCULENT', 'ADENIUM_OBESUM']
+              const fixedType = types[index] || undefined
+              const typeLabel = fixedType ? PLANT_TYPE_LABELS[fixedType] : `Slide ${index + 1}`
 
-                          {/* Controles rápidos de Stock */}
-                          <div className="bg-canvas flex items-center gap-1 rounded-lg border border-zinc-200 p-0.5 shadow-sm dark:border-zinc-800">
-                            <button
-                              className="hover:bg-hover-overlay text-secondary flex h-7 w-7 items-center justify-center rounded font-mono text-sm font-bold transition-colors focus:outline-none"
-                              type="button"
-                              onClick={() => handleQuickStock(v.id, species.id, -1)}
-                            >
-                              -
-                            </button>
-                            <span className="h-4 w-px bg-zinc-200 dark:bg-zinc-800" />
-                            <button
-                              className="hover:bg-hover-overlay text-secondary flex h-7 w-7 items-center justify-center rounded font-mono text-sm font-bold transition-colors focus:outline-none"
-                              type="button"
-                              onClick={() => handleQuickStock(v.id, species.id, 1)}
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-                      </div>
+              return (
+                <Card key={index} className="bg-canvas border-input-outline overflow-hidden">
+                  <CardHeader className="bg-surface/50 border-input-outline border-b px-6 py-4">
+                    <CardTitle className="text-base font-bold flex items-center gap-2">
+                      Slide {index + 1}: {typeLabel}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6 flex flex-col gap-4">
+                    {/* Cascada de especies */}
+                    <SpeciesSelectorCascade
+                      allSpecies={initialData}
+                      selectedSpeciesId={slide.speciesId}
+                      fixedType={fixedType}
+                      onChange={(speciesId, imgUrl, slug) => {
+                        setConfig((prev) => {
+                          const slides = [...prev.heroSlides]
+                          slides[index] = {
+                            ...slides[index],
+                            speciesId,
+                            imageUrl: imgUrl,
+                            slug,
+                          }
+                          return { ...prev, heroSlides: slides }
+                        })
+                      }}
+                    />
 
-                      {/* Estatus */}
-                      <div className="flex items-center justify-between border-t border-zinc-100 pt-2 dark:border-zinc-800/50">
-                        <span className="text-secondary text-[10px] font-medium opacity-50">
-                          Visibilidad
-                        </span>
-                        {v.available ? (
-                          <span className="flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                            <PiCheckCircleFill className="h-3.5 w-3.5" /> Visible
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-xs font-bold text-red-500">
-                            <PiWarningFill className="h-3.5 w-3.5" /> Pausado
-                          </span>
-                        )}
-                      </div>
+                    {/* Título Personalizado */}
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-secondary text-xs font-semibold uppercase opacity-60">
+                        Título en el Hero
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ej: Cattleya Maxima"
+                        className="input-base"
+                        value={slide.title}
+                        onChange={(e) => {
+                          const val = e.target.value
+                          setConfig((prev) => {
+                            const slides = [...prev.heroSlides]
+                            slides[index] = { ...slides[index], title: val }
+                            return { ...prev, heroSlides: slides }
+                          })
+                        }}
+                      />
                     </div>
-                  ))}
+
+                    {/* Media Picker */}
+                    {slide.speciesId && (
+                      <div className="border-t border-input-outline pt-4">
+                        <MediaPicker
+                          images={getSpeciesImages(slide.speciesId)}
+                          selectedImage={slide.imageUrl}
+                          aspectRatio="hero"
+                          onSelect={(url) => {
+                            setConfig((prev) => {
+                              const slides = [...prev.heroSlides]
+                              slides[index] = { ...slides[index], imageUrl: url }
+                              return { ...prev, heroSlides: slides }
+                            })
+                          }}
+                        />
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Pestaña: Categorías */}
+        {activeTab === 'categories' && (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            {Object.entries(config.categories).map(([key, cat]) => {
+              const catKey = key as keyof typeof config.categories
+              let fixedType = ''
+              let label = ''
+
+              if (catKey === 'orchids') {
+                fixedType = 'ORCHID'
+                label = 'Orquídeas'
+              } else if (catKey === 'cactus') {
+                fixedType = 'CACTUS'
+                label = 'Cactus'
+              } else if (catKey === 'succulents') {
+                fixedType = 'SUCCULENT'
+                label = 'Suculentas'
+              } else if (catKey === 'adenium_obesum') {
+                fixedType = 'ADENIUM_OBESUM'
+                label = 'Rosas del Desierto'
+              }
+
+              // Buscar cuál especie tiene asignada esta imagen para inicializar la cascada
+              const matchingSpecies = initialData.find((s) => s.images.includes(cat.imageUrl))
+              const activeSpeciesId = matchingSpecies?.id || ''
+
+              return (
+                <Card key={catKey} className="bg-canvas border-input-outline overflow-hidden">
+                  <CardHeader className="bg-surface/50 border-input-outline border-b px-6 py-4">
+                    <CardTitle className="text-base font-bold">
+                      Categoría: {label}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-6 flex flex-col gap-4">
+                    {/* Cascada para buscar especie de este tipo */}
+                    <SpeciesSelectorCascade
+                      allSpecies={initialData}
+                      selectedSpeciesId={activeSpeciesId}
+                      fixedType={fixedType}
+                      onChange={(_, imgUrl) => {
+                        setConfig((prev) => ({
+                          ...prev,
+                          categories: {
+                            ...prev.categories,
+                            [catKey]: { imageUrl: imgUrl },
+                          },
+                        }))
+                      }}
+                    />
+
+                    {/* Media Picker */}
+                    {activeSpeciesId && (
+                      <div className="border-t border-input-outline pt-4">
+                        <MediaPicker
+                          images={getSpeciesImages(activeSpeciesId)}
+                          selectedImage={cat.imageUrl}
+                          aspectRatio="category"
+                          onSelect={(url) => {
+                            setConfig((prev) => ({
+                              ...prev,
+                              categories: {
+                                ...prev.categories,
+                                [catKey]: { imageUrl: url },
+                              },
+                            }))
+                          }}
+                        />
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Pestaña: Megamenú */}
+        {activeTab === 'megamenu' && (
+          <Card className="bg-canvas border-input-outline overflow-hidden">
+            <CardHeader className="bg-surface/50 border-input-outline border-b px-6 py-5">
+              <CardTitle className="text-xl font-bold">
+                Producto Destacado en Menú de Navegación (Header)
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6 flex flex-col gap-4">
+              <div className="text-secondary text-sm italic mb-2">
+                Asigna el producto especial que aparece con banner destacado dentro del megamenú desplegable del Header.
+              </div>
+
+              {/* Cascada de especies */}
+              <SpeciesSelectorCascade
+                allSpecies={initialData}
+                selectedSpeciesId={config.megamenu.featuredItem.speciesId}
+                onChange={(speciesId, imgUrl, slug) => {
+                  setConfig((prev) => ({
+                    ...prev,
+                    megamenu: {
+                      featuredItem: {
+                        ...prev.megamenu.featuredItem,
+                        speciesId,
+                        imageUrl: imgUrl,
+                        slug,
+                      },
+                    },
+                  }))
+                }}
+              />
+
+              {/* Título en megamenú */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-secondary text-xs font-semibold uppercase opacity-60">
+                  Título del Megamenú
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ej: Dendrobium Striata"
+                  className="input-base"
+                  value={config.megamenu.featuredItem.title}
+                  onChange={(e) => {
+                    const val = e.target.value
+                    setConfig((prev) => ({
+                      ...prev,
+                      megamenu: {
+                        featuredItem: {
+                          ...prev.megamenu.featuredItem,
+                          title: val,
+                        },
+                      },
+                    }))
+                  }}
+                />
+              </div>
+
+              {/* Media Picker */}
+              {config.megamenu.featuredItem.speciesId && (
+                <div className="border-t border-input-outline pt-4">
+                  <MediaPicker
+                    images={getSpeciesImages(config.megamenu.featuredItem.speciesId)}
+                    selectedImage={config.megamenu.featuredItem.imageUrl}
+                    aspectRatio="square"
+                    onSelect={(url) => {
+                      setConfig((prev) => ({
+                        ...prev,
+                        megamenu: {
+                          featuredItem: {
+                            ...prev.megamenu.featuredItem,
+                            imageUrl: url,
+                          },
+                        },
+                      }))
+                    }}
+                  />
                 </div>
               )}
             </CardContent>
           </Card>
-        ))}
+        )}
       </div>
-
-      {/* Modal Upsert */}
-      <Modal
-        footer={
-          <>
-            <Button disabled={isPending} variant="secondary" onClick={closeModal}>
-              Cancelar
-            </Button>
-            <Button isLoading={isPending} onClick={handleSave}>
-              {editingVariant ? 'Guardar Cambios' : 'Crear Variante'}
-            </Button>
-          </>
-        }
-        icon={<PiStorefrontFill />}
-        isOpen={isModalOpen}
-        title={
-          editingVariant
-            ? `Editar Variante: ${targetSpecies?.name}`
-            : `Nueva Variante: ${targetSpecies?.name}`
-        }
-        onClose={closeModal}
-      >
-        <div className="grid grid-cols-1 gap-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-secondary text-sm font-medium" htmlFor="v-size">
-                Tamaño Maceta
-              </label>
-              <select
-                className="input-base"
-                disabled={!!editingVariant}
-                id="v-size"
-                value={form.size}
-                onChange={(e) => setForm((p) => ({ ...p, size: e.target.value as PotSize }))}
-              >
-                {POT_SIZES.map((s) => (
-                  <option key={s} value={s}>
-                    {POT_SIZE_LABELS[s]}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-secondary text-sm font-medium" htmlFor="v-price">
-                Precio (Centavos USD)
-              </label>
-              <input
-                className="input-base font-mono"
-                id="v-price"
-                placeholder="Ej: 2500 (= $25.00)"
-                type="number"
-                value={form.price}
-                onChange={(e) => setForm((p) => ({ ...p, price: parseInt(e.target.value) || 0 }))}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-secondary text-sm font-medium" htmlFor="v-qty">
-                Stock Disponible
-              </label>
-              <input
-                className="input-base"
-                id="v-qty"
-                type="number"
-                value={form.quantity}
-                onChange={(e) =>
-                  setForm((p) => ({ ...p, quantity: parseInt(e.target.value) || 0 }))
-                }
-              />
-            </div>
-
-            <div className="flex flex-col justify-end">
-              <div
-                className="input-base flex cursor-pointer items-center justify-between"
-                role="button"
-                tabIndex={0}
-                onClick={() => setForm((p) => ({ ...p, available: !p.available }))}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    setForm((p) => ({ ...p, available: !p.available }))
-                  }
-                }}
-              >
-                <span className="text-sm font-medium">Publicar en tienda</span>
-                <div
-                  className={`h-4 w-8 rounded-full transition-colors ${form.available ? 'bg-emerald-500' : 'bg-red-400'} relative`}
-                >
-                  <div
-                    className={`absolute top-1 h-2 w-2 rounded-full bg-white transition-all ${form.available ? 'right-1' : 'left-1'}`}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </Modal>
     </div>
   )
 }
+

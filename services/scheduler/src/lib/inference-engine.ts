@@ -46,6 +46,8 @@ const THRESHOLDS = {
   VETO_DAILY_SATURATED_HOURS_LIMIT: 6,
   /** Umbral de humedad para considerar un bloque de 1h como saturado */
   HUMIDITY_SATURATION_THRESHOLD: 98.0, // >= 98%
+  /** Umbral de humedad diurna promedio de 4h para veto de saturación hídrica (sin sesgo) */
+  DIURNAL_SATURATION_THRESHOLD: 85.0, // >= 85%
   /** Mínimo de muestras válidas requeridas en un bloque de 1h */
   MIN_SAMPLES_PER_HOUR_BLOCK: 5,
 
@@ -187,7 +189,6 @@ export class InferenceEngine {
         const regadoAyer = await this.checkRiegoCompleto(yesterday)
 
         if (regadoAyer) {
-          const yesterdayRain = await this.getRainAccumulationForDate(yesterday)
           const startYesterday = new Date(yesterday)
 
           startYesterday.setHours(0, 0, 0, 0)
@@ -204,11 +205,35 @@ export class InferenceEngine {
             _sum: { duration: true },
           })
           const aspMins = yesterdayAsp._sum.duration ?? 0
-          const rainMins = Math.round(yesterdayRain.durationSeconds / 60)
+
+          const rainEventsYesterday = await prisma.rainEvent.findMany({
+            where: {
+              zone: 'EXTERIOR',
+              startedAt: { gte: startYesterday, lte: endYesterday },
+            },
+            select: { isInfered: true, durationSeconds: true },
+          })
+          const totalRainSec = rainEventsYesterday.reduce(
+            (acc, curr) => acc + (curr.durationSeconds ?? 0),
+            0,
+          )
+          const rainMins = Math.round(totalRainSec / 60)
+
+          let vetoReason = ''
+
+          if (rainMins >= 20) {
+            const hasInfered = rainEventsYesterday.some((e) => e.isInfered)
+
+            vetoReason = `Motor de inferencia.\nRiego interdiario estricto.\nAyer se registró un evento de Lluvia${hasInfered ? ' inferida' : ''}.`
+          } else if (aspMins >= 15) {
+            vetoReason = `Motor de inferencia.\nRiego interdiario estricto.\nAyer se completó riego por aspersión.`
+          } else {
+            vetoReason = `Motor de inferencia.\nRiego interdiario estricto.\nAyer se registró un riego completo.`
+          }
 
           return {
             shouldCancel: true,
-            reason: `VETO RIEGO INTERDIARIO: Ayer ya se registró un riego completo (Aspersión: ${aspMins} min, Lluvia: ${rainMins} min). Manteniendo alternancia.`,
+            reason: vetoReason,
             action: 'SKIP',
             metadata: { regadoAyer },
           }
@@ -254,9 +279,13 @@ export class InferenceEngine {
       )
 
       if (currentlyRaining) {
+        const rainNotes = openRainEvent?.isInfered
+          ? 'Evento de lluvia inferida en curso.'
+          : 'Evento de lluvia en curso.'
+
         return {
           shouldCancel: true,
-          reason: `Está lloviendo ahora (evento de lluvia en curso en Postgres).`,
+          reason: rainNotes,
           action: 'SKIP',
           metadata: { openRainEventId: openRainEvent?.id },
         }
@@ -271,24 +300,21 @@ export class InferenceEngine {
         ? THRESHOLDS.HUMIDITY_VETO_4H_SUNNY
         : THRESHOLDS.HUMIDITY_VETO_4H_CLOUDY
 
-      // ── 3.B: Veto Humedad Diaria Sostenida (6h Acumuladas >= 98% hoy) ──
+      // ── 3.B: Veto por Saturación Hídrica (Promedio >= 85.0% en las últimas 4h) ──
       if (
         purpose === 'HUMIDIFICATION' ||
         purpose === 'SOIL_WETTING' ||
         purpose === 'FUMIGATION' ||
         purpose === 'FERTIGATION'
       ) {
-        const saturatedBlocks = await this.getHourlySaturatedBlocks()
+        const isSaturated = await this.checkSaturacionHidrica(now, 4)
 
-        if (saturatedBlocks >= THRESHOLDS.VETO_DAILY_SATURATED_HOURS_LIMIT) {
+        if (isSaturated) {
           return {
             shouldCancel: true,
-            reason: `VETO HUMEDAD DIARIA SOSTENIDA: Se han acumulado ${saturatedBlocks} bloques de 1h con HR promedio ≥ ${THRESHOLDS.HUMIDITY_SATURATION_THRESHOLD}% hoy (lluvia persistente / día muy húmedo). Omitiendo ${purpose}.`,
+            reason: `Motor de inferencia.\nSaturación hídrica.\n4h HR promedio >=${THRESHOLDS.DIURNAL_SATURATION_THRESHOLD}%`,
             action: 'SKIP',
-            metadata: {
-              saturatedBlocks,
-              thresholdLimit: THRESHOLDS.VETO_DAILY_SATURATED_HOURS_LIMIT,
-            },
+            metadata: { windowHours: 4, threshold: THRESHOLDS.DIURNAL_SATURATION_THRESHOLD },
           }
         }
       }
@@ -418,11 +444,37 @@ export class InferenceEngine {
         )
 
         if (recentRain.durationSeconds > 0) {
+          const startLookback = new Date(
+            now.getTime() - THRESHOLDS.RAIN_LOOKBACK_SOIL_WETTING_HOURS * 60 * 60 * 1000,
+          )
+          const lastEvent = await prisma.rainEvent.findFirst({
+            where: {
+              zone: 'EXTERIOR',
+              startedAt: { gte: startLookback },
+            },
+            orderBy: { startedAt: 'desc' },
+          })
+
+          let timeText = `${THRESHOLDS.RAIN_LOOKBACK_SOIL_WETTING_HOURS}h`
+
+          if (lastEvent) {
+            const diffMin = Math.round((now.getTime() - lastEvent.startedAt.getTime()) / 60000)
+
+            if (diffMin < 60) {
+              timeText = `${diffMin} min`
+            } else {
+              const diffHrs = diffMin / 60
+
+              timeText = `${diffHrs.toFixed(1).replace('.0', '')}h`
+            }
+          }
+          const label = lastEvent?.isInfered ? 'Lluvia inferida' : 'Lluvia'
+
           return {
             shouldCancel: true,
-            reason: `Cancelación automática: Lluvia detectada en las últimas ${THRESHOLDS.RAIN_LOOKBACK_SOIL_WETTING_HOURS} horas. Suelo ya humectado.`,
+            reason: `Motor de inferencia.\nEvento de ${label} registrado hace ${timeText}`,
             action: 'SKIP',
-            metadata: { recentRain },
+            metadata: { recentRain, lastEvent },
           }
         }
       }
@@ -434,11 +486,37 @@ export class InferenceEngine {
         )
 
         if (recentRain.durationSeconds > 0) {
+          const startLookback = new Date(
+            now.getTime() - THRESHOLDS.RAIN_LOOKBACK_HUMIDIFICATION_HOURS * 60 * 60 * 1000,
+          )
+          const lastEvent = await prisma.rainEvent.findFirst({
+            where: {
+              zone: 'EXTERIOR',
+              startedAt: { gte: startLookback },
+            },
+            orderBy: { startedAt: 'desc' },
+          })
+
+          let timeText = `${THRESHOLDS.RAIN_LOOKBACK_HUMIDIFICATION_HOURS}h`
+
+          if (lastEvent) {
+            const diffMin = Math.round((now.getTime() - lastEvent.startedAt.getTime()) / 60000)
+
+            if (diffMin < 60) {
+              timeText = `${diffMin} min`
+            } else {
+              const diffHrs = diffMin / 60
+
+              timeText = `${diffHrs.toFixed(1).replace('.0', '')}h`
+            }
+          }
+          const label = lastEvent?.isInfered ? 'Lluvia inferida' : 'Lluvia'
+
           return {
             shouldCancel: true,
-            reason: `Cancelación automática: Lluvia detectada durante el día botánico (últimas ${THRESHOLDS.RAIN_LOOKBACK_HUMIDIFICATION_HOURS}h). Ambiente saturado.`,
+            reason: `Motor de inferencia.\nEvento de ${label} registrado hace ${timeText}`,
             action: 'SKIP',
-            metadata: { recentRain },
+            metadata: { recentRain, lastEvent },
           }
         }
       }
@@ -1025,62 +1103,31 @@ export class InferenceEngine {
     }
   }
 
-  /**
-   * Divide el día de hoy (desde las 00:00 AM hora local de Caracas) en bloques de 1 hora.
-   * Cuenta cuántos bloques promediaron >= HUMIDITY_SATURATION_THRESHOLD (98.0%) en interior o exterior.
-   * Usado para el Veto de Humedad Diaria Sostenida (Lluvia Persistente).
-   */
-  private static async getHourlySaturatedBlocks(): Promise<number> {
+  private static async checkSaturacionHidrica(now: Date, windowHours = 4): Promise<boolean> {
     try {
-      const now = new Date()
-      const caracasOffsetMs = -4 * 60 * 60 * 1000
-      const localTime = new Date(now.getTime() + caracasOffsetMs)
+      const end = new Date(now)
+      const start = new Date(now.getTime() - windowHours * 60 * 60 * 1000)
 
-      const localMidnight = new Date(localTime)
+      const intRes = await this.getAverageHumidityInWindow(start, end, 'ZONA_A')
+      const extRes = await this.getAverageHumidityInWindow(start, end, 'EXTERIOR')
 
-      localMidnight.setUTCHours(0, 0, 0, 0)
+      const hasDataInt = intRes.count > 0
+      const hasDataExt = extRes.count > 0
 
-      const startOfDayUTC = new Date(localMidnight.getTime() - caracasOffsetMs)
+      if (!hasDataInt && !hasDataExt) return false
 
-      const blocks: { start: Date; end: Date }[] = []
-      let blockStart = new Date(startOfDayUTC)
+      const intAvg = hasDataInt ? intRes.average : 0
+      const extAvg = hasDataExt ? extRes.average : 0
 
-      while (blockStart < now) {
-        const blockEnd = new Date(blockStart.getTime() + 60 * 60 * 1000)
+      // Si cualquiera de los dos promedios (interior o exterior) es >= DIURNAL_SATURATION_THRESHOLD, se considera saturado
+      const isIntSaturated = hasDataInt && intAvg >= THRESHOLDS.DIURNAL_SATURATION_THRESHOLD
+      const isExtSaturated = hasDataExt && extAvg >= THRESHOLDS.DIURNAL_SATURATION_THRESHOLD
 
-        blocks.push({
-          start: new Date(blockStart),
-          end: blockEnd > now ? new Date(now) : blockEnd,
-        })
-        blockStart = blockEnd
-      }
-
-      const promises = blocks.map(async (block) => {
-        const intRes = await this.getAverageHumidityInWindow(block.start, block.end, 'ZONA_A')
-        const extRes = await this.getAverageHumidityInWindow(block.start, block.end, 'EXTERIOR')
-
-        const isIntSaturated =
-          intRes.count >= THRESHOLDS.MIN_SAMPLES_PER_HOUR_BLOCK &&
-          intRes.average >= THRESHOLDS.HUMIDITY_SATURATION_THRESHOLD
-        const isExtSaturated =
-          extRes.count >= THRESHOLDS.MIN_SAMPLES_PER_HOUR_BLOCK &&
-          extRes.average >= THRESHOLDS.HUMIDITY_SATURATION_THRESHOLD
-
-        return isIntSaturated || isExtSaturated
-      })
-
-      const results = await Promise.all(promises)
-      const saturatedBlocksCount = results.filter(Boolean).length
-
-      Logger.inference(
-        `Humedad Diaria Sostenida: ${saturatedBlocksCount} bloques de 1h saturados (>=${THRESHOLDS.HUMIDITY_SATURATION_THRESHOLD}%) hoy (límite: ${THRESHOLDS.VETO_DAILY_SATURATED_HOURS_LIMIT}).`,
-      )
-
-      return saturatedBlocksCount
+      return isIntSaturated || isExtSaturated
     } catch (err) {
-      Logger.error('Error al calcular los bloques de humedad diaria sostenida:', err)
+      Logger.error('Error al evaluar la saturación hídrica:', err)
 
-      return 0
+      return false
     }
   }
 
@@ -1200,20 +1247,6 @@ export class InferenceEngine {
 
       return { average: 0, count: 0 }
     }
-  }
-
-  private static async getExternalRecentAverageHumidity(lookbackMinutes: number): Promise<number> {
-    const res = await this.getRecentAverageHumidity(lookbackMinutes, 'EXTERIOR')
-
-    if (res.count < 50) {
-      Logger.inference(
-        `Humedad exterior reciente ignorada por baja densidad de datos (${res.count} muestras < 50 en los últimos ${lookbackMinutes} min).`,
-      )
-
-      return 0
-    }
-
-    return res.average
   }
 
   private static async getInteriorRecentAverageHumidity(lookbackMinutes: number): Promise<number> {
@@ -1398,8 +1431,10 @@ export class InferenceEngine {
     // Para evitar desfases por UTC/LocalTime, construimos la fecha basándonos en los componentes de Caracas (UTC-4)
     // 6:00 AM de Caracas equivale a las 10:00 AM UTC.
     const target = new Date(from.getTime())
+
     target.setDate(target.getDate() + daysAhead)
     target.setUTCHours(10, 0, 0, 0)
+
     return target
   }
 
@@ -1425,7 +1460,9 @@ export class InferenceEngine {
         return
       }
 
-      await prisma.taskLog.create({
+      const cleanReason = reason.replace('[ DAILY RULES ] ', '')
+
+      const newTask = await prisma.taskLog.create({
         data: {
           scheduledAt,
           status: TaskStatus.PENDING,
@@ -1433,11 +1470,21 @@ export class InferenceEngine {
           purpose: TaskPurpose.IRRIGATION,
           zones: [ZoneType.ZONA_A],
           duration: 15,
-          notes: `[ DAILY RULES ] ${reason}`,
+          notes: cleanReason,
         },
       })
 
-      Logger.inference(`Tarea de aspersión diferida creada para ${formatCaracasDateTime(scheduledAt)}.`)
+      await prisma.taskEventLog.create({
+        data: {
+          taskId: newTask.id,
+          status: TaskStatus.PENDING,
+          notes: cleanReason,
+        },
+      })
+
+      Logger.inference(
+        `Tarea de aspersión diferida creada para ${formatCaracasDateTime(scheduledAt)}.`,
+      )
     } catch (err) {
       Logger.error('Error creando aspersión diferida:', err)
     }
@@ -1599,7 +1646,7 @@ export class InferenceEngine {
             )
             await this.createDeferredIrrigation(
               this.getNext6am(targetDate, 0),
-              'Reprogramación interdiaria: Ayer fue seco/soleado sin riego.',
+              'Motor de inferencia.\nRiego interdiario.',
             )
           } else {
             Logger.cron(
@@ -1623,7 +1670,7 @@ export class InferenceEngine {
           await this.updateSchedulerState('STANDARD_CRON')
           await this.createDeferredIrrigation(
             this.getNext6am(targetDate, 0),
-            'Reactivación tras suspensión por lluvias: Primer día soleado ayer.',
+            'Motor de inferencia.\nRiego interdiario.',
           )
         } else {
           Logger.cron('Clima sigue húmedo/nublado. Manteniendo RAIN_SUSPENSION.')

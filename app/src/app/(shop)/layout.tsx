@@ -8,6 +8,8 @@ import { Logger } from '@/lib'
 import {
   getPlantsNavigation,
   getSearchSuggestions,
+  getShopLayoutConfig,
+  type ShopLayoutConfig,
   type SearchSuggestion,
   type PlantsNavData,
 } from '@/actions'
@@ -22,9 +24,10 @@ export const metadata: Metadata = {
 export default async function ShopLayout({ children }: { children: React.ReactNode }) {
   // Usamos Promise.all para cargar todos los datos en paralelo (incluyendo la sesión para hidratar el sidebar)
   // Tipamos el resultado con las interfaces reales para evitar errores de asignación en Header y Sidebar
-  const [suggestions, plantsNavData, session] = (await Promise.all([
+  const [suggestions, plantsNavData, layoutConfigResult, session] = (await Promise.all([
     getSearchSuggestions(),
     getPlantsNavigation(),
+    getShopLayoutConfig(),
     auth.api.getSession({
       headers: await headers(),
     }),
@@ -35,12 +38,23 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
     )
 
     // Devolvemos valores por defecto consistentes (null para session)
-    return [[], [], null]
-  })) as [SearchSuggestion[], PlantsNavData[], Record<string, unknown> | null]
+    return [[], [], { ok: false, config: null }, null]
+  })) as [
+    SearchSuggestion[],
+    PlantsNavData[],
+    { ok: boolean; config: ShopLayoutConfig | null },
+    Record<string, unknown> | null,
+  ]
+
+  const layoutConfig = layoutConfigResult?.config || null
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <AdaptiveHeader plantsNavData={plantsNavData || []} suggestions={suggestions || []} />
+      <AdaptiveHeader
+        plantsNavData={plantsNavData || []}
+        suggestions={suggestions || []}
+        layoutConfig={layoutConfig}
+      />
 
       <Sidebar session={session} suggestions={suggestions || []} />
 

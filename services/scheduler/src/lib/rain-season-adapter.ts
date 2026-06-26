@@ -232,7 +232,9 @@ async function createDeferredIrrigation(scheduledAt: Date, reason: string) {
     return
   }
 
-  await prisma.taskLog.create({
+  const cleanReason = `Motor de inferencia.\nAdaptación de temporada.`
+
+  const newTask = await prisma.taskLog.create({
     data: {
       scheduledAt,
       status: TaskStatus.PENDING,
@@ -240,7 +242,15 @@ async function createDeferredIrrigation(scheduledAt: Date, reason: string) {
       purpose: TaskPurpose.IRRIGATION,
       zones: [ZoneType.ZONA_A, ZoneType.ZONA_B, ZoneType.ZONA_C, ZoneType.ZONA_D],
       duration: RAIN_ADAPTER.DEFAULT_IRRIGATION_DURATION,
-      notes: `[ RAIN ADAPTER ] ${reason}`,
+      notes: cleanReason,
+    },
+  })
+
+  await prisma.taskEventLog.create({
+    data: {
+      taskId: newTask.id,
+      status: TaskStatus.PENDING,
+      notes: cleanReason,
     },
   })
 

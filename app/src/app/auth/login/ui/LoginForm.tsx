@@ -17,7 +17,7 @@ import { authClient } from '@/lib'
 const loginSchema = z.object({
   email: z.string().email('No es un correo electrónico válido').min(1, 'Rellene este campo'),
   password: z
-    .string({ required_error: 'No es un formato de contraseña válida' })
+    .string({ message: 'No es un formato de contraseña válida' })
     .min(8, 'Ingrese al menos 8 caracteres'),
 })
 

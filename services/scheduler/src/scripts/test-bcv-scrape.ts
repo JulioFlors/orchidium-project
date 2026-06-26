@@ -66,6 +66,9 @@ async function runTestScrape() {
       const bcvDateStr = dateStr.split('T')[0]
       const bcvDate = new Date(`${bcvDateStr}T00:00:00.000Z`)
 
+      const [year, month, day] = bcvDateStr.split('-')
+      const bcvDateFormatted = `${day}/${month}/${year}`
+
       // 1. Guardar tasa de mañana (según fecha valor reportada del BCV)
       await prisma.exchangeRate.upsert({
         where: { date: bcvDate },
@@ -76,7 +79,7 @@ async function runTestScrape() {
           date: bcvDate,
         },
       })
-      Logger.success(`Tasa de mañana (${bcvDateStr}) guardada: ${rate} Bs/USD`)
+      Logger.success(`Tasa de mañana (${bcvDateFormatted}) guardada: ${rate} Bs/USD`)
 
       // 2. Guardar tasa de hoy (llenado retroactivo)
       const formatter = new Intl.DateTimeFormat('en-US', {
@@ -86,10 +89,10 @@ async function runTestScrape() {
         day: '2-digit',
       })
       const parts = formatter.formatToParts(new Date())
-      const month = parts.find((p) => p.type === 'month')?.value
-      const day = parts.find((p) => p.type === 'day')?.value
-      const year = parts.find((p) => p.type === 'year')?.value
-      const today = new Date(`${year}-${month}-${day}T00:00:00.000Z`)
+      const tMonth = parts.find((p) => p.type === 'month')?.value
+      const tDay = parts.find((p) => p.type === 'day')?.value
+      const tYear = parts.find((p) => p.type === 'year')?.value
+      const today = new Date(`${tYear}-${tMonth}-${tDay}T00:00:00.000Z`)
 
       await prisma.exchangeRate.upsert({
         where: { date: today },
@@ -101,8 +104,36 @@ async function runTestScrape() {
         },
       })
       const todayStr = today.toISOString().slice(0, 10)
+      const [todYear, todMonth, todDay] = todayStr.split('-')
+      const todayFormatted = `${todDay}/${todMonth}/${todYear}`
 
-      Logger.success(`Tasa de hoy (${todayStr}) guardada/actualizada: ${rate} Bs/USD`)
+      Logger.success(`Tasa de hoy (${todayFormatted}) guardada/actualizada: ${rate} Bs/USD`)
+
+      // 3. Rellenar días intermedios (feriados/fines de semana)
+      const fillDate = new Date(today)
+
+      fillDate.setUTCDate(fillDate.getUTCDate() + 1)
+
+      while (fillDate.getTime() < bcvDate.getTime()) {
+        const fillDateStr = fillDate.toISOString().slice(0, 10)
+        const [fYear, fMonth, fDay] = fillDateStr.split('-')
+        const fillDateFormatted = `${fDay}/${fMonth}/${fYear}`
+
+        Logger.info(
+          `Rellenando día feriado/intermedio (${fillDateFormatted}) con la tasa obtenida: ${rate}`,
+          '💰',
+        )
+        await prisma.exchangeRate.upsert({
+          where: { date: new Date(fillDate) },
+          update: { rate },
+          create: {
+            rate,
+            currency: 'USD',
+            date: new Date(fillDate),
+          },
+        })
+        fillDate.setUTCDate(fillDate.getUTCDate() + 1)
+      }
     } else {
       Logger.warn('El scraping finalizó con datos incompletos.')
     }

@@ -6,7 +6,7 @@ import { Truck, Sparkles, Award, MapPin } from 'lucide-react'
 const features = [
   {
     icon: Truck,
-    title: 'Envíos por Zoom',
+    title: 'Envíos',
     description: 'Despachos rápidos a nivel nacional con embalaje protector diseñado a medida.',
   },
   {

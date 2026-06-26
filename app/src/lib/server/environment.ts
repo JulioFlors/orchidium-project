@@ -338,12 +338,24 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
         entry.max_temp_day_time = stat.maxTempDayTime
         entry.avg_temp_day = stat.avgTempDay
 
+        entry.min_temperature_day = stat.minTempDay
+        entry.min_temperature_day_time = stat.minTempDayTime
+        entry.max_temperature_day = stat.maxTempDay
+        entry.max_temperature_day_time = stat.maxTempDayTime
+        entry.avg_temperature_day = stat.avgTempDay
+
         // Nocturnas (07:00 PM - 05:59 AM)
         entry.min_temp_night = stat.minTempNight
         entry.min_temp_night_time = stat.minTempNightTime
         entry.max_temp_night = stat.maxTempNight
         entry.max_temp_night_time = stat.maxTempNightTime
         entry.avg_temp_night = stat.avgTempNight
+
+        entry.min_temperature_night = stat.minTempNight
+        entry.min_temperature_night_time = stat.minTempNightTime
+        entry.max_temperature_night = stat.maxTempNight
+        entry.max_temperature_night_time = stat.maxTempNightTime
+        entry.avg_temperature_night = stat.avgTempNight
       }
       if (fieldsToQuery.includes('humidity')) {
         entry.humidity = stat.avgHumidity
@@ -359,12 +371,24 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
         entry.max_hum_day = stat.maxHumDay
         entry.max_hum_day_time = stat.maxHumDayTime
 
+        entry.avg_humidity_day = stat.avgHumDay
+        entry.min_humidity_day = stat.minHumDay
+        entry.min_humidity_day_time = stat.minHumDayTime
+        entry.max_humidity_day = stat.maxHumDay
+        entry.max_humidity_day_time = stat.maxHumDayTime
+
         // Nocturnas (07:00 PM - 05:59 AM)
         entry.avg_hum_night = stat.avgHumNight
         entry.min_hum_night = stat.minHumNight
         entry.min_hum_night_time = stat.minHumNightTime
         entry.max_hum_night = stat.maxHumNight
         entry.max_hum_night_time = stat.maxHumNightTime
+
+        entry.avg_humidity_night = stat.avgHumNight
+        entry.min_humidity_night = stat.minHumNight
+        entry.min_humidity_night_time = stat.minHumNightTime
+        entry.max_humidity_night = stat.maxHumNight
+        entry.max_humidity_night_time = stat.maxHumNightTime
       }
       if (fieldsToQuery.includes('illuminance')) {
         entry.illuminance = stat.avgIlluminance

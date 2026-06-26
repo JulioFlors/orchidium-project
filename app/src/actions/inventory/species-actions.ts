@@ -233,20 +233,41 @@ export async function toggleSpeciesFeatured(id: string, isFeatured: boolean) {
 /** Obtiene las especies destacadas (más vendidas) y las que tienen floración activa */
 export async function getLandingSpecies() {
   try {
-    // 1. Obtener destacadas (Los más vendidos) - comentado temporalmente porque no existe isFeatured en BD
-    /*
-    const featured = await prisma.species.findMany({
-      where: { isFeatured: true },
-      include: {
-        genus: { select: { id: true, name: true, type: true } },
-        images: { select: { id: true, url: true } },
-        variants: true,
-      },
-      take: 9,
-      orderBy: { name: 'asc' },
+    // Intentar leer la configuración de la tienda
+    const setting = await prisma.systemSetting.findUnique({
+      where: { key: 'shop_layout' },
     })
-    */
-    const featured: typeof flowering = []
+
+    let featuredIds: string[] = []
+    if (setting) {
+      const config = setting.value as unknown as { featuredSpeciesIds?: string[] }
+      featuredIds = config.featuredSpeciesIds || []
+    }
+
+    const featured = featuredIds.length > 0
+      ? await (async () => {
+          const speciesList = await prisma.species.findMany({
+            where: { id: { in: featuredIds } },
+            include: {
+              genus: { select: { id: true, name: true, type: true } },
+              images: { select: { id: true, url: true } },
+              variants: true,
+            },
+          })
+          return featuredIds
+            .map((id) => speciesList.find((s) => s.id === id))
+            .filter((s): s is typeof speciesList[0] => !!s)
+        })()
+      : await prisma.species.findMany({
+          where: { isFeatured: true },
+          include: {
+            genus: { select: { id: true, name: true, type: true } },
+            images: { select: { id: true, url: true } },
+            variants: true,
+          },
+          take: 9,
+          orderBy: { name: 'asc' },
+        })
 
     // 2. Obtener especies con plantas en floración activa - máximo 9
     const flowering = await prisma.species.findMany({

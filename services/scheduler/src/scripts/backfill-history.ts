@@ -34,7 +34,7 @@ import { prisma, ZoneType } from '@package/database'
 
 import { Logger } from '../lib/logger'
 import { influxClient } from '../lib/influx'
-import { processDay } from '../lib/telemetry-processor'
+import { processDay, getCaracasMidnight } from '../lib/telemetry-processor'
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const BACKFILL_DAYS = parseInt(process.env.BACKFILL_DAYS || '30', 10)
@@ -54,13 +54,10 @@ async function main() {
   if (DRY_RUN) Logger.warn('  ⚠️  MODO DRY-RUN — No se escribirá en Postgres')
   Logger.info('════════════════════════════════════════════════════════')
 
-  const now = new Date()
+  const todayMidnight = getCaracasMidnight(new Date())
 
   for (let offset = BACKFILL_DAYS; offset >= 1; offset--) {
-    const dayStart = new Date(now)
-
-    dayStart.setDate(dayStart.getDate() - offset)
-    dayStart.setHours(0, 0, 0, 0)
+    const dayStart = new Date(todayMidnight.getTime() - offset * 24 * 60 * 60 * 1000)
 
     for (const zone of zones) {
       await processDay(zone, dayStart, DRY_RUN)

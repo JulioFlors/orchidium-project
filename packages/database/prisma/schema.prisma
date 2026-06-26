@@ -82,6 +82,7 @@ model Species {
   slug        String           @unique
   description String?
   genusId     String
+  isFeatured  Boolean          @default(false)
   plants      Plant[]
   variants    ProductVariant[]
   genus       Genus            @relation(fields: [genusId], references: [id], onDelete: Cascade)
@@ -131,6 +132,15 @@ model FloweringEvent {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   plant     Plant     @relation(fields: [plantId], references: [id], onDelete: Cascade)
+
+  // Métricas de Correlación al Momento de la Inducción
+  dliAtInduction   Float?
+  difAtInduction   Float?
+  tempDayAverage   Float?
+  tempNightAverage Float?
+  humDayAverage    Float?
+  humNightAverage  Float?
+  notes            String?
 
   @@index([plantId])
 }
@@ -640,6 +650,12 @@ model ExchangeRate {
   currency  String   @default("USD")
   date      DateTime @unique // Fecha de vigencia de la tasa (normalizada)
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SystemSetting {
+  key       String   @id
+  value     Json
   updatedAt DateTime @updatedAt
 }
 

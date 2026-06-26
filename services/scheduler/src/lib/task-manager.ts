@@ -53,11 +53,19 @@ export async function recordTaskEvent(
         return null
       }
 
-      const currentPrecedence = STATUS_PRECEDENCE[currentTask.status] || 0
+      // 1. Obtener todos los eventos históricos ya registrados para esta tarea
+      const existingEvents = await tx.taskEventLog.findMany({
+        where: { taskId },
+        select: { status: true },
+      })
+      const pastStatuses = existingEvents.map((e) => e.status)
+
+      // 2. Determinar la precedencia histórica máxima registrada
+      const maxPastPrecedence = Math.max(0, ...pastStatuses.map((s) => STATUS_PRECEDENCE[s] || 0))
       const newPrecedence = STATUS_PRECEDENCE[status] || 0
 
-      // No permitir retroceder en la jerarquía de estados
-      if (newPrecedence < currentPrecedence) {
+      // No permitir retroceder en la jerarquía histórica de estados
+      if (newPrecedence < maxPastPrecedence) {
         return null
       }
 
@@ -75,25 +83,19 @@ export async function recordTaskEvent(
         return null
       }
 
-      let shouldUpdateStatus = true
-
-      if (isCurrentTerminal) {
-        if (currentTask.status !== status) {
-          shouldUpdateStatus = false
-        }
-      }
-
       let resultRecord: TaskLog | null = currentTask as unknown as TaskLog
 
-      if (shouldUpdateStatus) {
-        if (currentTask.status === status) {
-          if (currentTask.notes === notes || status === TaskStatus.IN_PROGRESS) {
-            resultRecord = await tx.taskLog.update({
-              where: { id: taskId },
-              data: { notes, ...extraData },
-            })
-          }
-        } else {
+      if (isStatusChange) {
+        // Verificar si este evento en específico ya se registró en el timeline
+        const alreadyLogged = pastStatuses.includes(status)
+
+        let shouldUpdateStatus = true
+
+        if (isCurrentTerminal && currentTask.status !== status) {
+          shouldUpdateStatus = false
+        }
+
+        if (shouldUpdateStatus) {
           resultRecord = await tx.taskLog.update({
             where: { id: taskId },
             data: {
@@ -106,23 +108,36 @@ export async function recordTaskEvent(
               ...extraData,
             },
           })
+        } else {
+          resultRecord = await tx.taskLog.update({
+            where: { id: taskId },
+            data: { notes, ...extraData },
+          })
+        }
+
+        // Registrar en TaskEventLog únicamente si no se había registrado previamente
+        if (!alreadyLogged) {
+          // Limpiar notas para el timeline de auditoría si contiene [ATOMIC_CANCEL]
+          const cleanNotes = notes?.replace('[ATOMIC_CANCEL] ', '') || `Evento: ${status}`
+
+          await tx.taskEventLog.create({
+            data: {
+              taskId,
+              status,
+              notes: cleanNotes,
+              userId: extraData.userId as string | undefined,
+            },
+          })
         }
       } else {
-        resultRecord = await tx.taskLog.update({
-          where: { id: taskId },
-          data: { notes, ...extraData },
-        })
-      }
-
-      if (isStatusChange) {
-        await tx.taskEventLog.create({
-          data: {
-            taskId,
-            status,
-            notes: notes || `Evento: ${status}`,
-            userId: extraData.userId as string | undefined,
-          },
-        })
+        // Si el estado es el mismo en taskLog, no hay cambio de estado.
+        // Pero sí permitimos actualizar notas o datos extra (ej. guardar [ATOMIC_CANCEL] en taskLog.notes)
+        if (currentTask.notes !== notes || status === TaskStatus.IN_PROGRESS) {
+          resultRecord = await tx.taskLog.update({
+            where: { id: taskId },
+            data: { notes, ...extraData },
+          })
+        }
       }
 
       return resultRecord
@@ -150,14 +165,18 @@ export async function processTaskLog(taskLog: TaskLog) {
     ].includes(taskLog.purpose)
 
     if (isWaterTask && taskLog.source !== 'MANUAL' && isCurrentlyRaining()) {
+      const openRainEvent = await prisma.rainEvent.findFirst({
+        where: { zone: 'EXTERIOR', endedAt: null },
+      })
+      const isInfered = openRainEvent?.isInfered ?? false
+      const rainNotes = isInfered
+        ? 'Evento de lluvia inferida en curso.'
+        : 'Evento de lluvia en curso.'
+
       Logger.rain(
-        `Cancelando ejecución automática de ${taskLog.purpose} (${taskLog.id.slice(0, 8)}). El sensor de lluvia está activo.`,
+        `Cancelando ejecución automática de ${taskLog.purpose} (${taskLog.id.slice(0, 8)}). ${rainNotes}`,
       )
-      await recordTaskEvent(
-        taskLog.id,
-        TaskStatus.CANCELLED,
-        'Cancelación automática: Lluvia detectada en curso (Veto ambiental).',
-      )
+      await recordTaskEvent(taskLog.id, TaskStatus.CANCELLED, rainNotes)
 
       return
     }
@@ -193,8 +212,8 @@ export async function processTaskLog(taskLog: TaskLog) {
         return
       }
 
-      // [Regla de Tolerancia]: 1 minuto de tolerancia por cada 5 minutos de duración total
-      const toleranceSec = Math.floor(taskLog.duration / 5) * 60
+      // [Regla de Tolerancia]: 1 minuto de tolerancia por cada 5 minutos de duración total (mínimo 30 segundos)
+      const toleranceSec = Math.max(30, Math.floor(taskLog.duration / 5) * 60)
 
       if (durationToExecuteSec <= toleranceSec) {
         Logger.warn(
@@ -210,16 +229,6 @@ export async function processTaskLog(taskLog: TaskLog) {
       }
     }
 
-    // Despacho hacia MQTT con la duración recalibrada (en segundos)
-    executeSequence(
-      taskLog.purpose,
-      durationToExecuteSec,
-      taskLog.id,
-      taskLog.scheduledAt,
-      handleAckTimeout,
-      taskLog.duration,
-    )
-
     let durationText = `${durationToExecuteSec}s`
 
     if (durationToExecuteSec >= 60) {
@@ -232,9 +241,20 @@ export async function processTaskLog(taskLog: TaskLog) {
       ? `Reanudado por ${durationText}.`
       : 'Comandos MQTT enviados al Nodo Actuador.'
 
+    // Registrar en DB de forma optimista antes del envío de hardware
     await recordTaskEvent(taskLog.id, TaskStatus.DISPATCHED, notes, {
       executedAt: new Date(),
     })
+
+    // Despacho hacia MQTT con la duración recalibrada (en segundos)
+    executeSequence(
+      taskLog.purpose,
+      durationToExecuteSec,
+      taskLog.id,
+      taskLog.scheduledAt,
+      handleAckTimeout,
+      taskLog.duration,
+    )
   } catch (error) {
     Logger.error('Fallo crítico ejecutando taskLog', error)
     await prisma.taskLog
@@ -301,7 +321,7 @@ export async function processPostponedTasks() {
     orderBy: { scheduledAt: 'asc' },
   })
 
-  const postponed: TaskLog[] = []
+  const postponed: typeof candidates = []
 
   for (const task of candidates) {
     // Ventana Dinámica: 20 min + Duración de la tarea
@@ -379,7 +399,13 @@ export async function cleanupExpiredTasks() {
   const standardCandidates = await prisma.taskLog.findMany({
     where: {
       status: {
-        in: [TaskStatus.PENDING, TaskStatus.FAILED, TaskStatus.DISPATCHED, TaskStatus.ACKNOWLEDGED],
+        in: [
+          TaskStatus.PENDING,
+          TaskStatus.FAILED,
+          TaskStatus.DISPATCHED,
+          TaskStatus.ACKNOWLEDGED,
+          TaskStatus.WAITING_CONFIRMATION,
+        ],
       },
       purpose: { notIn: ['FERTIGATION', 'FUMIGATION'] },
       OR: [
@@ -419,8 +445,8 @@ export async function cleanupExpiredTasks() {
   for (const task of allTasksToExpire) {
     const isAgro = ['FERTIGATION', 'FUMIGATION'].includes(task.purpose)
     const reason = isAgro
-      ? 'Ventana de confirmación cerrada (24h expiradas sin autorización).'
-      : 'Ventana de oportunidad cerrada (20 min expirados sin reconexión del nodo).'
+      ? 'Ventana de confirmación cerrada\n24h sin autorización.'
+      : 'Ventana de oportunidad cerrada\n20min sin reconexión del nodo.'
 
     await recordTaskEvent(task.id, TaskStatus.EXPIRED, reason)
   }

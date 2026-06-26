@@ -5,6 +5,32 @@ import { influxClient } from './influx'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+/**
+ * Retorna la medianoche de Caracas (00:00:00.000 VET) en formato Date de JS
+ * para un día calendario específico en Caracas.
+ */
+export function getCaracasMidnight(date: Date): Date {
+  const parts = new Intl.DateTimeFormat('es-VE', {
+    timeZone: 'America/Caracas',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+
+  const getPart = (type: Intl.DateTimeFormatPartTypes): string => {
+    const found = parts.find((p) => p.type === type)
+
+    return found ? found.value : '00'
+  }
+
+  const y = getPart('year')
+  const m = getPart('month')
+  const d = getPart('day')
+
+  // 00:00:00 Caracas (UTC-4) = 04:00:00 UTC
+  return new Date(`${y}-${m}-${d}T04:00:00.000Z`)
+}
+
 // ── LÓGICA DE LÍMITES DE SUPERVIVENCIA ANTE CORTES (60% de operatividad esperada / tolerando 40% de pérdida)
 //
 // Fórmulas aplicadas:
@@ -13,39 +39,59 @@ import { influxClient } from './influx'
 //
 // 1. Zona Exterior (EXTERIOR) - Frecuencia de muestreo: 1 muestra/minuto (60 muestras/hora)
 //    - Temp/Hum (24h): 24h * 60 = 1440 muestras esperadas. Límite (60%): 1440 * 0.60 = 864
+//    - Temp/Hum Día (8h, 8am-4pm): 8h * 60 = 480 muestras esperadas. Límite (60%): 288
+//    - Temp/Hum Noche (10h, 7pm-5am): 10h * 60 = 600 muestras esperadas. Límite (60%): 360
 //    - Lux Total (14h, 5am-7pm): 14h * 60 = 840 muestras esperadas. Límite (60%): 840 * 0.60 = 504
 //    - Lux Botánica (8h, 8am-4pm): 8h * 60 = 480 muestras esperadas. Límite (60%): 480 * 0.60 = 288
 //
 // 2. Zona Orquideario (ZONA_A) - Frecuencia de muestreo: 1 muestra/5minutos (12 muestras/hora)
 //    - Temp/Hum (24h): 24h * 12 = 288 muestras esperadas. Límite (60%): 288 * 0.60 = 172.8 (redondeado a 173)
+//    - Temp/Hum Día (8h, 8am-4pm): 8h * 12 = 96 muestras esperadas. Límite (60%): 57.6 (redondeado a 58)
+//    - Temp/Hum Noche (10h, 7pm-5am): 10h * 12 = 120 muestras esperadas. Límite (60%): 72
 //    - Lux Total (14h, 5am-7pm): 14h * 12 = 168 muestras esperadas. Límite (60%): 168 * 0.60 = 100.8 (redondeado a 101)
 //    - Lux Botánica (8h, 8am-4pm): 8h * 12 = 96 muestras esperadas. Límite (60%): 96 * 0.60 = 57.6 (redondeado a 58)
 const ZONE_LIMITS: Record<
   ZoneType,
-  { readonly minTempHum: number; readonly minLuxTotal: number; readonly minLuxBotanical: number }
+  {
+    readonly minTempHum24h: number
+    readonly minTempHumDay: number
+    readonly minTempHumNight: number
+    readonly minLuxTotal: number
+    readonly minLuxBotanical: number
+  }
 > = {
   [ZoneType.EXTERIOR]: {
-    minTempHum: 864,
+    minTempHum24h: 864,
+    minTempHumDay: 288,
+    minTempHumNight: 360,
     minLuxTotal: 504,
     minLuxBotanical: 288,
   },
   [ZoneType.ZONA_A]: {
-    minTempHum: 173,
+    minTempHum24h: 173,
+    minTempHumDay: 58,
+    minTempHumNight: 72,
     minLuxTotal: 101,
     minLuxBotanical: 58,
   },
   [ZoneType.ZONA_B]: {
-    minTempHum: 173,
+    minTempHum24h: 173,
+    minTempHumDay: 58,
+    minTempHumNight: 72,
     minLuxTotal: 101,
     minLuxBotanical: 58,
   },
   [ZoneType.ZONA_C]: {
-    minTempHum: 173,
+    minTempHum24h: 173,
+    minTempHumDay: 58,
+    minTempHumNight: 72,
     minLuxTotal: 101,
     minLuxBotanical: 58,
   },
   [ZoneType.ZONA_D]: {
-    minTempHum: 173,
+    minTempHum24h: 173,
+    minTempHumDay: 58,
+    minTempHumNight: 72,
     minLuxTotal: 101,
     minLuxBotanical: 58,
   },
@@ -55,6 +101,11 @@ function rowTimeToDate(rawTime: unknown): Date {
   if (rawTime instanceof Date) return rawTime
   const s = String(rawTime)
 
+  if (isNaN(Number(s))) {
+    return new Date(s)
+  }
+
+  // Si tiene nanosegundos (19 dígitos) o microsegundos, truncar a milisegundos (13 dígitos)
   return s.length > 13 ? new Date(Number(s.substring(0, 13))) : new Date(Number(s))
 }
 
@@ -98,9 +149,7 @@ export async function processDay(
   dryRun: boolean = false,
   silent: boolean = false,
 ): Promise<boolean> {
-  const dayEnd = new Date(dayStart)
-
-  dayEnd.setDate(dayEnd.getDate() + 1)
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000)
 
   const isExterior = zone === ZoneType.EXTERIOR
   const dayLabel = dayStart.toISOString().split('T')[0]
@@ -230,7 +279,7 @@ export async function processDay(
 
       // Rango Botánico Estricto: 08:00:00 a 16:00:59
       const isDaytime = (localHour >= 8 && localHour < 16) || (localHour === 16 && localMin === 0)
-      const isNighttime = localHour >= 19 || localHour <= 5
+      const isNighttime = localHour >= 19 || localHour < 5
 
       // Temperatura (24h y desglosado)
       if (row.temperature != null) {
@@ -477,8 +526,12 @@ export async function processDay(
 
   // ── 4. Cálculos finales ──────────────────────────────────────────────────
   const limits = ZONE_LIMITS[zone]
-  const isTempValid = countTemp >= limits.minTempHum
-  const isHumValid = countHum >= limits.minTempHum
+  const isTempValid = countTemp >= limits.minTempHum24h
+  const isHumValid = countHum >= limits.minTempHum24h
+  const isTempDayValid = countTempDay >= limits.minTempHumDay
+  const isTempNightValid = countTempNight >= limits.minTempHumNight
+  const isHumDayValid = countHumDay >= limits.minTempHumDay
+  const isHumNightValid = countHumNight >= limits.minTempHumNight
   const isLuxValid = countLumTotal >= limits.minLuxTotal || countLum >= limits.minLuxBotanical
 
   const dli =
@@ -491,12 +544,22 @@ export async function processDay(
   if (!silent) {
     if (!isTempValid && countTemp > 0) {
       Logger.warn(
-        `[${dayLabel}] [${zone}] Temperatura descartada por baja densidad de muestras (${countTemp} < ${limits.minTempHum}).`,
+        `[${dayLabel}] [${zone}] Temperatura 24h descartada por baja densidad de muestras (${countTemp} < ${limits.minTempHum24h}).`,
       )
     }
     if (!isHumValid && countHum > 0) {
       Logger.warn(
-        `[${dayLabel}] [${zone}] Humedad descartada por baja densidad de muestras (${countHum} < ${limits.minTempHum}).`,
+        `[${dayLabel}] [${zone}] Humedad 24h descartada por baja densidad de muestras (${countHum} < ${limits.minTempHum24h}).`,
+      )
+    }
+    if (!isTempDayValid && countTempDay > 0) {
+      Logger.warn(
+        `[${dayLabel}] [${zone}] Temperatura diurna descartada por baja densidad de muestras (${countTempDay} < ${limits.minTempHumDay}).`,
+      )
+    }
+    if (!isTempNightValid && countTempNight > 0) {
+      Logger.warn(
+        `[${dayLabel}] [${zone}] Temperatura nocturna descartada por baja densidad de muestras (${countTempNight} < ${limits.minTempHumNight}).`,
       )
     }
     if (!isLuxValid && countLumTotal > 0) {
@@ -507,15 +570,17 @@ export async function processDay(
   }
 
   const avgTempDay =
-    isTempValid && countTempDay > 0 ? Number((sumTempDay / countTempDay).toFixed(2)) : null
+    isTempDayValid && countTempDay > 0 ? Number((sumTempDay / countTempDay).toFixed(2)) : null
   const avgTempNight =
-    isTempValid && countTempNight > 0 ? Number((sumTempNight / countTempNight).toFixed(2)) : null
+    isTempNightValid && countTempNight > 0
+      ? Number((sumTempNight / countTempNight).toFixed(2))
+      : null
   const dif =
     avgTempDay !== null && avgTempNight !== null
       ? Number((avgTempDay - avgTempNight).toFixed(2))
       : null
   const highHumidityHours =
-    isHumValid && maxHighHumStreakMinutes > 0
+    isHumNightValid && maxHighHumStreakMinutes > 0
       ? Number((maxHighHumStreakMinutes / 60).toFixed(1))
       : null
 
@@ -545,26 +610,30 @@ export async function processDay(
     maxHumTime: isHumValid ? toCaracasTimeStr(maxHumTime) : null,
 
     // Nuevas métricas de Día
-    minTempDay: isTempValid && countTempDay > 0 ? safeInf(minTempDay) : null,
-    minTempDayTime: isTempValid && countTempDay > 0 ? toCaracasTimeStr(minTempDayTime) : null,
-    maxTempDay: isTempValid && countTempDay > 0 ? safeInf(maxTempDay) : null,
-    maxTempDayTime: isTempValid && countTempDay > 0 ? toCaracasTimeStr(maxTempDayTime) : null,
-    avgHumDay: isHumValid && countHumDay > 0 ? safeAvg(sumHumDay, countHumDay) : null,
-    minHumDay: isHumValid && countHumDay > 0 ? safeInf(minHumDay) : null,
-    minHumDayTime: isHumValid && countHumDay > 0 ? toCaracasTimeStr(minHumDayTime) : null,
-    maxHumDay: isHumValid && countHumDay > 0 ? safeInf(maxHumDay) : null,
-    maxHumDayTime: isHumValid && countHumDay > 0 ? toCaracasTimeStr(maxHumDayTime) : null,
+    minTempDay: isTempDayValid && countTempDay > 0 ? safeInf(minTempDay) : null,
+    minTempDayTime: isTempDayValid && countTempDay > 0 ? toCaracasTimeStr(minTempDayTime) : null,
+    maxTempDay: isTempDayValid && countTempDay > 0 ? safeInf(maxTempDay) : null,
+    maxTempDayTime: isTempDayValid && countTempDay > 0 ? toCaracasTimeStr(maxTempDayTime) : null,
+    avgHumDay: isHumDayValid && countHumDay > 0 ? safeAvg(sumHumDay, countHumDay) : null,
+    minHumDay: isHumDayValid && countHumDay > 0 ? safeInf(minHumDay) : null,
+    minHumDayTime: isHumDayValid && countHumDay > 0 ? toCaracasTimeStr(minHumDayTime) : null,
+    maxHumDay: isHumDayValid && countHumDay > 0 ? safeInf(maxHumDay) : null,
+    maxHumDayTime: isHumDayValid && countHumDay > 0 ? toCaracasTimeStr(maxHumDayTime) : null,
 
     // Nuevas métricas de Noche
-    minTempNight: isTempValid && countTempNight > 0 ? safeInf(minTempNight) : null,
-    minTempNightTime: isTempValid && countTempNight > 0 ? toCaracasTimeStr(minTempNightTime) : null,
-    maxTempNight: isTempValid && countTempNight > 0 ? safeInf(maxTempNight) : null,
-    maxTempNightTime: isTempValid && countTempNight > 0 ? toCaracasTimeStr(maxTempNightTime) : null,
-    avgHumNight: isHumValid && countHumNight > 0 ? safeAvg(sumHumNight, countHumNight) : null,
-    minHumNight: isHumValid && countHumNight > 0 ? safeInf(minHumNight) : null,
-    minHumNightTime: isHumValid && countHumNight > 0 ? toCaracasTimeStr(minHumNightTime) : null,
-    maxHumNight: isHumValid && countHumNight > 0 ? safeInf(maxHumNight) : null,
-    maxHumNightTime: isHumValid && countHumNight > 0 ? toCaracasTimeStr(maxHumNightTime) : null,
+    minTempNight: isTempNightValid && countTempNight > 0 ? safeInf(minTempNight) : null,
+    minTempNightTime:
+      isTempNightValid && countTempNight > 0 ? toCaracasTimeStr(minTempNightTime) : null,
+    maxTempNight: isTempNightValid && countTempNight > 0 ? safeInf(maxTempNight) : null,
+    maxTempNightTime:
+      isTempNightValid && countTempNight > 0 ? toCaracasTimeStr(maxTempNightTime) : null,
+    avgHumNight: isHumNightValid && countHumNight > 0 ? safeAvg(sumHumNight, countHumNight) : null,
+    minHumNight: isHumNightValid && countHumNight > 0 ? safeInf(minHumNight) : null,
+    minHumNightTime:
+      isHumNightValid && countHumNight > 0 ? toCaracasTimeStr(minHumNightTime) : null,
+    maxHumNight: isHumNightValid && countHumNight > 0 ? safeInf(maxHumNight) : null,
+    maxHumNightTime:
+      isHumNightValid && countHumNight > 0 ? toCaracasTimeStr(maxHumNightTime) : null,
 
     avgIlluminance: isLuxValid ? safeAvg(sumLum, countLum) : null,
     minIlluminance: isLuxValid ? safeInf(minLum) : null,

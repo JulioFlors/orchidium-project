@@ -29,6 +29,23 @@ const prismaClientSingleton = () => {
     throw new Error(`❌ ${Colors.RED}No se encontró ninguna URL de base de datos definida.${Colors.RESET}`)
   }
 
+  // ---- Inyección Dinámica de Parámetros de Timeout en la URL ----
+  try {
+    const parsedUrl = new URL(connectionString)
+    if (isVercel) {
+      // En Vercel forzamos timeouts de 5s para fallar rápido antes del límite de 10s
+      parsedUrl.searchParams.set('connect_timeout', '5')
+      parsedUrl.searchParams.set('pool_timeout', '5')
+    } else {
+      // En local permitimos hasta 30s en caso de latencia o arranques fríos del VPS
+      parsedUrl.searchParams.set('connect_timeout', '30')
+      parsedUrl.searchParams.set('pool_timeout', '30')
+    }
+    connectionString = parsedUrl.toString()
+  } catch (error) {
+    console.error('⚠️ [Prisma] No se pudo parsear el DATABASE_URL para inyectar timeouts dinámicos:', error)
+  }
+
   // Log de depuración (ocultando contraseña)
   const maskedUrl = connectionString.replace(/:([^:@]+)@/, ':****@')
   console.log(`${Colors.BLUE}🔍 [Prisma] Conectando a: ${maskedUrl}${Colors.RESET}`)
@@ -49,10 +66,10 @@ const prismaClientSingleton = () => {
   const poolConfig: PoolConfig = {
     connectionString,
     ssl: requiresSsl ? { rejectUnauthorized: false } : false,
-    // Timeouts generosos para evitar errores en "Cold Starts" de serverless
-    connectionTimeoutMillis: 120000, // 120s
-    idleTimeoutMillis: 120000,       // 120s
-    max: 10 // Límite de conexiones en el pool local del contenedor
+    // Ajuste de tiempos del pool según el entorno
+    connectionTimeoutMillis: isVercel ? 5000 : 30000, // 5s en Vercel vs 30s en local
+    idleTimeoutMillis: isVercel ? 10000 : 30000,      // 10s en Vercel vs 30s en local
+    max: isVercel ? 4 : 10 // Reducimos el pool en Vercel para no saturar las conexiones del VPS
   }
 
   // ---- Creamos el Pool SOLO cuando entramos a esta función ----

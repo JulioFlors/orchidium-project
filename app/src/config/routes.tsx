@@ -22,7 +22,7 @@ export const shopRoutes: ShopRoute[] = [
     layout: 'catalog',
     featuredItem: {
       name: 'Dendrobium Striata',
-      image: '/plants/orchids/orchids.webp',
+      image: 'plants/orchids/orchids.webp',
       url: '/product/dendrobium-striata',
     },
     categories: [
@@ -30,32 +30,34 @@ export const shopRoutes: ShopRoute[] = [
         name: 'Orquídeas',
         slug: 'orchids',
         url: '/category/plants/orchids',
-        image: '/plants/orchids/orchids.webp',
+        image: 'plants/orchids/orchids.webp',
       },
       {
         name: 'Rosas del Desierto',
         slug: 'adenium_obesum',
         url: '/category/plants/adenium_obesum',
-        image: '/plants/adenium_obesum/marbella_0_2000.webp',
+        image: 'plants/adenium_obesum/multiple-petals/adenium-obesum-marbella/marbella_0_2000.webp',
       },
       {
         name: 'Cactus',
         slug: 'cactus',
         url: '/category/plants/cactus',
-        image: '/plants/cactus/mammillaria-prolifera-ssp-haitiensis_0_2000.webp',
+        image:
+          'plants/cactus/mammillaria/mammillaria-prolifera-ssp-haitiensis/mammillaria-prolifera-ssp-haitiensis_0_2000.webp',
       },
       {
         name: 'Suculentas',
         slug: 'succulents',
         url: '/category/plants/succulents',
-        image: '/plants/succulents/pachyveria-scheideckeri_2_2000.webp',
+        image:
+          'plants/succulents/pachyveria/pachyveria-scheideckeri/pachyveria-scheideckeri_2_2000.webp',
       },
     ],
   },
   {
     name: 'Contacto',
     slug: 'contacto',
-    url: '/about/contacto',
+    url: '/#contact',
     layout: 'informational',
   },
   {

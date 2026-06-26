@@ -215,7 +215,7 @@ export async function cancelManualTask(taskId: string, notes?: string) {
         data: {
           taskId: taskId,
           status: 'CANCELLED',
-          notes: finalNotes,
+          notes: finalNotes.replace('[ATOMIC_CANCEL] ', ''),
         },
       })
     })

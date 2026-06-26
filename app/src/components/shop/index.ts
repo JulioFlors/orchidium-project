@@ -7,3 +7,5 @@ export * from './CategoriesSection'
 export * from './TeslaSection'
 
 export * from './TeslaValuesSection'
+
+export * from './TeslaContactSection'

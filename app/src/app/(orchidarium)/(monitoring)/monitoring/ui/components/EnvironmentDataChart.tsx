@@ -320,10 +320,10 @@ function CustomTooltip({
                 </div>
               </div>
 
-              {/* Bloque 2: Fase Diurna */}
+              {/* Bloque 2: Día */}
               <div className="border-input-outline/30 flex flex-col gap-1 border-t pt-2">
                 <span className="text-foreground flex items-center gap-1 text-xs font-bold">
-                  ☀️ Fase diurna (08:00 am - 04:00 pm)
+                  ☀️ Día (08:00 am - 04:00 pm)
                 </span>
                 <div className="flex items-center justify-between gap-4 text-xs font-semibold">
                   <div className="flex flex-col">
@@ -370,10 +370,10 @@ function CustomTooltip({
                 </div>
               </div>
 
-              {/* Bloque 3: Fase Nocturna */}
+              {/* Bloque 3: Noche */}
               <div className="border-input-outline/30 flex flex-col gap-1 border-t pt-2">
                 <span className="text-foreground flex items-center gap-1 text-xs font-bold">
-                  🌙 Fase nocturna (07:00 pm - 05:59 am)
+                  🌙 Noche (07:00 pm - 05:59 am)
                 </span>
                 <div className="flex items-center justify-between gap-4 text-xs font-semibold">
                   <div className="flex flex-col">
@@ -750,7 +750,7 @@ export function EnvironmentDataChart({
         max = Math.max(...generalValues)
         avg = generalValues.reduce((sum, val) => sum + val, 0) / generalValues.length
 
-        // 2. Fase Diurna (08:00 AM - 04:00 PM)
+        // 2. Día (08:00 AM - 04:00 PM)
         const dayPoints = validPoints.filter((d) => {
           const dDate = new Date(String(d.time))
           const hour = (dDate.getUTCHours() - 4 + 24) % 24
@@ -770,7 +770,7 @@ export function EnvironmentDataChart({
           }
         }
 
-        // 3. Fase Nocturna (07:00 PM - 05:59 AM)
+        // 3. Noche (07:00 PM - 05:59 AM)
         const nightPoints = validPoints.filter((d) => {
           const dDate = new Date(String(d.time))
           const hour = (dDate.getUTCHours() - 4 + 24) % 24
@@ -1290,7 +1290,7 @@ export function EnvironmentDataChart({
           <span className="text-secondary mb-1 text-xs font-bold">Mínimo</span>
           {isDetailed && count > 0 ? (
             dataKey === 'illuminance' ? (
-              <div className="flex w-full flex-col gap-0.5 px-2 text-xs">
+              <div className="tds-sm:text-xs flex w-full flex-col gap-0.5 px-2 text-[10px]">
                 <div className="flex w-full justify-between">
                   <span className="text-foreground font-semibold">🌄 Amanecer</span>
                   <span className="text-primary font-bold">
@@ -1311,7 +1311,7 @@ export function EnvironmentDataChart({
                 </div>
               </div>
             ) : (
-              <div className="flex w-full flex-col gap-0.5 px-2 text-xs">
+              <div className="tds-sm:text-xs flex w-full flex-col gap-0.5 px-2 text-[10px]">
                 <div className="flex w-full justify-between">
                   <span className="text-foreground font-semibold">📊 General</span>
                   <span className="text-primary font-bold">
@@ -1319,13 +1319,13 @@ export function EnvironmentDataChart({
                   </span>
                 </div>
                 <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
-                  <span className="text-foreground font-semibold">☀️ Fase Diurna</span>
+                  <span className="text-foreground font-semibold">☀️ Día</span>
                   <span className="text-primary font-bold">
                     {dayStats.count > 0 ? `${formatStat(dayStats.min)} ${unit}` : '--'}
                   </span>
                 </div>
                 <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
-                  <span className="text-foreground font-semibold">🌙 Fase Nocturna</span>
+                  <span className="text-foreground font-semibold">🌙 Noche</span>
                   <span className="text-primary font-bold">
                     {nightStats.count > 0 ? `${formatStat(nightStats.min)} ${unit}` : '--'}
                   </span>
@@ -1344,7 +1344,7 @@ export function EnvironmentDataChart({
           <span className="text-secondary mb-1 text-xs font-bold">Máximo</span>
           {isDetailed && count > 0 ? (
             dataKey === 'illuminance' ? (
-              <div className="flex w-full flex-col gap-0.5 px-2 text-xs">
+              <div className="tds-sm:text-xs flex w-full flex-col gap-0.5 px-2 text-[10px]">
                 <div className="flex w-full justify-between">
                   <span className="text-foreground font-semibold">🌄 Amanecer</span>
                   <span className="text-primary font-bold">
@@ -1365,7 +1365,7 @@ export function EnvironmentDataChart({
                 </div>
               </div>
             ) : (
-              <div className="flex w-full flex-col gap-0.5 px-2 text-xs">
+              <div className="tds-sm:text-xs flex w-full flex-col gap-0.5 px-2 text-[10px]">
                 <div className="flex w-full justify-between">
                   <span className="text-foreground font-semibold">📊 General</span>
                   <span className="text-primary font-bold">
@@ -1373,13 +1373,13 @@ export function EnvironmentDataChart({
                   </span>
                 </div>
                 <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
-                  <span className="text-foreground font-semibold">☀️ Fase Diurna</span>
+                  <span className="text-foreground font-semibold">☀️ Día</span>
                   <span className="text-primary font-bold">
                     {dayStats.count > 0 ? `${formatStat(dayStats.max)} ${unit}` : '--'}
                   </span>
                 </div>
                 <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
-                  <span className="text-foreground font-semibold">🌙 Fase Nocturna</span>
+                  <span className="text-foreground font-semibold">🌙 Noche</span>
                   <span className="text-primary font-bold">
                     {nightStats.count > 0 ? `${formatStat(nightStats.max)} ${unit}` : '--'}
                   </span>
@@ -1398,7 +1398,7 @@ export function EnvironmentDataChart({
           <span className="text-secondary mb-1 text-xs font-bold">Promedio</span>
           {isDetailed && count > 0 ? (
             dataKey === 'illuminance' ? (
-              <div className="flex w-full flex-col gap-0.5 px-2 text-xs">
+              <div className="tds-sm:text-xs flex w-full flex-col gap-0.5 px-2 text-[10px]">
                 <div className="flex w-full justify-between">
                   <span className="text-foreground font-semibold">🌄 Amanecer</span>
                   <span className="text-primary font-bold">
@@ -1419,7 +1419,7 @@ export function EnvironmentDataChart({
                 </div>
               </div>
             ) : (
-              <div className="flex w-full flex-col gap-0.5 px-2 text-xs">
+              <div className="tds-sm:text-xs flex w-full flex-col gap-0.5 px-2 text-[10px]">
                 <div className="flex w-full justify-between">
                   <span className="text-foreground font-semibold">📊 General</span>
                   <span className="text-primary font-bold">
@@ -1427,13 +1427,13 @@ export function EnvironmentDataChart({
                   </span>
                 </div>
                 <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
-                  <span className="text-foreground font-semibold">☀️ Fase Diurna</span>
+                  <span className="text-foreground font-semibold">☀️ Día</span>
                   <span className="text-primary font-bold">
                     {dayStats.count > 0 ? `${formatStat(dayStats.avg)} ${unit}` : '--'}
                   </span>
                 </div>
                 <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
-                  <span className="text-foreground font-semibold">🌙 Fase Nocturna</span>
+                  <span className="text-foreground font-semibold">🌙 Noche</span>
                   <span className="text-primary font-bold">
                     {nightStats.count > 0 ? `${formatStat(nightStats.avg)} ${unit}` : '--'}
                   </span>
@@ -1454,7 +1454,7 @@ export function EnvironmentDataChart({
           </span>
           {isDetailed && count > 0 ? (
             dataKey === 'illuminance' ? (
-              <div className="flex w-full flex-col gap-0.5 px-2 text-xs">
+              <div className="tds-sm:text-xs flex w-full flex-col gap-0.5 px-2 text-[10px]">
                 <div className="flex w-full justify-between">
                   <span className="text-foreground font-semibold">🌄 Amanecer</span>
                   <span className="text-primary font-bold">{illumDawnStats.count}</span>
@@ -1469,17 +1469,17 @@ export function EnvironmentDataChart({
                 </div>
               </div>
             ) : (
-              <div className="flex w-full flex-col gap-0.5 px-2 text-xs">
+              <div className="tds-sm:text-xs flex w-full flex-col gap-0.5 px-2 text-[10px]">
                 <div className="flex w-full justify-between">
                   <span className="text-foreground font-semibold">📊 General</span>
                   <span className="text-primary font-bold">{count}</span>
                 </div>
                 <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
-                  <span className="text-foreground font-semibold">☀️ Fase Diurna</span>
+                  <span className="text-foreground font-semibold">☀️ Día</span>
                   <span className="text-primary font-bold">{dayStats.count}</span>
                 </div>
                 <div className="flex w-full justify-between border-t border-white/5 pt-0.5">
-                  <span className="text-foreground font-semibold">🌙 Fase Nocturna</span>
+                  <span className="text-foreground font-semibold">🌙 Noche</span>
                   <span className="text-primary font-bold">{nightStats.count}</span>
                 </div>
               </div>

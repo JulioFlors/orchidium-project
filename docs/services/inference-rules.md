@@ -196,11 +196,14 @@ Incluso con autorización, el motor puede vetar si detecta tormenta inminente.
 ## 4. Reglas de Evaluación por Propósito
 
 ### 4.A Veto General: Humedad Diaria Sostenida (Lluvia Persistente)
+
 Aplica a: `HUMIDIFICATION`, `SOIL_WETTING`, `FUMIGATION` y `FERTIGATION`.
-* **Condición de Veto**: Si a lo largo de hoy (desde las 00:00 AM hora local Caracas) se acumulan **$\ge 6$ horas** (no necesariamente consecutivas) con humedad relativa promedio **$\ge 98.0\%$** en el interior (`ZONA_A`) o exterior.
-* **Justificación**: Representa una condición de lluvia persistente o humedad extrema que ha saturado las hojas y mallas. No se debe añadir más agua ni agroquímicos bajo este estado.
+
+- **Condición de Veto**: Si a lo largo de hoy (desde las 00:00 AM hora local Caracas) se acumulan **$\ge 6$ horas** (no necesariamente consecutivas) con humedad relativa promedio **$\ge 98.0\%$** en el interior (`ZONA_A`) o exterior.
+- **Justificación**: Representa una condición de lluvia persistente o humedad extrema que ha saturado las hojas y mallas. No se debe añadir más agua ni agroquímicos bajo este estado.
 
 ### 4.1 IRRIGATION (Aspersión — 6:00 AM, Interdiaria)
+
 **Objetivo:** Regar las raíces aéreas y el sustrato con aspersión directa.
 
 ```text
@@ -209,6 +212,7 @@ MOTIVO: La lluvia ya proporcionó el agua equivalente en el ciclo diario previo.
 ```
 
 #### Veto de Respaldo Nocturno
+
 ```text
 SI hora_local entre 7:00 PM y 5:59 AM
    Y humedad_exterior_promedio(últimas 3h) ≥ 98.0% (BACKUP_NOCTURNAL_HR_THRESHOLD)
@@ -216,43 +220,52 @@ SI hora_local entre 7:00 PM y 5:59 AM
 ```
 
 ### 4.2 SOIL_WETTING (Humectación de Suelo — 11:00 AM y 3:00 PM)
+
 **Objetivo:** Mantener la humedad del sustrato durante el pico de calor.
 
 #### Hard Block: Lluvia Reciente
+
 ```text
 SI lluvia_acumulada(últimas 4h) > 0 → SKIP (Suelo ya humectado)
 ```
 
 #### Veto de 4 Horas: Humedad y Temperatura Promedios (Retrospectivas)
+
 ```text
 SI humedad_promedio(últimas 4h) ≥ Umbral_Dinámico_4H (THRESHOLD_4H) → SKIP
 SI temperatura_promedio(últimas 4h) ≤ 30.0°C (TEMPERATURE_MIN_VETO_4H)
    Y humedad_promedio(últimas 4h) ≥ 80.0%
    → SKIP (Veto acoplado por ambiente fresco y húmedo)
 ```
-* **Umbral Dinámico de 4h (THRESHOLD_4H)**:
-  * Si Lux promedio desde 8:00 AM es $\ge 26,000\text{ lx}$ (Templado/Soleado): **$\ge 85.0\%$**
-  * Si Lux promedio desde 8:00 AM es $< 26,000\text{ lx}$ (Nublado/Lluvioso): **$\ge 91.0\%$**
+
+- **Umbral Dinámico de 4h (THRESHOLD_4H)**:
+  - Si Lux promedio desde 8:00 AM es $\ge 26,000\text{ lx}$ (Templado/Soleado): **$\ge 85.0\%$**
+  - Si Lux promedio desde 8:00 AM es $< 26,000\text{ lx}$ (Nublado/Lluvioso): **$\ge 91.0\%$**
 
 ### 4.3 HUMIDIFICATION (Nebulización/Pulverización — 4:00 PM)
+
 **Objetivo:** Elevar la humedad ambiental al cierre del fotoperiodo.
 
 #### Veto de 3 Horas: Humedad Crítica Interior (Retrospectiva)
+
 ```text
 SI humedad_promedio_interior(últimas 3h) ≥ Umbral_Dinámico_3H (THRESHOLD_3H) → SKIP
 ```
-* **Umbral Dinámico de 3h (THRESHOLD_3H)**:
-  * Si Lux promedio desde 8:00 AM es $\ge 26,000\text{ lx}$ (Templado/Soleado): **$\ge 88.0\%$**
-  * Si Lux promedio desde 8:00 AM es $< 26,000\text{ lx}$ (Nublado/Lluvioso): **$\ge 95.0\%$**
+
+- **Umbral Dinámico de 3h (THRESHOLD_3H)**:
+  - Si Lux promedio desde 8:00 AM es $\ge 26,000\text{ lx}$ (Templado/Soleado): **$\ge 88.0\%$**
+  - Si Lux promedio desde 8:00 AM es $< 26,000\text{ lx}$ (Nublado/Lluvioso): **$\ge 95.0\%$**
 
 #### Regla Principal de Nebulización de las 4:00 PM
+
 ```text
-SI DayClassifier.avgLuxSince8am < 26,000 lux (SUNNY_DAY_LUX_THRESHOLD)
+   SI DayClassifier.avgLuxSince8am < 26,000 lux (SUNNY_DAY_LUX_THRESHOLD)
    Y DayClassifier.type ≠ DESCONOCIDO
    → SKIP (Día nublado, evapotranspiración baja, humedad suficiente)
 ```
 
 #### Regla de Temperatura Fresca (Nebulización de las 4:00 PM)
+
 ```text
 SI interior.hum > 80% (MISTING_HUMIDITY_PROVISIONAL_THRESHOLD)
    Y interior.temp < 28°C (MISTING_TEMPERATURE_PROVISIONAL_MIN)
@@ -261,19 +274,23 @@ SI interior.hum > 80% (MISTING_HUMIDITY_PROVISIONAL_THRESHOLD)
 ```
 
 ### 4.4 FUMIGATION / FERTIGATION (Agroquímicos — 5:00 PM)
+
 **Objetivo:** Aplicación de fertilización y fumigación foliar/raíces.
 
-#### Veto de 4 Horas: Humedad y Temperatura Promedios (Retrospectivas)
+#### Veto de 4 Horas: Humedad y Temperatura Promedios (Retrospectiva)
+
 Para evitar la escorrentía, lavado y proliferación de hongos foliares, se aplican los mismos vetos retrospectivos que en SOIL_WETTING:
+
 ```text
 SI humedad_promedio(últimas 4h) ≥ Umbral_Dinámico_4H (THRESHOLD_4H) → SKIP
 SI temperatura_promedio(últimas 4h) ≤ 30.0°C (TEMPERATURE_MIN_VETO_4H)
    Y humedad_promedio(últimas 4h) ≥ 80.0%
    → SKIP (Veto acoplado)
 ```
-* **Umbral Dinámico de 4h (THRESHOLD_4H)**:
-  * Si Lux promedio desde 8:00 AM es $\ge 26,000\text{ lx}$: **$\ge 85.0\%$**
-  * Si Lux promedio desde 8:00 AM es $< 26,000\text{ lx}$: **$\ge 91.0\%$**
+
+- **Umbral Dinámico de 4h (THRESHOLD_4H)**:
+  - Si Lux promedio desde 8:00 AM es $\ge 26,000\text{ lx}$: **$\ge 85.0\%$**
+  - Si Lux promedio desde 8:00 AM es $< 26,000\text{ lx}$: **$\ge 91.0\%$**
 
 ---
 
@@ -429,16 +446,15 @@ A continuación se detallan todas las constantes operativas y biológicas centra
 | **BACKUP_NOCTURNAL_HR_THRESHOLD** | `98.0` | $\%$ | Humedad promedio exterior requerida de noche para cancelar riego por aspersión. |
 | **MAX_NEBULIZATION_DURATION_MINUTES** | `3` | minutos | Duración máxima de nebulización para evitar goteo sobre las hojas. |
 | **IRRIGATION_DURATION_MINUTES** | `15` | minutos | Duración estándar de la aspersión matutina. |
-| **MISTING_HUMIDITY_PROVISIONAL_THRESHOLD**| `80.0`| $\%$ | Humedad provisional para habilitar nebulización de las 4PM. |
+| **MISTING_HUMIDITY_PROVISIONAL_THRESHOLD** | `80.0` | $\%$ | Humedad provisional para habilitar nebulización de las 4PM. |
 | **MISTING_TEMPERATURE_PROVISIONAL_MIN** | `28.0` | $^\circ\text{C}$ | Temperatura interior mínima para habilitar nebulización de las 4PM. |
-| **FORECAST_PRECIPITATION_PROBABILITY_LIMIT**| `0.95`| Adimensional | Probabilidad de lluvia límite en pronóstico para veto de agroquímicos (tormentas). |
-| **AGROCHEMICAL_RAIN_LOOKBACK_LIMIT_4H**| `14,400` | segundos | Segundos equivalentes a 4h de lluvia reciente para veto de agroquímicos. |
+| **FORECAST_PRECIPITATION_PROBABILITY_LIMIT** | `0.95` | Adimensional | Probabilidad de lluvia límite en pronóstico para veto de agroquímicos (tormentas). |
+| **AGROCHEMICAL_RAIN_LOOKBACK_LIMIT_4H** | `14,400` | segundos | Segundos equivalentes a 4h de lluvia reciente para veto de agroquímicos. |
 
 > [!NOTE]
 > Toda cancelación realizada por el motor de inferencia queda registrada en el historial (`TaskLog.notes`) con el motivo detallado y las constantes evaluadas, permitiendo auditar por qué el sistema tomó dicha decisión.
 
 ---
-
 
 ## 8. Contexto Geográfico y Estacional
 

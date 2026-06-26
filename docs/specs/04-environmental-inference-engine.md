@@ -62,19 +62,57 @@ Cada noche a las 23:55, el backend ejecutará el volcado de insights:
 
 ---
 
-## 4. Plan de Acción (Hoja de Ruta de Ingeniería)
+## 4. Reglas de Veto Climático en Tiempo Real (Saturación Hídrica y Condensación)
+
+Para proteger las orquídeas contra el exceso hídrico, el shock térmico por frío y la proliferación de patógenos, el motor de inferencia implementa reglas móviles en tiempo real para vetar de forma automática las tareas programadas (`HUMIDIFICATION`, `SOIL_WETTING`, `FUMIGATION`, `FERTIGATION` e `IRRIGATION`).
+
+### 4.1 Veto Diurno por Saturación Hídrica Móvil (4 Horas)
+* **Propósito**: Cancelar riegos y nebulizaciones si la atmósfera y el suelo ya están saturados por una lluvia diurna reciente o en curso.
+* **Regla**: Evalúa que la media móvil simple (SMA) de la humedad relativa exterior o interior de las últimas 4 horas sea $\ge 85.0\%$.
+* **Justificación Técnica**: 
+  - Las temperaturas diurnas en Ciudad Guayana y Caracas (promedios de $31^\circ\text{C}$ a $37^\circ\text{C}$) expanden la capacidad volumétrica de retención de humedad del aire. Por ello, incluso bajo lluvia torrencial diurna, la humedad relativa sostenida en 4 horas es físicamente incapca de promediar el $98\%$.
+  - Establecer el umbral de saturación hídrica diurno en **$\ge 85.0\%$** proporciona el balance óptimo: evita regar bajo lluvias activas o tormentas recientes, y previene falsos positivos en días secos donde la humedad promedio de la tarde se mantiene en el rango de **$58\%$ - $59\%$**.
+
+### 4.2 Veto Nocturno por Condensación y Rocío Natural (1 Hora)
+* **Propósito**: Cancelar el riego de aspersión nocturno/madrugada si se detecta una llovizna persistente o si la madrugada está saturada, previniendo hongos y asfixia radicular.
+* **Regla**: Evalúa si se registraron al menos 6 horas (bloques de 1h) continuas con humedad relativa exterior promedio $\ge 98.0\%$.
+* **Justificación Técnica**:
+  - Durante la noche y madrugada, el enfriamiento de la atmósfera provoca que la humedad relativa ascienda gradualmente hasta llegar a la condensación natural (rocío a las 5:00 AM) sin necesidad de que ocurra precipitación.
+  - Para evitar que la condensación natural vete falsamente el riego programado, el umbral nocturno se mantiene en un nivel sumamente estricto del **$\ge 98.0\%$** y exige persistencia prolongada (6 horas), distinguiendo el rocío natural (aumento gradual) de la saturación por lloviznas (saturación rápida y caída térmica abrupta).
+
+---
+
+## 5. Datos Empíricos de la Auditoría Climática (30 Días de Historial)
+
+La calibración de los umbrales del motor de inferencia se basó en el análisis estadístico sin sesgos de 42,629 muestras de InfluxDB y 45 eventos de lluvia de Postgres registrados en Caracas (UTC-4) entre mayo y junio de 2026. Los promedios reales de humedad relativa y temperatura por ventana diurna y categoría climática se resumen a continuación:
+
+### 5.1 Ventana 1: 7:00 AM - 11:00 AM (Previo a Humectación 11 AM)
+* **Días Secos**: **73.8% HR** (Mín: 60.2% - Máx: 94.9%) | Temp: **32.6°C**
+* **Durante la Lluvia (Solapada)**: **83.5% HR** (Mín: 75.6% - Máx: 91.1%) | Temp: **30.6°C**
+* **Después de la Lluvia**: **81.4% HR** | Temp: **31.2°C**
+* **Antes de la Lluvia**: **75.6% HR** | Temp: **32.9°C**
+
+### 5.2 Ventana 2: 11:00 AM - 3:00 PM (Previo a Humectación 3 PM)
+* **Días Secos**: **58.5% HR** (Mín: 49.9% - Máx: 98.5%) | Temp: **37.4°C**
+* **Durante la Lluvia (Solapada)**: **74.1% HR** (Mín: 57.7% - Máx: 89.6%) | Temp: **33.8°C**
+* **Después de la Lluvia**: **62.4% HR** (Mín: 53.3% - Máx: 75.9%) | Temp: **36.6°C**
+* **Antes de la Lluvia**: **57.4% HR** | Temp: **36.5°C**
+
+### 5.3 Ventana 3: 12:00 PM - 4:00 PM (Previo a Humidificación 4 PM)
+* **Días Secos**: **58.0% HR** (Mín: 49.0% - Máx: 98.2%) | Temp: **37.4°C**
+* **Durante la Lluvia (Solapada)**: **80.1% HR** (Mín: 60.7% - Máx: 93.6%) | Temp: **31.7°C**
+* **Después de la Lluvia**: **62.3% HR** (Mín: 53.5% - Máx: 75.3%) | Temp: **36.1°C**
+* **Antes de la Lluvia**: **60.6% HR** | Temp: **34.7°C**
+
+---
+
+## 6. Plan de Acción (Hoja de Ruta de Ingeniería)
 
 Este es el roadmap accionable a integrar en el `todos.md` (Fase 3):
 
 - **Fase 3.2.1: Estabilización de Datos en Vivo (Smooth Data):**
-  - Modificar las consultas de la API en el backend para que devuelvan promedios (SMA) de la última ventana temporal (ej. 15 min), en vez del dato crudo absoluto, para nutrir las cards del frontend.
-- **Fase 3.2.2: Implementación de VPD (Vapor Pressure Deficit):**
-  - Crear función de cálculo de VPD e incluirlo en el payload hacia la base de datos o como dato derivado en la vista en tiempo real.
-  - Actualizar UI para mostrar Dial/Gauge de VPD.
+  - Modificar las consultas de la API en el backend para que devuelvan promedios (SMA) de la última ventana temporal (ej. 15 min), en vez del dato crudo absoluto.
+- **Fase 3.2.2: Implementación de VPD (Vapor Pressure Deficit) y Reglas de Veto:**
+  - Integrar el cálculo de VPD nocturno y diurno y acoplar el veto hídrico diurno móvil de 4h ($\ge 85\%$) y de rocío nocturno ($\ge 98\%$) en el backend del scheduler.
 - **Fase 3.2.3: Worker de Agregación Diaria (CRON 23:55):**
-  - Desarrollar el script backend que procese los miles de puntos diarios en InfluxDB.
-  - Implementar ecuaciones de DLI (Lux -> PPFD -> Integral) y DIF.
-  - Insertar los resultados procesados en la base de datos relacional para consultas de alto nivel (Gemelos Digitales y Diario Biológico).
-- **Fase 3.2.4: Evolución del Frontend (Inteligencia sobre Gráficos):**
-  - Ofrecer "Scorecards" diarios: "El DLI de ayer fue 14 mol (Perfecto para Cattleyas)".
-  - Transformar los gráficos de líneas espagueti históricos en Gráficos de Velas (Max/Min/Avg) o Bandas, como se definió en la Fase 4 de UX.
+  - Desarrollar el script backend que procese los miles de puntos diarios en InfluxDB, calculando DLI y DIF, y persistiendo los resultados en PostgreSQL (`DailyEnvironmentStat`).
