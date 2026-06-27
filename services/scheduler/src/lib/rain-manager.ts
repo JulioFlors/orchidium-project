@@ -596,13 +596,19 @@ export async function evaluateClimateInference(): Promise<void> {
         const varTempPre = maxTempPreAll - minTempPreAll
 
         const minHumPreAll = Math.min(humBatches[1].min, humBatches[2].min, humBatches[3].min)
+        const maxHumPreAll = Math.max(humBatches[1].max, humBatches[2].max, humBatches[3].max)
+        const varHumPre = maxHumPreAll - minHumPreAll
 
         // 3. Deltas de choque en B0
         const currentTempDrop = maxTempPreAll - currentMinTemp
         const currentHumRise = currentMaxHum - minHumPreAll
 
-        const isTempDropAbrupt = currentTempDrop >= refVarTemp * 2.5
-        const isHumRiseAbrupt = currentHumRise >= refVarHum * 2.0
+        // --- Calibración Fina (Tuning) para Evitar Falsos Positivos de Enfriamiento Radiativo ---
+        const tempDropThreshold = Math.max(0.4, varTempPre * 2.0)
+        const humRiseThreshold = Math.max(1.5, varHumPre * 1.8)
+
+        const isTempDropAbrupt = currentTempDrop >= tempDropThreshold
+        const isHumRiseAbrupt = currentHumRise >= humRiseThreshold
         const isPreSaturated = currentMaxHum >= 98.0 || humBatches[1].min >= 95.0
 
         if (varTempPre <= 0.6 && isTempDropAbrupt && (isHumRiseAbrupt || isPreSaturated)) {

@@ -4,14 +4,14 @@ async function main() {
   const events = await prisma.rainEvent.findMany({
     where: {
       startedAt: {
-        gte: new Date('2026-06-01T00:00:00Z'),
-        lt: new Date('2026-06-10T00:00:00Z'),
+        gte: new Date('2026-06-23T00:00:00Z'),
+        lt: new Date('2026-06-27T12:00:00Z'),
       },
     },
     orderBy: { startedAt: 'asc' },
   })
 
-  console.log('=== TODOS LOS EVENTOS DE LLUVIA DEL 01/06 al 09/06 ===')
+  console.log('=== TODOS LOS EVENTOS DE LLUVIA DEL 23/06 al 27/06 ===')
   for (const e of events) {
     const isV = e.isInfered
 

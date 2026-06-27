@@ -107,6 +107,7 @@ async function main() {
 
       // 1. Analizar encapotamiento post-lluvia (Objetivo 1)
       let inRain = false
+
       for (let i = 0; i < samples.length; i++) {
         if (samples[i].rain > 0 && !inRain) {
           inRain = true

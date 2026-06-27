@@ -54,22 +54,38 @@ Durante el día (`isDay = true`), el motor evalúa en dos pasos el lote actual (
 
 ## 3. Regla Nocturna Adaptativa por Gradiente Auto-Calibrable (`THERMAL_DROP_NIGHT`)
 
-### A. Razonamiento Físico (Enfriamiento Radiativo Nocturno)
-De noche (4:00 PM - 8:00 AM), el suelo pierde calor de forma lenta y predecible por radiación infrarroja hacia el espacio (enfriamiento radiativo). Esto provoca una bajada térmica lineal suave de $\approx -0.1^\circ\text{C}$ cada 10 min y una subida de humedad correlacionada de $\approx +0.3\%$ HR (según la ley de Clausius-Clapeyron).
+### A. Razonamiento Físico (Enfriamiento Radiativo Nocturno vs Choque por Lluvia)
+De noche (4:00 PM - 8:00 AM), el suelo pierde calor de forma lenta y predecible por radiación infrarroja hacia el espacio (enfriamiento radiativo). Esto provoca una bajada térmica lineal suave de $\approx -0.18^\circ\text{C}$ cada 10 min y una subida de humedad relativa correlacionada de $\approx +0.67\%$ HR cada 10 min (según la ley de Clausius-Clapeyron).
 
-La lluvia nocturna interrumpe abruptamente este enfriamiento lento. Para no confundir el enfriamiento radiativo natural con lluvia, el motor de inferencia **no utiliza límites rígidos**. En su lugar, mide la variabilidad natural del clima de esa noche específica (ruido base) y busca anomalías (choques térmicos y de humedad) que superen esta variación por un factor multiplicador.
+El motor de inferencia original (Fórmula A) comparaba una caída acumulada de 40 min contra el ruido de un solo lote de 10 min, lo que causaba falsos positivos constantes al anochecer. La **Fórmula B** corrige esta asimetría temporal comparando variables del mismo dominio de tiempo: la ventana acumulada de calma previa de 30 minutos ($varTempPre$ y $varHumPre$):
+
+1. **Choque Térmico Adaptativo**: La caída térmica acumulada debe superar en **2.0x** a la variación total acumulada previa:
+   $$tempDropThreshold = \max(0.4^\circ\text{C}, varTempPre \times 2.0)$$
+2. **Choque Hídrico Adaptativo**: El alza hídrica acumulada debe superar en **1.8x** a la variación total acumulada previa:
+   $$humRiseThreshold = \max(1.5\%, varHumPre \times 1.8)$$
+
+#### Explicación de los Pisos Mínimos de Seguridad (Safe Floors):
+* **Piso Térmico de $0.4^\circ\text{C}$**: El sensor DHT22 posee una precisión nominal de $\pm0.5^\circ\text{C}$ y resolución de $0.1^\circ\text{C}$. En noches en calma absoluta donde la variación previa combinada ($varTempPre$) cae a niveles de $0.1^\circ\text{C}$, el piso de seguridad de **$0.4^\circ\text{C}$** actúa como barrera para evitar que una fluctuación menor o digitalización del sensor dispare un falso positivo.
+* **Piso Hídrico de $1.5\%$ HR**: Protege al motor contra el ruido electrónico instrumental de lectura del sensor (que suele fluctuar $\pm1.0\%$ en calma), ignorando fluctuaciones de bits insignificantes.
 
 ### B. Funcionamiento en el Código
-1. **Calcular Variabilidad de Referencia**: Evaluamos los 3 lotes anteriores ($B_1, B_2, B_3$, que cubren los 40 minutos previos de historia). Determinamos la variación interna máxima de lote a lote:
-   - $V_{Temp\_Ref} = \max(B_i.max - B_i.min, 0.15^\circ\text{C})$
-   - $V_{Hum\_Ref} = \max(B_i.max - B_i.min, 0.5\%)$
-2. **Establecer Extremos de Referencia**: Calculamos la temperatura más alta previa ($maxTempPreAll$) y la humedad más baja previa ($minHumPreAll$) del bloque combinado de los 3 lotes anteriores.
-3. **Evaluar Anomalía**: Se infiere el inicio de lluvia nocturna si el clima previo era estable (rango de temperatura en la ventana previa $\le 0.6^\circ\text{C}$) y el lote actual ($B_0$) experimenta un choque térmico y de humedad abrupto respecto a los extremos previos:
-   - Caída térmica: $\Delta T = maxTempPreAll - B_0.min \ge 2.5 \times V_{Temp\_Ref}$
-   - Subida de humedad: $\Delta HR = B_0.max - minHumPreAll \ge 2.0 \times V_{Hum\_Ref}$ (se obvia si ya está en saturación extrema).
+1. **Calcular Estabilidad y Variaciones Previas (30 min)**: Evaluamos los 3 lotes anteriores ($B_1, B_2, B_3$).
+   - $varTempPre = maxTempPreAll - minTempPreAll$
+   - $varHumPre = maxHumPreAll - minHumPreAll$
+2. **Calcular Umbrales de Choque con Piso**:
+   - $tempDropThreshold = \max(0.4^\circ\text{C}, varTempPre \times 2.0)$
+   - $humRiseThreshold = \max(1.5\%, varHumPre \times 1.8)$
+3. **Evaluar Anomalía**: Se infiere lluvia si la calma previa fue real ($varTempPre \le 0.6^\circ\text{C}$), el lote $B_0$ experimenta una caída térmica abrupta ($currentTempDrop \ge tempDropThreshold$), y un alza de humedad abrupta ($currentHumRise \ge humRiseThreshold$ o se encuentra pre-saturado).
 
-### C. Validación de Campo
-* **Caso de Estudio (24/06 - 8:50 PM)**: En una noche pre-saturada, la temperatura venía estable con variaciones internas de $0.00^\circ\text{C}$ a $0.10^\circ\text{C}$ (calma total). A las 8:50 PM, la temperatura cayó a $25.40^\circ\text{C}$ ($\Delta T = 0.90^\circ\text{C}$ desde el pico previo de $26.30^\circ\text{C}$). Dado que la variación de referencia era de $0.15^\circ\text{C}$ (piso instrumental), el umbral de choque era de $2.5 \times 0.15 = 0.375^\circ\text{C}$. Como $0.90^\circ\text{C} \ge 0.375^\circ\text{C}$, el inicio se infirió de forma precisa.
+### C. Estrategia de Ajuste Futuro (Fine-Tuning)
+Si bajo condiciones de inestabilidad atmosférica inusual o ráfagas frías el motor continuase dando falsos positivos, se debe seguir la siguiente escala de afinación:
+1. **Ajustar los Multiplicadores**: Incrementar el multiplicador térmico de `2.0` a **`2.5`** y el hídrico de `1.8` a **`2.0`** para exigir choques más severos.
+2. **Elevar los Pisos de Seguridad**: Subir el piso térmico a **`0.6°C`** y el hídrico a **`2.5%`** si el sensor DHT22 experimenta desgaste físico e incremento de ruido.
+3. **Sensibilizar la Calma Previa**: Reducir el límite de $varTempPre \le 0.6^\circ\text{C}$ a **$\le 0.5^\circ\text{C}$** para bloquear evaluaciones en noches con transiciones ventosas activas.
+
+### D. Validación de Campo
+* **Caso de Estudio (24/06 - 8:50 PM)**: En una noche pre-saturada, la temperatura venía estable con $varTempPre = 0.20^\circ\text{C}$. A las 8:50 PM, la temperatura cayó a $25.40^\circ\text{C}$ ($dT = 0.90^\circ\text{C}$ desde el pico previo). El umbral de choque calculado fue de $ThT = \max(0.4, 0.20 \times 2.0) = 0.40^\circ\text{C}$. Como $0.90^\circ\text{C} \ge 0.40^\circ\text{C}$ y la humedad subió al $98.7\%$, el inicio se infirió con precisión al segundo exacto del reporte de lluvia.
+* **Caso de Enfriamiento del 26/06 (Falsos Positivos Filtrados)**: A las 7:40 PM del 26 de junio, la temperatura cayó $0.60^\circ\text{C}$ en 40 min por radiación nocturna neta. Al venir del enfriamiento constante de la tarde, la variación previa era $varTempPre = 0.40^\circ\text{C}$, autocalibrando el umbral a $ThT = 0.4 \times 2.0 = 0.80^\circ\text{C}$. Dado que $0.60 < 0.80$, la Fórmula B bloqueó exitosamente el falso positivo.
 
 ---
 
