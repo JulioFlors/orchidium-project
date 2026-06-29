@@ -209,7 +209,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
         if (dTemp1 <= tempDropThreshold && humCondition && luxCondition) {
           triggered = true
-          triggerReason = `Inferencia de Día (DÍA NORMAL): Incremento de +${dHum1.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp1).toFixed(1)}°C`
+          triggerReason = `Inferencia de Día: Incremento de +${dHum1.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp1).toFixed(1)}°C`
           tempBaselineAgeMinutes = 20
           tempDeltaTemp = dTemp1
           tempDeltaHum = dHum1
@@ -240,7 +240,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
           if (dTemp2 <= tempDropThreshold2 && humCondition2 && luxCondition2) {
             triggered = true
-            triggerReason = `Inferencia de Día (DÍA NORMAL): Incremento de +${dHum2.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp2).toFixed(1)}°C`
+            triggerReason = `Inferencia de Día: Incremento de +${dHum2.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp2).toFixed(1)}°C`
             tempBaselineAgeMinutes = 30
             tempDeltaTemp = dTemp2
             tempDeltaHum = dHum2
@@ -330,8 +330,8 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
         if (isDay) {
           // 2. Recuperación Adaptativa (Día)
           if (baselineTemp !== null && baselineHum !== null && minTempInRain !== null && maxHumInRain !== null) {
-            const currentTemp = tempBatches[0].max
-            const currentHum = humBatches[0].min
+            const currentTemp = tempBatches[0].min
+            const currentHum = humBatches[0].max
             const tempDrop = baselineTemp - minTempInRain
             const humRise = maxHumInRain - baselineHum
 
@@ -420,9 +420,12 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           const hVal = Number(row.humidity)
           if (hVal > 10.0 && hVal <= 100.0) humBuffer.push(hVal)
         }
+        const sampleHour = (tDate.getUTCHours() - 4 + 24) % 24
         if (row.illuminance != null) {
-          const lVal = Number(row.illuminance)
+          const lVal = (sampleHour < 8 || sampleHour >= 16) ? 0 : Number(row.illuminance)
           if (lVal >= 0) luxBuffer.push(lVal)
+        } else if (sampleHour < 8 || sampleHour >= 16) {
+          luxBuffer.push(0)
         }
       }
     } catch (err) {

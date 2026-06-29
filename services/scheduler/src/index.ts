@@ -42,6 +42,7 @@ interface BootTelemetryAccumulator {
 }
 const bootAccumulators = new Map<string, BootTelemetryAccumulator>()
 let isSystemReady = false // Solo true tras recibir la primera telemetría post-boot
+let lastRainState = 'Dry' // Declaración global para evitar ReferenceError
 let lastEmaHeartbeat: number = 0
 let lastEmaAuditAckAt: number = 0
 
@@ -1033,17 +1034,29 @@ function setupMqttHandlers() {
           if (!isEma) {
             clearSyncTimerIfHealthy()
 
+            const now = new Date()
+            const caracasTimeStr = new Intl.DateTimeFormat('en-US', {
+              timeZone: 'America/Caracas',
+              hour: 'numeric',
+              minute: 'numeric',
+              hour12: false,
+            }).format(now)
+            const [caracasHour] = caracasTimeStr.split(':').map(Number)
+
+            // Saneamiento Solar: Si es antes de las 8:00 AM o después de las 4:00 PM, forzar lux a 0
+            const cleanLux = (caracasHour < 8 || caracasHour >= 16) ? 0 : (lux ?? lastKnownLux ?? 0)
+
             // Registrar muestras en el buffer de telemetría de RainManager
-            if (lastKnownLux !== null && lastKnownTemp !== null && lastKnownHum !== null) {
-              RainManager.pushTelemetrySample(lastKnownLux, lastKnownTemp, lastKnownHum)
+            if (lastKnownTemp !== null && lastKnownHum !== null) {
+              RainManager.pushTelemetrySample(cleanLux, lastKnownTemp, lastKnownHum)
             }
 
             // Evaluar inferencia climática de lluvia
             await RainManager.evaluateClimateInference()
 
             // Evaluar el veto climático inteligente sobre el sensor físico
-            if (lux !== null && temp !== null && hum !== null) {
-              await RainManager.evaluatePhysicalRainVeto(lux, temp, hum)
+            if (temp !== null && hum !== null) {
+              await RainManager.evaluatePhysicalRainVeto(cleanLux, temp, hum)
             }
           }
         } catch (err) {
@@ -1088,6 +1101,7 @@ function setupMqttHandlers() {
         lastFirmwareHeartbeat = Date.now()
         RainManager.updateFirmwareHeartbeat()
 
+        lastRainState = state
         await RainManager.handlePhysicalRainState(state, rainTimestamp)
 
         return

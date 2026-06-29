@@ -726,10 +726,10 @@ export async function evaluateClimateInference(): Promise<void> {
 
       if (isDay) {
         const isPersistentlyCloudy = baseLux1 <= 10000
-        const tagMode = isPersistentlyCloudy ? 'NUBOSIDAD PERSISTENTE' : 'DÍA NORMAL'
+        const tagMode = isPersistentlyCloudy ? ' (NUBOSIDAD PERSISTENTE)' : ''
 
         Logger.rain(
-          `[RainManager] Lluvia Inferida [DÍA - ${tagMode}]: deltaHR=${tempDeltaHum.toFixed(1)}%, deltaTemp=${tempDeltaTemp.toFixed(1)}°C, Lux min actual: ${currentMinLux.toFixed(0)}lx vs baseline: ${inferedBaselineLux.toFixed(0)}lx (${dropPct.toFixed(0)}% caída).`,
+          `[RainManager] Lluvia Inferida [DÍA${tagMode}]: deltaHR=${tempDeltaHum.toFixed(1)}%, deltaTemp=${tempDeltaTemp.toFixed(1)}°C, Lux min actual: ${currentMinLux.toFixed(0)}lx vs baseline: ${inferedBaselineLux.toFixed(0)}lx (${dropPct.toFixed(0)}% caída).`,
         )
 
         await openRainEvent(
@@ -741,7 +741,7 @@ export async function evaluateClimateInference(): Promise<void> {
             lux: inferedBaselineLux,
             ageMinutes: 10,
           },
-          `Inferencia de Día (${tagMode}): Incremento de +${tempDeltaHum.toFixed(1)}% HR y caída térmica de ${tempDeltaTemp.toFixed(1)}°C en ${tempBaselineAgeMinutes}m.`,
+          `Inferencia de Día${tagMode}: Incremento de +${tempDeltaHum.toFixed(1)}% HR y caída térmica de ${tempDeltaTemp.toFixed(1)}°C en ${tempBaselineAgeMinutes}m.`,
         )
       } else {
         const rainNotes = isStagnantTriggered
@@ -816,8 +816,8 @@ export async function evaluateClimateInference(): Promise<void> {
           minTempInRain !== null &&
           maxHumInRain !== null
         ) {
-          const currentTemp = tempBatches[0].max
-          const currentHum = humBatches[0].min
+          const currentTemp = tempBatches[0].min
+          const currentHum = humBatches[0].max
 
           const tempDrop = inferedBaselineTemp - minTempInRain
           const humRise = maxHumInRain - inferedBaselineHum
