@@ -10,6 +10,7 @@ import {
   TeslaSection,
   TeslaValuesSection,
   TeslaContactSection,
+  SnapScrollHandler,
 } from '@/components'
 
 export const metadata: Metadata = {
@@ -140,6 +141,8 @@ export default async function HomePage() {
 
   return (
     <div className="tds-sm:-mx-9 tds-xl:-mx-12 -mx-6 -mt-14">
+      <SnapScrollHandler />
+
       {heroSlidesData.map((slide, index) => (
         <TeslaSection
           key={index}
@@ -159,7 +162,7 @@ export default async function HomePage() {
       {/* SECCIÓN 6: Los más vendidos (Especies Destacadas) */}
       {featuredProducts.length > 0 && (
         <section
-          className="bg-canvas relative flex min-h-screen w-full snap-start flex-col justify-between overflow-y-auto pt-24 pb-16"
+          className="bg-canvas relative flex min-h-dvh w-full snap-start flex-col justify-between overflow-y-auto pt-24 pb-16"
           id="productos-destacados"
         >
           <div className="mx-auto w-full max-w-7xl grow px-4 sm:px-6 lg:px-8">
@@ -175,7 +178,7 @@ export default async function HomePage() {
 
       {/* SECCIÓN 7: Floración Activa */}
       {floweringProducts.length > 0 && (
-        <section className="bg-surface dark:bg-canvas relative flex min-h-screen w-full snap-start flex-col justify-between overflow-y-auto pt-24 pb-16">
+        <section className="bg-surface dark:bg-canvas relative flex min-h-dvh w-full snap-start flex-col justify-between overflow-y-auto pt-24 pb-16">
           <div className="mx-auto w-full max-w-7xl grow px-4 sm:px-6 lg:px-8">
             <div className="mb-8 text-center">
               <Title title="Floración Activa" />

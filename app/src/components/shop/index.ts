@@ -9,3 +9,5 @@ export * from './TeslaSection'
 export * from './TeslaValuesSection'
 
 export * from './TeslaContactSection'
+export * from './SnapScrollHandler'
+

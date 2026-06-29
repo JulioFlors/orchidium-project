@@ -273,7 +273,7 @@ function CustomTooltip({
         } catch {}
       }
 
-      const closeIcon = isNight ? '☁' : '⛅'
+      const closeIcon = isNight ? '☁️' : '⛅'
 
       if (typeof data.closeReason === 'string') {
         const reasonStr = data.closeReason

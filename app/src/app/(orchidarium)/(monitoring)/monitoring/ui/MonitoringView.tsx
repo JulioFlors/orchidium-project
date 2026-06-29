@@ -593,6 +593,8 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
                   endTime: formatTime12h(endDate),
                   dateLabel: formatDateLong(startDate),
                   isInfered: ev.isInfered,
+                  startedAt: ev.time,
+                  endedAt: endDate.toISOString(),
                   baselineTemp: ev.baselineTemp ?? undefined,
                   baselineHum: ev.baselineHum ?? undefined,
                   baselineLux: ev.baselineLux ?? undefined,

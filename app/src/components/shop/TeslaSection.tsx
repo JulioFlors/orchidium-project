@@ -29,7 +29,7 @@ export function TeslaSection({
   priority = false,
 }: Props) {
   return (
-    <section className="relative flex h-screen w-full snap-start flex-col items-center justify-end overflow-hidden pb-20">
+    <section className="relative flex h-dvh w-full snap-start flex-col items-center justify-end overflow-hidden pb-20">
       {/* Imagen de fondo a pantalla completa */}
       <div className="absolute inset-0 -z-10 h-full w-full">
         <Image

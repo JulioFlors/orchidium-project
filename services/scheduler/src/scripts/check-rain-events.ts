@@ -5,13 +5,13 @@ async function main() {
     where: {
       startedAt: {
         gte: new Date('2026-06-23T00:00:00Z'),
-        lt: new Date('2026-06-27T12:00:00Z'),
+        lt: new Date('2026-06-29T12:00:00Z'),
       },
     },
     orderBy: { startedAt: 'asc' },
   })
 
-  console.log('=== TODOS LOS EVENTOS DE LLUVIA DEL 23/06 al 27/06 ===')
+  console.log('=== TODOS LOS EVENTOS DE LLUVIA DEL 23/06 al 29/06 ===')
   for (const e of events) {
     const isV = e.isInfered
 

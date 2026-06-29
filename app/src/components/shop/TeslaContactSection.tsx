@@ -36,7 +36,7 @@ export function TeslaContactSection() {
 
   return (
     <section
-      className="bg-surface dark:bg-canvas relative flex min-h-screen w-full snap-start flex-col justify-between overflow-y-auto pt-24 pb-16"
+      className="bg-surface dark:bg-canvas relative flex min-h-dvh w-full snap-start flex-col justify-between overflow-y-auto pt-24 pb-16"
       id="contact"
     >
       {/* Elementos decorativos sutiles */}
