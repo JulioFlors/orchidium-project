@@ -511,12 +511,63 @@ export async function evaluatePhysicalRainVeto(
 export async function evaluateClimateInference(): Promise<void> {
   const nowMs = Date.now()
 
-  // 1. Necesitamos al menos 3 batches en cada cola para poder evaluar derivadas
+  // 1. Hidratar las colas de batches en tiempo real directamente desde InfluxDB (para resiliencia ante reinicios y sincronización de intervalos)
+  const query = `
+    SELECT 
+      date_bin(interval '10 minutes', time) as time_bin,
+      MIN(temperature) as min_temp,
+      MAX(temperature) as max_temp,
+      MIN(humidity) as min_hum,
+      MAX(humidity) as max_hum,
+      MIN(illuminance) as min_lux,
+      MAX(illuminance) as max_lux
+    FROM "environment_metrics"
+    WHERE "zone" = 'EXTERIOR'
+      AND time >= now() - interval '65 minutes'
+    GROUP BY time_bin
+    ORDER BY time_bin DESC
+    LIMIT 6
+  `
+
+  try {
+    const stream = influxClient.query(query)
+    const newTempBatches: BatchSummary[] = []
+    const newHumBatches: BatchSummary[] = []
+    const newLuxBatches: BatchSummary[] = []
+
+    for await (const row of stream) {
+      const minTemp = Number(row.min_temp)
+      const maxTemp = Number(row.max_temp)
+      const minHum = Number(row.min_hum)
+      const maxHum = Number(row.max_hum)
+      const minLux = Number(row.min_lux)
+      const maxLux = Number(row.max_lux)
+      const timeBin = new Date(row.time_bin as string)
+
+      if (isNaN(minTemp) || isNaN(minHum) || isNaN(minLux)) continue
+
+      const timestamp = timeBin.getTime()
+
+      newTempBatches.push({ min: minTemp, max: maxTemp, timestamp })
+      newHumBatches.push({ min: minHum, max: maxHum, timestamp })
+      newLuxBatches.push({ min: minLux, max: maxLux, timestamp })
+    }
+
+    if (newTempBatches.length > 0) {
+      tempBatches.splice(0, tempBatches.length, ...newTempBatches)
+      humBatches.splice(0, humBatches.length, ...newHumBatches)
+      luxBatches.splice(0, luxBatches.length, ...newLuxBatches)
+    }
+  } catch (err) {
+    Logger.error('[RainManager] Error al hidratar colas de lluvia desde InfluxDB:', err)
+  }
+
+  // 2. Necesitamos al menos 3 batches en cada cola para poder evaluar derivadas
   if (tempBatches.length < 3 || humBatches.length < 3 || luxBatches.length < 3) {
     return
   }
 
-  // 2. Extraer extremos del lote actual B0
+  // 3. Extraer extremos del lote actual B0
   const currentMinTemp = tempBatches[0].min
   const currentMaxHum = humBatches[0].max
   const currentMinLux = luxBatches[0].min
@@ -526,7 +577,7 @@ export async function evaluateClimateInference(): Promise<void> {
       timeZone: 'America/Caracas',
       hour: '2-digit',
       hour12: false,
-    }).format(new Date()),
+    }).format(new Date(tempBatches[0].timestamp)),
   )
   const isDay = caracasHour >= 8 && caracasHour < 16
 
@@ -603,9 +654,13 @@ export async function evaluateClimateInference(): Promise<void> {
         const currentTempDrop = maxTempPreAll - currentMinTemp
         const currentHumRise = currentMaxHum - minHumPreAll
 
-        // --- Calibración Fina (Tuning) para Evitar Falsos Positivos de Enfriamiento Radiativo ---
-        const tempDropThreshold = Math.max(0.4, varTempPre * 2.0)
-        const humRiseThreshold = Math.max(1.5, varHumPre * 1.8)
+        // --- Calibración Fina (Fórmula B Calibrada con Filtro de Rocío) ---
+        // Si el aire ya venía saturado (>= 98.0% HR), el motor asume que el sensor está saturado (rocío/neblina) y eleva el piso térmico a 0.50°C.
+        // Si no está saturado (< 98.0% HR), el piso es 0.35°C para registrar garúas tenues de forma dinámica.
+        const tempFloor = minHumPreAll >= 98.0 ? 0.50 : 0.35
+
+        const tempDropThreshold = Math.max(tempFloor, varTempPre * 1.8) // Multiplicador térmico a 1.8
+        const humRiseThreshold = Math.max(1.5, varHumPre * 1.6) // Multiplicador hídrico a 1.6
 
         const isTempDropAbrupt = currentTempDrop >= tempDropThreshold
         const isHumRiseAbrupt = currentHumRise >= humRiseThreshold

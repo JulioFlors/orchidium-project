@@ -216,7 +216,104 @@ function CustomTooltip({
         formattedTime = ''
       }
     }
+
+    let baselineTimeText = 'Condiciones climáticas previas'
     if (data.isInfered) {
+      if (data.startedAt && typeof data.startedAt !== 'boolean' && data.baselineAgeMinutes !== undefined && data.baselineAgeMinutes !== null) {
+        try {
+          const startTime = new Date(data.startedAt as any)
+          const baselineTime = new Date(startTime.getTime() - Number(data.baselineAgeMinutes) * 60 * 1000)
+          
+          // Formateador limpio a las hh:mm en minúsculas (pm/am)
+          const rawTimeStr = baselineTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+          const cleanTimeStr = rawTimeStr.toLowerCase() // 08:40 pm
+          
+          baselineTimeText = `Condiciones climáticas a las ${cleanTimeStr}`
+        } catch {
+          baselineTimeText = `Condiciones climáticas hace ${data.baselineAgeMinutes}min`
+        }
+      } else if (data.baselineAgeMinutes !== undefined && data.baselineAgeMinutes !== null) {
+        baselineTimeText = `Condiciones climáticas hace ${data.baselineAgeMinutes}min`
+      } else {
+        baselineTimeText = 'Condiciones climáticas previas (10-20 min antes)'
+      }
+    }
+
+    if (data.isInfered) {
+      // Parsear Inicio
+      let triggerTitle = 'Inferencia de Lluvia'
+      let triggerDetails = ''
+      if (typeof data.triggerReason === 'string') {
+        const triggerStr = data.triggerReason
+        const triggerParts = triggerStr.split(':')
+        if (triggerParts.length > 1) {
+          triggerTitle = triggerParts[0].trim()
+          triggerDetails = triggerParts.slice(1).join(':').trim()
+        } else {
+          triggerDetails = triggerStr
+        }
+      }
+
+      // Parsear Cese
+      let closeTitle = 'Cese de Lluvia'
+      let closeDetails = ''
+      let isNight = true
+
+      if (data.endedAt) {
+        try {
+          const endDate = new Date(data.endedAt as any)
+          const localHour = (endDate.getUTCHours() - 4 + 24) % 24
+          isNight = localHour < 8 || localHour >= 16
+        } catch {}
+      } else if (data.startedAt) {
+        try {
+          const startDate = new Date(data.startedAt as any)
+          const localHour = (startDate.getUTCHours() - 4 + 24) % 24
+          isNight = localHour < 8 || localHour >= 16
+        } catch {}
+      }
+
+      const closeIcon = isNight ? '☁' : '⛅'
+
+      if (typeof data.closeReason === 'string') {
+        const reasonStr = data.closeReason
+        const reasonUpper = reasonStr.toUpperCase()
+        if (reasonUpper.includes('STAGNANT') || reasonUpper.includes('ESTANCAMIENTO')) {
+          closeTitle = 'Cese por estancamiento'
+        } else if (reasonUpper.includes('SOLAR_RECOVERY') || reasonUpper.includes('SOLAR')) {
+          closeTitle = 'Cese por recuperación solar'
+        } else if (reasonUpper.includes('BASELINE_RECOVERY') || reasonUpper.includes('RECUPERACIÓN')) {
+          closeTitle = 'Cese por recuperación adaptativa'
+        }
+
+        // Extraer los detalles dentro de paréntesis si existen, por ejemplo STAGNANT (dT=0.1°C <= 0.4)
+        const match = reasonStr.match(/\(([^)]+)\)/)
+        if (match) {
+          closeDetails = match[1]
+        } else {
+          // Fallback al formato alternativo con dos puntos si no hay paréntesis
+          const parts = reasonStr.split(':')
+          if (parts.length > 1) {
+            closeDetails = parts.slice(1).join(':').trim()
+          } else {
+            closeDetails = reasonStr
+          }
+        }
+
+        // Reemplazar abreviaciones de motivos comunes en los detalles para pulir estética
+        closeDetails = closeDetails
+          .replace('dT=', 'Caída térmica de ')
+          .replace('°C <= 0.4', '°C')
+          .replace('<= 0.4', '')
+          .trim()
+        
+        // Poner la primera letra en mayúscula para detalles limpios
+        if (closeDetails.length > 0) {
+          closeDetails = closeDetails.charAt(0).toUpperCase() + closeDetails.slice(1)
+          if (!closeDetails.endsWith('.')) closeDetails += '.'
+        }
+      }
+
       return (
         <div className="bg-surface border-input-outline relative z-50 flex max-w-[340px] flex-col gap-3 overflow-visible rounded-lg border p-3 text-xs shadow-md outline-none">
           {/* Encabezado: Fecha y Duración */}
@@ -230,9 +327,7 @@ function CustomTooltip({
           {/* Condiciones Climáticas Previas */}
           <div className="border-input-outline/30 flex flex-col gap-1 border-t pt-2">
             <span className="text-foreground font-bold">
-              {data.baselineAgeMinutes !== undefined && data.baselineAgeMinutes !== null
-                ? `Condiciones climáticas hace ${data.baselineAgeMinutes}min`
-                : 'Condiciones climáticas previas (10-20 min antes)'}
+              {baselineTimeText}
             </span>
             <span className="text-foreground/80 font-medium">
               🌡️ Temp:{' '}
@@ -254,9 +349,9 @@ function CustomTooltip({
           {/* Inicio */}
           {data.triggerReason && (
             <div className="border-input-outline/30 flex flex-col gap-1 border-t pt-2">
-              <span className="font-bold text-purple-400">Inicio</span>
+              <span className="font-bold text-purple-400">🌧️ {triggerTitle}</span>
               <span className="text-foreground/80 leading-relaxed font-medium">
-                {data.triggerReason}
+                {triggerDetails}
               </span>
             </div>
           )}
@@ -264,9 +359,9 @@ function CustomTooltip({
           {/* Cierre */}
           {data.closeReason && (
             <div className="border-input-outline/30 flex flex-col gap-1 border-t pt-2">
-              <span className="font-bold text-purple-400">Cierre</span>
+              <span className="font-bold text-purple-400">{closeIcon} {closeTitle}</span>
               <span className="text-foreground/80 leading-relaxed font-medium">
-                {data.closeReason}
+                {closeDetails}
               </span>
             </div>
           )}
