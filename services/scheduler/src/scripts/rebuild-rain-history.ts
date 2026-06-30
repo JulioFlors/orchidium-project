@@ -192,16 +192,26 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
         const dTemp1 = currentMinTemp - baseTemp1
         const dHum1 = currentMaxHum - baseHum1
 
-        let luxCondition = true
+        let luxCondition = false
         let tempDropThreshold = -3.0
         let humRiseThreshold = 10.0
 
-        if (baseLux1 <= 10000) {
+        if (baseLux1 <= 15000) {
           luxCondition = true
           tempDropThreshold = -1.2
           humRiseThreshold = 4.0
+        } else if (baseLux1 <= 26000) {
+          luxCondition = currentMinLux <= baseLux1 * 0.6
+          if (currentMinLux <= 15000) {
+            tempDropThreshold = -1.2
+            humRiseThreshold = 4.0
+          }
         } else {
-          luxCondition = currentMinLux < baseLux1 * 0.4
+          luxCondition = currentMinLux <= baseLux1 * 0.4
+          if (currentMinLux <= 15000) {
+            tempDropThreshold = -1.2
+            humRiseThreshold = 4.0
+          }
         }
 
         const humCondition =
@@ -209,7 +219,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
         if (dTemp1 <= tempDropThreshold && humCondition && luxCondition) {
           triggered = true
-          triggerReason = `Inferencia de Día: Incremento de +${dHum1.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp1).toFixed(1)}°C`
+          triggerReason = `Inferencia de Día: Incremento de +${dHum1.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp1).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
           tempBaselineAgeMinutes = 20
           tempDeltaTemp = dTemp1
           tempDeltaHum = dHum1
@@ -223,16 +233,26 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           const dTemp2 = currentMinTemp - baseTemp2
           const dHum2 = currentMaxHum - baseHum2
 
-          let luxCondition2 = true
+          let luxCondition2 = false
           let tempDropThreshold2 = -3.0
           let humRiseThreshold2 = 12.0
 
-          if (baseLux2 <= 10000) {
+          if (baseLux2 <= 15000) {
             luxCondition2 = true
             tempDropThreshold2 = -1.2
             humRiseThreshold2 = 4.0
+          } else if (baseLux2 <= 26000) {
+            luxCondition2 = currentMinLux <= baseLux2 * 0.6
+            if (currentMinLux <= 15000) {
+              tempDropThreshold2 = -1.2
+              humRiseThreshold2 = 4.0
+            }
           } else {
-            luxCondition2 = currentMinLux < baseLux2 * 0.4
+            luxCondition2 = currentMinLux <= baseLux2 * 0.4
+            if (currentMinLux <= 15000) {
+              tempDropThreshold2 = -1.2
+              humRiseThreshold2 = 4.0
+            }
           }
 
           const humCondition2 =
@@ -240,7 +260,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
           if (dTemp2 <= tempDropThreshold2 && humCondition2 && luxCondition2) {
             triggered = true
-            triggerReason = `Inferencia de Día: Incremento de +${dHum2.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp2).toFixed(1)}°C`
+            triggerReason = `Inferencia de Día: Incremento de +${dHum2.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp2).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
             tempBaselineAgeMinutes = 30
             tempDeltaTemp = dTemp2
             tempDeltaHum = dHum2
@@ -267,7 +287,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
         if (varTempPre <= 0.6 && isTempDropAbrupt && (isHumRiseAbrupt || isPreSaturated)) {
           triggered = true
-          triggerReason = `Inferencia de Noche: Caída térmica de ${currentTempDrop.toFixed(1)}°C en ${tempBaselineAgeMinutes}m.`
+          triggerReason = `Inferencia de Noche: Caída térmica de ${currentTempDrop.toFixed(1)}°C en ${tempBaselineAgeMinutes}m (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%)`
           tempBaselineAgeMinutes = 30
           tempDeltaTemp = -currentTempDrop
           tempDeltaHum = currentHumRise
@@ -315,7 +335,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             await closeVirtualEvent(
               new Date(timestampMs),
               'STAGNANT',
-              `STAGNANT (dT=${diffTemp.toFixed(1)}°C <= 0.4, dH=${diffHum.toFixed(1)}% <= 1)`,
+              `STAGNANT (dT=${diffTemp.toFixed(1)}°C <= 0.4, dH=${diffHum.toFixed(1)}% <= 1, Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%)`,
             )
             maxHumInRain = null
             createdCount++
@@ -370,7 +390,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
               await closeVirtualEvent(
                 new Date(timestampMs),
                 'SOLAR_RECOVERY',
-                `SOLAR_RECOVERY (Lux max: ${currentMaxLux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx)`,
+                `SOLAR_RECOVERY (Lux max: ${currentMaxLux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx, Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%)`,
               )
               maxHumInRain = null
               createdCount++

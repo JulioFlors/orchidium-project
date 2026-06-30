@@ -1122,71 +1122,53 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
                         <span>⚡ Criterios de Inicio</span>
                       </div>
                       <p className="leading-relaxed">
-                        El Scheduler evalúa cambios en las variables climáticas exteriores
-                        comparando la lectura actual con la de hace 30 minutos:
+                        El motor evalúa cambios climáticos comparando la lectura actual con la de hace 20-30 minutos:
                       </p>
-                      <ul className="list-disc space-y-1 pl-4 leading-relaxed">
+                      <ul className="list-disc space-y-1.5 pl-4 leading-relaxed">
                         <li>
-                          <strong className="text-slate-300">De Día:</strong> Subida de humedad de
-                          al menos 12.0% y caída de temperatura de al menos 3.0°C. Si hay sol
-                          (iluminancia previa mayor a 10,000 lx), la iluminación debe caer un 60% o
-                          más con respecto a ese lote previo.
+                          <strong className="text-slate-300">De Día [8:00 am - 4:00 pm]:</strong> Choque térmico e hídrico. Exige caída de iluminancia &gt;= 60% (si hay sol) o cielo encapotado persistente (Lux &lt;= 10k), requiriendo caídas térmicas de 1.2°C a 3.0°C.
                         </li>
                         <li>
-                          <strong className="text-slate-300">De Noche:</strong> Subida de humedad de
-                          al menos 10.0% y caída de temperatura de al menos 2.0°C.
+                          <strong className="text-slate-300">De Noche [4:00 pm - 8:00 am]:</strong> Fórmula B Calibrada. Exige caída térmica de al menos 0.50°C (con HR &gt;= 98.0%) o 0.35°C (con HR &lt; 98.0%), y subida de humedad según la variabilidad de calma previa.
                         </li>
                       </ul>
                     </div>
 
-                    {/* Regla 2: Cierre adaptativo */}
+                    {/* Regla 2: Criterios de Cierre */}
                     <div className="flex flex-col gap-2">
                       <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-green-400 uppercase">
                         <span>♻️ Criterios de Cierre</span>
                       </div>
                       <p className="leading-relaxed">
-                        Determina cuándo ha cesado la lluvia y se divide según el periodo horario:
+                        Infiere el término de la precipitación según los siguientes disparadores climáticos:
                       </p>
                       <ul className="list-disc space-y-1.5 pl-4 leading-relaxed">
                         <li>
-                          <strong className="text-slate-300">De Día (Despeje Solar):</strong> La
-                          iluminancia sube por encima del umbral adaptativo calculado entre el punto
-                          más oscuro del evento y el valor previo.
+                          <strong className="text-slate-300">Despeje Solar (Día):</strong> La iluminancia sube por encima del umbral elástico calculado en base a la caída de luz en la tormenta.
                         </li>
                         <li>
-                          <strong className="text-slate-300">
-                            De Día (Retorno Térmico e Hídrico):
-                          </strong>{' '}
-                          La temperatura sube hasta quedar a 1°C o menos del valor previo, y la
-                          humedad baja hasta quedar a 5% o menos del valor previo.
+                          <strong className="text-slate-300">Recuperación Adaptativa (Día):</strong> Retorno térmico e hídrico. La temperatura sube un 35% de lo caído y la humedad baja un 15% del ascenso.
                         </li>
                         <li>
-                          <strong className="text-slate-300">De Noche:</strong> Al no haber
-                          radiación solar, el cese del evento se rige en exclusiva por las
-                          salvaguardas de seguridad.
+                          <strong className="text-slate-300">Estancamiento (Día/Noche):</strong> Si tras 15 minutos la atmósfera entra en calma (variación de temp &lt;= 0.4°C y hum &lt;= 1.0% en 10 min).
                         </li>
                       </ul>
                     </div>
 
-                    {/* Regla 3: Cierres de seguridad */}
+                    {/* Regla 3: Salvaguardas */}
                     <div className="flex flex-col gap-2">
                       <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-blue-400 uppercase">
                         <span>🛡️ Salvaguardas de Seguridad</span>
                       </div>
                       <p className="leading-relaxed">
-                        Límites de protección globales para evitar que un evento quede abierto de
-                        forma indefinida por fallos de red o anomalías del clima:
+                        Límites de protección globales para evitar eventos infinitos por pérdidas de señal:
                       </p>
                       <ul className="list-disc space-y-1.5 pl-4 leading-relaxed">
                         <li>
-                          <strong className="text-slate-300">Duración máxima:</strong> El evento de
-                          lluvia se cierra de forma obligatoria al alcanzar los 120 minutos (2
-                          horas) de duración.
+                          <strong className="text-slate-300">Duración máxima:</strong> Cierre forzado del evento al alcanzar los 120 minutos (2 horas).
                         </li>
                         <li>
-                          <strong className="text-slate-300">Estancamiento:</strong> Si tras 60
-                          minutos la humedad varía menos de un 1.0% y la temperatura varía menos de
-                          0.4°C, indicando que el clima se estabilizó.
+                          <strong className="text-slate-300">Límite de Estancamiento:</strong> Criterio global de calma atmosférica (15 minutos mínimo de lluvia).
                         </li>
                       </ul>
                     </div>

@@ -604,17 +604,26 @@ export async function evaluateClimateInference(): Promise<void> {
     const dHum1 = currentMaxHum - baseHum1
 
     if (isDay) {
-      let luxCondition = true
+      let luxCondition = false
       let tempDropThreshold = -3.0
       let humRiseThreshold = 10.0
 
-      // Si el sol previo ya era muy débil (cielo nublado persistente), sensibilizamos las reglas
-      if (baseLux1 <= 10000) {
+      if (baseLux1 <= 15000) {
         luxCondition = true
-        tempDropThreshold = -1.2 // Sensible a caídas sutiles por estar pre-enfriado
-        humRiseThreshold = 4.0 // Sensible a pequeños ascensos por estar pre-saturado
+        tempDropThreshold = -1.2
+        humRiseThreshold = 4.0
+      } else if (baseLux1 <= 26000) {
+        luxCondition = currentMinLux <= baseLux1 * 0.6
+        if (currentMinLux <= 15000) {
+          tempDropThreshold = -1.2
+          humRiseThreshold = 4.0
+        }
       } else {
-        luxCondition = currentMinLux < baseLux1 * 0.4
+        luxCondition = currentMinLux <= baseLux1 * 0.4
+        if (currentMinLux <= 15000) {
+          tempDropThreshold = -1.2
+          humRiseThreshold = 4.0
+        }
       }
 
       const humCondition =
@@ -687,16 +696,26 @@ export async function evaluateClimateInference(): Promise<void> {
       const dTemp2 = currentMinTemp - baseTemp2
       const dHum2 = currentMaxHum - baseHum2
 
-      let luxCondition = true
+      let luxCondition = false
       let tempDropThreshold = -3.0
       let humRiseThreshold = 12.0
 
-      if (baseLux2 <= 10000) {
+      if (baseLux2 <= 15000) {
         luxCondition = true
         tempDropThreshold = -1.2
         humRiseThreshold = 4.0
+      } else if (baseLux2 <= 26000) {
+        luxCondition = currentMinLux <= baseLux2 * 0.6
+        if (currentMinLux <= 15000) {
+          tempDropThreshold = -1.2
+          humRiseThreshold = 4.0
+        }
       } else {
-        luxCondition = currentMinLux < baseLux2 * 0.4
+        luxCondition = currentMinLux <= baseLux2 * 0.4
+        if (currentMinLux <= 15000) {
+          tempDropThreshold = -1.2
+          humRiseThreshold = 4.0
+        }
       }
 
       const humCondition =
@@ -741,12 +760,12 @@ export async function evaluateClimateInference(): Promise<void> {
             lux: inferedBaselineLux,
             ageMinutes: 10,
           },
-          `Inferencia de Día${tagMode}: Incremento de +${tempDeltaHum.toFixed(1)}% HR y caída térmica de ${tempDeltaTemp.toFixed(1)}°C en ${tempBaselineAgeMinutes}m.`,
+          `Inferencia de Día${tagMode}: Incremento de +${tempDeltaHum.toFixed(1)}% HR y caída térmica de ${tempDeltaTemp.toFixed(1)}°C en ${tempBaselineAgeMinutes}m (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
         )
       } else {
         const rainNotes = isStagnantTriggered
-          ? `Inferencia de Noche (Gradiente por Estancamiento): Caída térmica de ${tempDeltaTemp.toFixed(1)}°C tras estabilidad previa de ${stagnantVarTempPre.toFixed(2)}°C (HR: ${currentMaxHum.toFixed(1)}%).`
-          : `Inferencia de Noche: Incremento de +${tempDeltaHum.toFixed(1)}% HR y caída térmica de ${tempDeltaTemp.toFixed(1)}°C en ${tempBaselineAgeMinutes}m.`
+          ? `Inferencia de Noche (Gradiente por Estancamiento): Caída térmica de ${tempDeltaTemp.toFixed(1)}°C tras estabilidad previa de ${stagnantVarTempPre.toFixed(2)}°C (HR: ${currentMaxHum.toFixed(1)}%) (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%)`
+          : `Inferencia de Noche: Incremento de +${tempDeltaHum.toFixed(1)}% HR y caída térmica de ${tempDeltaTemp.toFixed(1)}°C en ${tempBaselineAgeMinutes}m (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%)`
 
         Logger.rain(
           isStagnantTriggered
@@ -795,7 +814,7 @@ export async function evaluateClimateInference(): Promise<void> {
             'STAGNANT',
             new Date(),
             true,
-            `Estancamiento climático dinámico: sin fluctuación de temperatura (variación ≤ ${tempCeseThreshold.toFixed(1)}°C) ni humedad (variación ≤ ${humCeseThreshold.toFixed(1)}% HR) durante 10 minutos.`,
+            `Estancamiento climático dinámico: sin fluctuación de temperatura (variación ≤ ${tempCeseThreshold.toFixed(1)}°C) ni humedad (variación ≤ ${humCeseThreshold.toFixed(1)}% HR) durante 10 minutos (dT=${diffTemp.toFixed(1)}°C <= ${tempCeseThreshold.toFixed(1)}, dH=${diffHum.toFixed(1)}% <= ${humCeseThreshold.toFixed(1)}, Temp: ${tempBatches[0].min.toFixed(1)}°C, Hum: ${humBatches[0].max.toFixed(1)}%)`,
           )
 
           return
@@ -841,7 +860,7 @@ export async function evaluateClimateInference(): Promise<void> {
               'BASELINE_RECOVERY',
               new Date(),
               true,
-              `Cese de lluvia (térmico/hídrico): temperatura subió a ${currentTemp.toFixed(1)}°C (umbral: ${tempThreshold.toFixed(1)}°C) y humedad bajó a ${currentHum.toFixed(1)}% (umbral: ${humThreshold.toFixed(1)}% HR).`,
+              `Cese de lluvia (térmico/hídrico): temperatura subió a ${currentTemp.toFixed(1)}°C (umbral: ${tempThreshold.toFixed(1)}°C) y humedad bajó a ${currentHum.toFixed(1)}% (umbral: ${humThreshold.toFixed(1)}% HR) (Temp: ${currentTemp.toFixed(1)}°C, Hum: ${currentHum.toFixed(1)}%)`,
             )
             maxHumInRain = null
 
@@ -876,7 +895,7 @@ export async function evaluateClimateInference(): Promise<void> {
               'SOLAR_RECOVERY',
               new Date(),
               true,
-              `Despeje solar verificado: iluminancia subió a ${Math.round(currentMaxLux).toLocaleString()} lx (umbral elástico: ${Math.round(luxRecoveryThreshold).toLocaleString()} lx) acoplado a estabilidad térmica en el lote actual.`,
+              `Despeje solar verificado: iluminancia subió a ${Math.round(currentMaxLux).toLocaleString()} lx (umbral elástico: ${Math.round(luxRecoveryThreshold).toLocaleString()} lx) acoplado a estabilidad térmica en el lote actual (Lux max: ${currentMaxLux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx, Temp: ${tempBatches[0].min.toFixed(1)}°C, Hum: ${humBatches[0].max.toFixed(1)}%)`,
             )
 
             return

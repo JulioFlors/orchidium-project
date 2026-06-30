@@ -218,17 +218,16 @@ function CustomTooltip({
     }
 
     let baselineTimeText = 'Condiciones climáticas previas'
+    let baselineTimeStr = '00:00'
     if (data.isInfered) {
       if (data.startedAt && typeof data.startedAt !== 'boolean' && data.baselineAgeMinutes !== undefined && data.baselineAgeMinutes !== null) {
         try {
           const startTime = new Date(data.startedAt as any)
           const baselineTime = new Date(startTime.getTime() - Number(data.baselineAgeMinutes) * 60 * 1000)
           
-          // Formateador limpio a las hh:mm en minúsculas (pm/am)
           const rawTimeStr = baselineTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-          const cleanTimeStr = rawTimeStr.toLowerCase() // 08:40 pm
-          
-          baselineTimeText = `Condiciones climáticas a las ${cleanTimeStr}`
+          baselineTimeStr = rawTimeStr.toLowerCase()
+          baselineTimeText = `Condiciones climáticas a las ${baselineTimeStr}`
         } catch {
           baselineTimeText = `Condiciones climáticas hace ${data.baselineAgeMinutes}min`
         }
@@ -240,9 +239,16 @@ function CustomTooltip({
     }
 
     if (data.isInfered) {
-      // Parsear Inicio
+      // 1. Cabecera y Día
+      const dayLabel = formattedTime.split(',')[0].trim()
+
+      // 2. Parsear Inicio
       let triggerTitle = 'Inferencia de Lluvia'
       let triggerDetails = ''
+      let startTemp = '--'
+      let startHum = '--'
+      let startLux = '--'
+
       if (typeof data.triggerReason === 'string') {
         const triggerStr = data.triggerReason
         const triggerParts = triggerStr.split(':')
@@ -252,115 +258,143 @@ function CustomTooltip({
         } else {
           triggerDetails = triggerStr
         }
+
+        // Formatear choques
+        const hrMatch = triggerStr.match(/Incremento de \+?([^%\s,]+)/)
+        const tempMatch = triggerStr.match(/caída térmica de ([^°C\s,]+)/)
+        const hrVal = hrMatch ? hrMatch[1].trim() : ''
+        const tempVal = tempMatch ? tempMatch[1].trim() : ''
+
+        if (hrVal && tempVal) {
+          triggerDetails = `💧 Subida HR ${hrVal}%   |   🌡️ Caída térmica ${tempVal}°C`
+        }
+
+        // Extraer absolutos
+        const startTempMatch = triggerStr.match(/Temp:\s*([^°C\s,)]+)/)
+        const startHumMatch = triggerStr.match(/Hum:\s*([^%\s,)]+)/)
+        const startLuxMatch = triggerStr.match(/Lux:\s*([^°C\s,lx)]+)/)
+
+        if (startTempMatch) startTemp = `${startTempMatch[1].trim()}°C`
+        if (startHumMatch) startHum = `${startHumMatch[1].trim()}%`
+        if (startLuxMatch) startLux = `${formatTooltipValue(startLuxMatch[1].trim(), 'lx')} lx`
       }
 
-      // Parsear Cese
+      // Fallbacks al baseline si no se inyectaron
+      if (startTemp === '--' && data.baselineTemp !== undefined && data.baselineTemp !== null) {
+        startTemp = `${Number(data.baselineTemp).toFixed(1)}°C`
+      }
+      if (startHum === '--' && data.baselineHum !== undefined && data.baselineHum !== null) {
+        startHum = `${Number(data.baselineHum).toFixed(1)}%`
+      }
+      if (startLux === '--' && data.baselineLux !== undefined && data.baselineLux !== null) {
+        startLux = `${formatTooltipValue(data.baselineLux, 'lx')} lx`
+      }
+
+      // 3. Parsear Cese
       let closeTitle = 'Cese de Lluvia'
       let closeDetails = ''
-      let isNight = true
-
-      if (data.endedAt) {
-        try {
-          const endDate = new Date(data.endedAt as any)
-          const localHour = (endDate.getUTCHours() - 4 + 24) % 24
-          isNight = localHour < 8 || localHour >= 16
-        } catch {}
-      } else if (data.startedAt) {
-        try {
-          const startDate = new Date(data.startedAt as any)
-          const localHour = (startDate.getUTCHours() - 4 + 24) % 24
-          isNight = localHour < 8 || localHour >= 16
-        } catch {}
-      }
-
-      const closeIcon = isNight ? '☁️' : '⛅'
+      let endTemp = '--'
+      let endHum = '--'
+      let endLux = '--'
 
       if (typeof data.closeReason === 'string') {
         const reasonStr = data.closeReason
         const reasonUpper = reasonStr.toUpperCase()
+
         if (reasonUpper.includes('STAGNANT') || reasonUpper.includes('ESTANCAMIENTO')) {
           closeTitle = 'Cese por estancamiento'
+          const dtMatch = reasonStr.match(/dT=([^°C\s,]+)/)
+          const dhMatch = reasonStr.match(/dH=([^%\s,]+)/)
+          const dtVal = dtMatch ? dtMatch[1].trim() : '0.0'
+          const dhVal = dhMatch ? dhMatch[1].trim() : '0.0'
+          closeDetails = `💧 Variación ${dhVal}%   |   🌡️ Variación ${dtVal}°C`
         } else if (reasonUpper.includes('SOLAR_RECOVERY') || reasonUpper.includes('SOLAR')) {
           closeTitle = 'Cese por recuperación solar'
+          const luxMatch = reasonStr.match(/Lux max:\s*([^°C\s,lx]+)/)
+          const luxVal = luxMatch ? luxMatch[1].trim() : '--'
+          closeDetails = `⛅ Iluminancia ${formatTooltipValue(luxVal, 'lx')} lx`
         } else if (reasonUpper.includes('BASELINE_RECOVERY') || reasonUpper.includes('RECUPERACIÓN')) {
           closeTitle = 'Cese por recuperación adaptativa'
+          const tempMatch = reasonStr.match(/Temp:\s*([^°C\s,)]+)/)
+          const humMatch = reasonStr.match(/Hum:\s*([^%\s,)]+)/)
+          const tempVal = tempMatch ? tempMatch[1].trim() : ''
+          const humVal = humMatch ? humMatch[1].trim() : ''
+          closeDetails = `💧 Caída HR ${humVal}%   |   🌡️ Subida térmica ${tempVal}°C`
         }
 
-        // Extraer los detalles dentro de paréntesis si existen, por ejemplo STAGNANT (dT=0.1°C <= 0.4)
-        const match = reasonStr.match(/\(([^)]+)\)/)
-        if (match) {
-          closeDetails = match[1]
-        } else {
-          // Fallback al formato alternativo con dos puntos si no hay paréntesis
-          const parts = reasonStr.split(':')
-          if (parts.length > 1) {
-            closeDetails = parts.slice(1).join(':').trim()
-          } else {
-            closeDetails = reasonStr
-          }
-        }
+        // Extraer absolutos de cese
+        const endTempMatch = reasonStr.match(/Temp:\s*([^°C\s,)]+)/)
+        const endHumMatch = reasonStr.match(/Hum:\s*([^%\s,)]+)/)
+        const endLuxMatch = reasonStr.match(/Lux:\s*([^°C\s,lx)]+)/)
 
-        // Reemplazar abreviaciones de motivos comunes en los detalles para pulir estética
-        closeDetails = closeDetails
-          .replace('dT=', 'Caída térmica de ')
-          .replace('°C <= 0.4', '°C')
-          .replace('<= 0.4', '')
-          .trim()
-        
-        // Poner la primera letra en mayúscula para detalles limpios
-        if (closeDetails.length > 0) {
-          closeDetails = closeDetails.charAt(0).toUpperCase() + closeDetails.slice(1)
-          if (!closeDetails.endsWith('.')) closeDetails += '.'
-        }
+        if (endTempMatch) endTemp = `${endTempMatch[1].trim()}°C`
+        if (endHumMatch) endHum = `${endHumMatch[1].trim()}%`
+        if (endLuxMatch) endLux = `${formatTooltipValue(endLuxMatch[1].trim(), 'lx')} lx`
+      }
+
+      // Emojis de cabecera alineados a la regla de cese
+      let closeIcon = '☁️'
+      if (closeTitle.includes('recuperación solar')) {
+        closeIcon = '☀️'
+      } else if (closeTitle.includes('recuperación adaptativa')) {
+        closeIcon = '⛅'
       }
 
       return (
         <div className="bg-surface border-input-outline relative z-50 flex max-w-[340px] flex-col gap-3 overflow-visible rounded-lg border p-3 text-xs shadow-md outline-none">
-          {/* Encabezado: Fecha y Duración */}
+          {/* Encabezado Cronológico */}
           <div className="text-foreground flex flex-col gap-1 text-xs font-bold">
-            <span className="flex items-center gap-1.5">📅 {formattedTime}</span>
-            <span className="flex items-center gap-1.5">
-              ⏱️ Duración: {formatTooltipStat(data[dataKey], unit)}
+            <span className="flex items-center gap-1.5 text-xs text-slate-200">📅 {dayLabel}</span>
+            <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-400">
+              🌧️ {data.startTime}   |   {closeIcon} {data.endTime}   |   ⏱️ {data.duration} min
             </span>
           </div>
 
-          {/* Condiciones Climáticas Previas */}
-          <div className="border-input-outline/30 flex flex-col gap-1 border-t pt-2">
-            <span className="text-foreground font-bold">
+          {/* 1. Calma Previa */}
+          <div className="border-input-outline/30 flex flex-col gap-0.5 border-t pt-2">
+            <span className="font-bold text-purple-400">
               {baselineTimeText}
             </span>
-            <span className="text-foreground/80 font-medium">
-              🌡️ Temp:{' '}
-              {data.baselineTemp !== undefined && data.baselineTemp !== null
-                ? `${Number(data.baselineTemp).toFixed(1)}°C`
-                : '--'}{' '}
-              | 💧 Hum:{' '}
-              {data.baselineHum !== undefined && data.baselineHum !== null
-                ? `${Number(data.baselineHum).toFixed(1)}%`
-                : '--'}{' '}
-              | ☀️ Ilum:{' '}
-              {data.baselineLux !== undefined && data.baselineLux !== null
-                ? formatTooltipValue(data.baselineLux, 'lx')
-                : '--'}{' '}
-              lx
+            <span className="text-foreground/85 font-semibold">
+              🌡️ Temp: {data.baselineTemp !== undefined && data.baselineTemp !== null ? `${Number(data.baselineTemp).toFixed(1)}°C` : '--'} | 💧 Hum: {data.baselineHum !== undefined && data.baselineHum !== null ? `${Number(data.baselineHum).toFixed(1)}%` : '--'} | ☀️ Ilum: {data.baselineLux !== undefined && data.baselineLux !== null ? formatTooltipValue(data.baselineLux, 'lx') : '--'} lx
             </span>
           </div>
 
-          {/* Inicio */}
+          {/* 2. Condiciones al Inicio */}
+          <div className="border-input-outline/30 flex flex-col gap-0.5 border-t pt-2">
+            <span className="font-bold text-purple-400">
+              Condiciones climáticas a las {data.startTime}
+            </span>
+            <span className="text-foreground/85 font-semibold">
+              🌡️ Temp: {startTemp} | 💧 Hum: {startHum} | ☀️ Ilum: {startLux}
+            </span>
+          </div>
+
+          {/* 3. Condiciones al Cese */}
+          <div className="border-input-outline/30 flex flex-col gap-0.5 border-t pt-2">
+            <span className="font-bold text-purple-400">
+              Condiciones climáticas a las {data.endTime}
+            </span>
+            <span className="text-foreground/85 font-semibold">
+              🌡️ Temp: {endTemp} | 💧 Hum: {endHum} | ☀️ Ilum: {endLux}
+            </span>
+          </div>
+
+          {/* Regla de Inicio */}
           {data.triggerReason && (
-            <div className="border-input-outline/30 flex flex-col gap-1 border-t pt-2">
+            <div className="border-input-outline/30 flex flex-col gap-0.5 border-t pt-2">
               <span className="font-bold text-purple-400">🌧️ {triggerTitle}</span>
-              <span className="text-foreground/80 leading-relaxed font-medium">
+              <span className="text-foreground/85 leading-relaxed font-semibold">
                 {triggerDetails}
               </span>
             </div>
           )}
 
-          {/* Cierre */}
+          {/* Regla de Cese */}
           {data.closeReason && (
-            <div className="border-input-outline/30 flex flex-col gap-1 border-t pt-2">
+            <div className="border-input-outline/30 flex flex-col gap-0.5 border-t pt-2">
               <span className="font-bold text-purple-400">{closeIcon} {closeTitle}</span>
-              <span className="text-foreground/80 leading-relaxed font-medium">
+              <span className="text-foreground/85 leading-relaxed font-semibold">
                 {closeDetails}
               </span>
             </div>
