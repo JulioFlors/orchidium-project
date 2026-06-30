@@ -210,7 +210,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           luxCondition = currentMinLux <= baseLux1 * 0.4
           if (currentMinLux <= 15000) {
             tempDropThreshold = -1.2
-            humRiseThreshold = 4.0
+            humRiseThreshold = 8.0
           }
         }
 
@@ -251,7 +251,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             luxCondition2 = currentMinLux <= baseLux2 * 0.4
             if (currentMinLux <= 15000) {
               tempDropThreshold2 = -1.2
-              humRiseThreshold2 = 4.0
+              humRiseThreshold2 = 8.0
             }
           }
 
@@ -315,6 +315,11 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             ageMinutes: 10, // Sincronizado a hace 10m
           },
           triggerReason,
+          {
+            temp: currentMinTemp,
+            hum: currentMaxHum,
+            lux: currentMinLux,
+          },
         )
       }
     } else {
@@ -335,7 +340,12 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             await closeVirtualEvent(
               new Date(timestampMs),
               'STAGNANT',
-              `STAGNANT (dT=${diffTemp.toFixed(1)}°C <= 0.4, dH=${diffHum.toFixed(1)}% <= 1, Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%)`,
+              `STAGNANT (dT=${diffTemp.toFixed(1)}°C <= 0.4, dH=${diffHum.toFixed(1)}% <= 1, Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
+              {
+                temp: currentMinTemp,
+                hum: currentMaxHum,
+                lux: currentMinLux,
+              },
             )
             maxHumInRain = null
             createdCount++
@@ -364,7 +374,12 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
               await closeVirtualEvent(
                 new Date(timestampMs),
                 'BASELINE_RECOVERY',
-                `BASELINE_RECOVERY (Temp: ${currentTemp.toFixed(1)}°C >= ${tempThreshold.toFixed(1)}°C, Hum: ${currentHum.toFixed(1)}% <= ${humThreshold.toFixed(1)}%)`,
+                `BASELINE_RECOVERY (Temp: ${currentTemp.toFixed(1)}°C >= ${tempThreshold.toFixed(1)}°C, Hum: ${currentHum.toFixed(1)}% <= ${humThreshold.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
+                {
+                  temp: currentTemp,
+                  hum: currentHum,
+                  lux: currentMinLux,
+                },
               )
               maxHumInRain = null
               createdCount++
@@ -390,7 +405,12 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
               await closeVirtualEvent(
                 new Date(timestampMs),
                 'SOLAR_RECOVERY',
-                `SOLAR_RECOVERY (Lux max: ${currentMaxLux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx, Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%)`,
+                `SOLAR_RECOVERY (Lux max: ${currentMaxLux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx, Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
+                {
+                  temp: tempBatches[0].min,
+                  hum: humBatches[0].max,
+                  lux: currentMinLux,
+                },
               )
               maxHumInRain = null
               createdCount++
@@ -528,6 +548,9 @@ let activeVirtualEvent: {
   baselineLux: number | null
   baselineAgeMinutes: number | null
   triggerReason: string
+  startTemp?: number | null
+  startHum?: number | null
+  startLux?: number | null
 } | null = null
 
 async function openVirtualEvent(
@@ -539,6 +562,11 @@ async function openVirtualEvent(
     ageMinutes: number | null
   },
   triggerReason: string,
+  startMetrics?: {
+    temp: number | null
+    hum: number | null
+    lux: number | null
+  },
 ) {
   let cleanStart = startedAt
   if (cleanStart.getFullYear() < 2025) {
@@ -553,10 +581,22 @@ async function openVirtualEvent(
     baselineLux: baselines.lux,
     baselineAgeMinutes: baselines.ageMinutes,
     triggerReason,
+    startTemp: startMetrics?.temp ?? null,
+    startHum: startMetrics?.hum ?? null,
+    startLux: startMetrics?.lux ?? null,
   }
 }
 
-async function closeVirtualEvent(endedAt: Date, closeType: string, closeReason: string) {
+async function closeVirtualEvent(
+  endedAt: Date,
+  closeType: string,
+  closeReason: string,
+  endMetrics?: {
+    temp: number | null
+    hum: number | null
+    lux: number | null
+  },
+) {
   if (!activeVirtualEvent) return
 
   let cleanEnd = endedAt
@@ -591,12 +631,21 @@ async function closeVirtualEvent(endedAt: Date, closeType: string, closeReason: 
       triggerReason: activeVirtualEvent.triggerReason,
       closeReason,
       closedBy: `REBUILD_SCRIPT_${closeType}`,
+      startTemp: activeVirtualEvent.startTemp ?? null,
+      startHum: activeVirtualEvent.startHum ?? null,
+      startLux: activeVirtualEvent.startLux ?? null,
+      endTemp: endMetrics?.temp ?? null,
+      endHum: endMetrics?.hum ?? null,
+      endLux: endMetrics?.lux ?? null,
     },
     update: {
       endedAt: cleanEnd,
       durationSeconds: durationSeconds > 0 ? durationSeconds : 60,
       closeReason,
       closedBy: `REBUILD_SCRIPT_${closeType}`,
+      endTemp: endMetrics?.temp ?? null,
+      endHum: endMetrics?.hum ?? null,
+      endLux: endMetrics?.lux ?? null,
     },
   })
 

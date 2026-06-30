@@ -29,7 +29,7 @@ const features = [
 
 export function TeslaValuesSection() {
   return (
-    <section className="bg-surface dark:bg-canvas relative flex h-dvh w-full snap-start flex-col justify-between overflow-hidden pt-24 pb-16">
+    <section className="bg-surface dark:bg-canvas relative flex h-[calc(100dvh-36px)] tds-xs:h-[calc(100dvh-56px)] w-full snap-start flex-col justify-between overflow-hidden pt-24 pb-16">
       {/* Elementos decorativos sutiles */}
       <div className="absolute top-1/3 left-10 -z-10 h-64 w-64 rounded-full bg-emerald-500/5 blur-3xl" />
       <div className="absolute right-10 bottom-1/3 -z-10 h-64 w-64 rounded-full bg-purple-500/5 blur-3xl" />

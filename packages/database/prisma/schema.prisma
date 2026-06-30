@@ -388,6 +388,16 @@ model RainEvent {
   triggerReason   String?
   closeReason     String?
 
+  /// Métricas ambientales estructuradas al inicio del evento
+  startTemp       Float?
+  startHum        Float?
+  startLux        Float?
+
+  /// Métricas ambientales estructuradas al cese/cierre del evento
+  endTemp         Float?
+  endHum          Float?
+  endLux          Float?
+
   @@unique([zone, startedAt])
   @@index([startedAt])
   @@index([zone])

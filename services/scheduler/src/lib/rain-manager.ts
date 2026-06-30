@@ -183,6 +183,11 @@ async function openRainEvent(
     ageMinutes?: number | null
   },
   triggerReason?: string,
+  startMetrics?: {
+    temp: number | null
+    hum: number | null
+    lux: number | null
+  },
 ) {
   rainEventMutex = rainEventMutex
     .then(async () => {
@@ -216,6 +221,9 @@ async function openRainEvent(
                 baselineLux: baselines?.lux ?? null,
                 baselineAgeMinutes: baselines?.ageMinutes ?? null,
                 triggerReason: triggerReason ?? null,
+                startTemp: startMetrics?.temp ?? null,
+                startHum: startMetrics?.hum ?? null,
+                startLux: startMetrics?.lux ?? null,
               },
             })
 
@@ -247,6 +255,11 @@ async function closeRainEvent(
   endTime: Date = new Date(),
   isInfered: boolean = false,
   closeReason?: string,
+  endMetrics?: {
+    temp: number | null
+    hum: number | null
+    lux: number | null
+  },
 ) {
   rainEventMutex = rainEventMutex
     .then(async () => {
@@ -316,6 +329,9 @@ async function closeRainEvent(
             closeReason: closeReason ?? reason,
             avgIntensity,
             peakIntensity,
+            endTemp: endMetrics?.temp ?? null,
+            endHum: endMetrics?.hum ?? null,
+            endLux: endMetrics?.lux ?? null,
           },
         })
 
@@ -622,7 +638,7 @@ export async function evaluateClimateInference(): Promise<void> {
         luxCondition = currentMinLux <= baseLux1 * 0.4
         if (currentMinLux <= 15000) {
           tempDropThreshold = -1.2
-          humRiseThreshold = 4.0
+          humRiseThreshold = 8.0
         }
       }
 
@@ -714,7 +730,7 @@ export async function evaluateClimateInference(): Promise<void> {
         luxCondition = currentMinLux <= baseLux2 * 0.4
         if (currentMinLux <= 15000) {
           tempDropThreshold = -1.2
-          humRiseThreshold = 4.0
+          humRiseThreshold = 8.0
         }
       }
 
@@ -761,6 +777,11 @@ export async function evaluateClimateInference(): Promise<void> {
             ageMinutes: 10,
           },
           `Inferencia de Día${tagMode}: Incremento de +${tempDeltaHum.toFixed(1)}% HR y caída térmica de ${tempDeltaTemp.toFixed(1)}°C en ${tempBaselineAgeMinutes}m (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
+          {
+            temp: currentMinTemp,
+            hum: currentMaxHum,
+            lux: currentMinLux,
+          },
         )
       } else {
         const rainNotes = isStagnantTriggered
@@ -783,6 +804,11 @@ export async function evaluateClimateInference(): Promise<void> {
             ageMinutes: 10,
           },
           rainNotes,
+          {
+            temp: currentMinTemp,
+            hum: currentMaxHum,
+            lux: currentMinLux,
+          },
         )
       }
     }
@@ -814,7 +840,12 @@ export async function evaluateClimateInference(): Promise<void> {
             'STAGNANT',
             new Date(),
             true,
-            `Estancamiento climático dinámico: sin fluctuación de temperatura (variación ≤ ${tempCeseThreshold.toFixed(1)}°C) ni humedad (variación ≤ ${humCeseThreshold.toFixed(1)}% HR) durante 10 minutos (dT=${diffTemp.toFixed(1)}°C <= ${tempCeseThreshold.toFixed(1)}, dH=${diffHum.toFixed(1)}% <= ${humCeseThreshold.toFixed(1)}, Temp: ${tempBatches[0].min.toFixed(1)}°C, Hum: ${humBatches[0].max.toFixed(1)}%)`,
+            `Estancamiento climático dinámico: sin fluctuación de temperatura (variación ≤ ${tempCeseThreshold.toFixed(1)}°C) ni humedad (variación ≤ ${humCeseThreshold.toFixed(1)}% HR) durante 10 minutos (dT=${diffTemp.toFixed(1)}°C <= ${tempCeseThreshold.toFixed(1)}, dH=${diffHum.toFixed(1)}% <= ${humCeseThreshold.toFixed(1)}, Temp: ${tempBatches[0].min.toFixed(1)}°C, Hum: ${humBatches[0].max.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
+            {
+              temp: currentMinTemp,
+              hum: currentMaxHum,
+              lux: currentMinLux,
+            },
           )
 
           return
@@ -860,7 +891,12 @@ export async function evaluateClimateInference(): Promise<void> {
               'BASELINE_RECOVERY',
               new Date(),
               true,
-              `Cese de lluvia (térmico/hídrico): temperatura subió a ${currentTemp.toFixed(1)}°C (umbral: ${tempThreshold.toFixed(1)}°C) y humedad bajó a ${currentHum.toFixed(1)}% (umbral: ${humThreshold.toFixed(1)}% HR) (Temp: ${currentTemp.toFixed(1)}°C, Hum: ${currentHum.toFixed(1)}%)`,
+              `Cese de lluvia (térmico/hídrico): temperatura subió a ${currentTemp.toFixed(1)}°C (umbral: ${tempThreshold.toFixed(1)}°C) y humedad bajó a ${currentHum.toFixed(1)}% (umbral: ${humThreshold.toFixed(1)}% HR) (Temp: ${currentTemp.toFixed(1)}°C, Hum: ${currentHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
+              {
+                temp: currentTemp,
+                hum: currentHum,
+                lux: currentMinLux,
+              },
             )
             maxHumInRain = null
 
@@ -895,7 +931,12 @@ export async function evaluateClimateInference(): Promise<void> {
               'SOLAR_RECOVERY',
               new Date(),
               true,
-              `Despeje solar verificado: iluminancia subió a ${Math.round(currentMaxLux).toLocaleString()} lx (umbral elástico: ${Math.round(luxRecoveryThreshold).toLocaleString()} lx) acoplado a estabilidad térmica en el lote actual (Lux max: ${currentMaxLux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx, Temp: ${tempBatches[0].min.toFixed(1)}°C, Hum: ${humBatches[0].max.toFixed(1)}%)`,
+              `Despeje solar verificado: iluminancia subió a ${Math.round(currentMaxLux).toLocaleString()} lx (umbral elástico: ${Math.round(luxRecoveryThreshold).toLocaleString()} lx) acoplado a estabilidad térmica en el lote actual (Lux max: ${currentMaxLux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx, Temp: ${tempBatches[0].min.toFixed(1)}°C, Hum: ${humBatches[0].max.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
+              {
+                temp: tempBatches[0].min,
+                hum: humBatches[0].max,
+                lux: currentMinLux,
+              },
             )
 
             return

@@ -199,7 +199,7 @@ function CustomTooltip({
     if (data.time && typeof data.time !== 'boolean') {
       try {
         const isMacroRange = range === '7d' || range === '30d' || range === 'all'
-        const showHour = !isMacroRange || !!data.isInfered || dataKey === 'duration'
+        const showHour = data.isInfered ? false : (!isMacroRange || dataKey === 'duration')
 
         formattedTime = formatTooltipHeader(data.time as string | number | Date, showHour)
       } catch {
@@ -209,7 +209,7 @@ function CustomTooltip({
       try {
         const dateObj = typeof label === 'string' ? new Date(label) : new Date(Number(label))
         const isMacroRange = range === '7d' || range === '30d' || range === 'all'
-        const showHour = !isMacroRange || !!data.isInfered || dataKey === 'duration'
+        const showHour = data.isInfered ? false : (!isMacroRange || dataKey === 'duration')
 
         formattedTime = formatTooltipHeader(dateObj, showHour)
       } catch {
@@ -239,15 +239,70 @@ function CustomTooltip({
     }
 
     if (data.isInfered) {
-      // 1. Cabecera y Día
-      const dayLabel = formattedTime.split(',')[0].trim()
+      // Helper para extraer y convertir variables de base de datos
+      const getNumberOrNull = (val: any): number | null => {
+        if (typeof val === 'number') return val
+        if (typeof val === 'string') {
+          const parsed = parseFloat(val)
+          return isNaN(parsed) ? null : parsed
+        }
+        return null
+      }
 
-      // 2. Parsear Inicio
+      // 1. Obtener valores estructurados de la base de datos
+      const sTemp = getNumberOrNull(data.startTemp)
+      const sHum = getNumberOrNull(data.startHum)
+      const sLux = getNumberOrNull(data.startLux)
+      
+      const eTemp = getNumberOrNull(data.endTemp)
+      const eHum = getNumberOrNull(data.endHum)
+      const eLux = getNumberOrNull(data.endLux)
+
+      const bTemp = getNumberOrNull(data.baselineTemp)
+      const bHum = getNumberOrNull(data.baselineHum)
+      const bLux = getNumberOrNull(data.baselineLux)
+
+      // 2. Definir helper de Caracas solar (> 5:00 AM y < 7:00 PM)
+      const isWithinSolarTimeRange = (timeVal: string | number | Date | undefined): boolean => {
+        if (!timeVal) return false
+        try {
+          const d = new Date(timeVal)
+          if (isNaN(d.getTime())) return false
+          
+          const localHour = (d.getUTCHours() - 4 + 24) % 24
+          const localMin = d.getUTCMinutes()
+          const totalMinutes = localHour * 60 + localMin
+          
+          return totalMinutes > 300 && totalMinutes < 1140 // > 5:00 AM y < 7:00 PM (19:00)
+        } catch {
+          return false
+        }
+      }
+
+      // Calcular timestamp del baseline
+      let baselineTime: Date | undefined
+      if (data.startedAt && typeof data.startedAt !== 'boolean' && data.baselineAgeMinutes !== undefined && data.baselineAgeMinutes !== null) {
+        try {
+          const startTime = new Date(data.startedAt as any)
+          baselineTime = new Date(startTime.getTime() - Number(data.baselineAgeMinutes) * 60 * 1000)
+        } catch {}
+      }
+
+      // 3. Formateador con fallback a "--" sin unidad si no hay lectura
+      const formatVal = (val: number | null | undefined, unit: string): string => {
+        if (val === null || val === undefined) return '--'
+        if (unit === 'lx') return `${formatTooltipValue(val, 'lx')} lx`
+        return `${Number(val).toFixed(1)}${unit}`
+      }
+
+      // Evaluar visibilidad solar
+      const showBaselineLux = bLux !== null && isWithinSolarTimeRange(baselineTime)
+      const showStartLux = isWithinSolarTimeRange(data.startedAt as any)
+      const showEndLux = isWithinSolarTimeRange(data.endedAt as any)
+
+      // 4. Parsear razones para las reglas en la parte inferior
       let triggerTitle = 'Inferencia de Lluvia'
       let triggerDetails = ''
-      let startTemp = '--'
-      let startHum = '--'
-      let startLux = '--'
 
       if (typeof data.triggerReason === 'string') {
         const triggerStr = data.triggerReason
@@ -259,7 +314,6 @@ function CustomTooltip({
           triggerDetails = triggerStr
         }
 
-        // Formatear choques
         const hrMatch = triggerStr.match(/Incremento de \+?([^%\s,]+)/)
         const tempMatch = triggerStr.match(/caída térmica de ([^°C\s,]+)/)
         const hrVal = hrMatch ? hrMatch[1].trim() : ''
@@ -268,34 +322,10 @@ function CustomTooltip({
         if (hrVal && tempVal) {
           triggerDetails = `💧 Subida HR ${hrVal}%   |   🌡️ Caída térmica ${tempVal}°C`
         }
-
-        // Extraer absolutos
-        const startTempMatch = triggerStr.match(/Temp:\s*([^°C\s,)]+)/)
-        const startHumMatch = triggerStr.match(/Hum:\s*([^%\s,)]+)/)
-        const startLuxMatch = triggerStr.match(/Lux:\s*([^°C\s,lx)]+)/)
-
-        if (startTempMatch) startTemp = `${startTempMatch[1].trim()}°C`
-        if (startHumMatch) startHum = `${startHumMatch[1].trim()}%`
-        if (startLuxMatch) startLux = `${formatTooltipValue(startLuxMatch[1].trim(), 'lx')} lx`
       }
 
-      // Fallbacks al baseline si no se inyectaron
-      if (startTemp === '--' && data.baselineTemp !== undefined && data.baselineTemp !== null) {
-        startTemp = `${Number(data.baselineTemp).toFixed(1)}°C`
-      }
-      if (startHum === '--' && data.baselineHum !== undefined && data.baselineHum !== null) {
-        startHum = `${Number(data.baselineHum).toFixed(1)}%`
-      }
-      if (startLux === '--' && data.baselineLux !== undefined && data.baselineLux !== null) {
-        startLux = `${formatTooltipValue(data.baselineLux, 'lx')} lx`
-      }
-
-      // 3. Parsear Cese
       let closeTitle = 'Cese de Lluvia'
       let closeDetails = ''
-      let endTemp = '--'
-      let endHum = '--'
-      let endLux = '--'
 
       if (typeof data.closeReason === 'string') {
         const reasonStr = data.closeReason
@@ -321,18 +351,8 @@ function CustomTooltip({
           const humVal = humMatch ? humMatch[1].trim() : ''
           closeDetails = `💧 Caída HR ${humVal}%   |   🌡️ Subida térmica ${tempVal}°C`
         }
-
-        // Extraer absolutos de cese
-        const endTempMatch = reasonStr.match(/Temp:\s*([^°C\s,)]+)/)
-        const endHumMatch = reasonStr.match(/Hum:\s*([^%\s,)]+)/)
-        const endLuxMatch = reasonStr.match(/Lux:\s*([^°C\s,lx)]+)/)
-
-        if (endTempMatch) endTemp = `${endTempMatch[1].trim()}°C`
-        if (endHumMatch) endHum = `${endHumMatch[1].trim()}%`
-        if (endLuxMatch) endLux = `${formatTooltipValue(endLuxMatch[1].trim(), 'lx')} lx`
       }
 
-      // Emojis de cabecera alineados a la regla de cese
       let closeIcon = '☁️'
       if (closeTitle.includes('recuperación solar')) {
         closeIcon = '☀️'
@@ -344,7 +364,7 @@ function CustomTooltip({
         <div className="bg-surface border-input-outline relative z-50 flex max-w-[340px] flex-col gap-3 overflow-visible rounded-lg border p-3 text-xs shadow-md outline-none">
           {/* Encabezado Cronológico */}
           <div className="text-foreground flex flex-col gap-1 text-xs font-bold">
-            <span className="flex items-center gap-1.5 text-xs text-slate-200">📅 {dayLabel}</span>
+            <span className="flex items-center gap-1.5 text-xs text-slate-200">📅 {formattedTime}</span>
             <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-400">
               🌧️ {data.startTime}   |   {closeIcon} {data.endTime}   |   ⏱️ {data.duration} min
             </span>
@@ -356,7 +376,7 @@ function CustomTooltip({
               {baselineTimeText}
             </span>
             <span className="text-foreground/85 font-semibold">
-              🌡️ Temp: {data.baselineTemp !== undefined && data.baselineTemp !== null ? `${Number(data.baselineTemp).toFixed(1)}°C` : '--'} | 💧 Hum: {data.baselineHum !== undefined && data.baselineHum !== null ? `${Number(data.baselineHum).toFixed(1)}%` : '--'} | ☀️ Ilum: {data.baselineLux !== undefined && data.baselineLux !== null ? formatTooltipValue(data.baselineLux, 'lx') : '--'} lx
+              🌡️ Temp: {formatVal(bTemp, '°C')} | 💧 Hum: {formatVal(bHum, '%')}{showBaselineLux ? ` | ☀️ Ilum: ${formatVal(bLux, 'lx')}` : ''}
             </span>
           </div>
 
@@ -366,7 +386,7 @@ function CustomTooltip({
               Condiciones climáticas a las {data.startTime}
             </span>
             <span className="text-foreground/85 font-semibold">
-              🌡️ Temp: {startTemp} | 💧 Hum: {startHum} | ☀️ Ilum: {startLux}
+              🌡️ Temp: {formatVal(sTemp, '°C')} | 💧 Hum: {formatVal(sHum, '%')}{showStartLux ? ` | ☀️ Ilum: ${formatVal(sLux, 'lx')}` : ''}
             </span>
           </div>
 
@@ -376,7 +396,7 @@ function CustomTooltip({
               Condiciones climáticas a las {data.endTime}
             </span>
             <span className="text-foreground/85 font-semibold">
-              🌡️ Temp: {endTemp} | 💧 Hum: {endHum} | ☀️ Ilum: {endLux}
+              🌡️ Temp: {formatVal(eTemp, '°C')} | 💧 Hum: {formatVal(eHum, '%')}{showEndLux ? ` | ☀️ Ilum: ${formatVal(eLux, 'lx')}` : ''}
             </span>
           </div>
 

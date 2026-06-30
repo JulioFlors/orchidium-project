@@ -44,3 +44,22 @@ cd ./services/scheduler/
 
 $env:BACKFILL_DAYS=60; npx dotenv-cli -e ../../.env -- pnpm tsx src/scripts/backfill-history.ts
 ```
+
+## rebuild-rain-history VPS: Ejecutar desde ~/pristinoplant/services/scheduler
+
+```bash
+# 1. Asegúrate de estar en la carpeta del scheduler en tu VPS
+cd ~/pristinoplant/services/scheduler
+
+# 2. Ejecuta el contenedor efímero de Node montando el monorepo y corriendo el script
+docker run --rm -it \
+  -v "$(pwd)/../../:/app" \
+  -w /app/services/scheduler \
+  --env-file ../../.env \
+  -e INFLUX_URL="https://vps.sisparrow.com:8181" \
+  -e INFLUX_TOKEN="apiv3_kcwBrLenNHizPffsCsEy03KmFeYWpvxkopjhQbCuDUBp2nCWw5ZMB7cSnV27D5OGmjsECS5KN4HzO8oNwE7JcQ" \
+  -e INFLUX_ORG="PristinoPlant" \
+  --network host \
+  node:24-alpine \
+  sh -c "corepack enable && pnpm install && pnpm --filter=@package/database db:generate && pnpm tsx src/scripts/rebuild-rain-history.ts"
+```

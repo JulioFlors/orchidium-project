@@ -737,23 +737,24 @@
 
 /* ---- Estilos para LandingHeader Transparente ---- */
 header.is-transparent {
-  /* [MODO CLARO] Por defecto, los elementos del header transparente se oscurecen */
+  /* Forzamos que tanto en tema claro como oscuro, los textos y links sean blancos */
   .nav-link,
   .menu-button,
   .toolbar-icon,
   .search-button,
   .cart-link,
   .section-label,
+  .pipe,
   .focus-link,
   .focus-link-hover,
   .focus-link-visible {
-    color: var(--color-primary) !important;
+    color: rgba(255, 255, 255, 0.9) !important;
     background-color: transparent !important;
     border-color: transparent !important;
     transition: color 0.3s ease, background-color 0.3s ease;
   }
 
-  /* Los SVGs heredan el color dinámico del texto */
+  /* Los SVGs heredan el color blanco del texto */
   svg {
     fill: currentColor;
     color: currentColor !important;
@@ -764,57 +765,50 @@ header.is-transparent {
     color: currentColor !important;
   }
 
-  /* El buscador (.header-searchbox) se vuelve transparente y con texto oscuro */
-  .header-searchbox {
-    background-color: transparent !important;
-    color: var(--color-primary) !important;
-    --tw-ring-color: rgba(23, 26, 32, 0.15) !important;
-  }
-
-  /* Hover con fondo translúcido adaptado a tonos oscuros del tema claro */
-  .menu-button:hover,
-  .toolbar-icon:hover {
-    background-color: rgba(23, 26, 32, 0.08) !important;
-    color: var(--color-primary) !important;
-  }
-
-  .search-button:hover,
-  .cart-link:hover,
-  a[href="/"]:hover {
-    background-color: transparent !important;
-    color: var(--color-primary) !important;
-  }
-}
-
-/* [MODO OSCURO] Forzamos colores blancos translúcidos para el header transparente */
-.dark header.is-transparent {
-  .nav-link,
-  .menu-button,
-  .toolbar-icon,
-  .search-button,
-  .cart-link,
-  .section-label,
-  .focus-link,
-  .focus-link-hover,
-  .focus-link-visible {
-    color: rgba(255, 255, 255, 0.9) !important;
-  }
-
   /* El buscador (.header-searchbox) se vuelve transparente con texto e input blanco */
   .header-searchbox {
+    background-color: transparent !important;
     color: rgba(255, 255, 255, 0.9) !important;
     --tw-ring-color: rgba(255, 255, 255, 0.2) !important;
   }
 
-  .search-button:hover,
-  .cart-link:hover,
-  a[href="/"]:hover {
+  /* Hover con fondo blanco translúcido suave (8% de opacidad) para ambos modos */
+  .menu-button:hover,
+  .toolbar-icon:hover {
+    background-color: rgba(255, 255, 255, 0.08) !important;
     color: #ffffff !important;
   }
 
-  .menu-button:hover,
-  .toolbar-icon:hover {
-    background-color: rgba(255, 255, 255, 0.15) !important;
+  .search-button:hover,
+  .cart-link:hover,
+  a[href="/"]:hover {
+    background-color: transparent !important;
     color: #ffffff !important;
   }
 }
+
+/* ---- Estilos responsivos de paginación para el carrusel de la tienda (Estilo Tesla) ---- */
+.hero-swiper {
+  --swiper-pagination-color: #ffffff;
+  --swiper-pagination-bullet-inactive-color: #ffffff;
+  --swiper-pagination-bullet-inactive-opacity: 0.4;
+  --swiper-pagination-bullet-size: 8px;
+  --swiper-pagination-bullet-horizontal-gap: 5px;
+  --swiper-pagination-bottom: 16px;
+}
+
+@media (min-width: 40.0625rem) { /* tds-sm */
+  .hero-swiper {
+    --swiper-pagination-bullet-size: 9px;
+    --swiper-pagination-bullet-horizontal-gap: 6px;
+    --swiper-pagination-bottom: 24px;
+  }
+}
+
+@media (min-width: 60.0625rem) { /* tds-lg */
+  .hero-swiper {
+    --swiper-pagination-bullet-size: 10px;
+    --swiper-pagination-bullet-horizontal-gap: 6px;
+    --swiper-pagination-bottom: 32px;
+  }
+}

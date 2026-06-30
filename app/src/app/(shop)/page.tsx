@@ -10,7 +10,7 @@ import {
   TeslaSection,
   TeslaValuesSection,
   TeslaContactSection,
-  SnapScrollHandler,
+  HeroSlideshow,
 } from '@/components'
 
 export const metadata: Metadata = {
@@ -139,22 +139,37 @@ export default async function HomePage() {
     }
   })
 
+  const categoriesData = [
+    {
+      title: 'Orquídeas de Colección',
+      subtitle: 'Cultivadas y aclimatadas al clima de Ciudad Guayana',
+      image: heroSlidesData[0]?.image || 'plants/orchids/orchids.webp',
+      href: '/category/plants/orchids',
+    },
+    {
+      title: 'Rosas del Desierto',
+      subtitle: 'Bonsáis naturales de floración extraordinaria',
+      image: heroSlidesData[1]?.image || 'plants/adenium_obesum/multiple-petals/adenium-obesum-marbella/marbella_0_2000.webp',
+      href: '/category/plants/adenium_obesum',
+    },
+    {
+      title: 'Cactus',
+      subtitle: 'Especies exóticas de colección y bajo mantenimiento',
+      image: heroSlidesData[2]?.image || 'plants/cactus/mammillaria/mammillaria-vetula-ssp-gracilis/mammillaria-vetula-ssp-gracilis_0_2000.webp',
+      href: '/category/plants/cactus',
+    },
+    {
+      title: 'Suculentas',
+      subtitle: 'Geometrías botánicas y colores extraordinarios',
+      image: heroSlidesData[3]?.image || 'plants/succulents/crassula/crassula-capitella-campfire/crassula-capitella-campfire_0_2000.webp',
+      href: '/category/plants/succulents',
+    },
+  ]
+
   return (
     <div className="tds-sm:-mx-9 tds-xl:-mx-12 -mx-6 -mt-14">
-      <SnapScrollHandler />
-
-      {heroSlidesData.map((slide, index) => (
-        <TeslaSection
-          key={index}
-          priority={index === 0}
-          showScrollIndicator={index === 0}
-          image={slide.image}
-          primaryButtonHref={slide.href}
-          primaryButtonText="Comprar ahora"
-          subtitle={slide.subtitle}
-          title={slide.title}
-        />
-      ))}
+      {/* Carrusel Superior Horizontal con Autoplay y navegación por teclado/bullets */}
+      <HeroSlideshow slides={heroSlidesData} />
 
       {/* SECCIÓN 5: Promesas de Valor */}
       <TeslaValuesSection />
@@ -189,6 +204,18 @@ export default async function HomePage() {
           </div>
         </section>
       )}
+
+      {/* Secciones Hero individuales por Categoría al final de la página */}
+      {categoriesData.map((cat, index) => (
+        <TeslaSection
+          key={index}
+          image={cat.image}
+          primaryButtonHref={cat.href}
+          primaryButtonText="Explorar catálogo"
+          subtitle={cat.subtitle}
+          title={cat.title}
+        />
+      ))}
 
       {/* SECCIÓN 8: Contacto */}
       <TeslaContactSection />
