@@ -842,6 +842,8 @@ export async function getRainSummaryInternal(range: string, zone: ZoneType) {
     const events = rainEvents.map((ev) => ({
       id: ev.id,
       time: ev.startedAt.toISOString(),
+      startedAt: ev.startedAt.toISOString(),
+      endedAt: ev.endedAt ? ev.endedAt.toISOString() : null,
       duration: ev.durationSeconds || 0,
       intensity: ev.avgIntensity || ev.peakIntensity || 0,
       isInfered: ev.isInfered,
@@ -851,6 +853,12 @@ export async function getRainSummaryInternal(range: string, zone: ZoneType) {
       baselineAgeMinutes: ev.baselineAgeMinutes,
       triggerReason: ev.triggerReason,
       closeReason: ev.closeReason,
+      startTemp: ev.startTemp,
+      startHum: ev.startHum,
+      startLux: ev.startLux,
+      endTemp: ev.endTemp,
+      endHum: ev.endHum,
+      endLux: ev.endLux,
     }))
 
     const totalDuration = rainEvents.reduce((acc, ev) => acc + (ev.durationSeconds || 0), 0)

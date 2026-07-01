@@ -56,6 +56,12 @@ interface RainEvent {
   baselineAgeMinutes?: number | null
   triggerReason: string | null
   closeReason: string | null
+  startTemp?: number | null
+  startHum?: number | null
+  startLux?: number | null
+  endTemp?: number | null
+  endHum?: number | null
+  endLux?: number | null
 }
 
 interface RainData {
@@ -601,6 +607,12 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
                   baselineAgeMinutes: ev.baselineAgeMinutes ?? undefined,
                   triggerReason: ev.triggerReason ?? undefined,
                   closeReason: ev.closeReason ?? undefined,
+                  startTemp: ev.startTemp ?? undefined,
+                  startHum: ev.startHum ?? undefined,
+                  startLux: ev.startLux ?? undefined,
+                  endTemp: ev.endTemp ?? undefined,
+                  endHum: ev.endHum ?? undefined,
+                  endLux: ev.endLux ?? undefined,
                 }
               }) || [],
         }
