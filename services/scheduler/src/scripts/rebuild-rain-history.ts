@@ -167,7 +167,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
     const date = new Date(timestampMs)
     const caracasHour = (date.getUTCHours() - 4 + 24) % 24
-    const isDay = caracasHour >= 8 && caracasHour < 16
+    const isDay = caracasHour >= 8 && caracasHour < 18
 
     if (!isTelemetryRainActive) {
       if (lastRainClosedAt !== null && timestampMs - lastRainClosedAt < 15 * 60 * 1000) return
@@ -484,8 +484,8 @@ function pushBatchMetrics(queue: BatchSummary[], values: number[], timestamp: nu
 
 async function savePhysicalEvent(event: { startedAt: Date; endedAt: Date; intensities: number[] }) {
   let { startedAt, endedAt } = event
-  let durationSeconds = Math.round((endedAt.getTime() - startedAt.getTime()) / 1000)
-  if (durationSeconds <= 0) durationSeconds = 60
+  const durationSeconds = Math.round((endedAt.getTime() - startedAt.getTime()) / 1000)
+  if (durationSeconds < 300) return
 
   if (startedAt.getFullYear() < 2025) {
     startedAt = new Date(startedAt)
@@ -592,6 +592,11 @@ async function closeVirtualEvent(
   const durationSeconds = Math.round(
     (cleanEnd.getTime() - activeVirtualEvent.startedAt.getTime()) / 1000,
   )
+
+  if (durationSeconds < 300) {
+    activeVirtualEvent = null
+    return
+  }
 
   if (DRY_RUN) {
     activeVirtualEvent = null

@@ -1,9 +1,9 @@
 {
   "name": "Relay Modules",
   "description": "Nodo Actuador (sistema de riego) + Nodo EMA (Meteorológia Exterior).",
-  "version": "0.15.2",
-  "date": "26-05-2026",
-  "notes_release": "[Coordinación de Sensores]: recuperación de sensores por el Scheduler y suspensión de monitoreo mediante eventos si están desconectados.",
+  "version": "0.15.4",
+  "date": "02-07-2026",
+  "notes_release": "[📡 Telemetry & Sensors]: reintento de 20s en DHT22 y BH1750 ante fallos de lectura y optimizacion de nulos en cese.",
   "files": [
     "app.mpy",
     "boot.py",

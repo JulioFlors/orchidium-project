@@ -1,9 +1,9 @@
 # -----------------------------------------------------------------------------
 # Relay Modules: Actuator Controller + Weather Station (Exterior)
 # Descripcion: Nodo Actuador (sistema de riego) + Nodo EMA (Meteorológia Exterior).
-# Fecha: 06-06-2026
-# Version: v0.15.3
-# notes_release: [🌧 Rain Sensor]: modificacion de los parametros de inicio y fin de lluvia.
+# Fecha: 02-07-2026
+# Version: v0.15.4
+# notes_release: [📡 Telemetry & Sensors]: reintento de 20s en DHT22 y BH1750 ante fallos de lectura y optimizacion de nulos en cese.
 # ------------------------------- Configuración -------------------------------
 
 # [SOLUCIÓN IMPORT]: Modificamos sys.path para priorizar las librerías en /lib.
@@ -2167,20 +2167,27 @@ async def illuminance_monitor_task():
 
             lux_ok = False
             if bh1750_sensor is not None:
-                try:
-                    # Lectura de sensor BH1750 con auto-escala dinámica
-                    lux_raw = bh1750_sensor.get_auto_luminance()
-                    if lux_raw is not None:
-                        lux_val = round(lux_raw, 1)
-                        illuminance_Batch.append(lux_val)
-                        lux_ok = True
-                        lux_read_failures = 0
-                except Exception:
-                    pass
-
-            if not lux_ok:
-                lux_read_failures += 1
-                if DEBUG: print(f"⚠️  BH1750: Fallo de lectura transitorio. Fallos: {lux_read_failures}")
+                for attempt in range(2):
+                    try:
+                        # Lectura de sensor BH1750 con auto-escala dinámica
+                        lux_raw = bh1750_sensor.get_auto_luminance()
+                        if lux_raw is not None:
+                            lux_val = round(lux_raw, 1)
+                            illuminance_Batch.append(lux_val)
+                            lux_ok = True
+                            lux_read_failures = 0
+                            if attempt > 0 and DEBUG:
+                                print(f"✅  BH1750: Lectura recuperada en el reintento. Lux: {lux_val}")
+                            break
+                        else:
+                            raise ValueError("Lectura de lux devuelta como None")
+                    except Exception as e:
+                        if attempt == 0:
+                            if DEBUG: print(f"⚠️  BH1750: Fallo en primera lectura ({e}). Reintentando en 20s...")
+                            await asyncio.sleep(20)
+                        else:
+                            lux_read_failures += 1
+                            if DEBUG: print(f"⚠️  BH1750: Fallo de lectura definitivo en este ciclo. Fallos: {lux_read_failures}")
 
             if lux_read_failures >= 5:
                 if DEBUG: print(f"⚠️  BH1750: 5 Fallos consecutivos. Ejecutando Setup/Hard Reset Físico...")

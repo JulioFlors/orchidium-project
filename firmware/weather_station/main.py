@@ -823,7 +823,7 @@ async def mqtt_processor_task():
                             last_sync = rtc_data["last_sync_time"]
                             if last_sync > 0:
                                 elapsed_real = real_epoch - last_sync
-                                if elapsed_real > 300: # Ventana mínima de 5 minutos
+                                if elapsed_real > 260: # Ventana mínima de 5 minutos (tolerando pequeños desvíos/red rápida)
                                     error_sec = local_epoch - real_epoch
                                     measured_drift_rate = error_sec / elapsed_real
 

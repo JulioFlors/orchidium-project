@@ -47,6 +47,8 @@ interface SensorData {
 interface RainEvent {
   id: string
   time: string
+  startedAt?: string | null
+  endedAt?: string | null
   duration: number
   intensity: number
   isInfered: boolean
@@ -220,7 +222,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     isLoading: isPhysicalRainLoading,
   } = useSWR<RainData>(
     zone === ZoneType.EXTERIOR && physicalRainRange
-      ? `/api/environment/rain?range=${physicalRainRange}&zone=${zone}`
+      ? `/api/environment/precipitation?range=${physicalRainRange}&zone=${zone}`
       : null,
     fetcher,
     {
@@ -246,7 +248,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     isLoading: isInferredRainLoading,
   } = useSWR<RainData>(
     zone === ZoneType.EXTERIOR && inferredRainRange
-      ? `/api/environment/rain?range=${inferredRainRange}&zone=${zone}`
+      ? `/api/environment/precipitation?range=${inferredRainRange}&zone=${zone}`
       : null,
     fetcher,
     {
@@ -280,8 +282,16 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     const isPhysicalActive = physicalRainData?.isActive || false
     const isInferredActive = inferredRainData?.isInferredActive || false
 
-    const physicalDuration = physicalEvents.reduce((acc, ev) => acc + ev.duration, 0)
-    const inferredDuration = inferredEvents.reduce((acc, ev) => acc + ev.duration, 0)
+    const physicalDuration = physicalEvents.reduce((acc, ev) => {
+      const isAct = !ev.endedAt
+      const dur = isAct ? Math.round((Date.now() - new Date(ev.startedAt || ev.time).getTime()) / 1000) : ev.duration
+      return acc + dur
+    }, 0)
+    const inferredDuration = inferredEvents.reduce((acc, ev) => {
+      const isAct = !ev.endedAt
+      const dur = isAct ? Math.round((Date.now() - new Date(ev.startedAt || ev.time).getTime()) / 1000) : ev.duration
+      return acc + dur
+    }, 0)
 
     return {
       physical: {
@@ -563,14 +573,16 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               .filter((ev: RainEvent) => !ev.isInfered)
               .map((ev: RainEvent) => {
                 const startDate = new Date(ev.time)
-                const endDate = new Date(startDate.getTime() + ev.duration * 1000)
+                const isAct = !ev.endedAt
+                const durSec = isAct ? Math.round((Date.now() - startDate.getTime()) / 1000) : ev.duration
+                const endDate = isAct ? new Date() : new Date(startDate.getTime() + ev.duration * 1000)
 
                 return {
                   time: ev.time,
-                  duration: Math.round(ev.duration / 60),
+                  duration: Math.round(durSec / 60),
                   intensity: ev.intensity,
                   startTime: formatTime12h(startDate),
-                  endTime: formatTime12h(endDate),
+                  endTime: isAct ? 'En curso' : formatTime12h(endDate),
                   dateLabel: formatDateLong(startDate),
                   isInfered: ev.isInfered,
                 }
@@ -589,14 +601,16 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               .filter((ev: RainEvent) => ev.isInfered)
               .map((ev: RainEvent) => {
                 const startDate = new Date(ev.time)
-                const endDate = new Date(startDate.getTime() + ev.duration * 1000)
+                const isAct = !ev.endedAt
+                const durSec = isAct ? Math.round((Date.now() - startDate.getTime()) / 1000) : ev.duration
+                const endDate = isAct ? new Date() : new Date(startDate.getTime() + ev.duration * 1000)
 
                 return {
                   time: ev.time,
-                  duration: Math.round(ev.duration / 60),
+                  duration: Math.round(durSec / 60),
                   intensity: ev.intensity,
                   startTime: formatTime12h(startDate),
-                  endTime: formatTime12h(endDate),
+                  endTime: isAct ? 'En curso' : formatTime12h(endDate),
                   dateLabel: formatDateLong(startDate),
                   isInfered: ev.isInfered,
                   startedAt: ev.time,
@@ -676,13 +690,15 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
       }
     }
 
-    // ─── PRIORIDAD 3: Lluvia activa (MQTT State + InfluxDB) ───────────────────
-    if (rainState === 'Raining') {
+    // ─── PRIORIDAD 3: Lluvia activa (Física o Inferida) ───────────────────
+    const isRainingNow = rainState === 'Raining' || parsedRainData.physical.isActive || parsedRainData.inferred.isActive
+    if (isRainingNow) {
+      const isVirtual = parsedRainData.inferred.isActive && !parsedRainData.physical.isActive
       return {
         label: 'Lloviendo',
         icon: <CloudRain className="h-6 w-6 text-blue-400" />,
         color: 'blue' as const,
-        description: rain > 0 ? `Intensidad: ${rain.toFixed(0)}%` : 'Precipitación detectada',
+        description: isVirtual ? 'Inferencia termodinámica activa' : (rain > 0 ? `Intensidad: ${rain.toFixed(0)}%` : 'Precipitación detectada'),
         status: 'warning' as const,
       }
     }

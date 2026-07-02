@@ -320,6 +320,14 @@ async function closeRainEvent(
 
         if (!eventId) return
 
+        if (durationSeconds < 300) {
+          await prisma.rainEvent.delete({ where: { id: eventId } })
+          Logger.rain(
+            `[RainManager] Evento de lluvia ${label} descartado por duración insuficiente (${Math.round(durationSeconds / 60)} min) (ID: ${eventId.slice(0, 8)})`,
+          )
+          return
+        }
+
         await prisma.rainEvent.update({
           where: { id: eventId },
           data: {
@@ -614,7 +622,7 @@ export async function evaluateClimateInference(): Promise<void> {
       hour12: false,
     }).format(new Date(tempBatches[0].timestamp)),
   )
-  const isDay = caracasHour >= 8 && caracasHour < 16
+  const isDay = caracasHour >= 8 && caracasHour < 18
 
   // A. Evaluar Inicio de Lluvia Inferida
   if (!inferedRainActive) {

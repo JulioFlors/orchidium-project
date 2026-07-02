@@ -41,7 +41,7 @@ export default async function Page() {
   }
 
   if (rainRes.success) {
-    fallback[`/api/environment/rain?range=today&zone=${ZoneType.EXTERIOR}`] = rainRes.data
+    fallback[`/api/environment/precipitation?range=today&zone=${ZoneType.EXTERIOR}`] = rainRes.data
   }
 
   return (

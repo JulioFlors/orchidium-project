@@ -1,0 +1,404 @@
+[ 01/07/2026, 01:15 am ] ⏰ [ CRON ] Cargando Rutinas desde la base de datos.
+[ 01/07/2026, 01:15 am ] ⏰ [ CRON ] Programando: "Riego Interdiario (6:00)" ➜ [0 6 * * 1,3,5]
+[ 01/07/2026, 01:15 am ] ⏰ [ CRON ] Programando: "Nebulización Dominical (6:00)" ➜ [0 6 * * 0]
+[ 01/07/2026, 01:15 am ] ⏰ [ CRON ] Programando: "Humidificación del Suelo (11:00)" ➜ [0 11 * * *]
+[ 01/07/2026, 01:15 am ] ⏰ [ CRON ] Programando: "Humidificación del Suelo (15:00)" ➜ [0 15 * * *]
+[ 01/07/2026, 01:15 am ] ✅ [ DONE ] Conectado a Broker MQTT
+[ 01/07/2026, 01:15 am ] 🟢 [ NODE ] ONLINE [Actuador]
+[ 01/07/2026, 01:59 am ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 01:59 am ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 01:59 am ] 🌙 [ INFO ] Iluminancia: Muestreo Suspendido (Anochecer)
+[ 01/07/2026, 01:59 am ] 🌡️ [ INFO ] Clima: 25.8°C / 87.9%
+[ 01/07/2026, 01:59 am ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,1,59,49,0]} [Nodo EMA]
+[ 01/07/2026, 01:59 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,1,59,49,0]}
+[ 01/07/2026, 01:59 am ] 📡 [ MQTT ] Comando: lux_sampling:off [Nodo EMA]
+[ 01/07/2026, 02:00 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:off
+[ 01/07/2026, 02:00 am ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 02:00 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 02:00 am ] 💤 [ NODE ] SLEEP [EMA]
+[ 01/07/2026, 02:59 am ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 02:59 am ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 02:59 am ] 🌙 [ INFO ] Iluminancia: Muestreo Suspendido (Anochecer)
+[ 01/07/2026, 02:59 am ] 🌡️ [ INFO ] Clima: 25.8°C / 88.0%
+[ 01/07/2026, 02:59 am ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,2,59,54,0]} [Nodo EMA]
+[ 01/07/2026, 02:59 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,2,59,54,0]}
+[ 01/07/2026, 03:00 am ] 📡 [ MQTT ] Comando: lux_sampling:off [Nodo EMA]
+[ 01/07/2026, 03:00 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:off
+[ 01/07/2026, 03:00 am ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 03:00 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 03:00 am ] 💤 [ NODE ] SLEEP [EMA]
+[ 01/07/2026, 03:59 am ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 03:59 am ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 03:59 am ] 🌙 [ INFO ] Iluminancia: Muestreo Suspendido (Anochecer)
+[ 01/07/2026, 03:59 am ] 🌡️ [ INFO ] Clima: 25.6°C / 90.8%
+[ 01/07/2026, 03:59 am ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,3,59,48,0]} [Nodo EMA]
+[ 01/07/2026, 03:59 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,3,59,48,0]}
+[ 01/07/2026, 03:59 am ] 📡 [ MQTT ] Comando: lux_sampling:off [Nodo EMA]
+[ 01/07/2026, 03:59 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:off
+[ 01/07/2026, 03:59 am ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 04:00 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 04:00 am ] 💤 [ NODE ] SLEEP [EMA]
+[ 01/07/2026, 04:59 am ] 📡 [ INFO ] ☀  Iniciando muestreo de iluminancia (Amanecer)
+[ 01/07/2026, 04:59 am ] 📡 [ MQTT ] Comando: lux_sampling:on [Nodo Actuador]
+[ 01/07/2026, 04:59 am ] 📬 [ ACK  ] Nodo Actuador confirmó ACK para el comando: lux_sampling:on
+[ 01/07/2026, 04:59 am ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 04:59 am ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 04:59 am ] ☀️ [ INFO ] Iluminancia: Sincronizando Amanecer...
+[ 01/07/2026, 04:59 am ] 🌡️ [ INFO ] Clima: 25.2°C / 90.8%
+[ 01/07/2026, 04:59 am ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,4,59,58,0]} [Nodo EMA]
+[ 01/07/2026, 05:00 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,4,59,58,0]}
+[ 01/07/2026, 05:00 am ] 📡 [ MQTT ] Comando: lux_sampling:on [Nodo EMA]
+[ 01/07/2026, 05:00 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:on
+[ 01/07/2026, 05:00 am ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 05:00 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 05:00 am ] 💤 [ NODE ] SLEEP [EMA]
+[ 01/07/2026, 05:59 am ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 05:59 am ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 05:59 am ] ☀️ [ INFO ] Iluminancia: 41 lx
+[ 01/07/2026, 05:59 am ] 🌡️ [ INFO ] Clima: 25.0°C / 91.2%
+[ 01/07/2026, 05:59 am ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,5,59,51,0]} [Nodo EMA]
+[ 01/07/2026, 05:59 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,5,59,51,0]}
+[ 01/07/2026, 05:59 am ] 📡 [ MQTT ] Comando: lux_sampling:on [Nodo EMA]
+[ 01/07/2026, 06:00 am ] ⏰ [ CRON ] Ejecutando Rutina Programada (ID: d56dcc42)
+[ 01/07/2026, 06:00 am ] ⏰ [ CRON ] Rutina CANCELADA por veto climático: Riego Interdiario (6:00). Motivo: Motor de
+[ 01/07/2026, 06:00 am ] ⏰ [ CRON ] inferencia.
+[ 01/07/2026, 06:00 am ] ⏰ [ CRON ] Riego interdiario estricto.
+[ 01/07/2026, 06:00 am ] ⏰ [ CRON ] Ayer se registró un evento de Lluvia inferida.
+[ 01/07/2026, 06:00 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:on
+[ 01/07/2026, 06:00 am ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 06:00 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 06:00 am ] 💤 [ NODE ] SLEEP [EMA]
+[ 01/07/2026, 06:59 am ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 06:59 am ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 06:59 am ] ⚠️ [ INFO ] Iluminancia: No se detecto el sensor BH1750
+[ 01/07/2026, 06:59 am ] ⚠️ [ INFO ] Clima: No se detecto el sensor DHT22
+[ 01/07/2026, 06:59 am ] 📡 [ MQTT ] Comando: sync_climate (Descartado — Nodo Offline) [Nodo EMA]
+[ 01/07/2026, 06:59 am ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,6,59,57,0]} [Nodo EMA]
+[ 01/07/2026, 07:02 am ] 🔴 [ NODE ] OFFLINE [EMA] [BROKER]
+[ 01/07/2026, 07:54 am ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 07:54 am ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 07:54 am ] ☀️ [ INFO ] Iluminancia: 1253 lx
+[ 01/07/2026, 07:54 am ] 🌡️ [ INFO ] Clima: 26.2°C / 88.0%
+[ 01/07/2026, 07:54 am ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,7,54,24,0]} [Nodo EMA]
+[ 01/07/2026, 07:54 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,7,54,24,0]}
+[ 01/07/2026, 07:54 am ] 📡 [ MQTT ] Comando: lux_sampling:on [Nodo EMA]
+[ 01/07/2026, 07:54 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:on
+[ 01/07/2026, 07:54 am ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 07:54 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 07:54 am ] 💤 [ NODE ] SLEEP [EMA]
+[ 01/07/2026, 08:00 am ] 🌧️ [ RAIN ] Ajustando intervalo de chequeo de lluvia a 1 minuto (Ráfaga) por iluminancia
+[ 01/07/2026, 08:00 am ] 🌧️ [ RAIN ] (7449 lx) a las 8h.
+[ 01/07/2026, 08:00 am ] 📡 [ MQTT ] Comando: INTERVAL_BURST [Nodo Actuador]
+[ 01/07/2026, 08:00 am ] 📬 [ ACK  ] Nodo Actuador confirmó ACK para el comando: INTERVAL_BURST
+[ 01/07/2026, 08:00 am ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 08:00 am ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 08:00 am ] ☀️ [ INFO ] Iluminancia: 793 lx
+[ 01/07/2026, 08:00 am ] 🌡️ [ INFO ] Clima: 26.3°C / 86.7%
+[ 01/07/2026, 08:00 am ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,8,0,18,0]} [Nodo EMA]
+[ 01/07/2026, 08:00 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,8,0,18,0]}
+[ 01/07/2026, 08:00 am ] 📡 [ MQTT ] Comando: lux_sampling:on [Nodo EMA]
+[ 01/07/2026, 08:00 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:on
+[ 01/07/2026, 08:00 am ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 08:00 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 08:00 am ] 💤 [ NODE ] SLEEP [EMA]
+[ 01/07/2026, 08:30 am ] 🌧️ [ RAIN ] Restableciendo intervalo de chequeo de lluvia a 5 minutos (Vigía) por
+[ 01/07/2026, 08:30 am ] 🌧️ [ RAIN ] iluminancia recuperada (12942 lx).
+[ 01/07/2026, 08:30 am ] 📡 [ MQTT ] Comando: INTERVAL_NORMAL [Nodo Actuador]
+[ 01/07/2026, 08:30 am ] 📬 [ ACK  ] Nodo Actuador confirmó ACK para el comando: INTERVAL_NORMAL
+[ 01/07/2026, 08:59 am ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 08:59 am ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 08:59 am ] ⚠️ [ INFO ] Iluminancia: No se detecto el sensor BH1750
+[ 01/07/2026, 08:59 am ] ⚠️ [ INFO ] Clima: No se detecto el sensor DHT22
+[ 01/07/2026, 08:59 am ] 📡 [ MQTT ] Comando: sync_climate (Descartado — Nodo Offline) [Nodo EMA]
+[ 01/07/2026, 08:59 am ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,8,59,57,0]} [Nodo EMA]
+[ 01/07/2026, 09:00 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,8,59,57,0]}
+[ 01/07/2026, 09:00 am ] 📡 [ MQTT ] Comando: lux_sampling:on [Nodo EMA]
+[ 01/07/2026, 09:00 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:on
+[ 01/07/2026, 09:00 am ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 09:00 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 09:00 am ] 💤 [ NODE ] SLEEP [EMA]
+[ 01/07/2026, 10:00 am ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 10:00 am ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 10:00 am ] ☀️ [ INFO ] Iluminancia: 1007 lx
+[ 01/07/2026, 10:00 am ] 🌡️ [ INFO ] Clima: 28.9°C / 75.4%
+[ 01/07/2026, 10:00 am ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,10,0,6,0]} [Nodo EMA]
+[ 01/07/2026, 10:00 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,10,0,6,0]}
+[ 01/07/2026, 10:00 am ] 📡 [ MQTT ] Comando: lux_sampling:on [Nodo EMA]
+[ 01/07/2026, 10:00 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:on
+[ 01/07/2026, 10:00 am ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 10:00 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 10:00 am ] 💤 [ NODE ] SLEEP [EMA]
+[ 01/07/2026, 10:59 am ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 10:59 am ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 10:59 am ] ☀️ [ INFO ] Iluminancia: 3632 lx
+[ 01/07/2026, 10:59 am ] 🌡️ [ INFO ] Clima: 29.2°C / 74.3%
+[ 01/07/2026, 10:59 am ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,10,59,49,0]} [Nodo EMA]
+[ 01/07/2026, 10:59 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,10,59,49,0]}
+[ 01/07/2026, 10:59 am ] 📡 [ MQTT ] Comando: lux_sampling:on [Nodo EMA]
+[ 01/07/2026, 11:00 am ] ⏰ [ CRON ] Ejecutando Rutina Programada (ID: d860a2da)
+[ 01/07/2026, 11:00 am ] ☀️ [ DAYC ] Día: TEMPLADO (Avg: 27557 lx, Act: 17453 lx)
+[ 01/07/2026, 11:00 am ] ☀️ [ DAYC ] Nublado: 15 min | Nubes Grises: 9 min
+[ 01/07/2026, 11:00 am ] 🔮 [ INFR ] Evaluando: Humidificación del Suelo (11:00) (SOIL_WETTING)
+[ 01/07/2026, 11:00 am ] 🔮 [ INFR ] HR: 73% | Temp: 29.2°C | Día: TEMPLADO
+[ 01/07/2026, 11:00 am ] 🔮 [ INFR ] Datos: INT | Lluvia en curso (DB): NO
+[ 01/07/2026, 11:00 am ] 🔮 [ INFR ] Regla 4h para SOIL_WETTING [INT]:
+[ 01/07/2026, 11:00 am ] 🔮 [ INFR ] HR Prom: 81.4% | Temp Prom: 27.9°C
+[ 01/07/2026, 11:00 am ] ⏰ [ CRON ] Rutina CANCELADA por veto climático: Humidificación del Suelo (11:00). Motivo:
+[ 01/07/2026, 11:00 am ] ⏰ [ CRON ] VETO CLIMÁTICO SOIL_WETTING (4h): Temperatura promedio 27.9°C ≤ 30°C con HR
+[ 01/07/2026, 11:00 am ] ⏰ [ CRON ] promedio 81.4% ≥ 80.0% (Datos: INT).
+[ 01/07/2026, 11:00 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:on
+[ 01/07/2026, 11:00 am ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 11:00 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 11:00 am ] 💤 [ NODE ] SLEEP [EMA]
+[ 01/07/2026, 11:59 am ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 11:59 am ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 11:59 am ] ☀️ [ INFO ] Iluminancia: 2940 lx
+[ 01/07/2026, 11:59 am ] 🌡️ [ INFO ] Clima: 30.6°C / 67.6%
+[ 01/07/2026, 11:59 am ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,11,59,51,0]} [Nodo EMA]
+[ 01/07/2026, 11:59 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,11,59,51,0]}
+[ 01/07/2026, 11:59 am ] 📡 [ MQTT ] Comando: lux_sampling:on [Nodo EMA]
+[ 01/07/2026, 12:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:on
+[ 01/07/2026, 12:00 pm ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 12:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 12:00 pm ] 💤 [ NODE ] SLEEP [EMA]
+(node:1) TimeoutNegativeWarning: -1 is a negative number.
+Timeout duration was set to 1.
+(Use `node --trace-warnings ...` to show where the warning was created)
+[ 01/07/2026, 12:59 pm ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 12:59 pm ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 12:59 pm ] ☀️ [ INFO ] Iluminancia: 1018 lx
+[ 01/07/2026, 12:59 pm ] 🌡️ [ INFO ] Clima: 27.5°C / 83.6%
+[ 01/07/2026, 12:59 pm ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,12,59,51,0]} [Nodo EMA]
+[ 01/07/2026, 12:59 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,12,59,51,0]}
+[ 01/07/2026, 12:59 pm ] 📡 [ MQTT ] Comando: lux_sampling:on [Nodo EMA]
+[ 01/07/2026, 01:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:on
+[ 01/07/2026, 01:00 pm ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 01:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 01:00 pm ] 💤 [ NODE ] SLEEP [EMA]
+[ 01/07/2026, 01:01 pm ] 🌧️ [ RAIN ] Ajustando intervalo de chequeo de lluvia a 1 minuto (Ráfaga) por iluminancia
+[ 01/07/2026, 01:01 pm ] 🌧️ [ RAIN ] (9887 lx) a las 13h.
+[ 01/07/2026, 01:01 pm ] 📡 [ MQTT ] Comando: INTERVAL_BURST [Nodo Actuador]
+[ 01/07/2026, 01:01 pm ] 📬 [ ACK  ] Nodo Actuador confirmó ACK para el comando: INTERVAL_BURST
+[ 01/07/2026, 01:11 pm ] 🌧️ [ RAIN ] Restableciendo intervalo de chequeo de lluvia a 5 minutos (Vigía) por
+[ 01/07/2026, 01:11 pm ] 🌧️ [ RAIN ] iluminancia recuperada (11949 lx).
+[ 01/07/2026, 01:11 pm ] 📡 [ MQTT ] Comando: INTERVAL_NORMAL [Nodo Actuador]
+[ 01/07/2026, 01:11 pm ] 🌧️ [ RAIN ] [RainManager] Lluvia Inferida [DÍA]: deltaHR=5.1%, deltaTemp=-1.8°C, Lux min
+[ 01/07/2026, 01:11 pm ] 🌧️ [ RAIN ] actual: 9887lx vs baseline: 10429lx (45% caída).
+[ 01/07/2026, 01:11 pm ] 🌧️ [ RAIN ] [RainManager] Evento de lluvia inferido abierto (ID: 8cd95d3b)
+[ 01/07/2026, 01:11 pm ] 📬 [ ACK  ] Nodo Actuador confirmó ACK para el comando: INTERVAL_NORMAL
+[ 01/07/2026, 01:14 pm ] 🌧️ [ RAIN ] [RainManager] Cierre por Recuperación Solar Cruzada: Lux max: 11949 lx >= 10411
+[ 01/07/2026, 01:14 pm ] 🌧️ [ RAIN ] lx (Temp estable, deltaTempLastLote=-30.60°C).
+[ 01/07/2026, 01:14 pm ] 🌧️ [ RAIN ] [RainManager] Evento de lluvia inferido cerrado (SOLAR_RECOVERY) — Duración: 3
+[ 01/07/2026, 01:14 pm ] 🌧️ [ RAIN ] min (ID: 8cd95d3b)
+[ 01/07/2026, 01:59 pm ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 01:59 pm ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 01:59 pm ] ☀️ [ INFO ] Iluminancia: 2884 lx
+[ 01/07/2026, 01:59 pm ] 🌡️ [ INFO ] Clima: 27.9°C / 84.0%
+[ 01/07/2026, 01:59 pm ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,13,59,55,0]} [Nodo EMA]
+[ 01/07/2026, 01:59 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,13,59,55,0]}
+[ 01/07/2026, 02:00 pm ] 📡 [ MQTT ] Comando: lux_sampling:on [Nodo EMA]
+[ 01/07/2026, 02:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:on
+[ 01/07/2026, 02:00 pm ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 02:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 02:00 pm ] 💤 [ NODE ] SLEEP [EMA]
+[ 01/07/2026, 02:59 pm ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 02:59 pm ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 02:59 pm ] ☀️ [ INFO ] Iluminancia: 1608 lx
+[ 01/07/2026, 02:59 pm ] 🌡️ [ INFO ] Clima: 28.4°C / 75.3%
+[ 01/07/2026, 02:59 pm ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,14,59,54,0]} [Nodo EMA]
+[ 01/07/2026, 03:00 pm ] ⏰ [ CRON ] Ejecutando Rutina Programada (ID: 9d106389)
+[ 01/07/2026, 03:00 pm ] 🔮 [ INFR ] Datos incompletos en InfluxDB (Falta: INTERIOR)
+[ 01/07/2026, 03:00 pm ] ☀️ [ DAYC ] Día: TEMPLADO (Avg: 26360 lx, Act: 20652 lx)
+[ 01/07/2026, 03:00 pm ] ☀️ [ DAYC ] Nublado: 13 min | Nubes Grises: 8 min
+[ 01/07/2026, 03:00 pm ] 🔮 [ INFR ] Evaluando: Humidificación del Suelo (15:00) (SOIL_WETTING)
+[ 01/07/2026, 03:00 pm ] 🔮 [ INFR ] HR: 70% | Temp: 34.5°C | Día: TEMPLADO
+[ 01/07/2026, 03:00 pm ] 🔮 [ INFR ] Datos: EXT | Lluvia en curso (DB): NO
+[ 01/07/2026, 03:00 pm ] 🔮 [ INFR ] Regla 4h para SOIL_WETTING [INT]:
+[ 01/07/2026, 03:00 pm ] 🔮 [ INFR ] HR Prom: 78.9% | Temp Prom: 28.7°C
+[ 01/07/2026, 03:00 pm ] ⏰ [ CRON ] Rutina CANCELADA por veto climático: Humidificación del Suelo (15:00). Motivo:
+[ 01/07/2026, 03:00 pm ] ⏰ [ CRON ] Motor de inferencia.
+[ 01/07/2026, 03:00 pm ] ⏰ [ CRON ] Evento de Lluvia inferida registrado hace 1.8h
+[ 01/07/2026, 03:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,14,59,54,0]}
+[ 01/07/2026, 03:00 pm ] 📡 [ MQTT ] Comando: lux_sampling:on [Nodo EMA]
+[ 01/07/2026, 03:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:on
+[ 01/07/2026, 03:00 pm ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 03:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 03:00 pm ] 💤 [ NODE ] SLEEP [EMA]
+[ 01/07/2026, 03:11 pm ] 🌧️ [ RAIN ] Ajustando intervalo de chequeo de lluvia a 1 minuto (Ráfaga) por iluminancia
+[ 01/07/2026, 03:11 pm ] 🌧️ [ RAIN ] (9440 lx) a las 15h.
+[ 01/07/2026, 03:11 pm ] 📡 [ MQTT ] Comando: INTERVAL_BURST [Nodo Actuador]
+[ 01/07/2026, 03:11 pm ] 📬 [ ACK  ] Nodo Actuador confirmó ACK para el comando: INTERVAL_BURST
+[ 01/07/2026, 03:21 pm ] 🌧️ [ RAIN ] Restableciendo intervalo de chequeo de lluvia a 5 minutos (Vigía) por
+[ 01/07/2026, 03:21 pm ] 🌧️ [ RAIN ] iluminancia recuperada (13283 lx).
+[ 01/07/2026, 03:21 pm ] 📡 [ MQTT ] Comando: INTERVAL_NORMAL [Nodo Actuador]
+[ 01/07/2026, 03:21 pm ] 🌧️ [ RAIN ] [RainManager] Lluvia Inferida [DÍA]: deltaHR=7.5%, deltaTemp=-2.6°C, Lux min
+[ 01/07/2026, 03:21 pm ] 🌧️ [ RAIN ] actual: 9360lx vs baseline: 9440lx (57% caída).
+[ 01/07/2026, 03:21 pm ] 🌧️ [ RAIN ] [RainManager] Evento de lluvia inferido abierto (ID: 46ac23f5)
+[ 01/07/2026, 03:21 pm ] 📬 [ ACK  ] Nodo Actuador confirmó ACK para el comando: INTERVAL_NORMAL
+[ 01/07/2026, 03:29 pm ] 🌧️ [ RAIN ] [RainManager] Cierre por Recuperación Solar Cruzada: Lux max: 13425 lx >= 9440
+[ 01/07/2026, 03:29 pm ] 🌧️ [ RAIN ] lx (Temp estable, deltaTempLastLote=-33.20°C).
+[ 01/07/2026, 03:29 pm ] 🌧️ [ RAIN ] [RainManager] Evento de lluvia inferido cerrado (SOLAR_RECOVERY) — Duración: 8
+[ 01/07/2026, 03:29 pm ] 🌧️ [ RAIN ] min (ID: 46ac23f5)
+[ 01/07/2026, 04:00 pm ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 04:00 pm ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 04:00 pm ] ☀️ [ INFO ] Iluminancia: 612 lx
+[ 01/07/2026, 04:00 pm ] 🌡️ [ INFO ] Clima: 28.0°C / 80.9%
+[ 01/07/2026, 04:00 pm ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,16,0,4,0]} [Nodo EMA]
+[ 01/07/2026, 04:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,16,0,4,0]}
+[ 01/07/2026, 04:00 pm ] 📡 [ MQTT ] Comando: lux_sampling:on [Nodo EMA]
+[ 01/07/2026, 04:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:on
+[ 01/07/2026, 04:00 pm ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 04:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 04:00 pm ] 💤 [ NODE ] SLEEP [EMA]
+[ 01/07/2026, 04:59 pm ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 04:59 pm ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 04:59 pm ] ☀️ [ INFO ] Iluminancia: 426 lx
+[ 01/07/2026, 04:59 pm ] 🌡️ [ INFO ] Clima: 26.2°C / 87.6%
+[ 01/07/2026, 04:59 pm ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,16,59,54,0]} [Nodo EMA]
+[ 01/07/2026, 04:59 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,16,59,54,0]}
+[ 01/07/2026, 05:00 pm ] 📡 [ MQTT ] Comando: lux_sampling:on [Nodo EMA]
+[ 01/07/2026, 05:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:on
+[ 01/07/2026, 05:00 pm ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 05:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 05:00 pm ] 💤 [ NODE ] SLEEP [EMA]
+[ 01/07/2026, 05:59 pm ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 05:59 pm ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 05:59 pm ] ⚠️ [ INFO ] Iluminancia: No se detecto el sensor BH1750
+[ 01/07/2026, 05:59 pm ] ⚠️ [ INFO ] Clima: No se detecto el sensor DHT22
+[ 01/07/2026, 05:59 pm ] 📡 [ MQTT ] Comando: sync_climate (Descartado — Nodo Offline) [Nodo EMA]
+[ 01/07/2026, 05:59 pm ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,17,59,56,0]} [Nodo EMA]
+[ 01/07/2026, 06:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,17,59,56,0]}
+[ 01/07/2026, 06:00 pm ] 📡 [ MQTT ] Comando: lux_sampling:on [Nodo EMA]
+[ 01/07/2026, 06:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:on
+[ 01/07/2026, 06:00 pm ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 06:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 06:00 pm ] 💤 [ NODE ] SLEEP [EMA]
+[ 01/07/2026, 06:59 pm ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 07:00 pm ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 07:00 pm ] ⚠️ [ INFO ] Iluminancia: No se detecto el sensor BH1750
+[ 01/07/2026, 07:00 pm ] ⚠️ [ INFO ] Clima: No se detecto el sensor DHT22
+[ 01/07/2026, 07:00 pm ] 📡 [ MQTT ] Comando: sync_climate (Descartado — Nodo Offline) [Nodo EMA]
+[ 01/07/2026, 07:00 pm ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,19,0,8,0]} [Nodo EMA]
+[ 01/07/2026, 07:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,19,0,8,0]}
+[ 01/07/2026, 07:00 pm ] 📡 [ MQTT ] Comando: lux_sampling:off [Nodo EMA]
+[ 01/07/2026, 07:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:off
+[ 01/07/2026, 07:00 pm ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 07:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 07:00 pm ] 💤 [ NODE ] SLEEP [EMA]
+[ 01/07/2026, 07:01 pm ] 📡 [ INFO ] 🌙  Suspendiendo muestreo de iluminancia (Anochecer)
+[ 01/07/2026, 07:01 pm ] 📡 [ MQTT ] Comando: lux_sampling:off [Nodo Actuador]
+[ 01/07/2026, 07:01 pm ] 📬 [ ACK  ] Nodo Actuador confirmó ACK para el comando: lux_sampling:off
+[ 01/07/2026, 07:59 pm ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 07:59 pm ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 07:59 pm ] 🌙 [ INFO ] Iluminancia: Muestreo Suspendido (Anochecer)
+[ 01/07/2026, 07:59 pm ] 🌡️ [ INFO ] Clima: 25.5°C / 84.0%
+[ 01/07/2026, 07:59 pm ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,19,59,55,0]} [Nodo EMA]
+[ 01/07/2026, 08:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,19,59,55,0]}
+[ 01/07/2026, 08:00 pm ] 📡 [ MQTT ] Comando: lux_sampling:off [Nodo EMA]
+[ 01/07/2026, 08:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:off
+[ 01/07/2026, 08:00 pm ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 08:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 08:00 pm ] 💤 [ NODE ] SLEEP [EMA]
+[ 01/07/2026, 08:30 pm ] 💰 [ BCV  ] Iniciando sincronización de tasa BCV...
+[ 01/07/2026, 08:30 pm ] 💰 [ BCV  ] Tasa obtenida: 639.7029 Bs/USD con fecha valor: 02/07/2026
+[ 01/07/2026, 08:59 pm ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 08:59 pm ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 08:59 pm ] 🌙 [ INFO ] Iluminancia: Muestreo Suspendido (Anochecer)
+[ 01/07/2026, 08:59 pm ] 🌡️ [ INFO ] Clima: 25.4°C / 84.9%
+[ 01/07/2026, 08:59 pm ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,20,59,51,0]} [Nodo EMA]
+[ 01/07/2026, 08:59 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,20,59,51,0]}
+[ 01/07/2026, 08:59 pm ] 📡 [ MQTT ] Comando: lux_sampling:off [Nodo EMA]
+[ 01/07/2026, 09:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:off
+[ 01/07/2026, 09:00 pm ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 09:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 09:00 pm ] 💤 [ NODE ] SLEEP [EMA]
+[ 01/07/2026, 09:59 pm ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 09:59 pm ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 09:59 pm ] 🌙 [ INFO ] Iluminancia: Muestreo Suspendido (Anochecer)
+[ 01/07/2026, 09:59 pm ] 🌡️ [ INFO ] Clima: 25.1°C / 85.9%
+[ 01/07/2026, 09:59 pm ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,21,59,50,0]} [Nodo EMA]
+[ 01/07/2026, 09:59 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,21,59,50,0]}
+[ 01/07/2026, 10:00 pm ] 📡 [ MQTT ] Comando: lux_sampling:off [Nodo EMA]
+[ 01/07/2026, 10:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:off
+[ 01/07/2026, 10:00 pm ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 10:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 10:00 pm ] 💤 [ NODE ] SLEEP [EMA]
+[ 01/07/2026, 10:59 pm ] 🟢 [ NODE ] ONLINE [EMA]
+[ 01/07/2026, 10:59 pm ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 01/07/2026, 10:59 pm ] 🌙 [ INFO ] Iluminancia: Muestreo Suspendido (Anochecer)
+[ 01/07/2026, 10:59 pm ] 🌡️ [ INFO ] Clima: 24.8°C / 85.1%
+[ 01/07/2026, 10:59 pm ] 📡 [ MQTT ] Comando: {"time":[2026,7,1,2,22,59,53,0]} [Nodo EMA]
+[ 01/07/2026, 10:59 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,1,2,22,59,53,0]}
+[ 01/07/2026, 10:59 pm ] 📡 [ MQTT ] Comando: lux_sampling:off [Nodo EMA]
+[ 01/07/2026, 11:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:off
+[ 01/07/2026, 11:00 pm ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 01/07/2026, 11:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 01/07/2026, 11:00 pm ] 💤 [ NODE ] SLEEP [EMA]
+[ 02/07/2026, 12:01 am ] ✅ [ DONE ] [2026-07-01] [EXTERIOR] rows=2196 DLI=12.72 VPD=1.423 DIF=7.5
+[ 02/07/2026, 12:01 am ] ✅ [ DONE ] [2026-07-01] [ZONA_A] rows=266 DLI=1.68 VPD=0.845 DIF=2.95
+[ 02/07/2026, 12:01 am ] 📊 [ TLMT ] Cierre diario completado.
+[ 02/07/2026, 12:05 am ] ⏰ [ CRON ] Máquina de estados de Riego Interdiario
+[ 02/07/2026, 12:10 am ] 🔴 [ NODE ] OFFLINE [EMA] [Watchdog]
+[ 02/07/2026, 12:10 am ] 🔴 [ NODE ] OFFLINE [EMA] [NODE]
+[ 02/07/2026, 04:59 am ] 📡 [ INFO ] ☀  Iniciando muestreo de iluminancia (Amanecer)
+[ 02/07/2026, 04:59 am ] 📡 [ MQTT ] Comando: lux_sampling:on [Nodo Actuador]
+[ 02/07/2026, 04:59 am ] 📬 [ ACK  ] Nodo Actuador confirmó ACK para el comando: lux_sampling:on
+[ 02/07/2026, 08:00 am ] ⏰ [ CRON ] Notificación de mantenimiento de filtros generada.
+[ 02/07/2026, 11:00 am ] ⏰ [ CRON ] Ejecutando Rutina Programada (ID: d860a2da)
+[ 02/07/2026, 11:00 am ] 🔮 [ INFR ] Datos incompletos en InfluxDB (Falta: INTERIOR)
+[ 02/07/2026, 11:00 am ] ☀️ [ DAYC ] Día: SOLEADO (Avg: 35354 lx, Act: 21116 lx)
+[ 02/07/2026, 11:00 am ] ☀️ [ DAYC ] Nublado: 22 min | Nubes Grises: 9 min
+[ 02/07/2026, 11:00 am ] 🔮 [ INFR ] Evaluando: Humidificación del Suelo (11:00) (SOIL_WETTING)
+[ 02/07/2026, 11:00 am ] 🔮 [ INFR ] HR: 54% | Temp: 38.8°C | Día: SOLEADO
+[ 02/07/2026, 11:00 am ] 🔮 [ INFR ] Datos: EXT | Lluvia en curso (DB): NO
+[ 02/07/2026, 11:00 am ] 🔮 [ INFR ] Regla 4h para SOIL_WETTING [EXT]:
+[ 02/07/2026, 11:00 am ] 🔮 [ INFR ] HR Prom: 66.9% | Temp Prom: 35.1°C
+[ 02/07/2026, 11:00 am ] 📡 [ MQTT ] Despachando Circuito: SOIL_WETTING (10 min / 600s) [Task: 09f8960e] [Nodo
+[ 02/07/2026, 11:00 am ] 📡 [ MQTT ] Actuador]
+[ 02/07/2026, 11:00 am ] 📬 [ ACK  ] Nodo Actuador confirmó ACK para el comando: 09f8960e-ebe8-4288-bc88-3d0d1ea43844
+[ 02/07/2026, 11:00 am ] 💧 [ TASK ] Despacho confirmado — Task 09f8960e | 600s.
+[ 02/07/2026, 11:10 am ] 🟢 [ NODE ] ONLINE [EMA]
+[ 02/07/2026, 11:10 am ] 💧 [ TASK ] SOIL_WETTING 09f8960e FINALIZADA (9 min)
+[ 02/07/2026, 11:10 am ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 02/07/2026, 11:10 am ] ☀️ [ INFO ] Iluminancia: 2514 lx
+[ 02/07/2026, 11:10 am ] 🌡️ [ INFO ] Clima: 30.1°C / 69.0%
+[ 02/07/2026, 11:10 am ] 📡 [ MQTT ] Comando: {"time":[2026,7,2,3,11,10,15,0]} [Nodo EMA]
+[ 02/07/2026, 11:10 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,2,3,11,10,15,0]}
+[ 02/07/2026, 11:10 am ] 📡 [ MQTT ] Comando: lux_sampling:on [Nodo EMA]
+[ 02/07/2026, 11:10 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:on
+[ 02/07/2026, 11:10 am ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 02/07/2026, 11:10 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 02/07/2026, 11:10 am ] 💤 [ NODE ] SLEEP [EMA]
+[ 02/07/2026, 11:28 am ] 🔴 [ NODE ] OFFLINE [Actuador] [BROKER]
+[ 02/07/2026, 11:28 am ] 🔄 [ NODE ] REBOOT [Actuador]
+[ 02/07/2026, 11:29 am ] 📡 [ NODE ] Weather Station Exterior [Actuador]
+[ 02/07/2026, 11:29 am ] ☀️ [ INFO ] Iluminancia: 24166 lx
+[ 02/07/2026, 11:29 am ] ⚠️ [ INFO ] Clima: No se detecto el sensor DHT22
+[ 02/07/2026, 11:29 am ] 📡 [ MQTT ] Comando: sync_climate [Nodo Actuador]
+[ 02/07/2026, 11:29 am ] 🌧️ [ INFO ] Sensor Lluvia: Dry
+[ 02/07/2026, 11:29 am ] 📬 [ ACK  ] Nodo Actuador confirmó ACK para el comando: sync_climate
+[ 02/07/2026, 11:29 am ] 📡 [ MQTT ] Comando: lux_sampling:on [Nodo Actuador]
+[ 02/07/2026, 11:29 am ] 📡 [ INFO ] Watchdog: Sensores Sincronizados.
+[ 02/07/2026, 11:29 am ] 📬 [ ACK  ] Nodo Actuador confirmó ACK para el comando: lux_sampling:on
+[ 02/07/2026, 11:59 am ] 🟢 [ NODE ] ONLINE [EMA]
+[ 02/07/2026, 11:59 am ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 02/07/2026, 11:59 am ] ☀️ [ INFO ] Iluminancia: 2953 lx
+[ 02/07/2026, 11:59 am ] 🌡️ [ INFO ] Clima: 32.3°C / 62.2%
+[ 02/07/2026, 11:59 am ] 📡 [ MQTT ] Comando: {"time":[2026,7,2,3,11,59,56,0]} [Nodo EMA]
+[ 02/07/2026, 11:59 am ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,2,3,11,59,56,0]}
+[ 02/07/2026, 12:00 pm ] 📡 [ MQTT ] Comando: lux_sampling:on [Nodo EMA]
+[ 02/07/2026, 12:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:on
+[ 02/07/2026, 12:00 pm ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 02/07/2026, 12:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 02/07/2026, 12:00 pm ] 💤 [ NODE ] SLEEP [EMA]
+[ 02/07/2026, 12:59 pm ] 🟢 [ NODE ] ONLINE [EMA]
+[ 02/07/2026, 12:59 pm ] 📡 [ NODE ] Weather Station Orquideario [EMA]
+[ 02/07/2026, 12:59 pm ] ☀️ [ INFO ] Iluminancia: 3485 lx
+[ 02/07/2026, 12:59 pm ] 🌡️ [ INFO ] Clima: 29.9°C / 74.0%
+[ 02/07/2026, 12:59 pm ] 📡 [ MQTT ] Comando: {"time":[2026,7,2,3,12,59,51,0]} [Nodo EMA]
+[ 02/07/2026, 12:59 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: {"time":[2026,7,2,3,12,59,51,0]}
+[ 02/07/2026, 12:59 pm ] 📡 [ MQTT ] Comando: lux_sampling:on [Nodo EMA]
+[ 02/07/2026, 01:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: lux_sampling:on
+[ 02/07/2026, 01:00 pm ] 📡 [ MQTT ] Comando: sleep [Nodo EMA]
+[ 02/07/2026, 01:00 pm ] 📬 [ ACK  ] Nodo EMA confirmó ACK para el comando: sleep
+[ 02/07/2026, 01:00 pm ] 💤 [ NODE ] SLEEP [EMA]
