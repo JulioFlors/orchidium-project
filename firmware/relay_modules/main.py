@@ -2261,28 +2261,36 @@ async def climate_monitor_task():
 
             # 2. Lectura Normal (Siempre con Atomic Fix por seguridad de línea)
             if dht_sensor is not None:
-                try:
-                    # Limpieza atómica obligatoria antes de cada lectura periódica
-                    # Esto garantiza que el bus esté limpio a pesar del ruido/capacitancia.
-                    clean_dht_line()
-                    await asyncio.sleep_ms(1500) # Estabilización post-limpieza
+                success = False
+                for attempt in range(2):
+                    try:
+                        # Limpieza atómica obligatoria antes de cada lectura periódica
+                        clean_dht_line()
+                        await asyncio.sleep_ms(1500) # Estabilización post-limpieza
  
-                    # dht.measure() es bloqueante (~25ms) y apaga interrupciones.
-                    dht_sensor.measure()
-                    temp = round(dht_sensor.temperature(), 1)
-                    hum  = round(dht_sensor.humidity(), 1)
+                        # dht.measure() es bloqueante (~25ms) y apaga interrupciones.
+                        dht_sensor.measure()
+                        temp = round(dht_sensor.temperature(), 1)
+                        hum  = round(dht_sensor.humidity(), 1)
  
-                    # Validación de rango (descarta lecturas corruptas por ruido)
-                    if -10 <= temp <= 60:
-                        temperature_Batch.append(temp)
-                        dht_read_failures = 0
-                    if 0 <= hum <= 100:
-                        humidity_Batch.append(hum)
-                        dht_read_failures = 0
- 
-                except Exception:
-                    dht_read_failures += 1
-                    if DEBUG: print(f"⚠️  DHT22: Fallo de lectura transitorio. Fallos: {dht_read_failures}")
+                        # Validación de rango (descarta lecturas corruptas por ruido)
+                        if -10 <= temp <= 60 and 0 <= hum <= 100:
+                            temperature_Batch.append(temp)
+                            humidity_Batch.append(hum)
+                            dht_read_failures = 0
+                            success = True
+                            if attempt > 0 and DEBUG:
+                                print(f"✅  DHT22: Lectura recuperada en el reintento. Temp: {temp}°C, Hum: {hum}%")
+                            break
+                        else:
+                            raise ValueError("Valores fuera de rango")
+                    except Exception as e:
+                        if attempt == 0:
+                            if DEBUG: print(f"⚠️  DHT22: Fallo en primera lectura ({e}). Reintentando en 20s...")
+                            await asyncio.sleep(20)
+                        else:
+                            dht_read_failures += 1
+                            if DEBUG: print(f"⚠️  DHT22: Fallo de lectura definitivo en este ciclo. Fallos: {dht_read_failures}")
             else:
                 dht_read_failures += 1
                 if DEBUG: print(f"⚠️  DHT22: Sensor no disponible. Fallos: {dht_read_failures}")

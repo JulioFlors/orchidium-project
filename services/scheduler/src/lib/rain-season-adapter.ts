@@ -232,7 +232,7 @@ async function createDeferredIrrigation(scheduledAt: Date, reason: string) {
     return
   }
 
-  const cleanReason = `Motor de inferencia.\nAdaptación de temporada.`
+  const cleanReason = `Motor de inferencia.\nAdaptación de temporada: ${reason}`
 
   const newTask = await prisma.taskLog.create({
     data: {

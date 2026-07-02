@@ -88,7 +88,7 @@ export function isCurrentlyRaining(): boolean {
  */
 export function getRainStatusSummary() {
   return {
-    physicalActive,
+    physicalActive: physicalRainActive,
     physicalOverridden: physicalRainOverridden,
     inferedActive: inferedRainActive,
     inferedOverridden: inferedRainOverridden,
@@ -533,10 +533,13 @@ export async function evaluateClimateInference(): Promise<void> {
       date_bin(interval '10 minutes', time) as time_bin,
       MIN(temperature) as min_temp,
       MAX(temperature) as max_temp,
+      COUNT(temperature) as count_temp,
       MIN(humidity) as min_hum,
       MAX(humidity) as max_hum,
+      COUNT(humidity) as count_hum,
       MIN(illuminance) as min_lux,
-      MAX(illuminance) as max_lux
+      MAX(illuminance) as max_lux,
+      COUNT(illuminance) as count_lux
     FROM "environment_metrics"
     WHERE "zone" = 'EXTERIOR'
       AND time >= now() - interval '65 minutes'
@@ -560,7 +563,23 @@ export async function evaluateClimateInference(): Promise<void> {
       const maxLux = Number(row.max_lux)
       const timeBin = new Date(row.time_bin as string)
 
-      if (isNaN(minTemp) || isNaN(minHum) || isNaN(minLux)) continue
+      const countTemp = Number(row.count_temp)
+      const countHum = Number(row.count_hum)
+      const countLux = Number(row.count_lux)
+
+      if (
+        row.min_temp === null ||
+        row.min_hum === null ||
+        row.min_lux === null ||
+        isNaN(minTemp) ||
+        isNaN(minHum) ||
+        isNaN(minLux) ||
+        countTemp < 5 ||
+        countHum < 5 ||
+        countLux < 5
+      ) {
+        continue
+      }
 
       const timestamp = timeBin.getTime()
 
@@ -632,7 +651,7 @@ export async function evaluateClimateInference(): Promise<void> {
         luxCondition = currentMinLux <= baseLux1 * 0.6
         if (currentMinLux <= 15000) {
           tempDropThreshold = -1.2
-          humRiseThreshold = 4.0
+          humRiseThreshold = 8.0
         }
       } else {
         luxCondition = currentMinLux <= baseLux1 * 0.4
@@ -724,7 +743,7 @@ export async function evaluateClimateInference(): Promise<void> {
         luxCondition = currentMinLux <= baseLux2 * 0.6
         if (currentMinLux <= 15000) {
           tempDropThreshold = -1.2
-          humRiseThreshold = 4.0
+          humRiseThreshold = 8.0
         }
       } else {
         luxCondition = currentMinLux <= baseLux2 * 0.4

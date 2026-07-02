@@ -291,6 +291,7 @@ function CustomTooltip({
       // 3. Formateador con fallback a "--" sin unidad si no hay lectura
       const formatVal = (val: number | null | undefined, unit: string): string => {
         if (val === null || val === undefined) return '--'
+        if (unit !== 'lx' && val <= 1.0) return '--'
         if (unit === 'lx') return `${formatTooltipValue(val, 'lx')} lx`
         return `${Number(val).toFixed(1)}${unit}`
       }

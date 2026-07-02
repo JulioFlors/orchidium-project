@@ -7,13 +7,6 @@ const DRY_RUN = process.env.BACKFILL_DRY_RUN === 'true'
 const COOLDOWN_MS = 15 * 60 * 1000 // 15 minutos sin lluvia para cerrar evento físico
 const BATCH_INTERVAL_MS = 10 * 60 * 1000 // 10 minutos por lote de telemetría exterior
 
-interface InfluxSample {
-  time: Date
-  temperature: number | null
-  humidity: number | null
-  illuminance: number | null
-  rain_intensity: number | null
-}
 
 interface BatchSummary {
   min: number
@@ -156,9 +149,11 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
   let luxBuffer: number[] = []
 
   const flushIntervalAndEvaluate = async (timestampMs: number) => {
-    if (tempBuffer.length > 0) pushBatchMetrics(tempBatches, tempBuffer, timestampMs)
-    if (humBuffer.length > 0) pushBatchMetrics(humBatches, humBuffer, timestampMs)
-    if (luxBuffer.length > 0) pushBatchMetrics(luxBatches, luxBuffer, timestampMs)
+    if (tempBuffer.length >= 5 && humBuffer.length >= 5 && luxBuffer.length >= 5) {
+      pushBatchMetrics(tempBatches, tempBuffer, timestampMs)
+      pushBatchMetrics(humBatches, humBuffer, timestampMs)
+      pushBatchMetrics(luxBatches, luxBuffer, timestampMs)
+    }
 
     tempBuffer = []
     humBuffer = []
@@ -179,9 +174,6 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
       let triggered = false
       let tempBaselineAgeMinutes = 20
-      let tempDeltaTemp = 0
-      let tempDeltaHum = 0
-      let dropPct = 0
       let triggerReason = ''
 
       if (isDay) {
@@ -204,7 +196,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           luxCondition = currentMinLux <= baseLux1 * 0.6
           if (currentMinLux <= 15000) {
             tempDropThreshold = -1.2
-            humRiseThreshold = 4.0
+            humRiseThreshold = 8.0
           }
         } else {
           luxCondition = currentMinLux <= baseLux1 * 0.4
@@ -221,9 +213,6 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           triggered = true
           triggerReason = `Inferencia de Día: Incremento de +${dHum1.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp1).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
           tempBaselineAgeMinutes = 20
-          tempDeltaTemp = dTemp1
-          tempDeltaHum = dHum1
-          dropPct = baseLux1 > 0 ? ((baseLux1 - currentMinLux) / baseLux1) * 100 : 0
         }
 
         if (!triggered) {
@@ -245,7 +234,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             luxCondition2 = currentMinLux <= baseLux2 * 0.6
             if (currentMinLux <= 15000) {
               tempDropThreshold2 = -1.2
-              humRiseThreshold2 = 4.0
+              humRiseThreshold2 = 8.0
             }
           } else {
             luxCondition2 = currentMinLux <= baseLux2 * 0.4
@@ -262,9 +251,6 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             triggered = true
             triggerReason = `Inferencia de Día: Incremento de +${dHum2.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp2).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
             tempBaselineAgeMinutes = 30
-            tempDeltaTemp = dTemp2
-            tempDeltaHum = dHum2
-            dropPct = baseLux2 > 0 ? ((baseLux2 - currentMinLux) / baseLux2) * 100 : 0
           }
         }
       } else {
@@ -289,8 +275,6 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           triggered = true
           triggerReason = `Inferencia de Noche: Caída térmica de ${currentTempDrop.toFixed(1)}°C en ${tempBaselineAgeMinutes}m (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%)`
           tempBaselineAgeMinutes = 30
-          tempDeltaTemp = -currentTempDrop
-          tempDeltaHum = currentHumRise
         }
       }
 

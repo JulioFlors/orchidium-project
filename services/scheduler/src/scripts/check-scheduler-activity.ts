@@ -19,7 +19,7 @@ async function main() {
   console.log(`Se encontraron ${taskLogs.length} logs de tareas:`)
   for (const log of taskLogs) {
     console.log(
-      `[${log.timestamp.toISOString()}] Task: ${log.taskName} | Event: ${log.eventType} | Status: ${log.status} | Reason: ${log.payload ? JSON.stringify(log.payload) : 'N/A'}`
+      `[${log.timestamp.toISOString()}] Task ID: ${log.taskId} | Status: ${log.status} | Notes: ${log.notes ?? 'N/A'}`
     )
   }
 

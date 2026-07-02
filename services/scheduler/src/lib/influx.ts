@@ -28,7 +28,7 @@ if (!isPublicCloud && isInternalHost) {
   // Silenciar el warning molesto de Node.js
   const originalEmit = process.emit
 
-  // @ts-expect-error - Sobreescritura necesaria para silenciar warning TLS
+  // @ts-ignore - Sobreescritura necesaria para silenciar warning TLS
   process.emit = function (name: string | symbol, data: unknown, ...args: unknown[]) {
     if (
       name === 'warning' &&
