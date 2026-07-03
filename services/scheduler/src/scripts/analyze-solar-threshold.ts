@@ -95,7 +95,6 @@ async function runSimulation(require15kSolarThreshold: boolean) {
       if (lastRainClosedAt !== null && timestampMs - lastRainClosedAt < 15 * 60 * 1000) return
 
       let triggered = false
-      let triggerReason = ''
 
       if (isDay) {
         // Reglas Diurnas B1
@@ -132,7 +131,6 @@ async function runSimulation(require15kSolarThreshold: boolean) {
 
         if (dTemp1 <= tempDropThreshold && humCondition && luxCondition) {
           triggered = true
-          triggerReason = 'DÍA B1'
         }
 
         // Reglas Diurnas B2
@@ -170,7 +168,6 @@ async function runSimulation(require15kSolarThreshold: boolean) {
 
           if (dTemp2 <= tempDropThreshold2 && humCondition2 && luxCondition2) {
             triggered = true
-            triggerReason = 'DÍA B2'
           }
         }
       } else {
@@ -193,7 +190,6 @@ async function runSimulation(require15kSolarThreshold: boolean) {
 
         if (varTempPre <= 0.6 && isTempDropAbrupt && (isHumRiseAbrupt || isPreSaturated)) {
           triggered = true
-          triggerReason = 'NOCHE'
         }
       }
 

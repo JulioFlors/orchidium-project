@@ -544,7 +544,7 @@ export async function evaluateClimateInference(): Promise<void> {
     SELECT time, temperature, humidity, illuminance
     FROM "environment_metrics"
     WHERE "zone" = 'EXTERIOR'
-      AND time >= now() - 75m
+      AND time >= now() - INTERVAL '75 minutes'
     ORDER BY time ASC
   `
 
@@ -664,6 +664,9 @@ export async function evaluateClimateInference(): Promise<void> {
     let dropPct = 0
     let isStagnantTriggered = false
     let stagnantVarTempPre = 0
+    let calculatedBaselineTemp: number | null = null
+    let calculatedBaselineHum: number | null = null
+    let calculatedBaselineLux: number | null = null
 
     // Paso 1 (20 minutos para Día / Ventana de 40 minutos para Noche)
     const baseTemp1 = tempBatches[1].max
@@ -704,6 +707,9 @@ export async function evaluateClimateInference(): Promise<void> {
         tempDeltaTemp = dTemp1
         tempDeltaHum = dHum1
         dropPct = baseLux1 > 0 ? ((baseLux1 - currentMinLux) / baseLux1) * 100 : 0
+        calculatedBaselineTemp = baseTemp1
+        calculatedBaselineHum = baseHum1
+        calculatedBaselineLux = baseLux1
       }
     } else {
       // NOCHE - Regla Unificada de Gradiente Dinámico
@@ -733,8 +739,6 @@ export async function evaluateClimateInference(): Promise<void> {
         const currentHumRise = currentMaxHum - minHumPreAll
 
         // --- Calibración Fina (Fórmula B Calibrada con Filtro de Rocío) ---
-        // Si el aire ya venía saturado (>= 98.0% HR), el motor asume que el sensor está saturado (rocío/neblina) y eleva el piso térmico a 0.50°C.
-        // Si no está saturado (< 98.0% HR), el piso es 0.35°C para registrar garúas tenues de forma dinámica.
         const tempFloor = minHumPreAll >= 98.0 ? 0.50 : 0.35
 
         const tempDropThreshold = Math.max(tempFloor, varTempPre * 1.8) // Multiplicador térmico a 1.8
@@ -753,6 +757,9 @@ export async function evaluateClimateInference(): Promise<void> {
           stagnantVarTempPre = varTempPre
           inferedBaselineVarTemp = refVarTemp
           inferedBaselineVarHum = refVarHum
+          calculatedBaselineTemp = maxTempPreAll
+          calculatedBaselineHum = minHumPreAll
+          calculatedBaselineLux = 0
         }
       }
     }
@@ -796,6 +803,9 @@ export async function evaluateClimateInference(): Promise<void> {
         tempDeltaTemp = dTemp2
         tempDeltaHum = dHum2
         dropPct = baseLux2 > 0 ? ((baseLux2 - currentMinLux) / baseLux2) * 100 : 0
+        calculatedBaselineTemp = baseTemp2
+        calculatedBaselineHum = baseHum2
+        calculatedBaselineLux = baseLux2
       }
     }
 
@@ -803,12 +813,12 @@ export async function evaluateClimateInference(): Promise<void> {
       inferedRainActive = true
       inferedRainOverridden = false
 
-      inferedBaselineLux = luxBatches[0].max
-      inferedBaselineTemp = tempBatches[0].max
-      inferedBaselineHum = humBatches[0].min
+      inferedBaselineLux = calculatedBaselineLux ?? luxBatches[0].max
+      inferedBaselineTemp = calculatedBaselineTemp ?? tempBatches[0].max
+      inferedBaselineHum = calculatedBaselineHum ?? humBatches[0].min
 
       let preciseStartMs = nowMs
-      const baselineT = tempBatches[1] ? tempBatches[1].max : inferedBaselineTemp
+      const baselineT = calculatedBaselineTemp ?? tempBatches[1]?.max ?? inferedBaselineTemp
       const samplesT = tempBatches[0].samples
       const dropThreshold = isDay ? -1.2 : -0.35
       const matchingSample = samplesT.find((s) => s.value - baselineT <= dropThreshold)
@@ -858,8 +868,8 @@ export async function evaluateClimateInference(): Promise<void> {
         )
       } else {
         const rainNotes = isStagnantTriggered
-          ? `Inferencia de Noche (Gradiente por Estancamiento): Caída térmica de ${tempDeltaTemp.toFixed(1)}°C tras estabilidad previa de ${stagnantVarTempPre.toFixed(2)}°C (HR: ${currentMaxHum.toFixed(1)}%) (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%)`
-          : `Inferencia de Noche: Incremento de +${tempDeltaHum.toFixed(1)}% HR y caída térmica de ${tempDeltaTemp.toFixed(1)}°C en ${tempBaselineAgeMinutes}m (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%)`
+          ? `Inferencia de Noche (Gradiente por Estancamiento): Incremento de +${tempDeltaHum.toFixed(1)}% HR y caída térmica de ${Math.abs(tempDeltaTemp).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%)`
+          : `Inferencia de Noche: Incremento de +${tempDeltaHum.toFixed(1)}% HR y caída térmica de ${Math.abs(tempDeltaTemp).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%)`
 
         Logger.rain(
           isStagnantTriggered

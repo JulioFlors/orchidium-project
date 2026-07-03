@@ -365,8 +365,8 @@ function CustomTooltip({
         <div className="bg-surface border-input-outline relative z-50 flex max-w-[340px] flex-col gap-3 overflow-visible rounded-lg border p-3 text-xs shadow-md outline-none">
           {/* Encabezado Cronológico */}
           <div className="text-foreground flex flex-col gap-1 text-xs font-bold">
-            <span className="flex items-center gap-1.5 text-xs text-slate-200">📅 {formattedTime}</span>
-            <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-400">
+            <span className="flex items-center gap-1.5 text-xs text-primary">📅 {formattedTime}</span>
+            <span className="flex items-center gap-1 text-[11px] font-semibold text-primary/80">
               🌧️ {data.startTime}   |   {closeIcon} {data.endTime}   |   ⏱️ {data.duration} min
             </span>
           </div>

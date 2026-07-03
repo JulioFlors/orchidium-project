@@ -181,6 +181,9 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
       let triggered = false
       let tempBaselineAgeMinutes = 20
       let triggerReason = ''
+      let calculatedBaselineTemp: number | null = null
+      let calculatedBaselineHum: number | null = null
+      let calculatedBaselineLux: number | null = null
 
       if (isDay) {
         // --- REGLAS DIURNAS ---
@@ -219,6 +222,9 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           triggered = true
           triggerReason = `Inferencia de Día: Incremento de +${dHum1.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp1).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
           tempBaselineAgeMinutes = 20
+          calculatedBaselineTemp = baseTemp1
+          calculatedBaselineHum = baseHum1
+          calculatedBaselineLux = baseLux1
         }
 
         if (!triggered) {
@@ -257,6 +263,9 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             triggered = true
             triggerReason = `Inferencia de Día: Incremento de +${dHum2.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp2).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
             tempBaselineAgeMinutes = 30
+            calculatedBaselineTemp = baseTemp2
+            calculatedBaselineHum = baseHum2
+            calculatedBaselineLux = baseLux2
           }
         }
       } else {
@@ -279,20 +288,23 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
         if (varTempPre <= 0.6 && isTempDropAbrupt && (isHumRiseAbrupt || isPreSaturated)) {
           triggered = true
-          triggerReason = `Inferencia de Noche: Caída térmica de ${currentTempDrop.toFixed(1)}°C en ${tempBaselineAgeMinutes}m (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%)`
+          triggerReason = `Inferencia de Noche: Incremento de +${currentHumRise.toFixed(1)}% HR y caída térmica de ${currentTempDrop.toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%)`
           tempBaselineAgeMinutes = 30
+          calculatedBaselineTemp = maxTempPreAll
+          calculatedBaselineHum = minHumPreAll
+          calculatedBaselineLux = 0
         }
       }
 
       if (triggered) {
         isTelemetryRainActive = true
 
-        baselineLux = luxBatches[0].max
-        baselineTemp = tempBatches[0].max
-        baselineHum = humBatches[0].min
+        baselineLux = calculatedBaselineLux ?? luxBatches[0].max
+        baselineTemp = calculatedBaselineTemp ?? tempBatches[0].max
+        baselineHum = calculatedBaselineHum ?? humBatches[0].min
 
         let preciseStartMs = timestampMs
-        const baselineT = tempBatches[1] ? tempBatches[1].max : baselineTemp
+        const baselineT = calculatedBaselineTemp ?? tempBatches[1]?.max ?? baselineTemp
         const samplesT = tempBatches[0].samples
         const dropThreshold = isDay ? -1.2 : -0.35
         const matchingSample = samplesT.find((s) => s.value - baselineT <= dropThreshold)
