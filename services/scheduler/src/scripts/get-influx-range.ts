@@ -21,11 +21,13 @@ async function main() {
 
   try {
     const streamFirst = influxClient.query(query)
+
     for await (const row of streamFirst) {
       console.log('Primer registro en los últimos 10 días:', row.time)
     }
 
     const streamLast = influxClient.query(queryLast)
+
     for await (const row of streamLast) {
       console.log('Último registro en los últimos 10 días:', row.time)
     }

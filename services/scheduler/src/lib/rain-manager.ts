@@ -3,10 +3,16 @@ import { prisma } from '@package/database'
 import { Logger } from './logger'
 import { influxClient } from './influx'
 
+export interface Sample {
+  value: number
+  timestamp: number
+}
+
 export interface BatchSummary {
   min: number
   max: number
   timestamp: number
+  samples: Sample[]
 }
 
 interface TelemetrySample {
@@ -60,13 +66,18 @@ function pushBatchMetrics(queue: BatchSummary[], values: number[]) {
   const max = Math.max(...values)
   const now = Date.now()
 
-  // Si el lote actual tiene menos de 5 minutos, se combinan los extremos en el lote 0
+  const samples = values.map((val, idx) => ({
+    value: val,
+    timestamp: now - (values.length - 1 - idx) * 60000,
+  }))
+
   if (queue.length > 0 && now - queue[0].timestamp < 5 * 60 * 1000) {
     queue[0].min = Math.min(queue[0].min, min)
     queue[0].max = Math.max(queue[0].max, max)
     queue[0].timestamp = now
+    queue[0].samples.push(...samples)
   } else {
-    queue.unshift({ min, max, timestamp: now })
+    queue.unshift({ min, max, timestamp: now, samples })
     if (queue.length > 6) queue.pop()
   }
 }
@@ -320,14 +331,6 @@ async function closeRainEvent(
 
         if (!eventId) return
 
-        if (durationSeconds < 300) {
-          await prisma.rainEvent.delete({ where: { id: eventId } })
-          Logger.rain(
-            `[RainManager] Evento de lluvia ${label} descartado por duración insuficiente (${Math.round(durationSeconds / 60)} min) (ID: ${eventId.slice(0, 8)})`,
-          )
-          return
-        }
-
         await prisma.rainEvent.update({
           where: { id: eventId },
           data: {
@@ -536,64 +539,87 @@ export async function evaluateClimateInference(): Promise<void> {
   const nowMs = Date.now()
 
   // 1. Hidratar las colas de batches en tiempo real directamente desde InfluxDB (para resiliencia ante reinicios y sincronización de intervalos)
+  const BATCH_MS = 10 * 60 * 1000
   const query = `
-    SELECT 
-      date_bin(interval '10 minutes', time) as time_bin,
-      MIN(temperature) as min_temp,
-      MAX(temperature) as max_temp,
-      COUNT(temperature) as count_temp,
-      MIN(humidity) as min_hum,
-      MAX(humidity) as max_hum,
-      COUNT(humidity) as count_hum,
-      MIN(illuminance) as min_lux,
-      MAX(illuminance) as max_lux,
-      COUNT(illuminance) as count_lux
+    SELECT time, temperature, humidity, illuminance
     FROM "environment_metrics"
     WHERE "zone" = 'EXTERIOR'
-      AND time >= now() - interval '65 minutes'
-    GROUP BY time_bin
-    ORDER BY time_bin DESC
-    LIMIT 6
+      AND time >= now() - 75m
+    ORDER BY time ASC
   `
 
   try {
     const stream = influxClient.query(query)
+    const bins: { [binStartMs: number]: { temp: Sample[]; hum: Sample[]; lux: Sample[] } } = {}
+
+    for await (const row of stream) {
+      const tDate = rowTimeToDate(row.time)
+      const tMs = tDate.getTime()
+      const binStartMs = Math.floor(tMs / BATCH_MS) * BATCH_MS
+
+      if (!bins[binStartMs]) {
+        bins[binStartMs] = { temp: [], hum: [], lux: [] }
+      }
+
+      if (row.temperature != null) {
+        const tVal = Number(row.temperature)
+        if (tVal > 5.0 && tVal < 55.0) {
+          bins[binStartMs].temp.push({ value: tVal, timestamp: tMs })
+        }
+      }
+      if (row.humidity != null) {
+        const hVal = Number(row.humidity)
+        if (hVal > 10.0 && hVal <= 100.0) {
+          bins[binStartMs].hum.push({ value: hVal, timestamp: tMs })
+        }
+      }
+      if (row.illuminance != null) {
+        const lVal = Number(row.illuminance)
+        if (lVal >= 0) {
+          bins[binStartMs].lux.push({ value: lVal, timestamp: tMs })
+        }
+      } else {
+        const sampleHour = (tDate.getUTCHours() - 4 + 24) % 24
+        if (sampleHour >= 19 || sampleHour < 5) {
+          bins[binStartMs].lux.push({ value: 0, timestamp: tMs })
+        }
+      }
+    }
+
+    const sortedBins = Object.keys(bins)
+      .map(Number)
+      .sort((a, b) => b - a)
+
     const newTempBatches: BatchSummary[] = []
     const newHumBatches: BatchSummary[] = []
     const newLuxBatches: BatchSummary[] = []
 
-    for await (const row of stream) {
-      const minTemp = Number(row.min_temp)
-      const maxTemp = Number(row.max_temp)
-      const minHum = Number(row.min_hum)
-      const maxHum = Number(row.max_hum)
-      const minLux = Number(row.min_lux)
-      const maxLux = Number(row.max_lux)
-      const timeBin = new Date(row.time_bin as string)
+    for (const binStartMs of sortedBins) {
+      const bData = bins[binStartMs]
+      if (bData.temp.length >= 5 && bData.hum.length >= 5 && bData.lux.length >= 5) {
+        const tempVals = bData.temp.map((s) => s.value)
+        const humVals = bData.hum.map((s) => s.value)
+        const luxVals = bData.lux.map((s) => s.value)
 
-      const countTemp = Number(row.count_temp)
-      const countHum = Number(row.count_hum)
-      const countLux = Number(row.count_lux)
-
-      if (
-        row.min_temp === null ||
-        row.min_hum === null ||
-        row.min_lux === null ||
-        isNaN(minTemp) ||
-        isNaN(minHum) ||
-        isNaN(minLux) ||
-        countTemp < 5 ||
-        countHum < 5 ||
-        countLux < 5
-      ) {
-        continue
+        newTempBatches.push({
+          min: Math.min(...tempVals),
+          max: Math.max(...tempVals),
+          timestamp: binStartMs,
+          samples: bData.temp,
+        })
+        newHumBatches.push({
+          min: Math.min(...humVals),
+          max: Math.max(...humVals),
+          timestamp: binStartMs,
+          samples: bData.hum,
+        })
+        newLuxBatches.push({
+          min: Math.min(...luxVals),
+          max: Math.max(...luxVals),
+          timestamp: binStartMs,
+          samples: bData.lux,
+        })
       }
-
-      const timestamp = timeBin.getTime()
-
-      newTempBatches.push({ min: minTemp, max: maxTemp, timestamp })
-      newHumBatches.push({ min: minHum, max: maxHum, timestamp })
-      newLuxBatches.push({ min: minLux, max: maxLux, timestamp })
     }
 
     if (newTempBatches.length > 0) {
@@ -622,7 +648,7 @@ export async function evaluateClimateInference(): Promise<void> {
       hour12: false,
     }).format(new Date(tempBatches[0].timestamp)),
   )
-  const isDay = caracasHour >= 8 && caracasHour < 18
+  const isDay = caracasHour >= 8 && caracasHour < 17
 
   // A. Evaluar Inicio de Lluvia Inferida
   if (!inferedRainActive) {
@@ -776,15 +802,35 @@ export async function evaluateClimateInference(): Promise<void> {
     if (triggered) {
       inferedRainActive = true
       inferedRainOverridden = false
-      inferedRainStartedAt = nowMs
 
       inferedBaselineLux = luxBatches[0].max
       inferedBaselineTemp = tempBatches[0].max
       inferedBaselineHum = humBatches[0].min
 
+      let preciseStartMs = nowMs
+      const baselineT = tempBatches[1] ? tempBatches[1].max : inferedBaselineTemp
+      const samplesT = tempBatches[0].samples
+      const dropThreshold = isDay ? -1.2 : -0.35
+      const matchingSample = samplesT.find((s) => s.value - baselineT <= dropThreshold)
+      if (matchingSample) {
+        preciseStartMs = matchingSample.timestamp
+      } else {
+        const minSample = samplesT.reduce(
+          (min, s) => (s.value < min.value ? s : min),
+          samplesT[0],
+        )
+        if (minSample) preciseStartMs = minSample.timestamp
+      }
+
+      inferedRainStartedAt = preciseStartMs
+
       minLuxInRain = luxBatches[0].min
       minTempInRain = tempBatches[0].min
       maxHumInRain = humBatches[0].max
+
+      const startSampleT = tempBatches[0].samples.find((s) => s.timestamp === preciseStartMs) || tempBatches[0].samples[0]
+      const startSampleH = humBatches[0].samples.find((s) => s.timestamp === preciseStartMs) || humBatches[0].samples[0]
+      const startSampleL = luxBatches[0].samples.find((s) => s.timestamp === preciseStartMs) || luxBatches[0].samples[0]
 
       if (isDay) {
         const isPersistentlyCloudy = baseLux1 <= 10000
@@ -795,7 +841,7 @@ export async function evaluateClimateInference(): Promise<void> {
         )
 
         await openRainEvent(
-          new Date(),
+          new Date(preciseStartMs),
           true,
           {
             temp: inferedBaselineTemp,
@@ -805,9 +851,9 @@ export async function evaluateClimateInference(): Promise<void> {
           },
           `Inferencia de Día${tagMode}: Incremento de +${tempDeltaHum.toFixed(1)}% HR y caída térmica de ${tempDeltaTemp.toFixed(1)}°C en ${tempBaselineAgeMinutes}m (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
           {
-            temp: currentMinTemp,
-            hum: currentMaxHum,
-            lux: currentMinLux,
+            temp: startSampleT ? startSampleT.value : currentMinTemp,
+            hum: startSampleH ? startSampleH.value : currentMaxHum,
+            lux: startSampleL ? startSampleL.value : currentMinLux,
           },
         )
       } else {
@@ -822,7 +868,7 @@ export async function evaluateClimateInference(): Promise<void> {
         )
 
         await openRainEvent(
-          new Date(),
+          new Date(preciseStartMs),
           true,
           {
             temp: inferedBaselineTemp,
@@ -832,9 +878,9 @@ export async function evaluateClimateInference(): Promise<void> {
           },
           rainNotes,
           {
-            temp: currentMinTemp,
-            hum: currentMaxHum,
-            lux: currentMinLux,
+            temp: startSampleT ? startSampleT.value : currentMinTemp,
+            hum: startSampleH ? startSampleH.value : currentMaxHum,
+            lux: startSampleL ? startSampleL.value : currentMinLux,
           },
         )
       }
@@ -855,6 +901,13 @@ export async function evaluateClimateInference(): Promise<void> {
           inferedBaselineVarHum !== null ? Math.max(1.0, 1.2 * inferedBaselineVarHum) : 1.0
 
         if (diffHum <= humCeseThreshold && diffTemp <= tempCeseThreshold) {
+          const lastSample = tempBatches[0].samples[tempBatches[0].samples.length - 1]
+          const preciseEndMs = lastSample ? lastSample.timestamp : nowMs
+
+          const endSampleT = tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || tempBatches[0].samples[tempBatches[0].samples.length - 1]
+          const endSampleH = humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || humBatches[0].samples[humBatches[0].samples.length - 1]
+          const endSampleL = luxBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || luxBatches[0].samples[luxBatches[0].samples.length - 1]
+
           Logger.rain(
             `[RainManager] Cierre por Estancamiento de Variables (15m+): Rango HR: ${diffHum.toFixed(1)}% <= ${humCeseThreshold.toFixed(1)}%, Rango Temp: ${diffTemp.toFixed(1)}°C <= ${tempCeseThreshold.toFixed(1)}°C (últimos 10 min).`,
           )
@@ -865,13 +918,13 @@ export async function evaluateClimateInference(): Promise<void> {
           inferedBaselineVarHum = null
           await closeRainEvent(
             'STAGNANT',
-            new Date(),
+            new Date(preciseEndMs),
             true,
-            `Estancamiento climático dinámico: sin fluctuación de temperatura (variación ≤ ${tempCeseThreshold.toFixed(1)}°C) ni humedad (variación ≤ ${humCeseThreshold.toFixed(1)}% HR) durante 10 minutos (dT=${diffTemp.toFixed(1)}°C <= ${tempCeseThreshold.toFixed(1)}, dH=${diffHum.toFixed(1)}% <= ${humCeseThreshold.toFixed(1)}, Temp: ${tempBatches[0].min.toFixed(1)}°C, Hum: ${humBatches[0].max.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
+            `Estancamiento climático dinámico: sin fluctuación de temperatura (variación ≤ ${tempCeseThreshold.toFixed(1)}°C) ni humedad (variación ≤ ${humCeseThreshold.toFixed(1)}% HR) durante 10 minutos (dT=${diffTemp.toFixed(1)}°C <= ${tempCeseThreshold.toFixed(1)}, dH=${diffHum.toFixed(1)}% <= ${humCeseThreshold.toFixed(1)}, Temp: ${tempBatches[0].min.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
             {
-              temp: currentMinTemp,
-              hum: currentMaxHum,
-              lux: currentMinLux,
+              temp: endSampleT ? endSampleT.value : currentMinTemp,
+              hum: endSampleH ? endSampleH.value : currentMaxHum,
+              lux: endSampleL ? endSampleL.value : currentMinLux,
             },
           )
 
@@ -899,7 +952,6 @@ export async function evaluateClimateInference(): Promise<void> {
           const tempDrop = inferedBaselineTemp - minTempInRain
           const humRise = maxHumInRain - inferedBaselineHum
 
-          // Umbrales adaptativos: recuperar 35% de la caída y secar 15% del ascenso
           const tempThreshold = minTempInRain + Math.max(0.6, tempDrop * 0.35)
           const humThreshold = maxHumInRain - Math.max(2.0, humRise * 0.15)
 
@@ -907,6 +959,19 @@ export async function evaluateClimateInference(): Promise<void> {
           const humRecovered = currentHum <= humThreshold
 
           if (tempRecovered && humRecovered) {
+            let preciseEndMs = nowMs
+            const matchingEndSample = tempBatches[0].samples.find((s) => s.value >= tempThreshold)
+            if (matchingEndSample) {
+              preciseEndMs = matchingEndSample.timestamp
+            } else {
+              const lastSample = tempBatches[0].samples[tempBatches[0].samples.length - 1]
+              if (lastSample) preciseEndMs = lastSample.timestamp
+            }
+
+            const endSampleT = tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || tempBatches[0].samples[tempBatches[0].samples.length - 1]
+            const endSampleH = humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || humBatches[0].samples[humBatches[0].samples.length - 1]
+            const endSampleL = luxBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || luxBatches[0].samples[luxBatches[0].samples.length - 1]
+
             Logger.rain(
               `[RainManager] Cierre por Recuperación Adaptativa: Temp: ${currentTemp.toFixed(1)}°C >= ${tempThreshold.toFixed(1)}°C, Hum: ${currentHum.toFixed(1)}% <= ${humThreshold.toFixed(1)}% (DropTemp=${tempDrop.toFixed(1)}°C).`,
             )
@@ -916,13 +981,13 @@ export async function evaluateClimateInference(): Promise<void> {
             inferedBaselineVarHum = null
             await closeRainEvent(
               'BASELINE_RECOVERY',
-              new Date(),
+              new Date(preciseEndMs),
               true,
               `Cese de lluvia (térmico/hídrico): temperatura subió a ${currentTemp.toFixed(1)}°C (umbral: ${tempThreshold.toFixed(1)}°C) y humedad bajó a ${currentHum.toFixed(1)}% (umbral: ${humThreshold.toFixed(1)}% HR) (Temp: ${currentTemp.toFixed(1)}°C, Hum: ${currentHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
               {
-                temp: currentTemp,
-                hum: currentHum,
-                lux: currentMinLux,
+                temp: endSampleT ? endSampleT.value : currentTemp,
+                hum: endSampleH ? endSampleH.value : currentHum,
+                lux: endSampleL ? endSampleL.value : currentMinLux,
               },
             )
             maxHumInRain = null
@@ -941,11 +1006,23 @@ export async function evaluateClimateInference(): Promise<void> {
 
           const currentMaxLux = luxBatches[0].max
 
-          // Validación cruzada: que la temperatura no esté en bajada brusca en el último lote
-          const lastTempDrop = tempBatches[1].max - tempBatches[0].max // Si positivo, se está calentando o estable
-          const isTempStableOrRising = lastTempDrop >= -0.2 // Permite caídas marginales del sensor
+          const lastTempDrop = tempBatches[1].max - tempBatches[0].max
+          const isTempStableOrRising = lastTempDrop >= -0.2
 
-          if (currentMaxLux >= luxRecoveryThreshold && isTempStableOrRising) {
+          if (currentMaxLux >= luxRecoveryThreshold && isTempStableOrRising && currentMaxLux >= 15000) {
+            let preciseEndMs = nowMs
+            const matchingEndSample = luxBatches[0].samples.find((s) => s.value >= luxRecoveryThreshold)
+            if (matchingEndSample) {
+              preciseEndMs = matchingEndSample.timestamp
+            } else {
+              const lastSample = luxBatches[0].samples[luxBatches[0].samples.length - 1]
+              if (lastSample) preciseEndMs = lastSample.timestamp
+            }
+
+            const endSampleT = tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || tempBatches[0].samples[tempBatches[0].samples.length - 1]
+            const endSampleH = humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || humBatches[0].samples[humBatches[0].samples.length - 1]
+            const endSampleL = luxBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || luxBatches[0].samples[luxBatches[0].samples.length - 1]
+
             Logger.rain(
               `[RainManager] Cierre por Recuperación Solar Cruzada: Lux max: ${currentMaxLux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx (Temp estable, deltaTempLastLote=${(-lastTempDrop).toFixed(2)}°C).`,
             )
@@ -956,13 +1033,13 @@ export async function evaluateClimateInference(): Promise<void> {
             inferedBaselineVarHum = null
             await closeRainEvent(
               'SOLAR_RECOVERY',
-              new Date(),
+              new Date(preciseEndMs),
               true,
-              `Despeje solar verificado: iluminancia subió a ${Math.round(currentMaxLux).toLocaleString()} lx (umbral elástico: ${Math.round(luxRecoveryThreshold).toLocaleString()} lx) acoplado a estabilidad térmica en el lote actual (Lux max: ${currentMaxLux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx, Temp: ${tempBatches[0].min.toFixed(1)}°C, Hum: ${humBatches[0].max.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
+              `Despeje solar verificado: iluminancia subió a ${Math.round(currentMaxLux).toLocaleString()} lx (umbral elástico: ${Math.round(luxRecoveryThreshold).toLocaleString()} lx) acoplado a estabilidad térmica en el lote actual (Lux max: ${currentMaxLux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx, Temp: ${tempBatches[0].min.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
               {
-                temp: tempBatches[0].min,
-                hum: humBatches[0].max,
-                lux: currentMinLux,
+                temp: endSampleT ? endSampleT.value : tempBatches[0].min,
+                hum: endSampleH ? endSampleH.value : tempBatches[0].max,
+                lux: endSampleL ? endSampleL.value : currentMinLux,
               },
             )
 
@@ -972,4 +1049,11 @@ export async function evaluateClimateInference(): Promise<void> {
       }
     }
   }
+}
+
+function rowTimeToDate(rawTime: unknown): Date {
+  if (rawTime instanceof Date) return rawTime
+  const s = String(rawTime)
+  if (isNaN(Number(s))) return new Date(s)
+  return s.length > 13 ? new Date(Number(s.substring(0, 13))) : new Date(Number(s))
 }

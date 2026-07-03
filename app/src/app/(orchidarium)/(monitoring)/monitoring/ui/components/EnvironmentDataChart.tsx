@@ -392,14 +392,16 @@ function CustomTooltip({
           </div>
 
           {/* 3. Condiciones al Cese */}
-          <div className="border-input-outline/30 flex flex-col gap-0.5 border-t pt-2">
-            <span className="font-bold text-purple-400">
-              Condiciones climáticas a las {data.endTime}
-            </span>
-            <span className="text-foreground/85 font-semibold">
-              🌡️ Temp: {formatVal(eTemp, '°C')} | 💧 Hum: {formatVal(eHum, '%')}{showEndLux ? ` | ☀️ Ilum: ${formatVal(eLux, 'lx')}` : ''}
-            </span>
-          </div>
+          {data.endTime !== 'En curso' && (
+            <div className="border-input-outline/30 flex flex-col gap-0.5 border-t pt-2">
+              <span className="font-bold text-purple-400">
+                Condiciones climáticas a las {data.endTime}
+              </span>
+              <span className="text-foreground/85 font-semibold">
+                🌡️ Temp: {formatVal(eTemp, '°C')} | 💧 Hum: {formatVal(eHum, '%')}{showEndLux ? ` | ☀️ Ilum: ${formatVal(eLux, 'lx')}` : ''}
+              </span>
+            </div>
+          )}
 
           {/* Regla de Inicio */}
           {data.triggerReason && (

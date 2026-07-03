@@ -107,7 +107,7 @@ export default async function HomePage() {
       defaultTitle: 'Orquídeas de Colección',
       defaultSubtitle: 'Cultivadas y aclimatadas al clima de Ciudad Guayana',
       defaultImage: 'plants/orchids/orchids.webp',
-      defaultHref: '#productos-destacados',
+      defaultHref: '/category/plants/orchids',
     },
     {
       defaultTitle: 'Rosas del Desierto',

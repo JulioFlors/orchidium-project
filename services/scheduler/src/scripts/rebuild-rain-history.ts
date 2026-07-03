@@ -8,10 +8,16 @@ const COOLDOWN_MS = 15 * 60 * 1000 // 15 minutos sin lluvia para cerrar evento f
 const BATCH_INTERVAL_MS = 10 * 60 * 1000 // 10 minutos por lote de telemetría exterior
 
 
+interface Sample {
+  value: number
+  timestamp: number
+}
+
 interface BatchSummary {
   min: number
   max: number
   timestamp: number
+  samples: Sample[]
 }
 
 async function main() {
@@ -144,9 +150,9 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
   let lastRainClosedAt: number | null = null
 
   let currentIntervalStartMs = 0
-  let tempBuffer: number[] = []
-  let humBuffer: number[] = []
-  let luxBuffer: number[] = []
+  let tempBuffer: Sample[] = []
+  let humBuffer: Sample[] = []
+  let luxBuffer: Sample[] = []
 
   const flushIntervalAndEvaluate = async (timestampMs: number) => {
     if (tempBuffer.length >= 5 && humBuffer.length >= 5 && luxBuffer.length >= 5) {
@@ -167,7 +173,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
     const date = new Date(timestampMs)
     const caracasHour = (date.getUTCHours() - 4 + 24) % 24
-    const isDay = caracasHour >= 8 && caracasHour < 18
+    const isDay = caracasHour >= 8 && caracasHour < 17
 
     if (!isTelemetryRainActive) {
       if (lastRainClosedAt !== null && timestampMs - lastRainClosedAt < 15 * 60 * 1000) return
@@ -280,29 +286,49 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
       if (triggered) {
         isTelemetryRainActive = true
-        rainStartedAt = timestampMs
 
         baselineLux = luxBatches[0].max
         baselineTemp = tempBatches[0].max
         baselineHum = humBatches[0].min
 
+        let preciseStartMs = timestampMs
+        const baselineT = tempBatches[1] ? tempBatches[1].max : baselineTemp
+        const samplesT = tempBatches[0].samples
+        const dropThreshold = isDay ? -1.2 : -0.35
+        const matchingSample = samplesT.find((s) => s.value - baselineT <= dropThreshold)
+        if (matchingSample) {
+          preciseStartMs = matchingSample.timestamp
+        } else {
+          const minSample = samplesT.reduce(
+            (min, s) => (s.value < min.value ? s : min),
+            samplesT[0],
+          )
+          if (minSample) preciseStartMs = minSample.timestamp
+        }
+
+        rainStartedAt = preciseStartMs
+
         minLuxInRain = luxBatches[0].min
         minTempInRain = tempBatches[0].min
         maxHumInRain = humBatches[0].max
 
+        const startSampleT = tempBatches[0].samples.find((s) => s.timestamp === preciseStartMs) || tempBatches[0].samples[0]
+        const startSampleH = humBatches[0].samples.find((s) => s.timestamp === preciseStartMs) || humBatches[0].samples[0]
+        const startSampleL = luxBatches[0].samples.find((s) => s.timestamp === preciseStartMs) || luxBatches[0].samples[0]
+
         await openVirtualEvent(
-          new Date(timestampMs),
+          new Date(preciseStartMs),
           {
             temp: baselineTemp,
             hum: baselineHum,
             lux: baselineLux,
-            ageMinutes: 10, // Sincronizado a hace 10m
+            ageMinutes: 10,
           },
           triggerReason,
           {
-            temp: currentMinTemp,
-            hum: currentMaxHum,
-            lux: currentMinLux,
+            temp: startSampleT ? startSampleT.value : currentMinTemp,
+            hum: startSampleH ? startSampleH.value : currentMaxHum,
+            lux: startSampleL ? startSampleL.value : currentMinLux,
           },
         )
       }
@@ -319,16 +345,23 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           const humCeseThreshold = 1.0
 
           if (diffHum <= humCeseThreshold && diffTemp <= tempCeseThreshold) {
+            const lastSample = tempBatches[0].samples[tempBatches[0].samples.length - 1]
+            const preciseEndMs = lastSample ? lastSample.timestamp : timestampMs
+
+            const endSampleT = tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || tempBatches[0].samples[tempBatches[0].samples.length - 1]
+            const endSampleH = humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || humBatches[0].samples[humBatches[0].samples.length - 1]
+            const endSampleL = luxBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || luxBatches[0].samples[luxBatches[0].samples.length - 1]
+
             isTelemetryRainActive = false
-            lastRainClosedAt = timestampMs
+            lastRainClosedAt = preciseEndMs
             await closeVirtualEvent(
-              new Date(timestampMs),
+              new Date(preciseEndMs),
               'STAGNANT',
               `STAGNANT (dT=${diffTemp.toFixed(1)}°C <= 0.4, dH=${diffHum.toFixed(1)}% <= 1, Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
               {
-                temp: currentMinTemp,
-                hum: currentMaxHum,
-                lux: currentMinLux,
+                temp: endSampleT ? endSampleT.value : currentMinTemp,
+                hum: endSampleH ? endSampleH.value : currentMaxHum,
+                lux: endSampleL ? endSampleL.value : currentMinLux,
               },
             )
             maxHumInRain = null
@@ -353,16 +386,29 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             const humThreshold = maxHumInRain - Math.max(2.0, humRise * 0.15)
 
             if (currentTemp >= tempThreshold && currentHum <= humThreshold) {
+              let preciseEndMs = timestampMs
+              const matchingEndSample = tempBatches[0].samples.find((s) => s.value >= tempThreshold)
+              if (matchingEndSample) {
+                preciseEndMs = matchingEndSample.timestamp
+              } else {
+                const lastSample = tempBatches[0].samples[tempBatches[0].samples.length - 1]
+                if (lastSample) preciseEndMs = lastSample.timestamp
+              }
+
+              const endSampleT = tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || tempBatches[0].samples[tempBatches[0].samples.length - 1]
+              const endSampleH = humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || humBatches[0].samples[humBatches[0].samples.length - 1]
+              const endSampleL = luxBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || luxBatches[0].samples[luxBatches[0].samples.length - 1]
+
               isTelemetryRainActive = false
-              lastRainClosedAt = timestampMs
+              lastRainClosedAt = preciseEndMs
               await closeVirtualEvent(
-                new Date(timestampMs),
+                new Date(preciseEndMs),
                 'BASELINE_RECOVERY',
                 `BASELINE_RECOVERY (Temp: ${currentTemp.toFixed(1)}°C >= ${tempThreshold.toFixed(1)}°C, Hum: ${currentHum.toFixed(1)}% <= ${humThreshold.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
                 {
-                  temp: currentTemp,
-                  hum: currentHum,
-                  lux: currentMinLux,
+                  temp: endSampleT ? endSampleT.value : currentTemp,
+                  hum: endSampleH ? endSampleH.value : currentHum,
+                  lux: endSampleL ? endSampleL.value : currentMinLux,
                 },
               )
               maxHumInRain = null
@@ -383,17 +429,30 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             const lastTempDrop = tempBatches[1].max - tempBatches[0].max
             const isTempStableOrRising = lastTempDrop >= -0.2
 
-            if (currentMaxLux >= luxRecoveryThreshold && isTempStableOrRising) {
+            if (currentMaxLux >= luxRecoveryThreshold && isTempStableOrRising && currentMaxLux >= 15000) {
+              let preciseEndMs = timestampMs
+              const matchingEndSample = luxBatches[0].samples.find((s) => s.value >= luxRecoveryThreshold)
+              if (matchingEndSample) {
+                preciseEndMs = matchingEndSample.timestamp
+              } else {
+                const lastSample = luxBatches[0].samples[luxBatches[0].samples.length - 1]
+                if (lastSample) preciseEndMs = lastSample.timestamp
+              }
+
+              const endSampleT = tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || tempBatches[0].samples[tempBatches[0].samples.length - 1]
+              const endSampleH = humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || humBatches[0].samples[humBatches[0].samples.length - 1]
+              const endSampleL = luxBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || luxBatches[0].samples[luxBatches[0].samples.length - 1]
+
               isTelemetryRainActive = false
-              lastRainClosedAt = timestampMs
+              lastRainClosedAt = preciseEndMs
               await closeVirtualEvent(
-                new Date(timestampMs),
+                new Date(preciseEndMs),
                 'SOLAR_RECOVERY',
                 `SOLAR_RECOVERY (Lux max: ${currentMaxLux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx, Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
                 {
-                  temp: tempBatches[0].min,
-                  hum: humBatches[0].max,
-                  lux: currentMinLux,
+                  temp: endSampleT ? endSampleT.value : tempBatches[0].min,
+                  hum: endSampleH ? endSampleH.value : humBatches[0].max,
+                  lux: endSampleL ? endSampleL.value : currentMinLux,
                 },
               )
               maxHumInRain = null
@@ -438,18 +497,20 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
         if (row.temperature != null) {
           const tVal = Number(row.temperature)
-          if (tVal > 5.0 && tVal < 55.0) tempBuffer.push(tVal)
+          if (tVal > 5.0 && tVal < 55.0) tempBuffer.push({ value: tVal, timestamp: tMs })
         }
         if (row.humidity != null) {
           const hVal = Number(row.humidity)
-          if (hVal > 10.0 && hVal <= 100.0) humBuffer.push(hVal)
+          if (hVal > 10.0 && hVal <= 100.0) humBuffer.push({ value: hVal, timestamp: tMs })
         }
-        const sampleHour = (tDate.getUTCHours() - 4 + 24) % 24
         if (row.illuminance != null) {
-          const lVal = (sampleHour < 8 || sampleHour >= 16) ? 0 : Number(row.illuminance)
-          if (lVal >= 0) luxBuffer.push(lVal)
-        } else if (sampleHour < 8 || sampleHour >= 16) {
-          luxBuffer.push(0)
+          const lVal = Number(row.illuminance)
+          if (lVal >= 0) luxBuffer.push({ value: lVal, timestamp: tMs })
+        } else {
+          const sampleHour = (tDate.getUTCHours() - 4 + 24) % 24
+          if (sampleHour >= 19 || sampleHour < 5) {
+            luxBuffer.push({ value: 0, timestamp: tMs })
+          }
         }
       }
     } catch (err) {
@@ -475,17 +536,18 @@ function rowTimeToDate(rawTime: unknown): Date {
   return s.length > 13 ? new Date(Number(s.substring(0, 13))) : new Date(Number(s))
 }
 
-function pushBatchMetrics(queue: BatchSummary[], values: number[], timestamp: number) {
+function pushBatchMetrics(queue: BatchSummary[], samples: Sample[], timestamp: number) {
+  const values = samples.map((s) => s.value)
   const min = Math.min(...values)
   const max = Math.max(...values)
-  queue.unshift({ min, max, timestamp })
+  queue.unshift({ min, max, timestamp, samples })
   if (queue.length > 6) queue.pop()
 }
 
 async function savePhysicalEvent(event: { startedAt: Date; endedAt: Date; intensities: number[] }) {
   let { startedAt, endedAt } = event
   const durationSeconds = Math.round((endedAt.getTime() - startedAt.getTime()) / 1000)
-  if (durationSeconds < 300) return
+
 
   if (startedAt.getFullYear() < 2025) {
     startedAt = new Date(startedAt)
@@ -593,10 +655,7 @@ async function closeVirtualEvent(
     (cleanEnd.getTime() - activeVirtualEvent.startedAt.getTime()) / 1000,
   )
 
-  if (durationSeconds < 300) {
-    activeVirtualEvent = null
-    return
-  }
+
 
   if (DRY_RUN) {
     activeVirtualEvent = null

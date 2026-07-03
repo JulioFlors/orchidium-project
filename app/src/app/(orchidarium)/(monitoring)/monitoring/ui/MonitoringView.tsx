@@ -579,7 +579,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
 
                 return {
                   time: ev.time,
-                  duration: Math.round(durSec / 60),
+                  duration: Math.ceil(durSec / 60),
                   intensity: ev.intensity,
                   startTime: formatTime12h(startDate),
                   endTime: isAct ? 'En curso' : formatTime12h(endDate),
@@ -607,7 +607,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
 
                 return {
                   time: ev.time,
-                  duration: Math.round(durSec / 60),
+                  duration: Math.ceil(durSec / 60),
                   intensity: ev.intensity,
                   startTime: formatTime12h(startDate),
                   endTime: isAct ? 'En curso' : formatTime12h(endDate),

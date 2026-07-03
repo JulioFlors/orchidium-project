@@ -40,7 +40,7 @@ export function TeslaSection({
           sizes="100vw"
           src={getImageUrl(image)}
         />
-        <div className="absolute inset-0 bg-black/20 dark:bg-black/35" />
+        <div className="absolute inset-0 bg-black/20" />
       </div>
 
       {/* Contenedor Unificado (Textos + Botón) en la parte inferior */}

@@ -292,7 +292,9 @@ def load_rtc_buffer():
         "dht_failures": 0,
         "lux_failures": 0,
         "drift_rate": 0.0,
-        "last_sync_time": 0
+        "last_sync_time": 0,
+        "last_sec_to_sleep": 0,
+        "last_sec_to_next": 0
     }
 
 def save_rtc_buffer(buffer_data):
@@ -1676,9 +1678,11 @@ async def watchdog_wifi_connection():
     w = WLAN(STA_IF)
     if not w.isconnected():
         if DEBUG: print("\n⚠️ [Watchdog WiFi] No se pudo conectar en 60s. Entrando en deep sleep de recuperación (10 min).")
-        # Incrementar fallas en RTC
+        # Incrementar fallas en RTC y resetear variables de control de drift
         rtc_data = load_rtc_buffer()
         rtc_data["wifi_failures"] = rtc_data.get("wifi_failures", 0) + 1
+        rtc_data["last_sec_to_sleep"] = 0
+        rtc_data["last_sec_to_next"] = 0
         save_rtc_buffer(rtc_data)
         try:
             w.disconnect()
@@ -1764,6 +1768,11 @@ async def main_transmission():
         if sec_to_sleep < 10:
             sec_to_sleep = sec_to_next
 
+        # Registrar tiempos de deep sleep para corrección al despertar
+        rtc_data["last_sec_to_sleep"] = sec_to_sleep
+        rtc_data["last_sec_to_next"] = sec_to_next
+        save_rtc_buffer(rtc_data)
+
         if DEBUG:
             print(f"💤 Transmisión terminada. sec_to_next={sec_to_next}s | drift_rate={drift_rate:.6f}")
             print(f"💤 Entrando en Deep Sleep por {sec_to_sleep} segundos reales de hardware.")
@@ -1829,6 +1838,26 @@ def run_cycle():
 
     # 1. Cargar el buffer del RTC RAM
     rtc_data = load_rtc_buffer()
+
+    # Compensar el desvío acumulado en el RTC durante el deep sleep anterior
+    if machine.reset_cause() == machine.DEEPSLEEP_RESET:
+        last_sleep = rtc_data.get("last_sec_to_sleep", 0)
+        last_next = rtc_data.get("last_sec_to_next", 0)
+        drift_rate = rtc_data.get("drift_rate", 0.0)
+        if last_sleep > 0 and last_next > 0 and drift_rate != 0.0:
+            desvio = last_sleep - last_next
+            if desvio != 0:
+                epoch_corregido = utime.time() - desvio
+                t = utime.localtime(epoch_corregido)
+                try:
+                    from machine import RTC
+                    # Formato RTC: (year, month, day, weekday, hour, minute, second, subsecond)
+                    # localtime: (year, month, mday, hour, minute, second, weekday, yearday)
+                    RTC().datetime((t[0], t[1], t[2], t[6], t[3], t[4], t[5], 0))
+                    if DEBUG:
+                        print(f"⏰ RTC corregido por drift del deep sleep anterior. Desvío restado: {desvio}s")
+                except Exception as e:
+                    if DEBUG: print(f"⚠️ Error al corregir RTC: {e}")
 
     # 2. Configurar estados globales a partir de la memoria RTC
     IS_SAMPLING_LUX = rtc_data.get("is_sampling_lux", False)
@@ -2030,6 +2059,11 @@ def run_cycle():
         sec_to_sleep = int(sec_to_next * (1.0 + drift_rate))
         if sec_to_sleep < 10:
             sec_to_sleep = sec_to_next
+
+        # Registrar tiempos de deep sleep para corrección al despertar
+        rtc_data["last_sec_to_sleep"] = sec_to_sleep
+        rtc_data["last_sec_to_next"] = sec_to_next
+        save_rtc_buffer(rtc_data)
 
         if DEBUG:
             print(f"💤 Ciclo finalizado. sec_to_next={sec_to_next}s | drift_rate={drift_rate:.6f}")

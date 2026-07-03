@@ -75,7 +75,7 @@ export function HeroSlideshow({ slides }: Props) {
                 sizes="100vw"
                 src={getImageUrl(slide.image)}
               />
-              <div className="absolute inset-0 bg-black/20 dark:bg-black/35" />
+              <div className="absolute inset-0 bg-black/20" />
             </div>
 
             {/* Contenido centrado en la parte inferior con padding responsivo */}

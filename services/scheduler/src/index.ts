@@ -550,7 +550,7 @@ function setupMqttHandlers() {
             return
           }
 
-          if (emaManager.connectionState === 'none') {
+          if (emaManager.connectionState === 'none' || emaManager.connectionState === 'offline') {
             if (statusToSave === 'REBOOT') {
               emaManager.setReady()
             } else {
@@ -2101,12 +2101,135 @@ async function runTask(scheduleId: string) {
 }
 
 /**
- * Scraping del Banco Central de Venezuela y almacenamiento en base de datos.
- * Guarda la tasa oficial y asocia su vigencia basándose en la fecha reportada.
+ * Realiza el scraping de la página del BCV, extrae la tasa y fecha valor,
+ * y la guarda en la base de datos PostgreSQL.
+ * Retorna true si la tasa guardada corresponde al día de mañana (o posterior).
  */
-async function syncBcvExchangeRate(retryNum?: number | 'startup'): Promise<boolean> {
+async function fetchAndSaveBcvData(): Promise<boolean> {
   const url = 'https://www.bcv.org.ve/'
 
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Accept-Language': 'es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3',
+    },
+  })
+
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '1'
+
+  if (!res.ok) {
+    throw new Error(`HTTP Error ${res.status}: ${res.statusText}`)
+  }
+
+  const html = await res.text()
+
+  // 1. Extraer tasa de cambio del dólar
+  const matchDolar = html.match(
+    /id=["']dolar["'][\s\S]*?<strong[^>]*?>\s*([\d,.]+)\s*<\/strong>/i,
+  )
+
+  if (!matchDolar) {
+    throw new Error('No se pudo encontrar la tasa del dólar en el HTML del BCV.')
+  }
+
+  const rate = parseFloat(matchDolar[1].trim().replace(',', '.'))
+
+  if (isNaN(rate) || rate <= 0) {
+    throw new Error(`Tasa inválida analizada del BCV: ${rate}`)
+  }
+
+  // 2. Extraer fecha valor reportada
+  const matchDate = html.match(/class=["']date-display-single["'][^>]*?content=["']([^"']+)["']/i)
+
+  if (!matchDate) {
+    throw new Error('No se pudo encontrar la fecha valor en el HTML del BCV.')
+  }
+
+  const bcvDateStr = matchDate[1].split('T')[0] // Obtener YYYY-MM-DD
+  const dateValue = new Date(`${bcvDateStr}T00:00:00.000Z`)
+
+  const [year, month, day] = bcvDateStr.split('-')
+  const bcvDateFormatted = `${day}/${month}/${year}`
+
+  Logger.debug(`Tasa obtenida: ${rate} Bs/USD con fecha valor: ${bcvDateFormatted}`)
+
+  // 3. Upsert de la tasa en base de datos para la fecha de vigencia
+  await prisma.exchangeRate.upsert({
+    where: { date: dateValue },
+    update: { rate },
+    create: {
+      rate,
+      currency: 'USD',
+      date: dateValue,
+    },
+  })
+
+  Logger.bcv(`Tasa obtenida: ${rate} Bs/USD con fecha valor: ${bcvDateFormatted}`)
+
+  // 4. Lógica de rellenado para el día de hoy (para asegurar datos retroactivos inmediatos en desarrollo)
+  const today = getCaracasTodayMidnight()
+
+  const todayRate = await prisma.exchangeRate.findUnique({
+    where: { date: today },
+  })
+
+  if (!todayRate) {
+    const todayStr = today.toISOString().slice(0, 10)
+    const [tYear, tMonth, tDay] = todayStr.split('-')
+    const todayFormatted = `${tDay}/${tMonth}/${tYear}`
+
+    Logger.debug(`Rellenando tasa de hoy (${todayFormatted}) con el valor actual: ${rate}`)
+    await prisma.exchangeRate.create({
+      data: {
+        rate,
+        currency: 'USD',
+        date: today,
+      },
+    })
+  }
+
+  // 5. Rellenar días intermedios (feriados/fines de semana) entre hoy (excluido) y la fecha de vigencia (excluido)
+  const fillDate = new Date(today)
+
+  fillDate.setUTCDate(fillDate.getUTCDate() + 1)
+
+  while (fillDate.getTime() < dateValue.getTime()) {
+    const fillDateStr = fillDate.toISOString().slice(0, 10)
+    const [fYear, fMonth, fDay] = fillDateStr.split('-')
+    const fillDateFormatted = `${fDay}/${fMonth}/${fYear}`
+
+    Logger.debug(
+      `Rellenando día feriado/intermedio (${fillDateFormatted}) con la tasa obtenida: ${rate}`,
+    )
+    await prisma.exchangeRate.upsert({
+      where: { date: new Date(fillDate) },
+      update: { rate },
+      create: {
+        rate,
+        currency: 'USD',
+        date: new Date(fillDate),
+      },
+    })
+    fillDate.setUTCDate(fillDate.getUTCDate() + 1)
+  }
+
+  // Determinar si la tasa guardada corresponde al día de mañana (o posterior)
+  const tomorrow = new Date(today)
+
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
+
+  return dateValue.getTime() >= tomorrow.getTime()
+}
+
+/**
+ * Scraping del Banco Central de Venezuela y almacenamiento en base de datos.
+ * Realiza un primer intento y, si falla, realiza un segundo intento en 1 minuto sin loguear el error del primero.
+ * Si fallan ambos intentos, registra el error final.
+ */
+async function syncBcvExchangeRate(retryNum?: number | 'startup'): Promise<boolean> {
   if (retryNum === 'startup') {
     Logger.bcv('Iniciando scraping BCV de arranque...')
   } else if (retryNum !== undefined && retryNum > 0) {
@@ -2116,126 +2239,29 @@ async function syncBcvExchangeRate(retryNum?: number | 'startup'): Promise<boole
   }
 
   try {
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'es-ES,es;q=0.8,en-US;q=0.5,en;q=0.3',
-      },
-    })
+    return await fetchAndSaveBcvData()
+  } catch (firstError: Error | unknown) {
+    // Si falla el primer intento, se captura de manera silenciosa (no se loguea el error en consola/Logger)
+    // Esperamos 1 minuto (60000ms) antes de realizar el segundo intento
+    await new Promise((resolve) => setTimeout(resolve, 60000))
 
-    process.env.NODE_TLS_REJECT_UNAUTHORIZED = '1'
+    try {
+      if (retryNum === 'startup') {
+        Logger.bcv('Reintentando scraping BCV de arranque (intento 2)...')
+      } else if (retryNum !== undefined && retryNum > 0) {
+        Logger.bcv(`[Reintento ${retryNum}/3 - Minuto 1] Reintentando sincronización de tasa BCV...`)
+      } else {
+        Logger.bcv('Reintentando sincronización de tasa BCV (intento 2)...')
+      }
 
-    if (!res.ok) {
-      throw new Error(`HTTP Error ${res.status}: ${res.statusText}`)
+      return await fetchAndSaveBcvData()
+    } catch (secondError: Error | unknown) {
+      const errMsg = secondError instanceof Error ? secondError.message : String(secondError)
+      Logger.error(`Error durante sincronización BCV (ambos intentos fallidos): ${errMsg}`)
+      return false
+    } finally {
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = '1'
     }
-
-    const html = await res.text()
-
-    // 1. Extraer tasa de cambio del dólar
-    const matchDolar = html.match(
-      /id=["']dolar["'][\s\S]*?<strong[^>]*?>\s*([\d,.]+)\s*<\/strong>/i,
-    )
-
-    if (!matchDolar) {
-      throw new Error('No se pudo encontrar la tasa del dólar en el HTML del BCV.')
-    }
-
-    const rate = parseFloat(matchDolar[1].trim().replace(',', '.'))
-
-    if (isNaN(rate) || rate <= 0) {
-      throw new Error(`Tasa inválida analizada del BCV: ${rate}`)
-    }
-
-    // 2. Extraer fecha valor reportada
-    const matchDate = html.match(/class=["']date-display-single["'][^>]*?content=["']([^"']+)["']/i)
-
-    if (!matchDate) {
-      throw new Error('No se pudo encontrar la fecha valor en el HTML del BCV.')
-    }
-
-    const bcvDateStr = matchDate[1].split('T')[0] // Obtener YYYY-MM-DD
-    const dateValue = new Date(`${bcvDateStr}T00:00:00.000Z`)
-
-    const [year, month, day] = bcvDateStr.split('-')
-    const bcvDateFormatted = `${day}/${month}/${year}`
-
-    Logger.debug(`Tasa obtenida: ${rate} Bs/USD con fecha valor: ${bcvDateFormatted}`)
-
-    // 3. Upsert de la tasa en base de datos para la fecha de vigencia
-    await prisma.exchangeRate.upsert({
-      where: { date: dateValue },
-      update: { rate },
-      create: {
-        rate,
-        currency: 'USD',
-        date: dateValue,
-      },
-    })
-
-    Logger.bcv(`Tasa obtenida: ${rate} Bs/USD con fecha valor: ${bcvDateFormatted}`)
-
-    // 4. Lógica de rellenado para el día de hoy (para asegurar datos retroactivos inmediatos en desarrollo)
-    const today = getCaracasTodayMidnight()
-
-    const todayRate = await prisma.exchangeRate.findUnique({
-      where: { date: today },
-    })
-
-    if (!todayRate) {
-      const todayStr = today.toISOString().slice(0, 10)
-      const [tYear, tMonth, tDay] = todayStr.split('-')
-      const todayFormatted = `${tDay}/${tMonth}/${tYear}`
-
-      Logger.debug(`Rellenando tasa de hoy (${todayFormatted}) con el valor actual: ${rate}`)
-      await prisma.exchangeRate.create({
-        data: {
-          rate,
-          currency: 'USD',
-          date: today,
-        },
-      })
-    }
-
-    // 5. Rellenar días intermedios (feriados/fines de semana) entre hoy (excluido) y la fecha de vigencia (excluido)
-    const fillDate = new Date(today)
-
-    fillDate.setUTCDate(fillDate.getUTCDate() + 1)
-
-    while (fillDate.getTime() < dateValue.getTime()) {
-      const fillDateStr = fillDate.toISOString().slice(0, 10)
-      const [fYear, fMonth, fDay] = fillDateStr.split('-')
-      const fillDateFormatted = `${fDay}/${fMonth}/${fYear}`
-
-      Logger.debug(
-        `Rellenando día feriado/intermedio (${fillDateFormatted}) con la tasa obtenida: ${rate}`,
-      )
-      await prisma.exchangeRate.upsert({
-        where: { date: new Date(fillDate) },
-        update: { rate },
-        create: {
-          rate,
-          currency: 'USD',
-          date: new Date(fillDate),
-        },
-      })
-      fillDate.setUTCDate(fillDate.getUTCDate() + 1)
-    }
-
-    // Determinar si la tasa guardada corresponde al día de mañana (o posterior)
-    const tomorrow = new Date(today)
-
-    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
-
-    return dateValue.getTime() >= tomorrow.getTime()
-  } catch (error) {
-    const errMsg = error instanceof Error ? error.message : String(error)
-
-    Logger.error(`Error durante sincronización BCV: ${errMsg}`)
-
-    return false
   } finally {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '1'
   }
