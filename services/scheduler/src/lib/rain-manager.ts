@@ -60,10 +60,8 @@ const RAIN_ORPHAN_TIMEOUT_MS = 10 * 60 * 1000 // 10 minutos sin señales
 let rainEventMutex = Promise.resolve()
 
 // Helper para empujar métricas a las colas de batches deslizantes (10 min de ventana por lote)
-function pushBatchMetrics(queue: BatchSummary[], values: number[]) {
+function pushBatchMetrics(queue: BatchSummary[], values: number[], isLux = false) {
   if (values.length === 0) return
-  const min = Math.min(...values)
-  const max = Math.max(...values)
   const now = Date.now()
 
   const samples = values.map((val, idx) => ({
@@ -72,11 +70,36 @@ function pushBatchMetrics(queue: BatchSummary[], values: number[]) {
   }))
 
   if (queue.length > 0 && now - queue[0].timestamp < 5 * 60 * 1000) {
-    queue[0].min = Math.min(queue[0].min, min)
-    queue[0].max = Math.max(queue[0].max, max)
-    queue[0].timestamp = now
     queue[0].samples.push(...samples)
+    queue[0].timestamp = now
+
+    const allValues = queue[0].samples.map((s) => s.value)
+    if (isLux) {
+      const sortedAsc = [...allValues].sort((a, b) => a - b)
+      const low5 = sortedAsc.slice(0, Math.min(5, sortedAsc.length))
+      queue[0].min = low5.reduce((sum, val) => sum + val, 0) / low5.length
+
+      const sortedDesc = [...allValues].sort((a, b) => b - a)
+      const high5 = sortedDesc.slice(0, Math.min(5, sortedDesc.length))
+      queue[0].max = high5.reduce((sum, val) => sum + val, 0) / high5.length
+    } else {
+      queue[0].min = Math.min(...allValues)
+      queue[0].max = Math.max(...allValues)
+    }
   } else {
+    let min = Math.min(...values)
+    let max = Math.max(...values)
+
+    if (isLux && values.length > 0) {
+      const sortedAsc = [...values].sort((a, b) => a - b)
+      const low5 = sortedAsc.slice(0, Math.min(5, sortedAsc.length))
+      min = low5.reduce((sum, val) => sum + val, 0) / low5.length
+
+      const sortedDesc = [...values].sort((a, b) => b - a)
+      const high5 = sortedDesc.slice(0, Math.min(5, sortedDesc.length))
+      max = high5.reduce((sum, val) => sum + val, 0) / high5.length
+    }
+
     queue.unshift({ min, max, timestamp: now, samples })
     if (queue.length > 6) queue.pop()
   }
@@ -143,7 +166,7 @@ export function pushClimateBatch(
 ): void {
   if (tempValues.length > 0) pushBatchMetrics(tempBatches, tempValues)
   if (humValues.length > 0) pushBatchMetrics(humBatches, humValues)
-  if (luxValues.length > 0) pushBatchMetrics(luxBatches, luxValues)
+  if (luxValues.length > 0) pushBatchMetrics(luxBatches, luxValues, true)
 }
 
 /**
@@ -596,7 +619,14 @@ export async function evaluateClimateInference(): Promise<void> {
 
     for (const binStartMs of sortedBins) {
       const bData = bins[binStartMs]
-      if (bData.temp.length >= 5 && bData.hum.length >= 5 && bData.lux.length >= 5) {
+      const sampleHour = (new Date(binStartMs).getUTCHours() - 4 + 24) % 24
+      const isSolar = sampleHour >= 5 && sampleHour < 19
+      const hasLux = bData.lux.length >= 5 || !isSolar
+
+      if (bData.temp.length >= 5 && bData.hum.length >= 5 && hasLux) {
+        if (bData.lux.length < 5) {
+          bData.lux = Array(5).fill({ value: 0, timestamp: binStartMs })
+        }
         const tempVals = bData.temp.map((s) => s.value)
         const humVals = bData.hum.map((s) => s.value)
         const luxVals = bData.lux.map((s) => s.value)
@@ -657,6 +687,11 @@ export async function evaluateClimateInference(): Promise<void> {
       return
     }
 
+    // Regla de Seguridad Física: No inferir lluvia bajo sol radiante constante
+    if (currentMinLux >= 26000) {
+      return
+    }
+
     let triggered = false
     let tempBaselineAgeMinutes = 20
     let tempDeltaTemp = 0
@@ -714,51 +749,54 @@ export async function evaluateClimateInference(): Promise<void> {
     } else {
       // NOCHE - Regla Unificada de Gradiente Dinámico
       if (tempBatches.length >= 4 && humBatches.length >= 4) {
-        // 1. Ruido de referencia natural de los 3 lotes anteriores (B1, B2, B3)
+        // Calma previa (Lotes 1, 2, 3)
+        const maxTempPre = Math.max(tempBatches[1].max, tempBatches[2].max, tempBatches[3].max)
+        const minTempPre = Math.min(tempBatches[1].min, tempBatches[2].min, tempBatches[3].min)
+        const varTempPre = maxTempPre - minTempPre
+
+        const minHumPre = Math.min(humBatches[1].min, humBatches[2].min, humBatches[3].min)
+        const maxHumPre = Math.max(humBatches[1].max, humBatches[2].max, humBatches[3].max)
+        const varHumPre = maxHumPre - minHumPre
+
+        // Bloque actual (Lotes 0, 1, 2)
+        const maxTempCur = Math.max(tempBatches[0].max, tempBatches[1].max, tempBatches[2].max)
+        const minTempCur = Math.min(tempBatches[0].min, tempBatches[1].min, tempBatches[2].min)
+        const varTempCur = maxTempCur - minTempCur
+
+        const minHumCur = Math.min(humBatches[0].min, humBatches[1].min, humBatches[2].min)
+        const maxHumCur = Math.max(humBatches[0].max, humBatches[1].max, humBatches[2].max)
+        const varHumCur = maxHumCur - minHumCur
+
+        // Ruido para tooltips (máxima variación local en un lote individual)
         const varTemp1 = tempBatches[1].max - tempBatches[1].min
         const varTemp2 = tempBatches[2].max - tempBatches[2].min
         const varTemp3 = tempBatches[3].max - tempBatches[3].min
-        const refVarTemp = Math.max(varTemp1, varTemp2, varTemp3, 0.15) // Piso instrumental DHT22
+        const refVarTemp = Math.max(varTemp1, varTemp2, varTemp3, 0.15)
 
         const varHum1 = humBatches[1].max - humBatches[1].min
         const varHum2 = humBatches[2].max - humBatches[2].min
         const varHum3 = humBatches[3].max - humBatches[3].min
         const refVarHum = Math.max(varHum1, varHum2, varHum3, 0.5)
 
-        // 2. Estabilidad de calma previa
-        const maxTempPreAll = Math.max(tempBatches[1].max, tempBatches[2].max, tempBatches[3].max)
-        const minTempPreAll = Math.min(tempBatches[1].min, tempBatches[2].min, tempBatches[3].min)
-        const varTempPre = maxTempPreAll - minTempPreAll
+        const tempFloor = minHumPre >= 98.0 ? 0.50 : 0.35
+        const tempDropThreshold = Math.max(tempFloor, varTempPre * 1.8)
+        const humRiseThreshold = Math.max(1.5, varHumPre * 1.6)
 
-        const minHumPreAll = Math.min(humBatches[1].min, humBatches[2].min, humBatches[3].min)
-        const maxHumPreAll = Math.max(humBatches[1].max, humBatches[2].max, humBatches[3].max)
-        const varHumPre = maxHumPreAll - minHumPreAll
-
-        // 3. Deltas de choque en B0
-        const currentTempDrop = maxTempPreAll - currentMinTemp
-        const currentHumRise = currentMaxHum - minHumPreAll
-
-        // --- Calibración Fina (Fórmula B Calibrada con Filtro de Rocío) ---
-        const tempFloor = minHumPreAll >= 98.0 ? 0.50 : 0.35
-
-        const tempDropThreshold = Math.max(tempFloor, varTempPre * 1.8) // Multiplicador térmico a 1.8
-        const humRiseThreshold = Math.max(1.5, varHumPre * 1.6) // Multiplicador hídrico a 1.6
-
-        const isTempDropAbrupt = currentTempDrop >= tempDropThreshold
-        const isHumRiseAbrupt = currentHumRise >= humRiseThreshold
+        const isTempDropAbrupt = varTempCur >= tempDropThreshold
+        const isHumRiseAbrupt = varHumCur >= humRiseThreshold
         const isPreSaturated = currentMaxHum >= 98.0 || humBatches[1].min >= 95.0
 
-        if (varTempPre <= 0.6 && isTempDropAbrupt && (isHumRiseAbrupt || isPreSaturated)) {
+        if (isTempDropAbrupt && (isHumRiseAbrupt || isPreSaturated)) {
           triggered = true
           tempBaselineAgeMinutes = 40
-          tempDeltaTemp = currentMinTemp - maxTempPreAll
-          tempDeltaHum = currentHumRise
+          tempDeltaTemp = currentMinTemp - maxTempPre
+          tempDeltaHum = currentMaxHum - minHumPre
           isStagnantTriggered = true
           stagnantVarTempPre = varTempPre
           inferedBaselineVarTemp = refVarTemp
           inferedBaselineVarHum = refVarHum
-          calculatedBaselineTemp = maxTempPreAll
-          calculatedBaselineHum = minHumPreAll
+          calculatedBaselineTemp = maxTempPre
+          calculatedBaselineHum = minHumPre
           calculatedBaselineLux = 0
         }
       }
@@ -1017,11 +1055,16 @@ export async function evaluateClimateInference(): Promise<void> {
           const currentMaxLux = luxBatches[0].max
 
           const lastTempDrop = tempBatches[1].max - tempBatches[0].max
-          const isTempStableOrRising = lastTempDrop >= -0.2
+          const isTempStableOrRising = lastTempDrop <= 0.2
 
-          if (currentMaxLux >= luxRecoveryThreshold && isTempStableOrRising && currentMaxLux >= 15000) {
+          const isUnconditionalSolar = currentMaxLux >= 26000
+          const isConditionalSolar = currentMaxLux >= luxRecoveryThreshold && isTempStableOrRising && currentMaxLux >= 15000
+
+          if (isUnconditionalSolar || isConditionalSolar) {
             let preciseEndMs = nowMs
-            const matchingEndSample = luxBatches[0].samples.find((s) => s.value >= luxRecoveryThreshold)
+            // Si es incondicional, buscar la muestra >= 26000, si es condicional, buscar la muestra >= luxRecoveryThreshold
+            const targetThreshold = isUnconditionalSolar ? 26000 : luxRecoveryThreshold
+            const matchingEndSample = luxBatches[0].samples.find((s) => s.value >= targetThreshold)
             if (matchingEndSample) {
               preciseEndMs = matchingEndSample.timestamp
             } else {
@@ -1029,23 +1072,32 @@ export async function evaluateClimateInference(): Promise<void> {
               if (lastSample) preciseEndMs = lastSample.timestamp
             }
 
+            if (inferedRainStartedAt !== null && preciseEndMs < inferedRainStartedAt) {
+              preciseEndMs = inferedRainStartedAt
+            }
+
             const endSampleT = tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || tempBatches[0].samples[tempBatches[0].samples.length - 1]
             const endSampleH = humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || humBatches[0].samples[humBatches[0].samples.length - 1]
             const endSampleL = luxBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || luxBatches[0].samples[luxBatches[0].samples.length - 1]
 
             Logger.rain(
-              `[RainManager] Cierre por Recuperación Solar Cruzada: Lux max: ${currentMaxLux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx (Temp estable, deltaTempLastLote=${(-lastTempDrop).toFixed(2)}°C).`,
+              `[RainManager] Cierre por Recuperación Solar Cruzada: Lux max: ${currentMaxLux.toFixed(0)} lx (Uncond=${isUnconditionalSolar}, Cond=${isConditionalSolar}).`,
             )
             inferedRainActive = false
             inferedRainOverridden = true
             maxHumInRain = null
             inferedBaselineVarTemp = null
             inferedBaselineVarHum = null
+
+            const closeReasonText = isUnconditionalSolar
+              ? `SOLAR_RECOVERY (Sol radiante pleno >= 26k lx, Lux max: ${currentMaxLux.toFixed(0)} lx)`
+              : `Despeje solar verificado: iluminancia subió a ${Math.round(currentMaxLux).toLocaleString()} lx (umbral elástico: ${Math.round(luxRecoveryThreshold).toLocaleString()} lx) acoplado a estabilidad térmica en el lote actual (Lux max: ${currentMaxLux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx, Temp: ${tempBatches[0].min.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
+
             await closeRainEvent(
               'SOLAR_RECOVERY',
               new Date(preciseEndMs),
               true,
-              `Despeje solar verificado: iluminancia subió a ${Math.round(currentMaxLux).toLocaleString()} lx (umbral elástico: ${Math.round(luxRecoveryThreshold).toLocaleString()} lx) acoplado a estabilidad térmica en el lote actual (Lux max: ${currentMaxLux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx, Temp: ${tempBatches[0].min.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
+              closeReasonText,
               {
                 temp: endSampleT ? endSampleT.value : tempBatches[0].min,
                 hum: endSampleH ? endSampleH.value : tempBatches[0].max,

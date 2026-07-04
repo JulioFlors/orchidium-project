@@ -130,6 +130,19 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
   }
 
   let createdCount = 0
+
+  const isWithinSolarTimeRange = (timeVal: number): boolean => {
+    try {
+      const d = new Date(timeVal)
+      const localHour = (d.getUTCHours() - 4 + 24) % 24
+      const localMin = d.getUTCMinutes()
+      const totalMinutes = localHour * 60 + localMin
+      return totalMinutes > 300 && totalMinutes < 1140 // 5:00 AM a 7:00 PM VET
+    } catch {
+      return false
+    }
+  }
+
   const BLOCK_MS = 2 * 24 * 3600 * 1000
   let startMs = startTime.getTime()
   const endMs = endTime.getTime()
@@ -155,10 +168,16 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
   let luxBuffer: Sample[] = []
 
   const flushIntervalAndEvaluate = async (timestampMs: number) => {
-    if (tempBuffer.length >= 5 && humBuffer.length >= 5 && luxBuffer.length >= 5) {
+    const isSolar = isWithinSolarTimeRange(timestampMs)
+    const hasLux = luxBuffer.length >= 5 || !isSolar
+
+    if (tempBuffer.length >= 5 && humBuffer.length >= 5 && hasLux) {
+      if (luxBuffer.length < 5) {
+        luxBuffer = Array(5).fill({ value: 0, timestamp: timestampMs })
+      }
       pushBatchMetrics(tempBatches, tempBuffer, timestampMs)
       pushBatchMetrics(humBatches, humBuffer, timestampMs)
-      pushBatchMetrics(luxBatches, luxBuffer, timestampMs)
+      pushBatchMetrics(luxBatches, luxBuffer, timestampMs, true)
     }
 
     tempBuffer = []
@@ -177,9 +196,9 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
     if (!isTelemetryRainActive) {
       if (lastRainClosedAt !== null && timestampMs - lastRainClosedAt < 15 * 60 * 1000) return
+      if (currentMinLux >= 26000) return
 
       let triggered = false
-      let tempBaselineAgeMinutes = 20
       let triggerReason = ''
       let calculatedBaselineTemp: number | null = null
       let calculatedBaselineHum: number | null = null
@@ -221,7 +240,6 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
         if (dTemp1 <= tempDropThreshold && humCondition && luxCondition) {
           triggered = true
           triggerReason = `Inferencia de Día: Incremento de +${dHum1.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp1).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
-          tempBaselineAgeMinutes = 20
           calculatedBaselineTemp = baseTemp1
           calculatedBaselineHum = baseHum1
           calculatedBaselineLux = baseLux1
@@ -262,7 +280,6 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           if (dTemp2 <= tempDropThreshold2 && humCondition2 && luxCondition2) {
             triggered = true
             triggerReason = `Inferencia de Día: Incremento de +${dHum2.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp2).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
-            tempBaselineAgeMinutes = 30
             calculatedBaselineTemp = baseTemp2
             calculatedBaselineHum = baseHum2
             calculatedBaselineLux = baseLux2
@@ -270,28 +287,39 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
         }
       } else {
         // --- REGLAS NOCTURNAS (Fórmula B Calibrada + Filtro de Rocío 98.0%) ---
-        const maxTempPreAll = Math.max(tempBatches[1].max, tempBatches[2].max, tempBatches[3].max)
-        const minHumPreAll = Math.min(humBatches[1].min, humBatches[2].min, humBatches[3].min)
-        const varTempPre = maxTempPreAll - Math.min(tempBatches[1].min, tempBatches[2].min, tempBatches[3].min)
-        const varHumPre = Math.max(humBatches[1].max, humBatches[2].max, humBatches[3].max) - minHumPreAll
+        // Calma previa (Lotes 1, 2, 3)
+        const maxTempPre = Math.max(tempBatches[1].max, tempBatches[2].max, tempBatches[3].max)
+        const minTempPre = Math.min(tempBatches[1].min, tempBatches[2].min, tempBatches[3].min)
+        const varTempPre = maxTempPre - minTempPre
 
-        const currentTempDrop = maxTempPreAll - currentMinTemp
-        const currentHumRise = currentMaxHum - minHumPreAll
+        const minHumPre = Math.min(humBatches[1].min, humBatches[2].min, humBatches[3].min)
+        const maxHumPre = Math.max(humBatches[1].max, humBatches[2].max, humBatches[3].max)
+        const varHumPre = maxHumPre - minHumPre
 
-        const tempFloor = minHumPreAll >= 98.0 ? 0.50 : 0.35
+        // Bloque actual (Lotes 0, 1, 2)
+        const maxTempCur = Math.max(tempBatches[0].max, tempBatches[1].max, tempBatches[2].max)
+        const minTempCur = Math.min(tempBatches[0].min, tempBatches[1].min, tempBatches[2].min)
+        const varTempCur = maxTempCur - minTempCur
+
+        const minHumCur = Math.min(humBatches[0].min, humBatches[1].min, humBatches[2].min)
+        const maxHumCur = Math.max(humBatches[0].max, humBatches[1].max, humBatches[2].max)
+        const varHumCur = maxHumCur - minHumCur
+
+        const tempFloor = minHumPre >= 98.0 ? 0.50 : 0.35
         const tempDropThreshold = Math.max(tempFloor, varTempPre * 1.8)
         const humRiseThreshold = Math.max(1.5, varHumPre * 1.6)
 
-        const isTempDropAbrupt = currentTempDrop >= tempDropThreshold
-        const isHumRiseAbrupt = currentHumRise >= humRiseThreshold
+        const isTempDropAbrupt = varTempCur >= tempDropThreshold
+        const isHumRiseAbrupt = varHumCur >= humRiseThreshold
         const isPreSaturated = currentMaxHum >= 98.0 || humBatches[1].min >= 95.0
 
-        if (varTempPre <= 0.6 && isTempDropAbrupt && (isHumRiseAbrupt || isPreSaturated)) {
+        if (isTempDropAbrupt && (isHumRiseAbrupt || isPreSaturated)) {
           triggered = true
-          triggerReason = `Inferencia de Noche: Incremento de +${currentHumRise.toFixed(1)}% HR y caída térmica de ${currentTempDrop.toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%)`
-          tempBaselineAgeMinutes = 30
-          calculatedBaselineTemp = maxTempPreAll
-          calculatedBaselineHum = minHumPreAll
+          // Se calcula el delta térmico relativo al máximo previo de calma
+          const currentTempDrop = maxTempPre - currentMinTemp
+          triggerReason = `Inferencia de Noche: Incremento de +${(currentMaxHum - minHumPre).toFixed(1)}% HR y caída térmica de ${currentTempDrop.toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%)`
+          calculatedBaselineTemp = maxTempPre
+          calculatedBaselineHum = minHumPre
           calculatedBaselineLux = 0
         }
       }
@@ -439,16 +467,25 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
             const currentMaxLux = luxBatches[0].max
             const lastTempDrop = tempBatches[1].max - tempBatches[0].max
-            const isTempStableOrRising = lastTempDrop >= -0.2
+            const isTempStableOrRising = lastTempDrop <= 0.2
 
-            if (currentMaxLux >= luxRecoveryThreshold && isTempStableOrRising && currentMaxLux >= 15000) {
+            const isUnconditionalSolar = currentMaxLux >= 26000
+            const isConditionalSolar = currentMaxLux >= luxRecoveryThreshold && isTempStableOrRising && currentMaxLux >= 15000
+
+            if (isUnconditionalSolar || isConditionalSolar) {
               let preciseEndMs = timestampMs
-              const matchingEndSample = luxBatches[0].samples.find((s) => s.value >= luxRecoveryThreshold)
+              // Si es incondicional, buscar la muestra >= 26000, si es condicional, buscar la muestra >= luxRecoveryThreshold
+              const targetThreshold = isUnconditionalSolar ? 26000 : luxRecoveryThreshold
+              const matchingEndSample = luxBatches[0].samples.find((s) => s.value >= targetThreshold)
               if (matchingEndSample) {
                 preciseEndMs = matchingEndSample.timestamp
               } else {
                 const lastSample = luxBatches[0].samples[luxBatches[0].samples.length - 1]
                 if (lastSample) preciseEndMs = lastSample.timestamp
+              }
+
+              if (rainStartedAt !== null && preciseEndMs < rainStartedAt) {
+                preciseEndMs = rainStartedAt
               }
 
               const endSampleT = tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) || tempBatches[0].samples[tempBatches[0].samples.length - 1]
@@ -457,10 +494,15 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
               isTelemetryRainActive = false
               lastRainClosedAt = preciseEndMs
+
+              const closeReasonText = isUnconditionalSolar
+                ? `SOLAR_RECOVERY (Sol radiante pleno >= 26k lx, Lux max: ${currentMaxLux.toFixed(0)} lx)`
+                : `SOLAR_RECOVERY (Lux max: ${currentMaxLux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx, Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
+
               await closeVirtualEvent(
                 new Date(preciseEndMs),
                 'SOLAR_RECOVERY',
-                `SOLAR_RECOVERY (Lux max: ${currentMaxLux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx, Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
+                closeReasonText,
                 {
                   temp: endSampleT ? endSampleT.value : tempBatches[0].min,
                   hum: endSampleH ? endSampleH.value : humBatches[0].max,
@@ -548,10 +590,21 @@ function rowTimeToDate(rawTime: unknown): Date {
   return s.length > 13 ? new Date(Number(s.substring(0, 13))) : new Date(Number(s))
 }
 
-function pushBatchMetrics(queue: BatchSummary[], samples: Sample[], timestamp: number) {
+function pushBatchMetrics(queue: BatchSummary[], samples: Sample[], timestamp: number, isLux = false) {
   const values = samples.map((s) => s.value)
-  const min = Math.min(...values)
-  const max = Math.max(...values)
+  let min = Math.min(...values)
+  let max = Math.max(...values)
+
+  if (isLux && values.length > 0) {
+    const sortedAsc = [...values].sort((a, b) => a - b)
+    const low5 = sortedAsc.slice(0, Math.min(5, sortedAsc.length))
+    min = low5.reduce((sum, val) => sum + val, 0) / low5.length
+
+    const sortedDesc = [...values].sort((a, b) => b - a)
+    const high5 = sortedDesc.slice(0, Math.min(5, sortedDesc.length))
+    max = high5.reduce((sum, val) => sum + val, 0) / high5.length
+  }
+
   queue.unshift({ min, max, timestamp, samples })
   if (queue.length > 6) queue.pop()
 }

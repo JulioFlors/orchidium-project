@@ -98,4 +98,44 @@ if (baseLux <= 15000) {
    * *Umbrales Activos*: `tempDropThreshold = -3.0`, `humRiseThreshold = 12.0`.
 2. **Evaluación de Choque**:
    * ¿`dTemp <= -3.0`? (-0.5 <= -3.0) ➜ **FALSE** ❌.
-   * **Resultado**: **`EVENTO RECHAZADO`** (Evita falso positivo por sombreado de nube).
+    * **Resultado**: **`EVENTO RECHAZADO`** (Evita falso positivo por sombreado de nube).
+
+---
+
+## 🌙 Lógica de Inferencia Nocturna: Bloques Deslizantes Adaptativos
+
+Para la franja nocturna (`[5:00 PM - 8:00 AM)` hora de Caracas), el sistema prescinde de la iluminancia (ya que es naturalmente $0\text{ lx}$) y evalúa la dinámica térmica e hídrica comparando dos ventanas de tiempo de **30 minutos**:
+
+### 1. Las Dos Ventanas Deslizantes
+* **Bloque de Calma Previa (Lotes 1, 2, 3)**:
+  * $\text{varTempPre} = \text{Max}(1,2,3) - \text{Min}(1,2,3)$
+  * $\text{varHumPre} = \text{Max}(1,2,3) - \text{Min}(1,2,3)$
+* **Bloque de Evaluación Actual (Lotes 0, 1, 2)**:
+  * $\text{varTempCur} = \text{Max}(0,1,2) - \text{Min}(0,1,2)$
+  * $\text{varHumCur} = \text{Max}(0,1,2) - \text{Min}(0,1,2)$
+
+### 2. Disparo por Ruptura de Calma
+La calma nocturna se rompe si la variación del bloque actual supera el umbral elástico determinado por la calma previa:
+```typescript
+const tempFloor = minHumPre >= 98.0 ? 0.50 : 0.35
+const tempDropThreshold = Math.max(tempFloor, varTempPre * 1.8)
+const humRiseThreshold = Math.max(1.5, varHumPre * 1.6)
+
+const isTempDropAbrupt = varTempCur >= tempDropThreshold
+const isHumRiseAbrupt = varHumCur >= humRiseThreshold
+```
+* **Inyección Nocturna de Lux**: Para evitar que la ausencia de datos de iluminancia de noche (ya que el sensor BH1750 no reporta con oscuridad) congele o salte la evaluación del loop, el motor inyecta automáticamente un valor por defecto de **$0\text{ lx}$** al lote.
+
+---
+
+## ⚖️ Análisis de Estrategias Descartadas para la Noche
+
+Durante la calibración del motor virtual de noche, se evaluaron y descartaron múltiples enfoques por fallas de robustez meteorológica:
+
+### ❌ Estrategia 1: Híbrido de Choque vs. Variabilidad de 30 minutos (Original en HEAD)
+* **Diseño**: Comparaba la caída individual en el lote actual de **10 minutos** (`batch0`) contra la variabilidad acumulada de **30 minutos** de calma previa multiplicada por $1.8$, con un bloqueo estático si la variación previa superaba los $0.6^\circ\text{C}$ (`varTempPre <= 0.6`).
+* **Motivo del descarte**: Mezclaba escalas de tiempo. El enfriamiento natural y constante del atardecer acumulaba una variabilidad de $1.1^\circ\text{C}$ en 30 minutos, inflando el umbral de un solo lote a $1.98^\circ\text{C}$ (lo que insensibilizaba la regla e ignoraba lluvias reales). Además, el bloqueo de $0.6^\circ\text{C}$ abortaba la evaluación ante cualquier atardecer normal.
+
+### ❌ Estrategia 2: Ruido por Lote Individual de 10 minutos (`refVarTemp`)
+* **Diseño**: Tomaba la variación interna individual de cada lote por separado en la calma, seleccionaba la máxima para estimar el ruido natural local de 10 minutos, y comparaba la caída de `batch0` contra ese ruido multiplicado.
+* **Motivo del descarte**: Aunque eliminaba el falso positivo del atardecer al no acumular tendencias a 30 minutos, resultó ser **insensible ante lloviznas progresivas**. Al fragmentar la calma en ventanas de 10 minutos, los cambios lentos pero consistentes de temperatura y humedad se disipaban en el ruido local y no lograban disparar la inferencia.

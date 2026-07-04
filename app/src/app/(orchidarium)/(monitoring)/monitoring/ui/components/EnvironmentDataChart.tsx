@@ -341,9 +341,14 @@ function CustomTooltip({
           closeDetails = `💧 Variación ${dhVal}%   |   🌡️ Variación ${dtVal}°C`
         } else if (reasonUpper.includes('SOLAR_RECOVERY') || reasonUpper.includes('SOLAR')) {
           closeTitle = 'Cese por recuperación solar'
-          const luxMatch = reasonStr.match(/Lux max:\s*([^°C\s,lx]+)/)
-          const luxVal = luxMatch ? luxMatch[1].trim() : '--'
-          closeDetails = `⛅ Iluminancia ${formatTooltipValue(luxVal, 'lx')} lx`
+          let displayLux = '--'
+          if (eLux !== null) {
+            displayLux = formatTooltipValue(eLux, 'lx')
+          } else {
+            const luxMatch = reasonStr.match(/Lux(?: max)?:\s*([^°C\s,lx]+)/)
+            displayLux = luxMatch ? formatTooltipValue(luxMatch[1].trim(), 'lx') : '--'
+          }
+          closeDetails = `⛅ Iluminancia ${displayLux} lx`
         } else if (reasonUpper.includes('BASELINE_RECOVERY') || reasonUpper.includes('RECUPERACIÓN')) {
           closeTitle = 'Cese por recuperación adaptativa'
           const tempMatch = reasonStr.match(/Temp:\s*([^°C\s,)]+)/)
