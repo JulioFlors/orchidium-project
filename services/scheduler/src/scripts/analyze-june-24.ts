@@ -16,11 +16,13 @@ async function main() {
   `
 
   const stream = influxClient.query(query)
+
   console.log('--- TELEMETRÍA DEL 24 DE JUNIO (10:45 AM - 11:25 AM CARACAS) ---')
   for await (const row of stream) {
     const d = new Date(row.time as string)
+
     console.log(
-      `[${d.toLocaleTimeString('es-VE')}] Temp: ${row.temperature}°C | Hum: ${row.humidity}% | Lux: ${row.illuminance} lx`
+      `[${d.toLocaleTimeString('es-VE')}] Temp: ${row.temperature}°C | Hum: ${row.humidity}% | Lux: ${row.illuminance} lx`,
     )
   }
 }

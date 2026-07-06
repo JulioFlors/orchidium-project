@@ -1,5 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
+
 import { influxClient } from '../lib/influx'
 
 interface BatchSummary {
@@ -44,10 +45,11 @@ async function runSim(dateStr: string, algoMode: string): Promise<RainEvent[]> {
   `
 
   const events: RainEvent[] = []
-  
+
   try {
     const stream = influxClient.query(query)
     const rows: any[] = []
+
     for await (const row of stream) {
       rows.push(row)
     }
@@ -92,7 +94,11 @@ async function runSim(dateStr: string, algoMode: string): Promise<RainEvent[]> {
       if (tempBatches.length < 4 || humBatches.length < 4 || luxBatches.length < 4) continue
 
       const caracasHour = (timeBin.getUTCHours() - 4 + 24) % 24
-      const timeStr = timeBin.toLocaleTimeString('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' })
+      const timeStr = timeBin.toLocaleTimeString('es-VE', {
+        timeZone: 'America/Caracas',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
       const isDay = caracasHour >= 8 && caracasHour < 16
 
       const currentMinTemp = tempBatches[0].min
@@ -101,7 +107,10 @@ async function runSim(dateStr: string, algoMode: string): Promise<RainEvent[]> {
       const currentMaxLux = luxBatches[0].max
 
       if (!inferedRainActive) {
-        if (lastInferedRainClosedAt !== null && timestampMs - lastInferedRainClosedAt < 15 * 60 * 1000) {
+        if (
+          lastInferedRainClosedAt !== null &&
+          timestampMs - lastInferedRainClosedAt < 15 * 60 * 1000
+        ) {
           continue
         }
 
@@ -128,7 +137,8 @@ async function runSim(dateStr: string, algoMode: string): Promise<RainEvent[]> {
           }
 
           const humCondition =
-            dHum1 >= humRiseThreshold || (baseHum1 >= 90.0 && baseHum1 <= 95.0 && currentMaxHum >= 98.0)
+            dHum1 >= humRiseThreshold ||
+            (baseHum1 >= 90.0 && baseHum1 <= 95.0 && currentMaxHum >= 98.0)
 
           if (dTemp1 <= tempDropThreshold && humCondition && luxCondition) {
             triggered = true
@@ -155,7 +165,8 @@ async function runSim(dateStr: string, algoMode: string): Promise<RainEvent[]> {
             }
 
             const humCondition2 =
-              dHum2 >= humRiseThreshold2 || (baseHum2 >= 88.0 && baseHum2 <= 95.0 && currentMaxHum >= 98.0)
+              dHum2 >= humRiseThreshold2 ||
+              (baseHum2 >= 88.0 && baseHum2 <= 95.0 && currentMaxHum >= 98.0)
 
             if (dTemp2 <= tempDropThreshold2 && humCondition2 && luxCondition2) {
               triggered = true
@@ -166,10 +177,16 @@ async function runSim(dateStr: string, algoMode: string): Promise<RainEvent[]> {
           // --- NOCHE ---
           if (algoMode === 'FORMULA_B') {
             // Baseline Original
-            const maxTempPreAll = Math.max(tempBatches[1].max, tempBatches[2].max, tempBatches[3].max)
+            const maxTempPreAll = Math.max(
+              tempBatches[1].max,
+              tempBatches[2].max,
+              tempBatches[3].max,
+            )
             const minHumPreAll = Math.min(humBatches[1].min, humBatches[2].min, humBatches[3].min)
-            const varTempPre = maxTempPreAll - Math.min(tempBatches[1].min, tempBatches[2].min, tempBatches[3].min)
-            const varHumPre = Math.max(humBatches[1].max, humBatches[2].max, humBatches[3].max) - minHumPreAll
+            const varTempPre =
+              maxTempPreAll - Math.min(tempBatches[1].min, tempBatches[2].min, tempBatches[3].min)
+            const varHumPre =
+              Math.max(humBatches[1].max, humBatches[2].max, humBatches[3].max) - minHumPreAll
 
             const currentTempDrop = maxTempPreAll - currentMinTemp
             const currentHumRise = currentMaxHum - minHumPreAll
@@ -185,20 +202,24 @@ async function runSim(dateStr: string, algoMode: string): Promise<RainEvent[]> {
               triggered = true
               triggerReason = `Fórmula B`
             }
-          } 
-          
-          else if (algoMode === 'FORMULA_B_SENSITIVE') {
+          } else if (algoMode === 'FORMULA_B_SENSITIVE') {
             // Calibración Fina Sensibilizada con Bloqueo de Rocío Nocturno
-            const maxTempPreAll = Math.max(tempBatches[1].max, tempBatches[2].max, tempBatches[3].max)
+            const maxTempPreAll = Math.max(
+              tempBatches[1].max,
+              tempBatches[2].max,
+              tempBatches[3].max,
+            )
             const minHumPreAll = Math.min(humBatches[1].min, humBatches[2].min, humBatches[3].min)
-            const varTempPre = maxTempPreAll - Math.min(tempBatches[1].min, tempBatches[2].min, tempBatches[3].min)
-            const varHumPre = Math.max(humBatches[1].max, humBatches[2].max, humBatches[3].max) - minHumPreAll
+            const varTempPre =
+              maxTempPreAll - Math.min(tempBatches[1].min, tempBatches[2].min, tempBatches[3].min)
+            const varHumPre =
+              Math.max(humBatches[1].max, humBatches[2].max, humBatches[3].max) - minHumPreAll
 
             const currentTempDrop = maxTempPreAll - currentMinTemp
             const currentHumRise = currentMaxHum - minHumPreAll
 
             // Bloqueo de Rocío: Si la calma previa ya venía muy saturada (>= 98.0%), elevamos el piso térmico a 0.50°C
-            const tempFloor = minHumPreAll >= 98.0 ? 0.50 : 0.35
+            const tempFloor = minHumPreAll >= 98.0 ? 0.5 : 0.35
 
             const tempDropThreshold = Math.max(tempFloor, varTempPre * 1.8)
             const humRiseThreshold = Math.max(1.5, varHumPre * 1.6)
@@ -211,22 +232,28 @@ async function runSim(dateStr: string, algoMode: string): Promise<RainEvent[]> {
               triggered = true
               triggerReason = `Fórmula B Calibrada`
             }
-          }
-          
-          else if (algoMode === 'FORMULA_A_REFINED') {
+          } else if (algoMode === 'FORMULA_A_REFINED') {
             // Fórmula A Refinada Calibrada con bloqueo de calma y aceleración
             const varTemp1 = tempBatches[1].max - tempBatches[1].min
             const varTemp2 = tempBatches[2].max - tempBatches[2].min
             const varTemp3 = tempBatches[3].max - tempBatches[3].min
-            const refVarTemp = Math.max(varTemp1, varTemp2, varTemp3, 0.20)
+            const refVarTemp = Math.max(varTemp1, varTemp2, varTemp3, 0.2)
 
             const varHum1 = humBatches[1].max - humBatches[1].min
             const varHum2 = humBatches[2].max - humBatches[2].min
             const varHum3 = humBatches[3].max - humBatches[3].min
             const refVarHum = Math.max(varHum1, varHum2, varHum3, 1.0)
 
-            const maxTempPreAll = Math.max(tempBatches[1].max, tempBatches[2].max, tempBatches[3].max)
-            const minTempPreAll = Math.min(tempBatches[1].min, tempBatches[2].min, tempBatches[3].min)
+            const maxTempPreAll = Math.max(
+              tempBatches[1].max,
+              tempBatches[2].max,
+              tempBatches[3].max,
+            )
+            const minTempPreAll = Math.min(
+              tempBatches[1].min,
+              tempBatches[2].min,
+              tempBatches[3].min,
+            )
             const minHumPreAll = Math.min(humBatches[1].min, humBatches[2].min, humBatches[3].min)
             const varTempPre = maxTempPreAll - minTempPreAll
 
@@ -244,7 +271,12 @@ async function runSim(dateStr: string, algoMode: string): Promise<RainEvent[]> {
             const preTempDrop = maxTempPreAll - minTempPreAll
             const isAccelerating = currentTempDrop >= preTempDrop * 1.8 // Ajustado de 2.0 a 1.8
 
-            if (varTempPre <= 0.6 && isTempDropAbrupt && (isHumRiseAbrupt || isPreSaturated) && isAccelerating) {
+            if (
+              varTempPre <= 0.6 &&
+              isTempDropAbrupt &&
+              (isHumRiseAbrupt || isPreSaturated) &&
+              isAccelerating
+            ) {
               triggered = true
               triggerReason = `A Refinada Calibrada`
             }
@@ -280,7 +312,12 @@ async function runSim(dateStr: string, algoMode: string): Promise<RainEvent[]> {
         }
 
         if (!closed && isDay) {
-          if (inferedBaselineTemp !== null && inferedBaselineHum !== null && minTempInRain !== null && maxHumInRain !== null) {
+          if (
+            inferedBaselineTemp !== null &&
+            inferedBaselineHum !== null &&
+            minTempInRain !== null &&
+            maxHumInRain !== null
+          ) {
             const currentTemp = tempBatches[0].max
             const currentHum = humBatches[0].min
             const tempDrop = inferedBaselineTemp - minTempInRain
@@ -319,15 +356,19 @@ async function runSim(dateStr: string, algoMode: string): Promise<RainEvent[]> {
         if (closed) {
           inferedRainActive = false
           lastInferedRainClosedAt = timestampMs
-          const startStr = new Date(inferedRainStartedAt || 0).toLocaleTimeString('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' })
-          
+          const startStr = new Date(inferedRainStartedAt || 0).toLocaleTimeString('es-VE', {
+            timeZone: 'America/Caracas',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+
           events.push({
             start: startStr,
             end: timeStr,
             duration: Math.round(durationMin),
-            reason: activeTriggerReason + ' -> ' + closeReason
+            reason: activeTriggerReason + ' -> ' + closeReason,
           })
-          
+
           inferedRainStartedAt = null
         }
       }
@@ -341,7 +382,7 @@ async function runSim(dateStr: string, algoMode: string): Promise<RainEvent[]> {
 
 async function runMatrix() {
   console.log('Iniciando matriz de calibración fina (24 al 28 de Junio)...')
-  
+
   const results: Record<string, Record<string, RainEvent[]>> = {}
 
   for (const date of DAYS) {
@@ -353,6 +394,7 @@ async function runMatrix() {
 
   // Generar reporte en Markdown
   let md = `# Reporte de Calibración Fina: Matriz de Simulación de Inferencia de Lluvia\n\n`
+
   md += `Este reporte presenta la comparación del algoritmo base (**FORMULA_B**) contra las dos variantes calibradas para buscar el punto óptimo de **cero falsos positivos** y máxima sensibilidad ante lloviznas.\n\n`
 
   md += `## 1. Tabla Comparativa de Eventos Detectados\n\n`
@@ -363,10 +405,14 @@ async function runMatrix() {
     md += `| **${date}** `
     for (const algo of ALGOS) {
       const evs = results[date][algo]
+
       if (evs.length === 0) {
         md += `| *Ninguno* `
       } else {
-        const summaries = evs.map(e => `🌧️ **${e.start}-${e.end}** (${e.duration} min)`).join('<br>')
+        const summaries = evs
+          .map((e) => `🌧️ **${e.start}-${e.end}** (${e.duration} min)`)
+          .join('<br>')
+
         md += `| ${summaries} `
       }
     }
@@ -394,12 +440,21 @@ async function runMatrix() {
   md += `* Aceleración térmica mínima: \`1.8x\`\n`
   md += `* Calma previa máxima: \`varTempPre <= 0.6°C\`\n`
 
-  const reportPath = path.join('C:', 'Users', 'Julio', '.gemini', 'antigravity', 'brain', 'b1d5745b-10a2-4a52-9a21-f76d66498382', 'reporte_matriz_lluvia.md')
-  
+  const reportPath = path.join(
+    'C:',
+    'Users',
+    'Julio',
+    '.gemini',
+    'antigravity',
+    'brain',
+    'b1d5745b-10a2-4a52-9a21-f76d66498382',
+    'reporte_matriz_lluvia.md',
+  )
+
   // Asegurar que la carpeta exista
   fs.mkdirSync(path.dirname(reportPath), { recursive: true })
   fs.writeFileSync(reportPath, md, 'utf-8')
-  
+
   console.log(`\n🎉 Matriz de calibración completada!`)
   console.log(`Reporte guardado en: file:///${reportPath.replace(/\\/g, '/')}`)
   console.log(`\n=== TABLA COMPARATIVA ===\n`)

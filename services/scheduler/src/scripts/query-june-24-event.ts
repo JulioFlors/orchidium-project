@@ -18,11 +18,17 @@ async function main() {
     console.log(`Cese: ${event.endedAt?.toISOString()}`)
     console.log(`Trigger Reason: ${event.triggerReason}`)
     console.log(`Close Reason: ${event.closeReason}`)
-    console.log(`BaselineTemp: ${event.baselineTemp} | BaselineHum: ${event.baselineHum} | BaselineLux: ${event.baselineLux}`)
-    console.log(`StartTemp: ${event.startTemp} | StartHum: ${event.startHum} | StartLux: ${event.startLux}`)
+    console.log(
+      `BaselineTemp: ${event.baselineTemp} | BaselineHum: ${event.baselineHum} | BaselineLux: ${event.baselineLux}`,
+    )
+    console.log(
+      `StartTemp: ${event.startTemp} | StartHum: ${event.startHum} | StartLux: ${event.startLux}`,
+    )
   } else {
     console.log('No se encontró el evento.')
   }
 }
 
-main().catch(console.error).finally(() => prisma.$disconnect())
+main()
+  .catch(console.error)
+  .finally(() => prisma.$disconnect())

@@ -1,5 +1,6 @@
 import * as fs from 'fs'
 import * as path from 'path'
+
 import { influxClient } from '../lib/influx'
 
 interface BatchSummary {
@@ -18,12 +19,35 @@ interface RainEvent {
 // Analizaremos 30 días históricos en total (31 de Mayo al 29 de Junio de 2026)
 const DAYS = [
   '2026-05-31',
-  '2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04', '2026-06-05',
-  '2026-06-06', '2026-06-07', '2026-06-08', '2026-06-09', '2026-06-10',
-  '2026-06-11', '2026-06-12', '2026-06-13', '2026-06-14', '2026-06-15',
-  '2026-06-16', '2026-06-17', '2026-06-18', '2026-06-19', '2026-06-20',
-  '2026-06-21', '2026-06-22', '2026-06-23', '2026-06-24', '2026-06-25',
-  '2026-06-26', '2026-06-27', '2026-06-28', '2026-06-29'
+  '2026-06-01',
+  '2026-06-02',
+  '2026-06-03',
+  '2026-06-04',
+  '2026-06-05',
+  '2026-06-06',
+  '2026-06-07',
+  '2026-06-08',
+  '2026-06-09',
+  '2026-06-10',
+  '2026-06-11',
+  '2026-06-12',
+  '2026-06-13',
+  '2026-06-14',
+  '2026-06-15',
+  '2026-06-16',
+  '2026-06-17',
+  '2026-06-18',
+  '2026-06-19',
+  '2026-06-20',
+  '2026-06-21',
+  '2026-06-22',
+  '2026-06-23',
+  '2026-06-24',
+  '2026-06-25',
+  '2026-06-26',
+  '2026-06-27',
+  '2026-06-28',
+  '2026-06-29',
 ]
 
 async function runSim(dateStr: string, dewThreshold: number): Promise<RainEvent[]> {
@@ -52,10 +76,11 @@ async function runSim(dateStr: string, dewThreshold: number): Promise<RainEvent[
   `
 
   const events: RainEvent[] = []
-  
+
   try {
     const stream = influxClient.query(query)
     const rows: any[] = []
+
     for await (const row of stream) {
       rows.push(row)
     }
@@ -100,7 +125,11 @@ async function runSim(dateStr: string, dewThreshold: number): Promise<RainEvent[
       if (tempBatches.length < 4 || humBatches.length < 4 || luxBatches.length < 4) continue
 
       const caracasHour = (timeBin.getUTCHours() - 4 + 24) % 24
-      const timeStr = timeBin.toLocaleTimeString('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' })
+      const timeStr = timeBin.toLocaleTimeString('es-VE', {
+        timeZone: 'America/Caracas',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
       const isDay = caracasHour >= 8 && caracasHour < 16
 
       const currentMinTemp = tempBatches[0].min
@@ -109,7 +138,10 @@ async function runSim(dateStr: string, dewThreshold: number): Promise<RainEvent[
       const currentMaxLux = luxBatches[0].max
 
       if (!inferedRainActive) {
-        if (lastInferedRainClosedAt !== null && timestampMs - lastInferedRainClosedAt < 15 * 60 * 1000) {
+        if (
+          lastInferedRainClosedAt !== null &&
+          timestampMs - lastInferedRainClosedAt < 15 * 60 * 1000
+        ) {
           continue
         }
 
@@ -136,7 +168,8 @@ async function runSim(dateStr: string, dewThreshold: number): Promise<RainEvent[
           }
 
           const humCondition =
-            dHum1 >= humRiseThreshold || (baseHum1 >= 90.0 && baseHum1 <= 95.0 && currentMaxHum >= 98.0)
+            dHum1 >= humRiseThreshold ||
+            (baseHum1 >= 90.0 && baseHum1 <= 95.0 && currentMaxHum >= 98.0)
 
           if (dTemp1 <= tempDropThreshold && humCondition && luxCondition) {
             triggered = true
@@ -163,7 +196,8 @@ async function runSim(dateStr: string, dewThreshold: number): Promise<RainEvent[
             }
 
             const humCondition2 =
-              dHum2 >= humRiseThreshold2 || (baseHum2 >= 88.0 && baseHum2 <= 95.0 && currentMaxHum >= 98.0)
+              dHum2 >= humRiseThreshold2 ||
+              (baseHum2 >= 88.0 && baseHum2 <= 95.0 && currentMaxHum >= 98.0)
 
             if (dTemp2 <= tempDropThreshold2 && humCondition2 && luxCondition2) {
               triggered = true
@@ -174,14 +208,16 @@ async function runSim(dateStr: string, dewThreshold: number): Promise<RainEvent[
           // --- NOCHE (FORMULA_B_SENSITIVE con dewThreshold dinámico para robustecer) ---
           const maxTempPreAll = Math.max(tempBatches[1].max, tempBatches[2].max, tempBatches[3].max)
           const minHumPreAll = Math.min(humBatches[1].min, humBatches[2].min, humBatches[3].min)
-          const varTempPre = maxTempPreAll - Math.min(tempBatches[1].min, tempBatches[2].min, tempBatches[3].min)
-          const varHumPre = Math.max(humBatches[1].max, humBatches[2].max, humBatches[3].max) - minHumPreAll
+          const varTempPre =
+            maxTempPreAll - Math.min(tempBatches[1].min, tempBatches[2].min, tempBatches[3].min)
+          const varHumPre =
+            Math.max(humBatches[1].max, humBatches[2].max, humBatches[3].max) - minHumPreAll
 
           const currentTempDrop = maxTempPreAll - currentMinTemp
           const currentHumRise = currentMaxHum - minHumPreAll
 
           // Filtro de Rocío: Elevación del piso a 0.50°C si la calma previa supera el dewThreshold
-          const tempFloor = minHumPreAll >= dewThreshold ? 0.50 : 0.35
+          const tempFloor = minHumPreAll >= dewThreshold ? 0.5 : 0.35
 
           const tempDropThreshold = Math.max(tempFloor, varTempPre * 1.8)
           const humRiseThreshold = Math.max(1.5, varHumPre * 1.6)
@@ -225,7 +261,12 @@ async function runSim(dateStr: string, dewThreshold: number): Promise<RainEvent[
         }
 
         if (!closed && isDay) {
-          if (inferedBaselineTemp !== null && inferedBaselineHum !== null && minTempInRain !== null && maxHumInRain !== null) {
+          if (
+            inferedBaselineTemp !== null &&
+            inferedBaselineHum !== null &&
+            minTempInRain !== null &&
+            maxHumInRain !== null
+          ) {
             const currentTemp = tempBatches[0].max
             const currentHum = humBatches[0].min
             const tempDrop = inferedBaselineTemp - minTempInRain
@@ -264,15 +305,19 @@ async function runSim(dateStr: string, dewThreshold: number): Promise<RainEvent[
         if (closed) {
           inferedRainActive = false
           lastInferedRainClosedAt = timestampMs
-          const startStr = new Date(inferedRainStartedAt || 0).toLocaleTimeString('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' })
-          
+          const startStr = new Date(inferedRainStartedAt || 0).toLocaleTimeString('es-VE', {
+            timeZone: 'America/Caracas',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+
           events.push({
             start: startStr,
             end: timeStr,
             duration: Math.round(durationMin),
-            reason: activeTriggerReason + ' -> ' + closeReason
+            reason: activeTriggerReason + ' -> ' + closeReason,
           })
-          
+
           inferedRainStartedAt = null
         }
       }
@@ -285,7 +330,9 @@ async function runSim(dateStr: string, dewThreshold: number): Promise<RainEvent[
 }
 
 async function runAnalysis() {
-  console.log('Iniciando Plan de Investigación Climatológica de 30 Días (Robustecimiento de Umbral)...')
+  console.log(
+    'Iniciando Plan de Investigación Climatológica de 30 Días (Robustecimiento de Umbral)...',
+  )
   console.log('Evaluando umbrales de robustecimiento: 98.0% vs. 95.0% vs. 91.0%...')
 
   const results98: Record<string, RainEvent[]> = {}
@@ -301,6 +348,7 @@ async function runAnalysis() {
 
   // Generar reporte Markdown
   let md = `# Informe Científico: Robustecimiento Histórico del Filtro de Rocío (30 Días)\n\n`
+
   md += `Este informe evalúa el impacto de robustecer el filtro de rocío bajando el umbral de calma previa de \`98.0%\` a \`95.0%\` y \`91.0%\` sobre los últimos **30 días de datos históricos** de InfluxDB.\n\n`
 
   md += `## 1. Tabla Comparativa de Detección de Eventos (30 Días)\n\n`
@@ -312,11 +360,21 @@ async function runAnalysis() {
     const ev95 = results95[date]
     const ev91 = results91[date]
 
-    const str98 = ev98.length === 0 ? '*Ninguno*' : ev98.map(e => `🌧️ **${e.start}** (${e.duration}m)`).join('<br>')
-    const str95 = ev95.length === 0 ? '*Ninguno*' : ev95.map(e => `🌧️ **${e.start}** (${e.duration}m)`).join('<br>')
-    const str91 = ev91.length === 0 ? '*Ninguno*' : ev91.map(e => `🌧️ **${e.start}** (${e.duration}m)`).join('<br>')
+    const str98 =
+      ev98.length === 0
+        ? '*Ninguno*'
+        : ev98.map((e) => `🌧️ **${e.start}** (${e.duration}m)`).join('<br>')
+    const str95 =
+      ev95.length === 0
+        ? '*Ninguno*'
+        : ev95.map((e) => `🌧️ **${e.start}** (${e.duration}m)`).join('<br>')
+    const str91 =
+      ev91.length === 0
+        ? '*Ninguno*'
+        : ev91.map((e) => `🌧️ **${e.start}** (${e.duration}m)`).join('<br>')
 
     let diagnostic = 'Estable (Seco)'
+
     if (ev91.length > 0) {
       diagnostic = '☔ Lluvia Real Confirmada (Todos los filtros aprobados)'
     } else if (ev98.length > 0) {
@@ -330,7 +388,7 @@ async function runAnalysis() {
 
   md += `\n---\n\n## 2. Evaluación de Robustecimiento e Impacto\n\n`
   md += `Robustecer el umbral hídrico de calma previa para activar el piso de \`0.50°C\` produce los siguientes efectos físicos:\n\n`
-  
+
   md += `* **Filtro al 91.0% (Ultra Robusto)**:\n`
   md += `  * **Física**: Exige un choque de al menos \`0.50°C\` en prácticamente cualquier noche, ya que la humedad en Caracas por la noche supera casi siempre el 91%.\n`
   md += `  * **Impacto**: Protege al 100% contra cualquier pequeña inestabilidad térmica nocturna, pero puede omitir lluvias verdaderas muy tenues.\n\n`
@@ -339,7 +397,17 @@ async function runAnalysis() {
   md += `  * **Física**: Exige el piso térmico estricto de \`0.50°C\` si la calma previa supera el \`95.0%\` HR.\n`
   md += `  * **Impacto**: Evaluemos en la tabla si este umbral logra aislar la lluvia real del 24/06 y 27/06 bloqueando cualquier ruido residual.\n\n`
 
-  const reportPath = path.join('C:', 'Users', 'Julio', '.gemini', 'antigravity', 'brain', 'b1d5745b-10a2-4a52-9a21-f76d66498382', 'analisis_historico_madrugadas.md')
+  const reportPath = path.join(
+    'C:',
+    'Users',
+    'Julio',
+    '.gemini',
+    'antigravity',
+    'brain',
+    'b1d5745b-10a2-4a52-9a21-f76d66498382',
+    'analisis_historico_madrugadas.md',
+  )
+
   fs.writeFileSync(reportPath, md, 'utf-8')
 
   console.log(`\n🎉 Matriz de robustecimiento completada!`)

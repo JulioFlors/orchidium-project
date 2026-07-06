@@ -14,13 +14,15 @@ async function main() {
   `
 
   const stream = influxClient.query(query)
+
   console.log('--- TELEMETRÍA DEL 18 DE JUNIO (12:00 PM - 1:00 PM CARACAS) ---')
   for await (const row of stream) {
     const d = new Date(row.time as string)
     const hour = (d.getUTCHours() - 4 + 24) % 24
+
     if (hour === 12) {
       console.log(
-        `[${d.toLocaleTimeString('es-VE')}] Temp: ${row.temperature}°C | Hum: ${row.humidity}% | Lux: ${row.illuminance} lx`
+        `[${d.toLocaleTimeString('es-VE')}] Temp: ${row.temperature}°C | Hum: ${row.humidity}% | Lux: ${row.illuminance} lx`,
       )
     }
   }

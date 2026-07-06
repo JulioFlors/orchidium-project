@@ -53,18 +53,33 @@ export async function recordTaskEvent(
         return null
       }
 
-      // 1. Obtener todos los eventos históricos ya registrados para esta tarea
+      // 1. Obtener todos los eventos históricos ya registrados para esta tarea, ordenados por tiempo
       const existingEvents = await tx.taskEventLog.findMany({
         where: { taskId },
+        orderBy: { timestamp: 'asc' },
         select: { status: true },
       })
       const pastStatuses = existingEvents.map((e) => e.status)
 
-      // 2. Determinar la precedencia histórica máxima registrada
-      const maxPastPrecedence = Math.max(0, ...pastStatuses.map((s) => STATUS_PRECEDENCE[s] || 0))
+      // Determinar el inicio del intento actual (basado en el último DISPATCHED)
+      const lastDispatchedIndex =
+        status === TaskStatus.DISPATCHED ? -1 : pastStatuses.lastIndexOf(TaskStatus.DISPATCHED)
+
+      const currentAttemptStatuses =
+        lastDispatchedIndex !== -1
+          ? pastStatuses.slice(lastDispatchedIndex)
+          : status === TaskStatus.DISPATCHED
+            ? []
+            : pastStatuses
+
+      // 2. Determinar la precedencia máxima registrada en este intento
+      const maxPastPrecedence = Math.max(
+        0,
+        ...currentAttemptStatuses.map((s) => STATUS_PRECEDENCE[s] || 0),
+      )
       const newPrecedence = STATUS_PRECEDENCE[status] || 0
 
-      // No permitir retroceder en la jerarquía histórica de estados
+      // No permitir retroceder en la jerarquía de estados dentro del mismo intento
       if (newPrecedence < maxPastPrecedence) {
         return null
       }
@@ -86,8 +101,9 @@ export async function recordTaskEvent(
       let resultRecord: TaskLog | null = currentTask as unknown as TaskLog
 
       if (isStatusChange) {
-        // Verificar si este evento en específico ya se registró en el timeline
-        const alreadyLogged = pastStatuses.includes(status)
+        // Verificar si este evento en específico ya se registró en el timeline del intento actual
+        const alreadyLogged =
+          status === TaskStatus.DISPATCHED ? false : currentAttemptStatuses.includes(status)
 
         let shouldUpdateStatus = true
 

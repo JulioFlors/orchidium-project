@@ -1044,7 +1044,7 @@ function setupMqttHandlers() {
             const [caracasHour] = caracasTimeStr.split(':').map(Number)
 
             // Saneamiento Solar: Si es antes de las 8:00 AM o después de las 4:00 PM, forzar lux a 0
-            const cleanLux = (caracasHour < 8 || caracasHour >= 16) ? 0 : (lux ?? lastKnownLux ?? 0)
+            const cleanLux = caracasHour < 8 || caracasHour >= 16 ? 0 : (lux ?? lastKnownLux ?? 0)
 
             // Registrar muestras en el buffer de telemetría de RainManager
             if (lastKnownTemp !== null && lastKnownHum !== null) {
@@ -1141,6 +1141,10 @@ function checkAndSleepEma() {
       emaManager.setOffline()
       saveDeviceLog('Weather_Station_ZONA_A', 'SLEEP', 'Suspendido (Fallback Sleep)')
       Logger.info('⚠️ EMA marcado en SLEEP tras timeout de acuse (Fallback)')
+      mqttClient.publish('PristinoPlant/Weather_Station/ZONA_A/status', 'sleep', {
+        retain: true,
+        qos: 1,
+      })
       emaSleepFallbackTimer = null
     }, 30000)
   }
@@ -2127,9 +2131,7 @@ async function fetchAndSaveBcvData(): Promise<boolean> {
   const html = await res.text()
 
   // 1. Extraer tasa de cambio del dólar
-  const matchDolar = html.match(
-    /id=["']dolar["'][\s\S]*?<strong[^>]*?>\s*([\d,.]+)\s*<\/strong>/i,
-  )
+  const matchDolar = html.match(/id=["']dolar["'][\s\S]*?<strong[^>]*?>\s*([\d,.]+)\s*<\/strong>/i)
 
   if (!matchDolar) {
     throw new Error('No se pudo encontrar la tasa del dólar en el HTML del BCV.')
@@ -2249,7 +2251,9 @@ async function syncBcvExchangeRate(retryNum?: number | 'startup'): Promise<boole
       if (retryNum === 'startup') {
         Logger.bcv('Reintentando scraping BCV de arranque (intento 2)...')
       } else if (retryNum !== undefined && retryNum > 0) {
-        Logger.bcv(`[Reintento ${retryNum}/3 - Minuto 1] Reintentando sincronización de tasa BCV...`)
+        Logger.bcv(
+          `[Reintento ${retryNum}/3 - Minuto 1] Reintentando sincronización de tasa BCV...`,
+        )
       } else {
         Logger.bcv('Reintentando sincronización de tasa BCV (intento 2)...')
       }
@@ -2257,7 +2261,9 @@ async function syncBcvExchangeRate(retryNum?: number | 'startup'): Promise<boole
       return await fetchAndSaveBcvData()
     } catch (secondError: Error | unknown) {
       const errMsg = secondError instanceof Error ? secondError.message : String(secondError)
+
       Logger.error(`Error durante sincronización BCV (ambos intentos fallidos): ${errMsg}`)
+
       return false
     } finally {
       process.env.NODE_TLS_REJECT_UNAUTHORIZED = '1'

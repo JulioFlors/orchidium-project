@@ -9,7 +9,7 @@ interface BatchSummary {
 async function main() {
   const dateStr = process.argv[2] || '2026-06-27'
   const algoMode = (process.argv[3] || 'FORMULA_B').toUpperCase()
-  
+
   // Rango UTC para el día local de Caracas (UTC-4)
   const startTime = `${dateStr}T04:00:00Z`
   const parts = dateStr.split('-').map(Number)
@@ -42,6 +42,7 @@ async function main() {
   try {
     const stream = influxClient.query(query)
     const rows: any[] = []
+
     for await (const row of stream) {
       rows.push(row)
     }
@@ -99,7 +100,10 @@ async function main() {
 
       if (!inferedRainActive) {
         // Cooldown de 15 minutos tras el cese
-        if (lastInferedRainClosedAt !== null && timestampMs - lastInferedRainClosedAt < 15 * 60 * 1000) {
+        if (
+          lastInferedRainClosedAt !== null &&
+          timestampMs - lastInferedRainClosedAt < 15 * 60 * 1000
+        ) {
           continue
         }
 
@@ -127,7 +131,8 @@ async function main() {
           }
 
           const humCondition =
-            dHum1 >= humRiseThreshold || (baseHum1 >= 90.0 && baseHum1 <= 95.0 && currentMaxHum >= 98.0)
+            dHum1 >= humRiseThreshold ||
+            (baseHum1 >= 90.0 && baseHum1 <= 95.0 && currentMaxHum >= 98.0)
 
           if (dTemp1 <= tempDropThreshold && humCondition && luxCondition) {
             triggered = true
@@ -154,7 +159,8 @@ async function main() {
             }
 
             const humCondition2 =
-              dHum2 >= humRiseThreshold2 || (baseHum2 >= 88.0 && baseHum2 <= 95.0 && currentMaxHum >= 98.0)
+              dHum2 >= humRiseThreshold2 ||
+              (baseHum2 >= 88.0 && baseHum2 <= 95.0 && currentMaxHum >= 98.0)
 
             if (dTemp2 <= tempDropThreshold2 && humCondition2 && luxCondition2) {
               triggered = true
@@ -163,13 +169,19 @@ async function main() {
           }
         } else {
           // --- EVALUACIÓN NOCTURNA SEGÚN MODO ---
-          
+
           if (algoMode === 'FORMULA_B' || algoMode === 'GARUA_EXTENSION') {
             // Propuestas A y D: Fórmula B de Choque Adaptativa
-            const maxTempPreAll = Math.max(tempBatches[1].max, tempBatches[2].max, tempBatches[3].max)
+            const maxTempPreAll = Math.max(
+              tempBatches[1].max,
+              tempBatches[2].max,
+              tempBatches[3].max,
+            )
             const minHumPreAll = Math.min(humBatches[1].min, humBatches[2].min, humBatches[3].min)
-            const varTempPre = maxTempPreAll - Math.min(tempBatches[1].min, tempBatches[2].min, tempBatches[3].min)
-            const varHumPre = Math.max(humBatches[1].max, humBatches[2].max, humBatches[3].max) - minHumPreAll
+            const varTempPre =
+              maxTempPreAll - Math.min(tempBatches[1].min, tempBatches[2].min, tempBatches[3].min)
+            const varHumPre =
+              Math.max(humBatches[1].max, humBatches[2].max, humBatches[3].max) - minHumPreAll
 
             const currentTempDrop = maxTempPreAll - currentMinTemp
             const currentHumRise = currentMaxHum - minHumPreAll
@@ -185,9 +197,7 @@ async function main() {
               triggered = true
               triggerReason = `Fórmula B Nocturna (vTPre=${varTempPre.toFixed(2)}°C, dT=${currentTempDrop.toFixed(2)}°C, dH=+${currentHumRise.toFixed(1)}%)`
             }
-          } 
-          
-          else if (algoMode === 'FORMULA_A_REFINED') {
+          } else if (algoMode === 'FORMULA_A_REFINED') {
             const varTemp1 = tempBatches[1].max - tempBatches[1].min
             const varTemp2 = tempBatches[2].max - tempBatches[2].min
             const varTemp3 = tempBatches[3].max - tempBatches[3].min
@@ -198,8 +208,16 @@ async function main() {
             const varHum3 = humBatches[3].max - humBatches[3].min
             const refVarHum = Math.max(varHum1, varHum2, varHum3, 0.5)
 
-            const maxTempPreAll = Math.max(tempBatches[1].max, tempBatches[2].max, tempBatches[3].max)
-            const minTempPreAll = Math.min(tempBatches[1].min, tempBatches[2].min, tempBatches[3].min)
+            const maxTempPreAll = Math.max(
+              tempBatches[1].max,
+              tempBatches[2].max,
+              tempBatches[3].max,
+            )
+            const minTempPreAll = Math.min(
+              tempBatches[1].min,
+              tempBatches[2].min,
+              tempBatches[3].min,
+            )
             const minHumPreAll = Math.min(humBatches[1].min, humBatches[2].min, humBatches[3].min)
 
             const currentTempDrop = maxTempPreAll - currentMinTemp
@@ -215,15 +233,26 @@ async function main() {
             const preTempDrop = maxTempPreAll - minTempPreAll
             const isAccelerating = currentTempDrop >= preTempDrop * 1.6
 
-            if (minTempPreAll - maxTempPreAll <= 0.6 && isTempDropAbrupt && (isHumRiseAbrupt || isPreSaturated) && isAccelerating) {
+            if (
+              minTempPreAll - maxTempPreAll <= 0.6 &&
+              isTempDropAbrupt &&
+              (isHumRiseAbrupt || isPreSaturated) &&
+              isAccelerating
+            ) {
               triggered = true
               triggerReason = `Fórmula A Refinada (refVarT=${refVarTemp.toFixed(2)}°C, dT=${currentTempDrop.toFixed(2)}°C, dH=+${currentHumRise.toFixed(1)}%, acel=SI)`
             }
-          }
-          
-          else if (algoMode === 'GARUA_PERSISTENT') {
-            const maxTempPreAll = Math.max(tempBatches[1].max, tempBatches[2].max, tempBatches[3].max)
-            const minTempPreAll = Math.min(tempBatches[1].min, tempBatches[2].min, tempBatches[3].min)
+          } else if (algoMode === 'GARUA_PERSISTENT') {
+            const maxTempPreAll = Math.max(
+              tempBatches[1].max,
+              tempBatches[2].max,
+              tempBatches[3].max,
+            )
+            const minTempPreAll = Math.min(
+              tempBatches[1].min,
+              tempBatches[2].min,
+              tempBatches[3].min,
+            )
             const minHumPreAll = Math.min(humBatches[1].min, humBatches[2].min, humBatches[3].min)
             const maxHumPreAll = Math.max(humBatches[1].max, humBatches[2].max, humBatches[3].max)
             const varTempPre = maxTempPreAll - minTempPreAll
@@ -246,7 +275,7 @@ async function main() {
 
             if (!triggered) {
               const isPreExtremelySaturated = minHumPreAll >= 96.0
-              const isTempPlat = varTempPre <= 0.30
+              const isTempPlat = varTempPre <= 0.3
               const isDark = currentMinLux <= 500
               const isCurrentSaturated = currentMaxHum >= 97.0
 
@@ -268,7 +297,9 @@ async function main() {
           minTempInRain = currentMinTemp
           maxHumInRain = currentMaxHum
 
-          console.log(`🌧️ [INICIO LLUVIA INFERIDA] A las ${timeStr} | Motivo: ${triggerReason} | Clima: ${minTemp.toFixed(1)}°C / ${maxHum.toFixed(1)}% HR / ${minLux.toFixed(0)} lx`)
+          console.log(
+            `🌧️ [INICIO LLUVIA INFERIDA] A las ${timeStr} | Motivo: ${triggerReason} | Clima: ${minTemp.toFixed(1)}°C / ${maxHum.toFixed(1)}% HR / ${minLux.toFixed(0)} lx`,
+          )
         }
       } else {
         // --- EVALUACIÓN DE CESE ---
@@ -283,10 +314,12 @@ async function main() {
           const humCeseThreshold = 1.0
 
           let isVetoed = false
+
           if (algoMode === 'GARUA_EXTENSION') {
             // Veto de cese: No cerrar si sigue extremadamente húmedo y sin sol (garúa persistente)
             const isExtremelySaturated = currentMaxHum >= 96.0
             const isDark = currentMinLux <= 500
+
             if (isExtremelySaturated && isDark) {
               isVetoed = true
             }
@@ -299,7 +332,12 @@ async function main() {
         }
 
         if (!closed && isDay) {
-          if (inferedBaselineTemp !== null && inferedBaselineHum !== null && minTempInRain !== null && maxHumInRain !== null) {
+          if (
+            inferedBaselineTemp !== null &&
+            inferedBaselineHum !== null &&
+            minTempInRain !== null &&
+            maxHumInRain !== null
+          ) {
             const currentTemp = tempBatches[0].max
             const currentHum = humBatches[0].min
             const tempDrop = inferedBaselineTemp - minTempInRain
@@ -338,7 +376,9 @@ async function main() {
         if (closed) {
           inferedRainActive = false
           lastInferedRainClosedAt = timestampMs
-          console.log(`☀️ [CESE LLUVIA INFERIDA] A las ${timeStr} | Motivo: ${closeReason} | Duración: ${durationMin.toFixed(0)} min`)
+          console.log(
+            `☀️ [CESE LLUVIA INFERIDA] A las ${timeStr} | Motivo: ${closeReason} | Duración: ${durationMin.toFixed(0)} min`,
+          )
         }
       }
     }

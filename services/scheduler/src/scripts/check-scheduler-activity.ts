@@ -2,24 +2,27 @@ import { prisma } from '@package/database'
 
 async function main() {
   const targetTime = new Date()
+
   targetTime.setDate(targetTime.getDate() - 3) // Últimos 3 días
 
-  console.log(`Consultando actividad del planificador en Postgres desde ${targetTime.toISOString()}...`)
+  console.log(
+    `Consultando actividad del planificador en Postgres desde ${targetTime.toISOString()}...`,
+  )
 
   const taskLogs = await prisma.taskEventLog.findMany({
     where: {
       timestamp: {
-        gte: targetTime
-      }
+        gte: targetTime,
+      },
     },
     orderBy: { timestamp: 'desc' },
-    take: 50
+    take: 50,
   })
 
   console.log(`Se encontraron ${taskLogs.length} logs de tareas:`)
   for (const log of taskLogs) {
     console.log(
-      `[${log.timestamp.toISOString()}] Task ID: ${log.taskId} | Status: ${log.status} | Notes: ${log.notes ?? 'N/A'}`
+      `[${log.timestamp.toISOString()}] Task ID: ${log.taskId} | Status: ${log.status} | Notes: ${log.notes ?? 'N/A'}`,
     )
   }
 
@@ -27,16 +30,16 @@ async function main() {
   const rainEvents = await prisma.rainEvent.findMany({
     where: {
       startedAt: {
-        gte: targetTime
-      }
+        gte: targetTime,
+      },
     },
-    orderBy: { startedAt: 'desc' }
+    orderBy: { startedAt: 'desc' },
   })
 
   console.log(`\nSe encontraron ${rainEvents.length} eventos de lluvia en Postgres:`)
   for (const e of rainEvents) {
     console.log(
-      `ID: ${e.id.slice(0, 8)} | Inicio: ${e.startedAt.toISOString()} | Fin: ${e.endedAt?.toISOString()} | Cierre: ${e.closedBy} | Inferido: ${e.isInfered}`
+      `ID: ${e.id.slice(0, 8)} | Inicio: ${e.startedAt.toISOString()} | Fin: ${e.endedAt?.toISOString()} | Cierre: ${e.closedBy} | Inferido: ${e.isInfered}`,
     )
   }
 }

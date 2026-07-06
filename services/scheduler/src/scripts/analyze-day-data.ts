@@ -9,7 +9,7 @@ async function analyzeDay(dateStr: string) {
   const endTime = `${nextDayStr}T03:59:59Z`
 
   console.log(`\n=== ANÁLISIS DE TELEMETRÍA EXTERIOR PARA EL DÍA LOCAL: ${dateStr} ===`)
-  
+
   const query = `
     SELECT 
       date_bin(interval '1 hour', time) as hour_bin,
@@ -28,14 +28,16 @@ async function analyzeDay(dateStr: string) {
 
   try {
     const stream = influxClient.query(query)
+
     for await (const row of stream) {
       const timeBin = new Date(row.hour_bin)
       const timeStr = timeBin.toLocaleTimeString('es-VE', { timeZone: 'America/Caracas' })
+
       console.log(
         `Hora: ${timeStr} | ` +
-        `Temp: [${Number(row.min_temp).toFixed(1)} - ${Number(row.max_temp).toFixed(1)}]°C | ` +
-        `Hum: [${Number(row.min_hum).toFixed(1)} - ${Number(row.max_hum).toFixed(1)}]% | ` +
-        `Lux Prom: ${Math.round(Number(row.avg_lux))} lx`
+          `Temp: [${Number(row.min_temp).toFixed(1)} - ${Number(row.max_temp).toFixed(1)}]°C | ` +
+          `Hum: [${Number(row.min_hum).toFixed(1)} - ${Number(row.max_hum).toFixed(1)}]% | ` +
+          `Lux Prom: ${Math.round(Number(row.avg_lux))} lx`,
       )
     }
   } catch (err) {

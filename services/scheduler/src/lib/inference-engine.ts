@@ -307,14 +307,25 @@ export class InferenceEngine {
         purpose === 'FUMIGATION' ||
         purpose === 'FERTIGATION'
       ) {
-        const isSaturated = await this.checkSaturacionHidrica(now, 4)
+        const satResult = await this.checkSaturacionHidrica(now, 4)
 
-        if (isSaturated) {
+        if (satResult.isSaturated) {
+          const sensorText = satResult.dataUsed === 'INT' ? 'Interior' : 'Exterior'
+          const realHum =
+            satResult.avgHum != null
+              ? Math.round(satResult.avgHum)
+              : THRESHOLDS.DIURNAL_SATURATION_THRESHOLD
+
           return {
             shouldCancel: true,
-            reason: `Motor de inferencia.\nSaturación hídrica.\n4h HR promedio >=${THRESHOLDS.DIURNAL_SATURATION_THRESHOLD}%`,
+            reason: `Motor de inferencia.\nEstacion Meteorologica ${sensorText}.\nSaturación hídrica.\n4h promedio HR ${realHum}% ≥ ${THRESHOLDS.DIURNAL_SATURATION_THRESHOLD}%`,
             action: 'SKIP',
-            metadata: { windowHours: 4, threshold: THRESHOLDS.DIURNAL_SATURATION_THRESHOLD },
+            metadata: {
+              windowHours: 4,
+              threshold: THRESHOLDS.DIURNAL_SATURATION_THRESHOLD,
+              avgHum: satResult.avgHum,
+              dataUsed: satResult.dataUsed,
+            },
           }
         }
       }
@@ -331,11 +342,9 @@ export class InferenceEngine {
           yesterdayLux < THRESHOLDS.SUNNY_DAY_LUX_THRESHOLD
 
         if (criterioA1) {
-          const razon = `Lluvia acumulada ayer: ${Math.round(yesterdayRain.durationSeconds / 60)} min + Lux promedio: ${yesterdayLux.toFixed(0)} (< ${THRESHOLDS.SUNNY_DAY_LUX_THRESHOLD} lux)`
-
           return {
             shouldCancel: true,
-            reason: `VETO AUTORIDAD (día anterior): ${razon}. Riego de aspersión omitido.`,
+            reason: `Motor de inferencia.\nVeto autoridad (dia anterior).\nLluvia ayer: ${Math.round(yesterdayRain.durationSeconds / 60)} min | Lux prom: ${formatLux(yesterdayLux)} < ${formatLux(THRESHOLDS.SUNNY_DAY_LUX_THRESHOLD)}`,
             action: 'SKIP',
             metadata: { yesterdayRain, yesterdayLux },
           }
@@ -344,15 +353,15 @@ export class InferenceEngine {
 
       // ── 3.2: Veto Respaldo Nocturno — HR exterior promedio >= 98.0% (segmentos de 1h en las últimas 6 horas) (solo IRRIGATION) ──
       if (purpose === 'IRRIGATION') {
-        const isNocturnalWindow = localHour >= 19 || localHour < 8
+        const checkNocturnalBackup = true
 
-        if (isNocturnalWindow) {
+        if (checkNocturnalBackup) {
           const saturatedBlocks = await this.getNocturnalSaturatedBlocks(6)
 
           if (saturatedBlocks >= 6) {
             return {
               shouldCancel: true,
-              reason: `VETO RESPALDO NOCTURNO: Se registraron 6 horas (bloques de 1h) continuas con HR exterior promedio ≥ ${THRESHOLDS.HUMIDITY_SATURATION_THRESHOLD}% (madrugada saturada / llovizna).`,
+              reason: `Motor de inferencia.\nEstacion Meteorologica Exterior.\nVeto respaldo nocturno (6h).\n6h continuas con HR prom ≥ ${THRESHOLDS.HUMIDITY_SATURATION_THRESHOLD}%`,
               action: 'SKIP',
               metadata: { saturatedBlocks },
             }
@@ -369,7 +378,7 @@ export class InferenceEngine {
         if (avgIntHum >= THRESHOLD_3H) {
           return {
             shouldCancel: true,
-            reason: `VETO HUMEDAD INTERIOR (3h): Promedio 3h de ZONA_A (${avgIntHum.toFixed(1)}%) ≥ ${THRESHOLD_3H}% (Umbral Dinámico; evitando exceso hídrico foliar).`,
+            reason: `Motor de inferencia.\nEstacion Meteorologica Interior.\nVeto humedad interior (3h).\nPromedio 3h ZONA_A ${avgIntHum.toFixed(1)}% ≥ ${THRESHOLD_3H}%`,
             action: 'SKIP',
             metadata: { avgIntHum, threshold3h: THRESHOLD_3H },
           }
@@ -397,18 +406,22 @@ export class InferenceEngine {
         Logger.inference(`HR Prom: ${avgHum.toFixed(1)}% | Temp Prom: ${avgTemp.toFixed(1)}°C`)
 
         if (avgHum >= THRESHOLD_4H) {
+          const sensorText = dataUsed === 'INT' ? 'Interior' : 'Exterior'
+
           return {
             shouldCancel: true,
-            reason: `VETO CLIMÁTICO ${purpose} (4h): HR promedio ${avgHum.toFixed(1)}% ≥ ${THRESHOLD_4H}% (Umbral Dinámico; Datos: ${dataUsed}).`,
+            reason: `Motor de inferencia.\nEstacion Meteorologica ${sensorText}.\nSaturación hídrica.\n4h promedio HR ${Math.round(avgHum)}% ≥ ${THRESHOLD_4H}%`,
             action: 'SKIP',
             metadata: { avgHum, threshold4h: THRESHOLD_4H, dataUsed },
           }
         }
 
         if (avgTemp <= THRESHOLDS.TEMPERATURE_MIN_VETO_4H && avgHum >= 80.0) {
+          const sensorText = dataUsed === 'INT' ? 'Interior' : 'Exterior'
+
           return {
             shouldCancel: true,
-            reason: `VETO CLIMÁTICO ${purpose} (4h): Temperatura promedio ${avgTemp.toFixed(1)}°C ≤ ${THRESHOLDS.TEMPERATURE_MIN_VETO_4H}°C con HR promedio ${avgHum.toFixed(1)}% ≥ 80.0% (Datos: ${dataUsed}).`,
+            reason: `Motor de inferencia.\nEstacion Meteorologica ${sensorText}.\nTemp promedio ${avgTemp.toFixed(1)}°C ≤ ${THRESHOLDS.TEMPERATURE_MIN_VETO_4H}°C\nHR promedio ${avgHum.toFixed(1)}% ≥ 80.0%`,
             action: 'SKIP',
             metadata: {
               avgTemp,
@@ -463,9 +476,10 @@ export class InferenceEngine {
             if (diffMin < 60) {
               timeText = `${diffMin} min`
             } else {
-              const diffHrs = diffMin / 60
+              const hrs = Math.floor(diffMin / 60)
+              const mins = diffMin % 60
 
-              timeText = `${diffHrs.toFixed(1).replace('.0', '')}h`
+              timeText = mins === 0 ? `${hrs}h` : `${hrs}h ${mins}min`
             }
           }
           const label = lastEvent?.isInfered ? 'Lluvia inferida' : 'Lluvia'
@@ -505,9 +519,10 @@ export class InferenceEngine {
             if (diffMin < 60) {
               timeText = `${diffMin} min`
             } else {
-              const diffHrs = diffMin / 60
+              const hrs = Math.floor(diffMin / 60)
+              const mins = diffMin % 60
 
-              timeText = `${diffHrs.toFixed(1).replace('.0', '')}h`
+              timeText = mins === 0 ? `${hrs}h` : `${hrs}h ${mins}min`
             }
           }
           const label = lastEvent?.isInfered ? 'Lluvia inferida' : 'Lluvia'
@@ -531,7 +546,7 @@ export class InferenceEngine {
       ) {
         return {
           shouldCancel: true,
-          reason: `Ambiente fresco (HR: ${interiorHum.toFixed(0)}%, Temp: ${interiorTemp.toFixed(1)}°C, Lux prom: ${dayClass.avgLuxSince8am.toFixed(0)}). Pulverización innecesaria.`,
+          reason: `Motor de inferencia.\nEstacion Meteorologica Interior.\nAmbiente fresco.\nHR: ${interiorHum.toFixed(0)}% | Temp: ${interiorTemp.toFixed(1)}°C | Lux: ${formatLux(dayClass.avgLuxSince8am)}`,
           action: 'SKIP',
           metadata: { localConditions, dayClass },
         }
@@ -545,7 +560,7 @@ export class InferenceEngine {
       ) {
         return {
           shouldCancel: true,
-          reason: `Día ${dayClass.type} (Lux prom 8am-ahora: ${dayClass.avgLuxSince8am.toFixed(0)}). Promedio ≤ ${THRESHOLDS.SUNNY_DAY_LUX_THRESHOLD} lux → pulverización innecesaria.`,
+          reason: `Motor de inferencia.\nEstacion Meteorologica Exterior.\nDia ${dayClass.type}.\nLux prom 8am-ahora: ${formatLux(dayClass.avgLuxSince8am)} ≤ ${formatLux(THRESHOLDS.SUNNY_DAY_LUX_THRESHOLD)}`,
           action: 'SKIP',
           metadata: { dayClass },
         }
@@ -570,9 +585,14 @@ export class InferenceEngine {
           forecast.consensusPrecipProb > THRESHOLDS.FORECAST_PRECIPITATION_PROBABILITY_LIMIT
 
         if ((conditionA || conditionB) && conditionC) {
+          const detailStr = conditionA ? 'Lluvia actual/reciente' : 'Día muy nublado + HR crítica'
+          const limitPercent = (THRESHOLDS.FORECAST_PRECIPITATION_PROBABILITY_LIMIT * 100).toFixed(
+            0,
+          )
+
           return {
             shouldCancel: true,
-            reason: `VETO AMBIENTAL: ${conditionA ? 'Lluvia actual/reciente' : 'Día muy nublado + HR crítica'} con Pronóstico > ${(THRESHOLDS.FORECAST_PRECIPITATION_PROBABILITY_LIMIT * 100).toFixed(0)}%. Protegiendo ${purpose}.`,
+            reason: `Motor de inferencia.\nVeto ambiental.\n${detailStr}.\nPronóstico > ${limitPercent}%`,
             action: 'SKIP',
             metadata: { forecast, dayClass, recentRain4h },
           }
@@ -1103,7 +1123,10 @@ export class InferenceEngine {
     }
   }
 
-  private static async checkSaturacionHidrica(now: Date, windowHours = 4): Promise<boolean> {
+  private static async checkSaturacionHidrica(
+    now: Date,
+    windowHours = 4,
+  ): Promise<{ isSaturated: boolean; avgHum?: number; dataUsed?: 'INT' | 'EXT' }> {
     try {
       const end = new Date(now)
       const start = new Date(now.getTime() - windowHours * 60 * 60 * 1000)
@@ -1114,7 +1137,7 @@ export class InferenceEngine {
       const hasDataInt = intRes.count > 0
       const hasDataExt = extRes.count > 0
 
-      if (!hasDataInt && !hasDataExt) return false
+      if (!hasDataInt && !hasDataExt) return { isSaturated: false }
 
       const intAvg = hasDataInt ? intRes.average : 0
       const extAvg = hasDataExt ? extRes.average : 0
@@ -1123,11 +1146,18 @@ export class InferenceEngine {
       const isIntSaturated = hasDataInt && intAvg >= THRESHOLDS.DIURNAL_SATURATION_THRESHOLD
       const isExtSaturated = hasDataExt && extAvg >= THRESHOLDS.DIURNAL_SATURATION_THRESHOLD
 
-      return isIntSaturated || isExtSaturated
+      if (isIntSaturated) {
+        return { isSaturated: true, avgHum: intAvg, dataUsed: 'INT' }
+      }
+      if (isExtSaturated) {
+        return { isSaturated: true, avgHum: extAvg, dataUsed: 'EXT' }
+      }
+
+      return { isSaturated: false }
     } catch (err) {
       Logger.error('Error al evaluar la saturación hídrica:', err)
 
-      return false
+      return { isSaturated: false }
     }
   }
 

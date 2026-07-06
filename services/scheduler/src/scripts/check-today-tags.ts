@@ -15,6 +15,7 @@ async function main() {
   `
 
   const stream = influxClient.query(query)
+
   console.log('--- REGISTROS CON TAGS DE HOY ---')
   for await (const row of stream) {
     console.log(JSON.stringify(row, null, 2))

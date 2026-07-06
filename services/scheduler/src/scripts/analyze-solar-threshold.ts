@@ -18,7 +18,9 @@ const BATCH_INTERVAL_MS = 10 * 60 * 1000
 function rowTimeToDate(rawTime: unknown): Date {
   if (rawTime instanceof Date) return rawTime
   const s = String(rawTime)
+
   if (isNaN(Number(s))) return new Date(s)
+
   return s.length > 13 ? new Date(Number(s.substring(0, 13))) : new Date(Number(s))
 }
 
@@ -26,6 +28,7 @@ function pushBatchMetrics(queue: BatchSummary[], samples: Sample[], timestamp: n
   const values = samples.map((s) => s.value)
   const min = Math.min(...values)
   const max = Math.max(...values)
+
   queue.unshift({ min, max, timestamp, samples })
   if (queue.length > 6) queue.pop()
 }
@@ -127,7 +130,8 @@ async function runSimulation(require15kSolarThreshold: boolean) {
         }
 
         const humCondition =
-          dHum1 >= humRiseThreshold || (baseHum1 >= 90.0 && baseHum1 <= 95.0 && currentMaxHum >= 98.0)
+          dHum1 >= humRiseThreshold ||
+          (baseHum1 >= 90.0 && baseHum1 <= 95.0 && currentMaxHum >= 98.0)
 
         if (dTemp1 <= tempDropThreshold && humCondition && luxCondition) {
           triggered = true
@@ -164,7 +168,8 @@ async function runSimulation(require15kSolarThreshold: boolean) {
           }
 
           const humCondition2 =
-            dHum2 >= humRiseThreshold2 || (baseHum2 >= 88.0 && baseHum2 <= 95.0 && currentMaxHum >= 98.0)
+            dHum2 >= humRiseThreshold2 ||
+            (baseHum2 >= 88.0 && baseHum2 <= 95.0 && currentMaxHum >= 98.0)
 
           if (dTemp2 <= tempDropThreshold2 && humCondition2 && luxCondition2) {
             triggered = true
@@ -174,13 +179,15 @@ async function runSimulation(require15kSolarThreshold: boolean) {
         // Reglas Nocturnas
         const maxTempPreAll = Math.max(tempBatches[1].max, tempBatches[2].max, tempBatches[3].max)
         const minHumPreAll = Math.min(humBatches[1].min, humBatches[2].min, humBatches[3].min)
-        const varTempPre = maxTempPreAll - Math.min(tempBatches[1].min, tempBatches[2].min, tempBatches[3].min)
-        const varHumPre = Math.max(humBatches[1].max, humBatches[2].max, humBatches[3].max) - minHumPreAll
+        const varTempPre =
+          maxTempPreAll - Math.min(tempBatches[1].min, tempBatches[2].min, tempBatches[3].min)
+        const varHumPre =
+          Math.max(humBatches[1].max, humBatches[2].max, humBatches[3].max) - minHumPreAll
 
         const currentTempDrop = maxTempPreAll - currentMinTemp
         const currentHumRise = currentMaxHum - minHumPreAll
 
-        const tempFloor = minHumPreAll >= 98.0 ? 0.50 : 0.35
+        const tempFloor = minHumPreAll >= 98.0 ? 0.5 : 0.35
         const tempDropThreshold = Math.max(tempFloor, varTempPre * 1.8)
         const humRiseThreshold = Math.max(1.5, varHumPre * 1.6)
 
@@ -204,6 +211,7 @@ async function runSimulation(require15kSolarThreshold: boolean) {
         const samplesT = tempBatches[0].samples
         const dropThreshold = isDay ? -1.2 : -0.35
         const matchingSample = samplesT.find((s) => s.value - baselineT <= dropThreshold)
+
         if (matchingSample) {
           preciseStartMs = matchingSample.timestamp
         } else {
@@ -211,6 +219,7 @@ async function runSimulation(require15kSolarThreshold: boolean) {
             (min, s) => (s.value < min.value ? s : min),
             samplesT[0],
           )
+
           if (minSample) preciseStartMs = minSample.timestamp
         }
 
@@ -247,6 +256,7 @@ async function runSimulation(require15kSolarThreshold: boolean) {
               endLux: currentMinLux,
             })
             maxHumInRain = null
+
             return
           }
         }
@@ -257,7 +267,12 @@ async function runSimulation(require15kSolarThreshold: boolean) {
 
         if (isDay) {
           // 2. Baseline Recovery
-          if (baselineTemp !== null && baselineHum !== null && minTempInRain !== null && maxHumInRain !== null) {
+          if (
+            baselineTemp !== null &&
+            baselineHum !== null &&
+            minTempInRain !== null &&
+            maxHumInRain !== null
+          ) {
             const currentTemp = tempBatches[0].min
             const currentHum = humBatches[0].max
             const tempDrop = baselineTemp - minTempInRain
@@ -269,10 +284,12 @@ async function runSimulation(require15kSolarThreshold: boolean) {
             if (currentTemp >= tempThreshold && currentHum <= humThreshold) {
               let preciseEndMs = timestampMs
               const matchingEndSample = tempBatches[0].samples.find((s) => s.value >= tempThreshold)
+
               if (matchingEndSample) {
                 preciseEndMs = matchingEndSample.timestamp
               } else {
                 const lastSample = tempBatches[0].samples[tempBatches[0].samples.length - 1]
+
                 if (lastSample) preciseEndMs = lastSample.timestamp
               }
 
@@ -288,6 +305,7 @@ async function runSimulation(require15kSolarThreshold: boolean) {
                 endLux: currentMinLux,
               })
               maxHumInRain = null
+
               return
             }
           }
@@ -310,11 +328,15 @@ async function runSimulation(require15kSolarThreshold: boolean) {
 
               if (meetsSolarConstraint) {
                 let preciseEndMs = timestampMs
-                const matchingEndSample = luxBatches[0].samples.find((s) => s.value >= luxRecoveryThreshold)
+                const matchingEndSample = luxBatches[0].samples.find(
+                  (s) => s.value >= luxRecoveryThreshold,
+                )
+
                 if (matchingEndSample) {
                   preciseEndMs = matchingEndSample.timestamp
                 } else {
                   const lastSample = luxBatches[0].samples[luxBatches[0].samples.length - 1]
+
                   if (lastSample) preciseEndMs = lastSample.timestamp
                 }
 
@@ -330,6 +352,7 @@ async function runSimulation(require15kSolarThreshold: boolean) {
                   endLux: currentMaxLux, // Aquí guardamos el valor real cruzado
                 })
                 maxHumInRain = null
+
                 return
               }
             }
@@ -342,6 +365,7 @@ async function runSimulation(require15kSolarThreshold: boolean) {
   while (startMs < endMs) {
     const blockStart = new Date(startMs)
     let nextMs = startMs + BLOCK_MS
+
     if (nextMs > endMs) nextMs = endMs
     const blockEnd = new Date(nextMs)
 
@@ -356,6 +380,7 @@ async function runSimulation(require15kSolarThreshold: boolean) {
 
     try {
       const stream = influxClient.query(query)
+
       for await (const row of stream) {
         const tDate = rowTimeToDate(row.time)
         const tMs = tDate.getTime()
@@ -371,17 +396,21 @@ async function runSimulation(require15kSolarThreshold: boolean) {
 
         if (row.temperature != null) {
           const tVal = Number(row.temperature)
+
           if (tVal > 5.0 && tVal < 55.0) tempBuffer.push({ value: tVal, timestamp: tMs })
         }
         if (row.humidity != null) {
           const hVal = Number(row.humidity)
+
           if (hVal > 10.0 && hVal <= 100.0) humBuffer.push({ value: hVal, timestamp: tMs })
         }
         if (row.illuminance != null) {
           const lVal = Number(row.illuminance)
+
           if (lVal >= 0) luxBuffer.push({ value: lVal, timestamp: tMs })
         } else {
           const sampleHour = (tDate.getUTCHours() - 4 + 24) % 24
+
           if (sampleHour >= 19 || sampleHour < 5) {
             luxBuffer.push({ value: 0, timestamp: tMs })
           }
@@ -407,47 +436,77 @@ async function main() {
   console.log(`📊 COMPARATIVA GENERAL DE EVENTOS VIRTUALES`)
   console.log(`   - Sin restricción solar >=15k lx: ${eventsBefore.length} eventos`)
   console.log(`   - Con restricción solar >=15k lx: ${eventsAfter.length} eventos`)
-  console.log(`   - Reducción de eventos dudosos: ${eventsBefore.length - eventsAfter.length} (${(((eventsBefore.length - eventsAfter.length) / eventsBefore.length) * 100).toFixed(1)}%)`)
+  console.log(
+    `   - Reducción de eventos dudosos: ${eventsBefore.length - eventsAfter.length} (${(((eventsBefore.length - eventsAfter.length) / eventsBefore.length) * 100).toFixed(1)}%)`,
+  )
   console.log('========================================================================\n')
 
   // Buscar casos específicos de discrepancia
   console.log('🔍 CASOS DE ESTUDIO COMPARADOS (Antes vs Después):')
-  
+
   for (const evB of eventsBefore) {
     // Buscar si este evento cambió en la simulación post-restricción
     const match = eventsAfter.find(
-      (evA) => Math.abs(evA.startedAt.getTime() - evB.startedAt.getTime()) < 2 * 60 * 1000
+      (evA) => Math.abs(evA.startedAt.getTime() - evB.startedAt.getTime()) < 2 * 60 * 1000,
     )
 
-    const dateStr = evB.startedAt.toLocaleDateString('es-VE', { weekday: 'long', day: 'numeric', month: 'long' })
-    const timeBStr = evB.startedAt.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })
+    const dateStr = evB.startedAt.toLocaleDateString('es-VE', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+    })
+    const timeBStr = evB.startedAt.toLocaleTimeString('es-VE', {
+      hour: '2-digit',
+      minute: '2-digit',
+    })
     const endBStr = evB.endedAt.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })
 
     const ceilDurB = Math.ceil(evB.durationSec / 60)
     const roundDurB = Math.round(evB.durationSec / 60)
 
     if (!match) {
-      console.log(`\n❌ EVENTO ELIMINADO/ABSORBIDO (Se extendió o se canceló el cese solar prematuro):`)
+      console.log(
+        `\n❌ EVENTO ELIMINADO/ABSORBIDO (Se extendió o se canceló el cese solar prematuro):`,
+      )
       console.log(`   📅 Fecha: ${dateStr}`)
       console.log(`   ⏱️  Rango: ${timeBStr} - ${endBStr} (${evB.durationSec}s)`)
       console.log(`   ⏱️  Duración: Math.round = ${roundDurB} min | Math.ceil = ${ceilDurB} min`)
-      console.log(`   💡 Cese original: ${evB.closeType} (Lux: ${(evB.endLux/1000).toFixed(1)}k lx) -> ${evB.closeReason}`)
+      console.log(
+        `   💡 Cese original: ${evB.closeType} (Lux: ${(evB.endLux / 1000).toFixed(1)}k lx) -> ${evB.closeReason}`,
+      )
     } else {
       const durDiff = match.durationSec - evB.durationSec
+
       if (durDiff !== 0) {
-        const timeAStr = match.startedAt.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })
-        const endAStr = match.endedAt.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' })
+        const timeAStr = match.startedAt.toLocaleTimeString('es-VE', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+        const endAStr = match.endedAt.toLocaleTimeString('es-VE', {
+          hour: '2-digit',
+          minute: '2-digit',
+        })
         const ceilDurA = Math.ceil(match.durationSec / 60)
         const roundDurA = Math.round(match.durationSec / 60)
 
         console.log(`\n♻️ EVENTO REDEFINIDO (Se retrasó el cese solar por estar nublado):`)
         console.log(`   📅 Fecha: ${dateStr}`)
         console.log(`   🔴 ANTES: ${timeBStr} - ${endBStr} (${evB.durationSec}s)`)
-        console.log(`             Motivo cese: ${evB.closeType} (Lux: ${(evB.endLux/1000).toFixed(1)}k lx)`)
-        console.log(`             Duración: Math.round = ${roundDurB} min | Math.ceil = ${ceilDurB} min`)
-        console.log(`   🟢 DESPUÉS: ${timeAStr} - ${endAStr} (${match.durationSec}s) [Extendido +${(durDiff/60).toFixed(1)} min]`)
-        console.log(`               Motivo cese: ${match.closeType} (Lux: ${(match.endLux/1000).toFixed(1)}k lx) -> ${match.closeReason}`)
-        console.log(`               Duración: Math.round = ${roundDurA} min | Math.ceil = ${ceilDurA} min`)
+        console.log(
+          `             Motivo cese: ${evB.closeType} (Lux: ${(evB.endLux / 1000).toFixed(1)}k lx)`,
+        )
+        console.log(
+          `             Duración: Math.round = ${roundDurB} min | Math.ceil = ${ceilDurB} min`,
+        )
+        console.log(
+          `   🟢 DESPUÉS: ${timeAStr} - ${endAStr} (${match.durationSec}s) [Extendido +${(durDiff / 60).toFixed(1)} min]`,
+        )
+        console.log(
+          `               Motivo cese: ${match.closeType} (Lux: ${(match.endLux / 1000).toFixed(1)}k lx) -> ${match.closeReason}`,
+        )
+        console.log(
+          `               Duración: Math.round = ${roundDurA} min | Math.ceil = ${ceilDurA} min`,
+        )
       }
     }
   }

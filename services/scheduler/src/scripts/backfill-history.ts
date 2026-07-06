@@ -37,7 +37,10 @@ import { influxClient } from '../lib/influx'
 import { processDay, getCaracasMidnight } from '../lib/telemetry-processor'
 
 // ── Config ────────────────────────────────────────────────────────────────────
-const BACKFILL_DAYS = parseInt(process.env.BACKFILL_DAYS || '30', 10)
+const ENV_BACKFILL_DAYS = process.env.BACKFILL_DAYS
+  ? parseInt(process.env.BACKFILL_DAYS, 10)
+  : undefined
+const START_DATE = new Date('2026-05-25T04:00:00.000Z') // 25 de Mayo 00:00:00 Caracas
 const BACKFILL_ZONE = process.env.BACKFILL_ZONE as ZoneType | undefined
 const DRY_RUN = process.env.BACKFILL_DRY_RUN === 'true'
 
@@ -47,16 +50,27 @@ async function main() {
   const allZones: ZoneType[] = [ZoneType.EXTERIOR, ZoneType.ZONA_A]
   const zones = BACKFILL_ZONE ? [BACKFILL_ZONE] : allZones
 
-  Logger.info('════════════════════════════════════════════════════════')
-  const dayText = BACKFILL_DAYS === 1 ? 'día' : 'días'
+  const todayMidnight = getCaracasMidnight(new Date())
+  let diffDays: number
+  let modeText = ''
 
-  Logger.info(`  BACKFILL: ${BACKFILL_DAYS} ${dayText} × ${zones.join(', ')}`)
+  if (ENV_BACKFILL_DAYS != null && !isNaN(ENV_BACKFILL_DAYS)) {
+    diffDays = ENV_BACKFILL_DAYS
+    modeText = `Personalizado (${diffDays} días)`
+  } else {
+    const diffTime = Math.max(0, todayMidnight.getTime() - START_DATE.getTime())
+
+    diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    modeText = `Completo desde 25 de Mayo (${diffDays} días)`
+  }
+
+  Logger.info('════════════════════════════════════════════════════════')
+  Logger.info(`  BACKFILL HISTÓRICO × ${zones.join(', ')}`)
+  Logger.info(`  Modo: ${modeText}`)
   if (DRY_RUN) Logger.warn('  ⚠️  MODO DRY-RUN — No se escribirá en Postgres')
   Logger.info('════════════════════════════════════════════════════════')
 
-  const todayMidnight = getCaracasMidnight(new Date())
-
-  for (let offset = BACKFILL_DAYS; offset >= 1; offset--) {
+  for (let offset = diffDays; offset >= 1; offset--) {
     const dayStart = new Date(todayMidnight.getTime() - offset * 24 * 60 * 60 * 1000)
 
     for (const zone of zones) {

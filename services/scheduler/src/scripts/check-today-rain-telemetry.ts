@@ -15,14 +15,21 @@ async function main() {
   `
 
   const stream = influxClient.query(query)
+
   console.log('Hora Caracas | Temp (°C) | Hum (%) | Lux')
   console.log('-------------------------------------------')
   for await (const row of stream) {
     const date = new Date(row.time)
-    const timeStr = date.toLocaleTimeString('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    const timeStr = date.toLocaleTimeString('es-VE', {
+      timeZone: 'America/Caracas',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    })
     const temp = row.temperature != null ? Number(row.temperature).toFixed(2) : 'null'
     const hum = row.humidity != null ? Number(row.humidity).toFixed(2) : 'null'
     const lux = row.illuminance != null ? Number(row.illuminance).toFixed(0) : 'null'
+
     console.log(`${timeStr} | ${temp} | ${hum} | ${lux}`)
   }
 }
