@@ -2235,14 +2235,14 @@ async function syncBcvExchangeRate(retryNum?: number | 'startup'): Promise<boole
   if (retryNum === 'startup') {
     Logger.bcv('Iniciando scraping BCV de arranque...')
   } else if (retryNum !== undefined && retryNum > 0) {
-    Logger.bcv(`[Reintento ${retryNum}/3] Iniciando sincronización de tasa BCV...`)
+    Logger.bcv(`[Reintento ${retryNum}/3] Sincronizando tasa BCV`)
   } else {
-    Logger.bcv('Iniciando sincronización de tasa BCV...')
+    Logger.bcv('Sincronizando tasa BCV')
   }
 
   try {
     return await fetchAndSaveBcvData()
-  } catch (firstError: Error | unknown) {
+  } catch {
     // Si falla el primer intento, se captura de manera silenciosa (no se loguea el error en consola/Logger)
     // Esperamos 1 minuto (60000ms) antes de realizar el segundo intento
     await new Promise((resolve) => setTimeout(resolve, 60000))
