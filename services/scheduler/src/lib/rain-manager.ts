@@ -727,18 +727,18 @@ export async function evaluateClimateInference(): Promise<void> {
       if (baseLux1 <= 15000) {
         luxCondition = true
         tempDropThreshold = -1.2
-        humRiseThreshold = 4.0
+        humRiseThreshold = 6.0
       } else if (baseLux1 <= 26000) {
         luxCondition = currentMinLux <= baseLux1 * 0.6
         if (currentMinLux <= 15000) {
           tempDropThreshold = -1.2
-          humRiseThreshold = 8.0
+          humRiseThreshold = 10.0
         }
       } else {
         luxCondition = currentMinLux <= baseLux1 * 0.4
         if (currentMinLux <= 15000) {
           tempDropThreshold = -1.2
-          humRiseThreshold = 8.0
+          humRiseThreshold = 10.0
         }
       }
 
@@ -1145,7 +1145,8 @@ export async function evaluateClimateInference(): Promise<void> {
 
             const hours = Math.floor(durationMin / 60)
             const minutes = Math.round(durationMin % 60)
-            const durationStr = hours > 0 ? `${hours}h ${minutes}min` : `${minutes}min`
+            const durationStr =
+              hours > 0 ? (minutes > 0 ? `${hours}h ${minutes}min` : `${hours}h`) : `${minutes}min`
 
             const closeReasonText = isSustained
               ? `☀️ Cese de Lluvia Intermitente (Estancamiento): estabilidad climática alcanzada tras lluvia prolongada (duración: ${durationStr}). La temperatura se recuperó +${(endSampleT.value - minTempInRain!).toFixed(2)}°C (Temp: ${endSampleT.value.toFixed(1)}°C vs mínimo en lluvia: ${minTempInRain!.toFixed(1)}°C) y la humedad se mantuvo saturada al 100% HR.`

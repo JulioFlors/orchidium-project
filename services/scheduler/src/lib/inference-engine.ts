@@ -456,7 +456,7 @@ export class InferenceEngine {
           THRESHOLDS.RAIN_LOOKBACK_SOIL_WETTING_HOURS,
         )
 
-        if (recentRain.durationSeconds > 0) {
+        if (recentRain.durationSeconds >= 1200) {
           const startLookback = new Date(
             now.getTime() - THRESHOLDS.RAIN_LOOKBACK_SOIL_WETTING_HOURS * 60 * 60 * 1000,
           )
@@ -499,7 +499,7 @@ export class InferenceEngine {
           THRESHOLDS.RAIN_LOOKBACK_HUMIDIFICATION_HOURS,
         )
 
-        if (recentRain.durationSeconds > 0) {
+        if (recentRain.durationSeconds >= 1200) {
           const startLookback = new Date(
             now.getTime() - THRESHOLDS.RAIN_LOOKBACK_HUMIDIFICATION_HOURS * 60 * 60 * 1000,
           )
