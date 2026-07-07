@@ -596,7 +596,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
                   : `${minutes}min`
 
               const closeReasonText = isSustained
-                ? `☀️ Cese de Lluvia Intermitente (Estancamiento): estabilidad climática alcanzada tras lluvia prolongada (duración: ${durationStr}). La temperatura se recuperó +${(endSampleT.value - minTempInRain!).toFixed(2)}°C (Temp: ${endSampleT.value.toFixed(1)}°C vs mínimo en lluvia: ${minTempInRain!.toFixed(1)}°C) y la humedad se mantuvo saturada al 100% HR.`
+                ? `☀️ Cese de Lluvia Intermitente (Estancamiento): estabilidad climática alcanzada tras lluvia prolongada (duración: ${durationStr}). La temperatura se recuperó +${(endSampleT.value - minTempInRain!).toFixed(2)}°C (Temp: ${endSampleT.value.toFixed(1)}°C vs mínimo en lluvia: ${minTempInRain!.toFixed(1)}°C) y la humedad se mantuvo saturada al 100% HR (recTemp=+${(endSampleT.value - minTempInRain!).toFixed(2)}°C, minTemp=${minTempInRain!.toFixed(1)}°C).`
                 : `Estancamiento climático dinámico: sin fluctuación de temperatura (variación ≤ ${tempCeseThreshold.toFixed(1)}°C) ni humedad (variación ≤ ${humCeseThreshold.toFixed(1)}% HR) durante 10 minutos (dT=${diffTemp.toFixed(1)}°C, dH=${diffHum.toFixed(1)}% HR, Temp: ${tempBatches[0].min.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
 
               isTelemetryRainActive = false
@@ -617,9 +617,9 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
               if (isSustained && createdEvent && createdEvent.id) {
                 try {
                   const originalReason = createdEvent.triggerReason || ''
-                  const newReason = originalReason.startsWith('☔ Lluvia Intermitente')
+                  const newReason = originalReason.startsWith('Lluvia Intermitente')
                     ? originalReason
-                    : `☔ Lluvia Intermitente: ${originalReason}`
+                    : `Lluvia Intermitente: ${originalReason}`
 
                   await prisma.rainEvent.update({
                     where: { id: createdEvent.id },

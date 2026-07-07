@@ -332,7 +332,14 @@ function CustomTooltip({
         const reasonStr = data.closeReason
         const reasonUpper = reasonStr.toUpperCase()
 
-        if (reasonUpper.includes('STAGNANT') || reasonUpper.includes('ESTANCAMIENTO')) {
+        if (reasonUpper.includes('CESE DE LLUVIA INTERMITENTE') || reasonUpper.includes('INTERMITENTE')) {
+          closeTitle = 'Cese de Lluvia Intermitente'
+          const recMatch = reasonStr.match(/recTemp=\+?([^°C\s,)]+)/)
+          const minMatch = reasonStr.match(/minTemp=([^°C\s,)]+)/)
+          const recVal = recMatch ? recMatch[1].trim() : '0.0'
+          const minVal = minMatch ? minMatch[1].trim() : '0.0'
+          closeDetails = `🌡️ Recuperación +${recVal}°C   |   ❄️ Mínima ${minVal}°C`
+        } else if (reasonUpper.includes('STAGNANT') || reasonUpper.includes('ESTANCAMIENTO')) {
           closeTitle = 'Cese por estancamiento'
           const dtMatch = reasonStr.match(/dT=([^°C\s,]+)/)
           const dhMatch = reasonStr.match(/dH=([^%\s,]+)/)
@@ -366,13 +373,21 @@ function CustomTooltip({
         closeIcon = '⛅'
       }
 
+      const formatDuration = (durationMin: number): string => {
+        const hours = Math.floor(durationMin / 60)
+        const minutes = Math.round(durationMin % 60)
+        return hours > 0
+          ? (minutes > 0 ? `${hours}h ${minutes}min` : `${hours}h`)
+          : `${minutes}min`
+      }
+
       return (
         <div className="bg-surface border-input-outline relative z-50 flex max-w-[340px] flex-col gap-3 overflow-visible rounded-lg border p-3 text-xs shadow-md outline-none">
           {/* Encabezado Cronológico */}
           <div className="text-foreground flex flex-col gap-1 text-xs font-bold">
             <span className="flex items-center gap-1.5 text-xs text-primary">📅 {formattedTime}</span>
             <span className="flex items-center gap-1 text-[11px] font-semibold text-primary/80">
-              🌧️ {data.startTime}   |   {closeIcon} {data.endTime}   |   ⏱️ {data.duration} min
+              🌧️ {data.startTime}   |   {closeIcon} {data.endTime}   |   ⏱️ {formatDuration(Number(data.duration))}
             </span>
           </div>
 
