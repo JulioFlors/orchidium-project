@@ -227,6 +227,12 @@ async function openRainEvent(
     hum: number | null
     lux: number | null
   },
+  triggerData?: {
+    type: string | null
+    tempDrop: number | null
+    humRise: number | null
+    luxDropPct: number | null
+  },
 ) {
   rainEventMutex = rainEventMutex
     .then(async () => {
@@ -263,6 +269,10 @@ async function openRainEvent(
                 startTemp: startMetrics?.temp ?? null,
                 startHum: startMetrics?.hum ?? null,
                 startLux: startMetrics?.lux ?? null,
+                triggerType: triggerData?.type ?? null,
+                triggerTempDrop: triggerData?.tempDrop ?? null,
+                triggerHumRise: triggerData?.humRise ?? null,
+                triggerLuxDropPct: triggerData?.luxDropPct ?? null,
               },
             })
 
@@ -298,6 +308,14 @@ async function closeRainEvent(
     temp: number | null
     hum: number | null
     lux: number | null
+  },
+  closeData?: {
+    type: string | null
+    minTemp?: number | null
+    tempRecovery?: number | null
+    tempVar?: number | null
+    humVar?: number | null
+    luxMax?: number | null
   },
 ) {
   rainEventMutex = rainEventMutex
@@ -371,6 +389,12 @@ async function closeRainEvent(
             endTemp: endMetrics?.temp ?? null,
             endHum: endMetrics?.hum ?? null,
             endLux: endMetrics?.lux ?? null,
+            closeType: closeData?.type ?? null,
+            closeMinTemp: closeData?.minTemp ?? null,
+            closeTempRecovery: closeData?.tempRecovery ?? null,
+            closeTempVar: closeData?.tempVar ?? null,
+            closeHumVar: closeData?.humVar ?? null,
+            closeLuxMax: closeData?.luxMax ?? null,
           },
         })
 
@@ -719,6 +743,7 @@ export async function evaluateClimateInference(): Promise<void> {
     let calculatedBaselineTemp: number | null = null
     let calculatedBaselineHum: number | null = null
     let calculatedBaselineLux: number | null = null
+    let triggerType: string | null = null
 
     // Paso 1 (20 minutos para Día / Ventana de 40 minutos para Noche)
     const baseTemp1 = tempBatches[1].max
@@ -765,6 +790,16 @@ export async function evaluateClimateInference(): Promise<void> {
         calculatedBaselineTemp = baseTemp1
         calculatedBaselineHum = baseHum1
         calculatedBaselineLux = baseLux1
+
+        if (baseLux1 <= 10000) {
+          triggerType = 'DAY_RAMA_A_OSCURO_20M'
+        } else if (baseLux1 <= 15000) {
+          triggerType = 'DAY_RAMA_A_NUBLADO_20M'
+        } else if (baseLux1 <= 26000) {
+          triggerType = 'DAY_RAMA_C_INTERMEDIO_20M'
+        } else {
+          triggerType = 'DAY_RAMA_B_SOLEADO_20M'
+        }
       }
     } else {
       // NOCHE - Regla Unificada de Gradiente Dinámico
@@ -818,16 +853,17 @@ export async function evaluateClimateInference(): Promise<void> {
 
         if (isTempDropAbrupt && (isHumRiseAbrupt || (isPreSaturated && !isLuxRising))) {
           triggered = true
-          tempBaselineAgeMinutes = 40
-          tempDeltaTemp = currentMinTemp - maxTempPre
-          tempDeltaHum = currentMaxHum - minHumPre
+          tempBaselineAgeMinutes = 20
+          tempDeltaTemp = currentMinTemp - tempBatches[1].max
+          tempDeltaHum = currentMaxHum - humBatches[1].min
           isStagnantTriggered = true
           stagnantVarTempPre = varTempPre
           inferedBaselineVarTemp = refVarTemp
           inferedBaselineVarHum = refVarHum
-          calculatedBaselineTemp = maxTempPre
-          calculatedBaselineHum = minHumPre
+          calculatedBaselineTemp = tempBatches[1].max
+          calculatedBaselineHum = humBatches[1].min
           calculatedBaselineLux = 0
+          triggerType = 'NIGHT_20M'
         }
       }
     }
@@ -877,6 +913,16 @@ export async function evaluateClimateInference(): Promise<void> {
         calculatedBaselineTemp = baseTemp2
         calculatedBaselineHum = baseHum2
         calculatedBaselineLux = baseLux2
+
+        if (baseLux2 <= 10000) {
+          triggerType = 'DAY_RAMA_A_OSCURO_30M'
+        } else if (baseLux2 <= 15000) {
+          triggerType = 'DAY_RAMA_A_NUBLADO_30M'
+        } else if (baseLux2 <= 26000) {
+          triggerType = 'DAY_RAMA_C_INTERMEDIO_30M'
+        } else {
+          triggerType = 'DAY_RAMA_B_SOLEADO_30M'
+        }
       }
     }
 
@@ -941,6 +987,12 @@ export async function evaluateClimateInference(): Promise<void> {
             hum: startSampleH ? startSampleH.value : currentMaxHum,
             lux: startSampleL ? startSampleL.value : currentMinLux,
           },
+          {
+            type: triggerType,
+            tempDrop: tempDeltaTemp,
+            humRise: tempDeltaHum,
+            luxDropPct: dropPct,
+          },
         )
       } else {
         const rainNotes = isStagnantTriggered
@@ -967,6 +1019,12 @@ export async function evaluateClimateInference(): Promise<void> {
             temp: startSampleT ? startSampleT.value : currentMinTemp,
             hum: startSampleH ? startSampleH.value : currentMaxHum,
             lux: startSampleL ? startSampleL.value : currentMinLux,
+          },
+          {
+            type: triggerType,
+            tempDrop: tempDeltaTemp,
+            humRise: tempDeltaHum,
+            luxDropPct: 0,
           },
         )
       }
@@ -1044,6 +1102,9 @@ export async function evaluateClimateInference(): Promise<void> {
                 hum: endSampleH ? endSampleH.value : currentHum,
                 lux: endSampleL ? endSampleL.value : currentMinLux,
               },
+              {
+                type: 'BASELINE_RECOVERY',
+              },
             )
             maxHumInRain = null
           }
@@ -1107,11 +1168,21 @@ export async function evaluateClimateInference(): Promise<void> {
               ? `SOLAR_RECOVERY (Sol radiante pleno >= 26k lx, Lux max: ${currentMaxLux.toFixed(0)} lx)`
               : `Despeje solar verificado: iluminancia subió a ${Math.round(currentMaxLux).toLocaleString()} lx (umbral elástico: ${Math.round(luxRecoveryThreshold).toLocaleString()} lx) acoplado a estabilidad térmica en el lote actual (Lux max: ${currentMaxLux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx, Temp: ${tempBatches[0].min.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
 
-            await closeRainEvent('SOLAR_RECOVERY', new Date(preciseEndMs), true, closeReasonText, {
-              temp: endSampleT ? endSampleT.value : tempBatches[0].min,
-              hum: endSampleH ? endSampleH.value : tempBatches[0].max,
-              lux: endSampleL ? endSampleL.value : currentMinLux,
-            })
+            await closeRainEvent(
+              'SOLAR_RECOVERY',
+              new Date(preciseEndMs),
+              true,
+              closeReasonText,
+              {
+                temp: endSampleT ? endSampleT.value : tempBatches[0].min,
+                hum: endSampleH ? endSampleH.value : tempBatches[0].max,
+                lux: endSampleL ? endSampleL.value : currentMinLux,
+              },
+              {
+                type: 'SOLAR_RECOVERY',
+                luxMax: currentMaxLux,
+              },
+            )
           }
         }
       }
@@ -1161,11 +1232,22 @@ export async function evaluateClimateInference(): Promise<void> {
 
           const closeReasonText = `🌡️ Cese de Lluvia Intermitente (Variación Térmica): la temperatura se recuperó +${tempRecovery.toFixed(2)}°C (Temp: ${currentTemp.toFixed(1)}°C vs mínimo en lluvia: ${minTempInRain.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}% HR, Lux: ${currentMinLux.toFixed(0)} lx)`
 
-          await closeRainEvent('THERMAL_VARIATION', new Date(preciseEndMs), true, closeReasonText, {
-            temp: endSampleT ? endSampleT.value : currentTemp,
-            hum: endSampleH ? endSampleH.value : tempBatches[0].max,
-            lux: endSampleL ? endSampleL.value : currentMinLux,
-          })
+          await closeRainEvent(
+            'THERMAL_VARIATION',
+            new Date(preciseEndMs),
+            true,
+            closeReasonText,
+            {
+              temp: endSampleT ? endSampleT.value : currentTemp,
+              hum: endSampleH ? endSampleH.value : tempBatches[0].max,
+              lux: endSampleL ? endSampleL.value : currentMinLux,
+            },
+            {
+              type: 'THERMAL_VARIATION',
+              minTemp: minTempInRain,
+              tempRecovery: tempRecovery,
+            },
+          )
         }
       }
 
@@ -1181,14 +1263,25 @@ export async function evaluateClimateInference(): Promise<void> {
         const humCeseThreshold =
           inferedBaselineVarHum !== null ? Math.max(1.0, 1.2 * inferedBaselineVarHum) : 1.0
 
-        if (diffHum <= humCeseThreshold && diffTemp <= tempCeseThreshold) {
+        const isSaturated = humBatches[0].max >= 100.0
+        const isHumStagnant = isSaturated ? true : diffHum <= humCeseThreshold
+
+        if (isHumStagnant && diffTemp <= tempCeseThreshold) {
           let allowStagnantClose = true
 
-          // Si es de día, exigir únicamente que la temperatura no esté descendiendo rápidamente
+          // Guardia Térmica Unificada (B0, B1, B2)
           if (isDay) {
-            const lastTempDrop = tempBatches[1].max - tempBatches[0].max
+            if (tempBatches.length >= 3) {
+              const maxTemp30 = Math.max(tempBatches[0].max, tempBatches[1].max, tempBatches[2].max)
+              const caidaNeta30 = maxTemp30 - tempBatches[0].min
 
-            allowStagnantClose = lastTempDrop <= 0.2
+              allowStagnantClose = caidaNeta30 <= 0.4
+            } else if (tempBatches.length >= 2) {
+              const maxTemp20 = Math.max(tempBatches[0].max, tempBatches[1].max)
+              const caidaNeta20 = maxTemp20 - tempBatches[0].min
+
+              allowStagnantClose = caidaNeta20 <= 0.4
+            }
           }
 
           if (allowStagnantClose) {
@@ -1230,11 +1323,22 @@ export async function evaluateClimateInference(): Promise<void> {
             inferedBaselineVarTemp = null
             inferedBaselineVarHum = null
 
-            await closeRainEvent('STAGNANT', new Date(preciseEndMs), true, closeReasonText, {
-              temp: endSampleT ? endSampleT.value : currentMinTemp,
-              hum: endSampleH ? endSampleH.value : currentMaxHum,
-              lux: endSampleL ? endSampleL.value : currentMinLux,
-            })
+            await closeRainEvent(
+              'STAGNANT',
+              new Date(preciseEndMs),
+              true,
+              closeReasonText,
+              {
+                temp: endSampleT ? endSampleT.value : currentMinTemp,
+                hum: endSampleH ? endSampleH.value : currentMaxHum,
+                lux: endSampleL ? endSampleL.value : currentMinLux,
+              },
+              {
+                type: isDay ? 'STAGNANT_DAY' : 'STAGNANT_NIGHT',
+                tempVar: diffTemp,
+                humVar: diffHum,
+              },
+            )
 
             // Si fue lluvia sostenida prolongada, actualizamos el triggerReason en Postgres
             if (isSustained && openVirtualRainEventId) {

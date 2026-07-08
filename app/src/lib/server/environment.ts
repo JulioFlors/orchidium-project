@@ -859,6 +859,16 @@ export async function getRainSummaryInternal(range: string, zone: ZoneType) {
       endTemp: ev.endTemp,
       endHum: ev.endHum,
       endLux: ev.endLux,
+      triggerType: ev.triggerType,
+      triggerTempDrop: ev.triggerTempDrop,
+      triggerHumRise: ev.triggerHumRise,
+      triggerLuxDropPct: ev.triggerLuxDropPct,
+      closeType: ev.closeType,
+      closeMinTemp: ev.closeMinTemp,
+      closeTempRecovery: ev.closeTempRecovery,
+      closeTempVar: ev.closeTempVar,
+      closeHumVar: ev.closeHumVar,
+      closeLuxMax: ev.closeLuxMax,
     }))
 
     const totalDuration = rainEvents.reduce((acc, ev) => acc + (ev.durationSeconds || 0), 0)
@@ -953,6 +963,16 @@ export async function getRainEventTelemetryInternal(eventId: string) {
         baselineAgeMinutes: event.baselineAgeMinutes,
         triggerReason: event.triggerReason,
         closeReason: event.closeReason,
+        triggerType: event.triggerType,
+        triggerTempDrop: event.triggerTempDrop,
+        triggerHumRise: event.triggerHumRise,
+        triggerLuxDropPct: event.triggerLuxDropPct,
+        closeType: event.closeType,
+        closeMinTemp: event.closeMinTemp,
+        closeTempRecovery: event.closeTempRecovery,
+        closeTempVar: event.closeTempVar,
+        closeHumVar: event.closeHumVar,
+        closeLuxMax: event.closeLuxMax,
       },
       telemetry: data,
     }

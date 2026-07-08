@@ -3,7 +3,9 @@ import { influxClient } from '../lib/influx'
 function rowTimeToDate(rawTime: unknown): Date {
   if (rawTime instanceof Date) return rawTime
   const s = String(rawTime)
+
   if (isNaN(Number(s))) return new Date(s)
+
   return s.length > 13 ? new Date(Number(s.substring(0, 13))) : new Date(Number(s))
 }
 
@@ -43,10 +45,11 @@ async function analyzeSundayLate() {
     const hum = row.humidity != null ? Number(row.humidity) : null
     const lux = row.illuminance != null ? Number(row.illuminance) : null
 
-    const deltaStr = prevTemp !== null && temp !== null
-      ? `(${temp - prevTemp >= 0 ? '+' : ''}${(temp - prevTemp).toFixed(2)}°C)`
-      : ''
-    
+    const deltaStr =
+      prevTemp !== null && temp !== null
+        ? `(${temp - prevTemp >= 0 ? '+' : ''}${(temp - prevTemp).toFixed(2)}°C)`
+        : ''
+
     console.log(
       `${toCaracas(t)} | Temp: ${temp !== null ? temp.toFixed(1).padStart(5) : '  N/A'}°C ${deltaStr.padEnd(12)} | Hum: ${hum !== null ? hum.toFixed(1).padStart(5) : '  N/A'}% | Lux: ${lux !== null ? lux.toFixed(0).padStart(7) : '    N/A'} lx`,
     )

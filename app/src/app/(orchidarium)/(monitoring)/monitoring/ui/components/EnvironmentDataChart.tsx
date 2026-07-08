@@ -305,7 +305,34 @@ function CustomTooltip({
       let triggerTitle = 'Inferencia de Lluvia'
       let triggerDetails = ''
 
-      if (typeof data.triggerReason === 'string') {
+      if (data.triggerType && typeof data.triggerType === 'string') {
+        // Mapeo estructurado moderno
+        const type = data.triggerType
+        if (type === 'NIGHT_20M') {
+          triggerTitle = 'Inferencia Nocturna 20m'
+        } else {
+          // DAY_RAMA_A_OSCURO_20M, etc.
+          const timeLabel = type.endsWith('_30M') ? '30m' : '20m'
+          let skyLabel = 'Cielo Oscuro'
+          if (type.includes('_NUBLADO_')) skyLabel = 'Cielo Nublado'
+          else if (type.includes('_INTERMEDIO_')) skyLabel = 'Cielo Intermedio'
+          else if (type.includes('_SOLEADO_')) skyLabel = 'Cielo Soleado'
+          
+          triggerTitle = `Inferencia Diurna ${skyLabel} ${timeLabel}`
+        }
+
+        const tDrop = getNumberOrNull(data.triggerTempDrop)
+        const hRise = getNumberOrNull(data.triggerHumRise)
+        const lDrop = getNumberOrNull(data.triggerLuxDropPct)
+
+        const detailsParts: string[] = []
+        if (hRise !== null) detailsParts.push(`💧 Subida HR +${hRise.toFixed(1)}%`)
+        if (tDrop !== null) detailsParts.push(`🌡️ Caída térmica ${tDrop.toFixed(1)}°C`)
+        if (lDrop !== null && lDrop > 0 && !type.includes('NIGHT')) detailsParts.push(`⛅ Caída Lux ${lDrop.toFixed(0)}%`)
+
+        triggerDetails = detailsParts.join('   |   ')
+      } else if (typeof data.triggerReason === 'string') {
+        // Fallback para eventos antiguos por regex
         const triggerStr = data.triggerReason
         const triggerParts = triggerStr.split(':')
         if (triggerParts.length > 1) {
@@ -328,17 +355,45 @@ function CustomTooltip({
       let closeTitle = 'Cese de Lluvia'
       let closeDetails = ''
 
-      if (typeof data.closeReason === 'string') {
+      if (data.closeType && typeof data.closeType === 'string') {
+        // Mapeo estructurado moderno
+        const type = data.closeType
+        if (type === 'BASELINE_RECOVERY') {
+          closeTitle = 'Cese por recuperación adaptativa'
+          // Mostrar caída de HR y subida de Temp
+          const tempRecVal = eTemp !== null && sTemp !== null ? eTemp - sTemp : null
+          const humDropVal = sHum !== null && eHum !== null ? sHum - eHum : null
+          const parts: string[] = []
+          if (humDropVal !== null) parts.push(`💧 Caída HR ${humDropVal.toFixed(1)}%`)
+          if (tempRecVal !== null) parts.push(`🌡️ Subida térmica +${tempRecVal.toFixed(1)}°C`)
+          closeDetails = parts.join('   |   ')
+        } else if (type === 'SOLAR_RECOVERY') {
+          closeTitle = 'Cese por recuperación solar'
+          const luxMax = getNumberOrNull(data.closeLuxMax) ?? eLux ?? 0
+          closeDetails = `⛅ Iluminancia ${formatTooltipValue(luxMax, 'lx')} lx`
+        } else if (type === 'THERMAL_VARIATION') {
+          closeTitle = 'Cese por Variación Térmica'
+          const minTemp = getNumberOrNull(data.closeMinTemp) ?? 0
+          const tempRecovery = getNumberOrNull(data.closeTempRecovery) ?? 0
+          closeDetails = `🌡️ Temperatura ${minTemp.toFixed(1)}°C   |   🌡️ Recuperación +${tempRecovery.toFixed(2)}°C`
+        } else if (type.startsWith('STAGNANT')) {
+          closeTitle = 'Cese por estancamiento'
+          const tempVar = getNumberOrNull(data.closeTempVar) ?? 0
+          const humVar = getNumberOrNull(data.closeHumVar) ?? 0
+          closeDetails = `💧 Variación ${humVar.toFixed(1)}%   |   🌡️ Variación ${tempVar.toFixed(1)}°C`
+        }
+      } else if (typeof data.closeReason === 'string') {
+        // Fallback para eventos antiguos por regex
         const reasonStr = data.closeReason
         const reasonUpper = reasonStr.toUpperCase()
 
         if (reasonUpper.includes('CESE DE LLUVIA INTERMITENTE') || reasonUpper.includes('INTERMITENTE')) {
-          closeTitle = 'Cese de Lluvia Intermitente'
+          closeTitle = 'Cese por Variación Térmica'
           const recMatch = reasonStr.match(/recTemp=\+?([^°C\s,)]+)/)
           const minMatch = reasonStr.match(/minTemp=([^°C\s,)]+)/)
           const recVal = recMatch ? recMatch[1].trim() : '0.0'
           const minVal = minMatch ? minMatch[1].trim() : '0.0'
-          closeDetails = `🌡️ Recuperación +${recVal}°C   |   ❄️ Mínima ${minVal}°C`
+          closeDetails = `🌡️ Temperatura ${minVal}°C   |   🌡️ Recuperación +${recVal}°C`
         } else if (reasonUpper.includes('STAGNANT') || reasonUpper.includes('ESTANCAMIENTO')) {
           closeTitle = 'Cese por estancamiento'
           const dtMatch = reasonStr.match(/dT=([^°C\s,]+)/)

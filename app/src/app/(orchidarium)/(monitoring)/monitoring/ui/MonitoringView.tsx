@@ -64,6 +64,16 @@ interface RainEvent {
   endTemp?: number | null
   endHum?: number | null
   endLux?: number | null
+  triggerType?: string | null
+  triggerTempDrop?: number | null
+  triggerHumRise?: number | null
+  triggerLuxDropPct?: number | null
+  closeType?: string | null
+  closeMinTemp?: number | null
+  closeTempRecovery?: number | null
+  closeTempVar?: number | null
+  closeHumVar?: number | null
+  closeLuxMax?: number | null
 }
 
 interface RainData {
@@ -627,6 +637,16 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
                   endTemp: ev.endTemp ?? undefined,
                   endHum: ev.endHum ?? undefined,
                   endLux: ev.endLux ?? undefined,
+                  triggerType: ev.triggerType ?? undefined,
+                  triggerTempDrop: ev.triggerTempDrop ?? undefined,
+                  triggerHumRise: ev.triggerHumRise ?? undefined,
+                  triggerLuxDropPct: ev.triggerLuxDropPct ?? undefined,
+                  closeType: ev.closeType ?? undefined,
+                  closeMinTemp: ev.closeMinTemp ?? undefined,
+                  closeTempRecovery: ev.closeTempRecovery ?? undefined,
+                  closeTempVar: ev.closeTempVar ?? undefined,
+                  closeHumVar: ev.closeHumVar ?? undefined,
+                  closeLuxMax: ev.closeLuxMax ?? undefined,
                 }
               }) || [],
         }

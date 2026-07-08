@@ -398,6 +398,20 @@ model RainEvent {
   endHum          Float?
   endLux          Float?
 
+  /// Datos estructurados de la inferencia de inicio
+  triggerType        String?
+  triggerTempDrop    Float?
+  triggerHumRise     Float?
+  triggerLuxDropPct  Float?
+
+  /// Datos estructurados del cese
+  closeType          String?
+  closeMinTemp       Float?
+  closeTempRecovery  Float?
+  closeTempVar       Float?
+  closeHumVar        Float?
+  closeLuxMax        Float?
+
   @@unique([zone, startedAt])
   @@index([startedAt])
   @@index([zone])

@@ -230,6 +230,10 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
       let calculatedBaselineHum: number | null = null
       let calculatedBaselineLux: number | null = null
       let calculatedBaselineAgeMinutes = 10
+      let triggerType: string | null = null
+      let tempDeltaTemp = 0
+      let tempDeltaHum = 0
+      let dropPct = 0
 
       if (isDay) {
         // --- REGLAS DIURNAS ---
@@ -275,6 +279,19 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           calculatedBaselineHum = baseHum1
           calculatedBaselineLux = baseLux1
           calculatedBaselineAgeMinutes = 20
+          tempDeltaTemp = dTemp1
+          tempDeltaHum = dHum1
+          dropPct = baseLux1 > 0 ? ((baseLux1 - currentMinLux) / baseLux1) * 100 : 0
+
+          if (baseLux1 <= 10000) {
+            triggerType = 'DAY_RAMA_A_OSCURO_20M'
+          } else if (baseLux1 <= 15000) {
+            triggerType = 'DAY_RAMA_A_NUBLADO_20M'
+          } else if (baseLux1 <= 26000) {
+            triggerType = 'DAY_RAMA_C_INTERMEDIO_20M'
+          } else {
+            triggerType = 'DAY_RAMA_B_SOLEADO_20M'
+          }
         }
 
         if (!triggered) {
@@ -320,6 +337,19 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             calculatedBaselineHum = baseHum2
             calculatedBaselineLux = baseLux2
             calculatedBaselineAgeMinutes = 30
+            tempDeltaTemp = dTemp2
+            tempDeltaHum = dHum2
+            dropPct = baseLux2 > 0 ? ((baseLux2 - currentMinLux) / baseLux2) * 100 : 0
+
+            if (baseLux2 <= 10000) {
+              triggerType = 'DAY_RAMA_A_OSCURO_30M'
+            } else if (baseLux2 <= 15000) {
+              triggerType = 'DAY_RAMA_A_NUBLADO_30M'
+            } else if (baseLux2 <= 26000) {
+              triggerType = 'DAY_RAMA_C_INTERMEDIO_30M'
+            } else {
+              triggerType = 'DAY_RAMA_B_SOLEADO_30M'
+            }
           }
         }
       } else {
@@ -362,14 +392,16 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
         if (isTempDropAbrupt && (isHumRiseAbrupt || (isPreSaturated && !isLuxRising))) {
           triggered = true
-          // Se calcula el delta térmico relativo al máximo previo de calma
-          const currentTempDrop = maxTempPre - currentMinTemp
-
-          triggerReason = `Inferencia de Noche: Incremento de +${(currentMaxHum - minHumPre).toFixed(1)}% HR y caída térmica de ${currentTempDrop.toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%)`
-          calculatedBaselineTemp = maxTempPre
-          calculatedBaselineHum = minHumPre
+          calculatedBaselineTemp = tempBatches[1].max
+          calculatedBaselineHum = humBatches[1].min
           calculatedBaselineLux = 0
-          calculatedBaselineAgeMinutes = 40
+          calculatedBaselineAgeMinutes = 20
+          tempDeltaTemp = currentMinTemp - tempBatches[1].max
+          tempDeltaHum = currentMaxHum - humBatches[1].min
+          dropPct = 0
+          triggerType = 'NIGHT_20M'
+
+          triggerReason = `Inferencia de Noche: Incremento de +${tempDeltaHum.toFixed(1)}% HR y caída térmica de ${Math.abs(tempDeltaTemp).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%)`
         }
       }
 
@@ -427,6 +459,12 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             temp: startSampleT ? startSampleT.value : currentMinTemp,
             hum: startSampleH ? startSampleH.value : currentMaxHum,
             lux: startSampleL ? startSampleL.value : currentMinLux,
+          },
+          {
+            type: triggerType,
+            tempDrop: tempDeltaTemp,
+            humRise: tempDeltaHum,
+            luxDropPct: dropPct,
           },
         )
       }
@@ -492,6 +530,9 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
                   hum: endSampleH ? endSampleH.value : currentHum,
                   lux: endSampleL ? endSampleL.value : currentMinLux,
                 },
+                {
+                  type: 'BASELINE_RECOVERY',
+                },
               )
               maxHumInRain = null
               createdCount++
@@ -553,11 +594,20 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
                 ? `SOLAR_RECOVERY (Sol radiante pleno >= 26k lx, Lux max: ${currentMaxLux.toFixed(0)} lx)`
                 : `Despeje solar verificado: iluminancia subió a ${Math.round(currentMaxLux).toLocaleString()} lx (umbral elástico: ${Math.round(luxRecoveryThreshold).toLocaleString()} lx) acoplado a estabilidad térmica en el lote actual (Lux max: ${currentMaxLux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx, Temp: ${tempBatches[0].min.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
 
-              await closeVirtualEvent(new Date(preciseEndMs), 'SOLAR_RECOVERY', closeReasonText, {
-                temp: endSampleT ? endSampleT.value : tempBatches[0].min,
-                hum: endSampleH ? endSampleH.value : humBatches[0].max,
-                lux: endSampleL ? endSampleL.value : currentMinLux,
-              })
+              await closeVirtualEvent(
+                new Date(preciseEndMs),
+                'SOLAR_RECOVERY',
+                closeReasonText,
+                {
+                  temp: endSampleT ? endSampleT.value : tempBatches[0].min,
+                  hum: endSampleH ? endSampleH.value : humBatches[0].max,
+                  lux: endSampleL ? endSampleL.value : currentMinLux,
+                },
+                {
+                  type: 'SOLAR_RECOVERY',
+                  luxMax: currentMaxLux,
+                },
+              )
               maxHumInRain = null
               createdCount++
             }
@@ -603,11 +653,21 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
             const closeReasonText = `🌡️ Cese de Lluvia Intermitente (Variación Térmica): la temperatura se recuperó +${tempRecovery.toFixed(2)}°C (Temp: ${currentTemp.toFixed(1)}°C vs mínimo en lluvia: ${minTempInRain.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}% HR, Lux: ${currentMinLux.toFixed(0)} lx)`
 
-            await closeVirtualEvent(new Date(preciseEndMs), 'THERMAL_VARIATION', closeReasonText, {
-              temp: endSampleT ? endSampleT.value : currentTemp,
-              hum: endSampleH ? endSampleH.value : tempBatches[0].max,
-              lux: endSampleL ? endSampleL.value : currentMinLux,
-            })
+            await closeVirtualEvent(
+              new Date(preciseEndMs),
+              'THERMAL_VARIATION',
+              closeReasonText,
+              {
+                temp: endSampleT ? endSampleT.value : currentTemp,
+                hum: endSampleH ? endSampleH.value : tempBatches[0].max,
+                lux: endSampleL ? endSampleL.value : currentMinLux,
+              },
+              {
+                type: 'THERMAL_VARIATION',
+                minTemp: minTempInRain,
+                tempRecovery: tempRecovery,
+              },
+            )
             maxHumInRain = null
             createdCount++
           }
@@ -622,14 +682,29 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           const tempCeseThreshold = 0.4
           const humCeseThreshold = 1.0
 
-          if (diffHum <= humCeseThreshold && diffTemp <= tempCeseThreshold) {
+          const isSaturated = humBatches[0].max >= 100.0
+          const isHumStagnant = isSaturated ? true : diffHum <= humCeseThreshold
+
+          if (isHumStagnant && diffTemp <= tempCeseThreshold) {
             let allowStagnantClose = true
 
-            // Si es de día, exigir únicamente que la temperatura no esté cayendo rápidamente
+            // Guardia Térmica Unificada (B0, B1, B2)
             if (isDay) {
-              const lastTempDrop = tempBatches[1].max - tempBatches[0].max
+              if (tempBatches.length >= 3) {
+                const maxTemp30 = Math.max(
+                  tempBatches[0].max,
+                  tempBatches[1].max,
+                  tempBatches[2].max,
+                )
+                const caidaNeta30 = maxTemp30 - tempBatches[0].min
 
-              allowStagnantClose = lastTempDrop <= 0.2
+                allowStagnantClose = caidaNeta30 <= 0.4
+              } else if (tempBatches.length >= 2) {
+                const maxTemp20 = Math.max(tempBatches[0].max, tempBatches[1].max)
+                const caidaNeta20 = maxTemp20 - tempBatches[0].min
+
+                allowStagnantClose = caidaNeta20 <= 0.4
+              }
             }
 
             if (allowStagnantClose) {
@@ -673,6 +748,11 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
                   temp: endSampleT ? endSampleT.value : currentMinTemp,
                   hum: endSampleH ? endSampleH.value : currentMaxHum,
                   lux: endSampleL ? endSampleL.value : currentMinLux,
+                },
+                {
+                  type: isDay ? 'STAGNANT_DAY' : 'STAGNANT_NIGHT',
+                  tempVar: diffTemp,
+                  humVar: diffHum,
                 },
               )
 
@@ -866,6 +946,10 @@ let activeVirtualEvent: {
   startTemp?: number | null
   startHum?: number | null
   startLux?: number | null
+  triggerType?: string | null
+  triggerTempDrop?: number | null
+  triggerHumRise?: number | null
+  triggerLuxDropPct?: number | null
 } | null = null
 
 async function openVirtualEvent(
@@ -881,6 +965,12 @@ async function openVirtualEvent(
     temp: number | null
     hum: number | null
     lux: number | null
+  },
+  triggerData?: {
+    type: string | null
+    tempDrop: number | null
+    humRise: number | null
+    luxDropPct: number | null
   },
 ) {
   let cleanStart = startedAt
@@ -900,6 +990,10 @@ async function openVirtualEvent(
     startTemp: startMetrics?.temp ?? null,
     startHum: startMetrics?.hum ?? null,
     startLux: startMetrics?.lux ?? null,
+    triggerType: triggerData?.type ?? null,
+    triggerTempDrop: triggerData?.tempDrop ?? null,
+    triggerHumRise: triggerData?.humRise ?? null,
+    triggerLuxDropPct: triggerData?.luxDropPct ?? null,
   }
 }
 
@@ -936,6 +1030,10 @@ async function saveOpenVirtualEvent() {
       startTemp: activeVirtualEvent.startTemp ?? null,
       startHum: activeVirtualEvent.startHum ?? null,
       startLux: activeVirtualEvent.startLux ?? null,
+      triggerType: activeVirtualEvent.triggerType ?? null,
+      triggerTempDrop: activeVirtualEvent.triggerTempDrop ?? null,
+      triggerHumRise: activeVirtualEvent.triggerHumRise ?? null,
+      triggerLuxDropPct: activeVirtualEvent.triggerLuxDropPct ?? null,
     },
     update: {
       endedAt: null,
@@ -955,6 +1053,14 @@ async function closeVirtualEvent(
     temp: number | null
     hum: number | null
     lux: number | null
+  },
+  closeData?: {
+    type: string | null
+    minTemp?: number | null
+    tempRecovery?: number | null
+    tempVar?: number | null
+    humVar?: number | null
+    luxMax?: number | null
   },
 ) {
   if (!activeVirtualEvent) return null
@@ -999,6 +1105,16 @@ async function closeVirtualEvent(
       endTemp: endMetrics?.temp ?? null,
       endHum: endMetrics?.hum ?? null,
       endLux: endMetrics?.lux ?? null,
+      triggerType: activeVirtualEvent.triggerType ?? null,
+      triggerTempDrop: activeVirtualEvent.triggerTempDrop ?? null,
+      triggerHumRise: activeVirtualEvent.triggerHumRise ?? null,
+      triggerLuxDropPct: activeVirtualEvent.triggerLuxDropPct ?? null,
+      closeType: closeData?.type ?? null,
+      closeMinTemp: closeData?.minTemp ?? null,
+      closeTempRecovery: closeData?.tempRecovery ?? null,
+      closeTempVar: closeData?.tempVar ?? null,
+      closeHumVar: closeData?.humVar ?? null,
+      closeLuxMax: closeData?.luxMax ?? null,
     },
     update: {
       endedAt: cleanEnd,
@@ -1008,6 +1124,12 @@ async function closeVirtualEvent(
       endTemp: endMetrics?.temp ?? null,
       endHum: endMetrics?.hum ?? null,
       endLux: endMetrics?.lux ?? null,
+      closeType: closeData?.type ?? null,
+      closeMinTemp: closeData?.minTemp ?? null,
+      closeTempRecovery: closeData?.tempRecovery ?? null,
+      closeTempVar: closeData?.tempVar ?? null,
+      closeHumVar: closeData?.humVar ?? null,
+      closeLuxMax: closeData?.luxMax ?? null,
     },
   })
 
