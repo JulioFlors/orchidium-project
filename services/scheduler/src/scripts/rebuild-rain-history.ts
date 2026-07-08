@@ -168,7 +168,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
     }
   }
 
-  const BLOCK_MS = 2 * 24 * 3600 * 1000
+  const BLOCK_MS = 1 * 24 * 3600 * 1000
   let startMs = startTime.getTime()
   const endMs = endTime.getTime()
 
@@ -184,6 +184,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
   let baselineLux: number | null = null
   let baselineTemp: number | null = null
   let baselineHum: number | null = null
+  let baselineAgeMinutes: number | null = null
   let rainStartedAt: number | null = null
   let lastRainClosedAt: number | null = null
 
@@ -220,7 +221,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
     const isDay = caracasHour >= 8 && caracasHour < 17
 
     if (!isTelemetryRainActive) {
-      if (lastRainClosedAt !== null && timestampMs - lastRainClosedAt < 15 * 60 * 1000) return
+      if (lastRainClosedAt !== null && timestampMs - lastRainClosedAt < 10 * 60 * 1000) return
       if (currentMinLux >= 26000) return
 
       let triggered = false
@@ -228,6 +229,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
       let calculatedBaselineTemp: number | null = null
       let calculatedBaselineHum: number | null = null
       let calculatedBaselineLux: number | null = null
+      let calculatedBaselineAgeMinutes = 10
 
       if (isDay) {
         // --- REGLAS DIURNAS ---
@@ -242,20 +244,23 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
         let humRiseThreshold = 10.0
 
         if (baseLux1 <= 15000) {
+          // Rama A (Cielo muy nublado: <= 15 klx)
           luxCondition = true
-          tempDropThreshold = -1.2
-          humRiseThreshold = 6.0
+          tempDropThreshold = -1.5
+          humRiseThreshold = 10.0
         } else if (baseLux1 <= 26000) {
+          // Rama C (Cielo intermedio: 15 klx < Lux <= 26 klx)
           luxCondition = currentMinLux <= baseLux1 * 0.6
           if (currentMinLux <= 15000) {
-            tempDropThreshold = -1.2
-            humRiseThreshold = 10.0
+            tempDropThreshold = -1.5
+            humRiseThreshold = 8.0
           }
         } else {
+          // Rama B (Cielo soleado: > 26 klx)
           luxCondition = currentMinLux <= baseLux1 * 0.4
           if (currentMinLux <= 15000) {
-            tempDropThreshold = -1.2
-            humRiseThreshold = 10.0
+            tempDropThreshold = -1.5
+            humRiseThreshold = 6.0
           }
         }
 
@@ -269,6 +274,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           calculatedBaselineTemp = baseTemp1
           calculatedBaselineHum = baseHum1
           calculatedBaselineLux = baseLux1
+          calculatedBaselineAgeMinutes = 20
         }
 
         if (!triggered) {
@@ -283,19 +289,22 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           let humRiseThreshold2 = 12.0
 
           if (baseLux2 <= 15000) {
+            // Rama A (Cielo muy nublado: <= 15 klx)
             luxCondition2 = true
-            tempDropThreshold2 = -1.2
-            humRiseThreshold2 = 4.0
+            tempDropThreshold2 = -2.5
+            humRiseThreshold2 = 12.0
           } else if (baseLux2 <= 26000) {
+            // Rama C (Cielo intermedio: 15 klx < Lux <= 26 klx)
             luxCondition2 = currentMinLux <= baseLux2 * 0.6
             if (currentMinLux <= 15000) {
-              tempDropThreshold2 = -1.2
-              humRiseThreshold2 = 8.0
+              tempDropThreshold2 = -2.5
+              humRiseThreshold2 = 10.0
             }
           } else {
+            // Rama B (Cielo soleado: > 26 klx)
             luxCondition2 = currentMinLux <= baseLux2 * 0.4
             if (currentMinLux <= 15000) {
-              tempDropThreshold2 = -1.2
+              tempDropThreshold2 = -2.5
               humRiseThreshold2 = 8.0
             }
           }
@@ -310,6 +319,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             calculatedBaselineTemp = baseTemp2
             calculatedBaselineHum = baseHum2
             calculatedBaselineLux = baseLux2
+            calculatedBaselineAgeMinutes = 30
           }
         }
       } else {
@@ -359,6 +369,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           calculatedBaselineTemp = maxTempPre
           calculatedBaselineHum = minHumPre
           calculatedBaselineLux = 0
+          calculatedBaselineAgeMinutes = 40
         }
       }
 
@@ -368,6 +379,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
         baselineLux = calculatedBaselineLux ?? luxBatches[0].max
         baselineTemp = calculatedBaselineTemp ?? tempBatches[0].max
         baselineHum = calculatedBaselineHum ?? humBatches[0].min
+        baselineAgeMinutes = calculatedBaselineAgeMinutes
 
         let preciseStartMs = timestampMs
         const baselineT = calculatedBaselineTemp ?? tempBatches[1]?.max ?? baselineTemp
@@ -408,7 +420,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             temp: baselineTemp,
             hum: baselineHum,
             lux: baselineLux,
-            ageMinutes: 10,
+            ageMinutes: baselineAgeMinutes,
           },
           triggerReason,
           {
@@ -552,9 +564,58 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           }
         }
 
+        // 4. Cese por Variación Térmica Diurna (Cese de Lluvia Intermitente)
+        if (!closedByRecovery && isDay && minTempInRain !== null) {
+          const currentTemp = tempBatches[0].min
+          const tempRecovery = currentTemp - minTempInRain
+
+          if (tempRecovery >= 0.6) {
+            closedByRecovery = true
+            let preciseEndMs = timestampMs
+            const matchingEndSample = tempBatches[0].samples.find(
+              (s) => s.value >= minTempInRain! + 0.6,
+            )
+
+            if (matchingEndSample) {
+              preciseEndMs = matchingEndSample.timestamp
+            } else {
+              const lastSample = tempBatches[0].samples[tempBatches[0].samples.length - 1]
+
+              if (lastSample) preciseEndMs = lastSample.timestamp
+            }
+
+            if (preciseEndMs < rainStartedAt) {
+              preciseEndMs = rainStartedAt
+            }
+
+            const endSampleT =
+              tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
+              tempBatches[0].samples[tempBatches[0].samples.length - 1]
+            const endSampleH =
+              humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
+              humBatches[0].samples[humBatches[0].samples.length - 1]
+            const endSampleL =
+              luxBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
+              luxBatches[0].samples[luxBatches[0].samples.length - 1]
+
+            isTelemetryRainActive = false
+            lastRainClosedAt = preciseEndMs
+
+            const closeReasonText = `🌡️ Cese de Lluvia Intermitente (Variación Térmica): la temperatura se recuperó +${tempRecovery.toFixed(2)}°C (Temp: ${currentTemp.toFixed(1)}°C vs mínimo en lluvia: ${minTempInRain.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}% HR, Lux: ${currentMinLux.toFixed(0)} lx)`
+
+            await closeVirtualEvent(new Date(preciseEndMs), 'THERMAL_VARIATION', closeReasonText, {
+              temp: endSampleT ? endSampleT.value : currentTemp,
+              hum: endSampleH ? endSampleH.value : tempBatches[0].max,
+              lux: endSampleL ? endSampleL.value : currentMinLux,
+            })
+            maxHumInRain = null
+            createdCount++
+          }
+        }
+
         if (closedByRecovery) return
 
-        // 4. Cese por Estancamiento de Variables (15 min de duración mínima) (Fallback de Última Instancia)
+        // 5. Cese por Estancamiento de Variables (15 min de duración mínima) (Fallback de Última Instancia)
         if (durationMin >= 15) {
           const diffHum = humBatches[0].max - humBatches[0].min
           const diffTemp = tempBatches[0].max - tempBatches[0].min
@@ -564,11 +625,11 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           if (diffHum <= humCeseThreshold && diffTemp <= tempCeseThreshold) {
             let allowStagnantClose = true
 
-            // Si es de día, exigir que la temperatura se haya recuperado ligeramente (+0.6°C) del mínimo de lluvia
-            if (isDay && minTempInRain !== null) {
-              const currentTemp = tempBatches[0].min
+            // Si es de día, exigir únicamente que la temperatura no esté cayendo rápidamente
+            if (isDay) {
+              const lastTempDrop = tempBatches[1].max - tempBatches[0].max
 
-              allowStagnantClose = currentTemp >= minTempInRain + 0.6
+              allowStagnantClose = lastTempDrop <= 0.2
             }
 
             if (allowStagnantClose) {
@@ -596,7 +657,9 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
                   : `${minutes}min`
 
               const closeReasonText = isSustained
-                ? `☀️ Cese de Lluvia Intermitente (Estancamiento): estabilidad climática alcanzada tras lluvia prolongada (duración: ${durationStr}). La temperatura se recuperó +${(endSampleT.value - minTempInRain!).toFixed(2)}°C (Temp: ${endSampleT.value.toFixed(1)}°C vs mínimo en lluvia: ${minTempInRain!.toFixed(1)}°C) y la humedad se mantuvo saturada al 100% HR (recTemp=+${(endSampleT.value - minTempInRain!).toFixed(2)}°C, minTemp=${minTempInRain!.toFixed(1)}°C).`
+                ? isDay
+                  ? `☀️ Cese de Lluvia Intermitente (Estancamiento): estabilidad climática alcanzada tras lluvia prolongada (duración: ${durationStr}). Sin variación significativa de temperatura (variación ≤ ${tempCeseThreshold.toFixed(1)}°C) ni humedad (variación ≤ ${humCeseThreshold.toFixed(1)}% HR) durante 10 minutos (dT=${diffTemp.toFixed(1)}°C, dH=${diffHum.toFixed(1)}% HR, Temp: ${endSampleT.value.toFixed(1)}°C, Hum: ${endSampleH.value.toFixed(1)}% HR).`
+                  : `☁️ Cese de Lluvia Intermitente (Estancamiento Nocturno): estabilidad climática alcanzada tras lluvia prolongada (duración: ${durationStr}). Sin variación significativa de temperatura (variación ≤ ${tempCeseThreshold.toFixed(1)}°C) ni humedad (variación ≤ ${humCeseThreshold.toFixed(1)}% HR) durante 10 minutos (dT=${diffTemp.toFixed(1)}°C, dH=${diffHum.toFixed(1)}% HR, Temp: ${endSampleT.value.toFixed(1)}°C, Hum: ${endSampleH.value.toFixed(1)}% HR).`
                 : `Estancamiento climático dinámico: sin fluctuación de temperatura (variación ≤ ${tempCeseThreshold.toFixed(1)}°C) ni humedad (variación ≤ ${humCeseThreshold.toFixed(1)}% HR) durante 10 minutos (dT=${diffTemp.toFixed(1)}°C, dH=${diffHum.toFixed(1)}% HR, Temp: ${tempBatches[0].min.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
 
               isTelemetryRainActive = false
@@ -704,6 +767,11 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
   if (tempBuffer.length > 0 || humBuffer.length > 0 || luxBuffer.length > 0) {
     await flushIntervalAndEvaluate(currentIntervalStartMs)
+  }
+
+  if (activeVirtualEvent) {
+    await saveOpenVirtualEvent()
+    createdCount++
   }
 
   Logger.success(
@@ -833,6 +901,50 @@ async function openVirtualEvent(
     startHum: startMetrics?.hum ?? null,
     startLux: startMetrics?.lux ?? null,
   }
+}
+
+async function saveOpenVirtualEvent() {
+  if (!activeVirtualEvent) return null
+
+  let cleanStart = activeVirtualEvent.startedAt
+
+  if (cleanStart.getFullYear() < 2025) {
+    cleanStart = new Date(cleanStart)
+    cleanStart.setFullYear(cleanStart.getFullYear() + 30)
+  }
+
+  if (DRY_RUN) {
+    activeVirtualEvent = null
+
+    return null
+  }
+
+  const record = await prisma.rainEvent.upsert({
+    where: {
+      zone_startedAt: { zone: ZoneType.EXTERIOR, startedAt: cleanStart },
+    },
+    create: {
+      startedAt: cleanStart,
+      endedAt: null,
+      zone: ZoneType.EXTERIOR,
+      isInfered: true,
+      baselineTemp: activeVirtualEvent.baselineTemp,
+      baselineHum: activeVirtualEvent.baselineHum,
+      baselineLux: activeVirtualEvent.baselineLux,
+      baselineAgeMinutes: activeVirtualEvent.baselineAgeMinutes,
+      triggerReason: activeVirtualEvent.triggerReason,
+      startTemp: activeVirtualEvent.startTemp ?? null,
+      startHum: activeVirtualEvent.startHum ?? null,
+      startLux: activeVirtualEvent.startLux ?? null,
+    },
+    update: {
+      endedAt: null,
+    },
+  })
+
+  activeVirtualEvent = null
+
+  return record
 }
 
 async function closeVirtualEvent(

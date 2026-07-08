@@ -652,9 +652,17 @@ export async function evaluateClimateInference(): Promise<void> {
           timestamp: binStartMs,
           samples: bData.hum,
         })
+        const sortedLuxAsc = [...luxVals].sort((a, b) => a - b)
+        const low5Lux = sortedLuxAsc.slice(0, Math.min(5, sortedLuxAsc.length))
+        const minLuxAvg = low5Lux.reduce((sum, val) => sum + val, 0) / low5Lux.length
+
+        const sortedLuxDesc = [...luxVals].sort((a, b) => b - a)
+        const high5Lux = sortedLuxDesc.slice(0, Math.min(5, sortedLuxDesc.length))
+        const maxLuxAvg = high5Lux.reduce((sum, val) => sum + val, 0) / high5Lux.length
+
         newLuxBatches.push({
-          min: Math.min(...luxVals),
-          max: Math.max(...luxVals),
+          min: minLuxAvg,
+          max: maxLuxAvg,
           timestamp: binStartMs,
           samples: bData.lux,
         })
@@ -691,8 +699,8 @@ export async function evaluateClimateInference(): Promise<void> {
 
   // A. Evaluar Inicio de Lluvia Inferida
   if (!inferedRainActive) {
-    // Histéresis de 15 minutos tras el cese anterior
-    if (lastInferedRainClosedAt !== null && nowMs - lastInferedRainClosedAt < 15 * 60 * 1000) {
+    // Histéresis de 10 minutos tras el cese anterior
+    if (lastInferedRainClosedAt !== null && nowMs - lastInferedRainClosedAt < 10 * 60 * 1000) {
       return
     }
 
@@ -725,20 +733,23 @@ export async function evaluateClimateInference(): Promise<void> {
       let humRiseThreshold = 10.0
 
       if (baseLux1 <= 15000) {
+        // Rama A (Cielo muy nublado: <= 15 klx)
         luxCondition = true
-        tempDropThreshold = -1.2
-        humRiseThreshold = 6.0
+        tempDropThreshold = -1.5
+        humRiseThreshold = 10.0
       } else if (baseLux1 <= 26000) {
+        // Rama C (Cielo intermedio: 15 klx < Lux <= 26 klx)
         luxCondition = currentMinLux <= baseLux1 * 0.6
         if (currentMinLux <= 15000) {
-          tempDropThreshold = -1.2
-          humRiseThreshold = 10.0
+          tempDropThreshold = -1.5
+          humRiseThreshold = 8.0
         }
       } else {
+        // Rama B (Cielo soleado: > 26 klx)
         luxCondition = currentMinLux <= baseLux1 * 0.4
         if (currentMinLux <= 15000) {
-          tempDropThreshold = -1.2
-          humRiseThreshold = 10.0
+          tempDropThreshold = -1.5
+          humRiseThreshold = 6.0
         }
       }
 
@@ -834,19 +845,22 @@ export async function evaluateClimateInference(): Promise<void> {
       let humRiseThreshold = 12.0
 
       if (baseLux2 <= 15000) {
+        // Rama A (Cielo muy nublado: <= 15 klx)
         luxCondition = true
-        tempDropThreshold = -1.2
-        humRiseThreshold = 4.0
+        tempDropThreshold = -2.5
+        humRiseThreshold = 12.0
       } else if (baseLux2 <= 26000) {
+        // Rama C (Cielo intermedio: 15 klx < Lux <= 26 klx)
         luxCondition = currentMinLux <= baseLux2 * 0.6
         if (currentMinLux <= 15000) {
-          tempDropThreshold = -1.2
-          humRiseThreshold = 8.0
+          tempDropThreshold = -2.5
+          humRiseThreshold = 10.0
         }
       } else {
+        // Rama B (Cielo soleado: > 26 klx)
         luxCondition = currentMinLux <= baseLux2 * 0.4
         if (currentMinLux <= 15000) {
-          tempDropThreshold = -1.2
+          tempDropThreshold = -2.5
           humRiseThreshold = 8.0
         }
       }
@@ -919,7 +933,7 @@ export async function evaluateClimateInference(): Promise<void> {
             temp: inferedBaselineTemp,
             hum: inferedBaselineHum,
             lux: inferedBaselineLux,
-            ageMinutes: 10,
+            ageMinutes: tempBaselineAgeMinutes,
           },
           `Inferencia de Día${tagMode}: Incremento de +${tempDeltaHum.toFixed(1)}% HR y caída térmica de ${tempDeltaTemp.toFixed(1)}°C en ${tempBaselineAgeMinutes}m (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
           {
@@ -946,7 +960,7 @@ export async function evaluateClimateInference(): Promise<void> {
             temp: inferedBaselineTemp,
             hum: inferedBaselineHum,
             lux: inferedBaselineLux,
-            ageMinutes: 10,
+            ageMinutes: tempBaselineAgeMinutes,
           },
           rainNotes,
           {
@@ -1102,9 +1116,62 @@ export async function evaluateClimateInference(): Promise<void> {
         }
       }
 
+      // 4. Cese por Variación Térmica Diurna (Cese de Lluvia Intermitente)
+      if (!closedByRecovery && isDay && minTempInRain !== null) {
+        const currentTemp = tempBatches[0].min
+        const tempRecovery = currentTemp - minTempInRain
+
+        if (tempRecovery >= 0.6) {
+          closedByRecovery = true
+          let preciseEndMs = nowMs
+          const matchingEndSample = tempBatches[0].samples.find(
+            (s) => s.value >= minTempInRain! + 0.6,
+          )
+
+          if (matchingEndSample) {
+            preciseEndMs = matchingEndSample.timestamp
+          } else {
+            const lastSample = tempBatches[0].samples[tempBatches[0].samples.length - 1]
+
+            if (lastSample) preciseEndMs = lastSample.timestamp
+          }
+
+          if (preciseEndMs < inferedRainStartedAt) {
+            preciseEndMs = inferedRainStartedAt
+          }
+
+          const endSampleT =
+            tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
+            tempBatches[0].samples[tempBatches[0].samples.length - 1]
+          const endSampleH =
+            humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
+            humBatches[0].samples[humBatches[0].samples.length - 1]
+          const endSampleL =
+            luxBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
+            luxBatches[0].samples[luxBatches[0].samples.length - 1]
+
+          Logger.rain(
+            `[RainManager] Cierre por Variación Térmica: Temp subió +${tempRecovery.toFixed(2)}°C desde el mínimo (${minTempInRain.toFixed(1)}°C).`,
+          )
+          inferedRainActive = false
+          inferedRainOverridden = true
+          maxHumInRain = null
+          inferedBaselineVarTemp = null
+          inferedBaselineVarHum = null
+
+          const closeReasonText = `🌡️ Cese de Lluvia Intermitente (Variación Térmica): la temperatura se recuperó +${tempRecovery.toFixed(2)}°C (Temp: ${currentTemp.toFixed(1)}°C vs mínimo en lluvia: ${minTempInRain.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}% HR, Lux: ${currentMinLux.toFixed(0)} lx)`
+
+          await closeRainEvent('THERMAL_VARIATION', new Date(preciseEndMs), true, closeReasonText, {
+            temp: endSampleT ? endSampleT.value : currentTemp,
+            hum: endSampleH ? endSampleH.value : tempBatches[0].max,
+            lux: endSampleL ? endSampleL.value : currentMinLux,
+          })
+        }
+      }
+
       if (closedByRecovery) return
 
-      // 4. Cese Dinámico por Estancamiento de Variables (Fallback de Última Instancia)
+      // 5. Cese Dinámico por Estancamiento de Variables (Fallback de Última Instancia)
       if (durationMin >= 15 && tempBatches.length >= 1 && humBatches.length >= 1) {
         const diffHum = humBatches[0].max - humBatches[0].min
         const diffTemp = tempBatches[0].max - tempBatches[0].min
@@ -1117,11 +1184,11 @@ export async function evaluateClimateInference(): Promise<void> {
         if (diffHum <= humCeseThreshold && diffTemp <= tempCeseThreshold) {
           let allowStagnantClose = true
 
-          // Si es de día, exigir que la temperatura se haya recuperado ligeramente (+0.6°C) del mínimo de lluvia
-          if (isDay && minTempInRain !== null) {
-            const currentTemp = tempBatches[0].min
+          // Si es de día, exigir únicamente que la temperatura no esté descendiendo rápidamente
+          if (isDay) {
+            const lastTempDrop = tempBatches[1].max - tempBatches[0].max
 
-            allowStagnantClose = currentTemp >= minTempInRain + 0.6
+            allowStagnantClose = lastTempDrop <= 0.2
           }
 
           if (allowStagnantClose) {
@@ -1149,7 +1216,9 @@ export async function evaluateClimateInference(): Promise<void> {
               hours > 0 ? (minutes > 0 ? `${hours}h ${minutes}min` : `${hours}h`) : `${minutes}min`
 
             const closeReasonText = isSustained
-              ? `☀️ Cese de Lluvia Intermitente (Estancamiento): estabilidad climática alcanzada tras lluvia prolongada (duración: ${durationStr}). La temperatura se recuperó +${(endSampleT.value - minTempInRain!).toFixed(2)}°C (Temp: ${endSampleT.value.toFixed(1)}°C vs mínimo en lluvia: ${minTempInRain!.toFixed(1)}°C) y la humedad se mantuvo saturada al 100% HR (recTemp=+${(endSampleT.value - minTempInRain!).toFixed(2)}°C, minTemp=${minTempInRain!.toFixed(1)}°C).`
+              ? isDay
+                ? `☀️ Cese de Lluvia Intermitente (Estancamiento): estabilidad climática alcanzada tras lluvia prolongada (duración: ${durationStr}). Sin variación significativa de temperatura (variación ≤ ${tempCeseThreshold.toFixed(1)}°C) ni humedad (variación ≤ ${humCeseThreshold.toFixed(1)}% HR) durante 10 minutos (dT=${diffTemp.toFixed(1)}°C, dH=${diffHum.toFixed(1)}% HR, Temp: ${endSampleT.value.toFixed(1)}°C, Hum: ${endSampleH.value.toFixed(1)}% HR).`
+                : `☁️ Cese de Lluvia Intermitente (Estancamiento Nocturno): estabilidad climática alcanzada tras lluvia prolongada (duración: ${durationStr}). Sin variación significativa de temperatura (variación ≤ ${tempCeseThreshold.toFixed(1)}°C) ni humedad (variación ≤ ${humCeseThreshold.toFixed(1)}% HR) durante 10 minutos (dT=${diffTemp.toFixed(1)}°C, dH=${diffHum.toFixed(1)}% HR, Temp: ${endSampleT.value.toFixed(1)}°C, Hum: ${endSampleH.value.toFixed(1)}% HR).`
               : `Estancamiento climático dinámico: sin fluctuación de temperatura (variación ≤ ${tempCeseThreshold.toFixed(1)}°C) ni humedad (variación ≤ ${humCeseThreshold.toFixed(1)}% HR) durante 10 minutos (dT=${diffTemp.toFixed(1)}°C, dH=${diffHum.toFixed(1)}% HR, Temp: ${tempBatches[0].min.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
 
             Logger.rain(
