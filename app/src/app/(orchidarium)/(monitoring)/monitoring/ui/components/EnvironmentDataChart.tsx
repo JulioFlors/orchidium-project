@@ -321,8 +321,8 @@ function CustomTooltip({
         if (type === 'NIGHT_20M') {
           triggerTitle = 'Inferencia Nocturna 10min'
         } else {
-          // DAY_RAMA_A_OSCURO_20M -> 10min, DAY_RAMA_A_OSCURO_30M -> 20min
-          const timeLabel = type.endsWith('_30M') ? '20min' : '10min'
+          // DAY_RAMA_A_OSCURO_20M -> 10min, DAY_RAMA_A_OSCURO_30M -> 20min, DAY_RAMA_A_OSCURO_40M -> 30min
+          const timeLabel = type.endsWith('_40M') ? '30min' : (type.endsWith('_30M') ? '20min' : '10min')
           let skyLabel = 'Cielo Oscuro'
           if (type.includes('_NUBLADO_')) skyLabel = 'Cielo Nublado'
           else if (type.includes('_INTERMEDIO_')) skyLabel = 'Cielo Intermedio'
@@ -369,34 +369,61 @@ function CustomTooltip({
       }
 
       let closeTitle = 'Cese de Lluvia'
-      let closeDetails = ''
+      let closeDetails: React.ReactNode = ''
 
       if (data.closeType && typeof data.closeType === 'string') {
         // Mapeo estructurado moderno
         const type = data.closeType
         if (type === 'BASELINE_RECOVERY') {
           closeTitle = 'Cese por recuperación adaptativa'
-          // Mostrar caída de HR y subida de Temp
-          const tempRecVal = eTemp !== null && sTemp !== null ? eTemp - sTemp : null
-          const humDropVal = sHum !== null && eHum !== null ? sHum - eHum : null
-          const parts: string[] = []
-          if (humDropVal !== null) parts.push(formatMetricValue(-Math.abs(humDropVal), '💧', 'HR', '%'))
-          if (tempRecVal !== null) parts.push(formatMetricValue(Math.abs(tempRecVal), '🌡️', 'Temp', '°C'))
-          closeDetails = parts.join('  |  ')
+          const minTemp = getNumberOrNull(data.closeMinTemp)
+          const tempRecovery = getNumberOrNull(data.closeTempRecovery)
+          const humVar = getNumberOrNull(data.closeHumVar)
+
+          if (minTemp !== null && tempRecovery !== null && humVar !== null) {
+            const maxHum = eHum !== null ? eHum + humVar : null
+            closeDetails = (
+              <div className="grid grid-cols-[auto_auto_1fr] gap-x-2 leading-relaxed">
+                {maxHum !== null && (
+                  <>
+                    <span className="text-foreground/85 font-semibold">💧 HR max {formatTooltipValue(maxHum, '%')}%</span>
+                    <span className="text-foreground/50 font-semibold">|</span>
+                    <span className="text-foreground/85 font-semibold">Variación -{humVar.toFixed(1)}%</span>
+                  </>
+                )}
+                <span className="text-foreground/85 font-semibold">🌡️ Temp min {formatTooltipValue(minTemp, '°C')}°C</span>
+                <span className="text-foreground/50 font-semibold">|</span>
+                <span className="text-foreground/85 font-semibold">Variación +{tempRecovery.toFixed(1)}°C</span>
+              </div>
+            )
+          } else {
+            // Mostrar caída de HR y subida de Temp (fallback antiguo)
+            const tempRecVal = eTemp !== null && sTemp !== null ? eTemp - sTemp : null
+            const humDropVal = sHum !== null && eHum !== null ? sHum - eHum : null
+            const parts: string[] = []
+            if (humDropVal !== null) parts.push(formatMetricValue(-Math.abs(humDropVal), '💧', 'HR', '%'))
+            if (tempRecVal !== null) parts.push(formatMetricValue(Math.abs(tempRecVal), '🌡️', 'Temp', '°C'))
+            closeDetails = parts.join('  |  ')
+          }
         } else if (type === 'SOLAR_RECOVERY') {
           closeTitle = 'Cese por recuperación solar'
           const luxMax = getNumberOrNull(data.closeLuxMax) ?? eLux ?? 0
           closeDetails = `⛅ Ilum ${formatTooltipValue(luxMax, 'lx')} lx`
         } else if (type === 'THERMAL_VARIATION') {
-          closeTitle = 'Cese por Variación Térmica'
+          closeTitle = 'Cese por variación térmica'
           const minTemp = getNumberOrNull(data.closeMinTemp) ?? 0
           const tempRecovery = getNumberOrNull(data.closeTempRecovery) ?? 0
-          closeDetails = `🌡️ Temperatura ${minTemp.toFixed(1)}°C  |  🌡️ Variación +${tempRecovery.toFixed(1)}°C`
+          closeDetails = `🌡️ Temp min ${formatTooltipValue(minTemp, '°C')}°C  |  Variación +${tempRecovery.toFixed(1)}°C`
         } else if (type.startsWith('STAGNANT')) {
           closeTitle = 'Cese por estancamiento'
           const tempVar = getNumberOrNull(data.closeTempVar) ?? 0
           const humVar = getNumberOrNull(data.closeHumVar) ?? 0
-          closeDetails = `💧 Variación ${humVar.toFixed(1)}%  |  🌡️ Variación ${tempVar.toFixed(1)}°C`
+          const isSaturated = eHum !== null && Math.round(eHum) >= 100
+          if (isSaturated || humVar === null) {
+            closeDetails = `🌡️ Variación ${tempVar.toFixed(1)}°C`
+          } else {
+            closeDetails = `💧 Variación ${humVar.toFixed(1)}%  |  🌡️ Variación ${tempVar.toFixed(1)}°C`
+          }
         }
       } else if (typeof data.closeReason === 'string') {
         // Fallback para eventos antiguos por regex
@@ -404,15 +431,15 @@ function CustomTooltip({
         const reasonUpper = reasonStr.toUpperCase()
 
         if (reasonUpper.includes('CESE DE LLUVIA INTERMITENTE') || reasonUpper.includes('INTERMITENTE')) {
-          closeTitle = 'Cese por Variación Térmica'
+          closeTitle = 'Cese por variación térmica'
           const recMatch = reasonStr.match(/recTemp=\+?([^°C\s,)]+)/)
           const minMatch = reasonStr.match(/minTemp=([^°C\s,)]+)/)
           const recVal = recMatch ? parseFloat(recMatch[1].trim()) : null
           const minVal = minMatch ? parseFloat(minMatch[1].trim()) : null
           
           const parts: string[] = []
-          if (minVal !== null && !isNaN(minVal)) parts.push(`🌡️ Temperatura ${minVal.toFixed(1)}°C`)
-          if (recVal !== null && !isNaN(recVal)) parts.push(`🌡️ Variación +${recVal.toFixed(1)}°C`)
+          if (minVal !== null && !isNaN(minVal)) parts.push(`🌡️ Temp min ${minVal.toFixed(1)}°C`)
+          if (recVal !== null && !isNaN(recVal)) parts.push(`Variación +${recVal.toFixed(1)}°C`)
           closeDetails = parts.join('  |  ')
         } else if (reasonUpper.includes('STAGNANT') || reasonUpper.includes('ESTANCAMIENTO')) {
           closeTitle = 'Cese por estancamiento'
@@ -448,7 +475,6 @@ function CustomTooltip({
           closeDetails = parts.join('  |  ')
         }
       }
-
       let closeIcon = '☁️'
       if (closeTitle.includes('recuperación solar')) {
         closeIcon = '☀️'
@@ -520,9 +546,9 @@ function CustomTooltip({
           {data.closeReason && (
             <div className="border-input-outline/30 flex flex-col gap-0.5 border-t pt-2">
               <span className="font-bold text-purple-400">{closeIcon} {closeTitle}</span>
-              <span className="text-foreground/85 leading-relaxed font-semibold">
+              <div className="text-foreground/85 leading-relaxed font-semibold">
                 {closeDetails}
-              </span>
+              </div>
             </div>
           )}
         </div>

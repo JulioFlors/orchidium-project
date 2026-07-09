@@ -773,8 +773,8 @@ export async function evaluateClimateInference(): Promise<void> {
         // Rama B (Cielo soleado: > 26 klx)
         luxCondition = currentMinLux <= baseLux1 * 0.4
         if (currentMinLux <= 15000) {
-          tempDropThreshold = -1.5
-          humRiseThreshold = 6.0
+          tempDropThreshold = -2.0
+          humRiseThreshold = 8.0
         }
       }
 
@@ -896,8 +896,8 @@ export async function evaluateClimateInference(): Promise<void> {
         // Rama B (Cielo soleado: > 26 klx)
         luxCondition = currentMinLux <= baseLux2 * 0.4
         if (currentMinLux <= 15000) {
-          tempDropThreshold = -2.5
-          humRiseThreshold = 8.0
+          tempDropThreshold = -3.0
+          humRiseThreshold = 10.0
         }
       }
 
@@ -922,6 +922,64 @@ export async function evaluateClimateInference(): Promise<void> {
           triggerType = 'DAY_RAMA_C_INTERMEDIO_30M'
         } else {
           triggerType = 'DAY_RAMA_B_SOLEADO_30M'
+        }
+      }
+    }
+
+    // Paso 3 (40 minutos para Día / Saltado en Noche)
+    if (!triggered && isDay && tempBatches.length >= 4 && humBatches.length >= 4 && luxBatches.length >= 4) {
+      const baseTemp3 = tempBatches[3].max
+      const baseHum3 = humBatches[3].min
+      const baseLux3 = luxBatches[3].max
+      const dTemp3 = currentMinTemp - baseTemp3
+      const dHum3 = currentMaxHum - baseHum3
+
+      let luxCondition = false
+      let tempDropThreshold = -4.0
+      let humRiseThreshold = 14.0
+
+      if (baseLux3 <= 15000) {
+        // Rama A (Cielo muy nublado: <= 15 klx)
+        luxCondition = true
+        tempDropThreshold = -3.5
+        humRiseThreshold = 14.0
+      } else if (baseLux3 <= 26000) {
+        // Rama C (Cielo intermedio: 15 klx < Lux <= 26 klx)
+        luxCondition = currentMinLux <= baseLux3 * 0.6
+        if (currentMinLux <= 15000) {
+          tempDropThreshold = -3.5
+          humRiseThreshold = 12.0
+        }
+      } else {
+        // Rama B (Cielo soleado: > 26 klx)
+        luxCondition = currentMinLux <= baseLux3 * 0.4
+        if (currentMinLux <= 15000) {
+          tempDropThreshold = -4.0
+          humRiseThreshold = 12.0
+        }
+      }
+
+      const humCondition =
+        dHum3 >= humRiseThreshold || (baseHum3 >= 86.0 && baseHum3 <= 95.0 && currentMaxHum >= 98.0)
+
+      if (dTemp3 <= tempDropThreshold && humCondition && luxCondition) {
+        triggered = true
+        tempBaselineAgeMinutes = 40
+        tempDeltaTemp = dTemp3
+        tempDeltaHum = dHum3
+        dropPct = baseLux3 > 0 ? ((baseLux3 - currentMinLux) / baseLux3) * 100 : 0
+        calculatedBaselineTemp = baseTemp3
+        calculatedBaselineHum = baseHum3
+        calculatedBaselineLux = baseLux3
+
+        if (baseLux3 <= 10000) {
+          triggerType = 'DAY_RAMA_A_OSCURO_40M'
+        } else if (baseLux3 <= 15000) {
+          triggerType = 'DAY_RAMA_A_NUBLADO_40M'
+        } else if (baseLux3 <= 26000) {
+          triggerType = 'DAY_RAMA_C_INTERMEDIO_40M'
+        } else {
+          triggerType = 'DAY_RAMA_B_SOLEADO_40M'
         }
       }
     }
@@ -983,9 +1041,9 @@ export async function evaluateClimateInference(): Promise<void> {
           },
           `Inferencia de Día${tagMode}: Incremento de +${tempDeltaHum.toFixed(1)}% HR y caída térmica de ${tempDeltaTemp.toFixed(1)}°C en ${tempBaselineAgeMinutes}m (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
           {
-            temp: startSampleT ? startSampleT.value : currentMinTemp,
-            hum: startSampleH ? startSampleH.value : currentMaxHum,
-            lux: startSampleL ? startSampleL.value : currentMinLux,
+            temp: currentMinTemp,
+            hum: currentMaxHum,
+            lux: currentMinLux,
           },
           {
             type: triggerType,
@@ -1016,9 +1074,9 @@ export async function evaluateClimateInference(): Promise<void> {
           },
           rainNotes,
           {
-            temp: startSampleT ? startSampleT.value : currentMinTemp,
-            hum: startSampleH ? startSampleH.value : currentMaxHum,
-            lux: startSampleL ? startSampleL.value : currentMinLux,
+            temp: currentMinTemp,
+            hum: currentMaxHum,
+            lux: currentMinLux,
           },
           {
             type: triggerType,
@@ -1104,6 +1162,9 @@ export async function evaluateClimateInference(): Promise<void> {
               },
               {
                 type: 'BASELINE_RECOVERY',
+                minTemp: minTempInRain,
+                tempRecovery: (endSampleT ? endSampleT.value : currentTemp) - minTempInRain,
+                humVar: maxHumInRain - (endSampleH ? endSampleH.value : currentHum),
               },
             )
             maxHumInRain = null

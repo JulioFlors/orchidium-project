@@ -263,8 +263,8 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           // Rama B (Cielo soleado: > 26 klx)
           luxCondition = currentMinLux <= baseLux1 * 0.4
           if (currentMinLux <= 15000) {
-            tempDropThreshold = -1.5
-            humRiseThreshold = 6.0
+            tempDropThreshold = -2.0
+            humRiseThreshold = 8.0
           }
         }
 
@@ -321,8 +321,8 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             // Rama B (Cielo soleado: > 26 klx)
             luxCondition2 = currentMinLux <= baseLux2 * 0.4
             if (currentMinLux <= 15000) {
-              tempDropThreshold2 = -2.5
-              humRiseThreshold2 = 8.0
+              tempDropThreshold2 = -3.0
+              humRiseThreshold2 = 10.0
             }
           }
 
@@ -349,6 +349,66 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
               triggerType = 'DAY_RAMA_C_INTERMEDIO_30M'
             } else {
               triggerType = 'DAY_RAMA_B_SOLEADO_30M'
+            }
+          }
+
+          // Paso 3 (40 minutos para Día / Saltado en Noche)
+          if (!triggered && tempBatches.length >= 4 && humBatches.length >= 4 && luxBatches.length >= 4) {
+            const baseTemp3 = tempBatches[3].max
+            const baseHum3 = humBatches[3].min
+            const baseLux3 = luxBatches[3].max
+            const dTemp3 = currentMinTemp - baseTemp3
+            const dHum3 = currentMaxHum - baseHum3
+
+            let luxCondition3 = false
+            let tempDropThreshold3 = -4.0
+            let humRiseThreshold3 = 14.0
+
+            if (baseLux3 <= 15000) {
+              // Rama A (Cielo muy nublado: <= 15 klx)
+              luxCondition3 = true
+              tempDropThreshold3 = -3.5
+              humRiseThreshold3 = 14.0
+            } else if (baseLux3 <= 26000) {
+              // Rama C (Cielo intermedio: 15 klx < Lux <= 26 klx)
+              luxCondition3 = currentMinLux <= baseLux3 * 0.6
+              if (currentMinLux <= 15000) {
+                tempDropThreshold3 = -3.5
+                humRiseThreshold3 = 12.0
+              }
+            } else {
+              // Rama B (Cielo soleado: > 26 klx)
+              luxCondition3 = currentMinLux <= baseLux3 * 0.4
+              if (currentMinLux <= 15000) {
+                tempDropThreshold3 = -4.0
+                humRiseThreshold3 = 12.0
+              }
+            }
+
+            const humCondition3 =
+              dHum3 >= humRiseThreshold3 ||
+              (baseHum3 >= 86.0 && baseHum3 <= 95.0 && currentMaxHum >= 98.0)
+
+            if (dTemp3 <= tempDropThreshold3 && humCondition3 && luxCondition3) {
+              triggered = true
+              triggerReason = `Inferencia de Día: Incremento de +${dHum3.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp3).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
+              calculatedBaselineTemp = baseTemp3
+              calculatedBaselineHum = baseHum3
+              calculatedBaselineLux = baseLux3
+              calculatedBaselineAgeMinutes = 40
+              tempDeltaTemp = dTemp3
+              tempDeltaHum = dHum3
+              dropPct = baseLux3 > 0 ? ((baseLux3 - currentMinLux) / baseLux3) * 100 : 0
+
+              if (baseLux3 <= 10000) {
+                triggerType = 'DAY_RAMA_A_OSCURO_40M'
+              } else if (baseLux3 <= 15000) {
+                triggerType = 'DAY_RAMA_A_NUBLADO_40M'
+              } else if (baseLux3 <= 26000) {
+                triggerType = 'DAY_RAMA_C_INTERMEDIO_40M'
+              } else {
+                triggerType = 'DAY_RAMA_B_SOLEADO_40M'
+              }
             }
           }
         }
@@ -456,9 +516,9 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           },
           triggerReason,
           {
-            temp: startSampleT ? startSampleT.value : currentMinTemp,
-            hum: startSampleH ? startSampleH.value : currentMaxHum,
-            lux: startSampleL ? startSampleL.value : currentMinLux,
+            temp: currentMinTemp,
+            hum: currentMaxHum,
+            lux: currentMinLux,
           },
           {
             type: triggerType,
@@ -532,6 +592,9 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
                 },
                 {
                   type: 'BASELINE_RECOVERY',
+                  minTemp: minTempInRain,
+                  tempRecovery: (endSampleT ? endSampleT.value : currentTemp) - minTempInRain,
+                  humVar: maxHumInRain - (endSampleH ? endSampleH.value : currentHum),
                 },
               )
               maxHumInRain = null
