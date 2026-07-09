@@ -1147,7 +1147,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
             {selectedMetric === 'rain_inferred' && (
               <div className="border-input-outline bg-surface/30 mt-6 rounded-xl border p-4 backdrop-blur-sm transition-all duration-200">
                 <button
-                  className="flex w-full items-center justify-between gap-3 text-left font-semibold text-slate-200 focus:outline-none"
+                  className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg text-left font-semibold text-slate-200 focus:ring-2 focus:ring-accessibility focus:ring-offset-2 focus:ring-offset-canvas focus:outline-none"
                   type="button"
                   onClick={() => setIsInfoOpen(!isInfoOpen)}
                 >
@@ -1163,60 +1163,54 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
                 </button>
 
                 {isInfoOpen && (
-                  <div className="mt-4 grid grid-cols-1 gap-6 border-t border-slate-800/60 pt-4 text-xs text-slate-400 md:grid-cols-3">
-                    {/* Regla 1: Inicio */}
+                  <div className="mt-4 grid grid-cols-1 gap-6 border-t border-slate-800/60 pt-4 text-xs text-slate-400 md:grid-cols-2">
+                    {/* Columna 1: Criterios de Inicio */}
                     <div className="flex flex-col gap-2">
                       <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-amber-400 uppercase">
                         <span>⚡ Criterios de Inicio</span>
                       </div>
                       <p className="leading-relaxed">
-                        El motor evalúa cambios climáticos comparando la lectura actual con la de hace 20-30 minutos:
+                        El motor evalúa cambios climáticos repentinos comparando las métricas actuales con el bloque de calma previa de hace 10 o 20 minutos (10min / 20min):
                       </p>
                       <ul className="list-disc space-y-1.5 pl-4 leading-relaxed">
                         <li>
-                          <strong className="text-slate-300">De Día [8:00 am - 4:00 pm]:</strong> Choque térmico e hídrico. Exige caída de iluminancia &gt;= 60% (si hay sol) o cielo encapotado persistente (Lux &lt;= 10k), requiriendo caídas térmicas de 1.2°C a 3.0°C.
+                          <strong className="text-slate-300">Inferencia Diurna [8:00 am - 5:00 pm Caracas]:</strong> Choque térmico, hídrico y lumínico. Exige caídas de temperatura de al menos 1.5°C (10min) o 2.5°C (20min) y ascensos de humedad según la iluminancia previa:
+                          <ul className="mt-1 list-circle space-y-1 pl-4">
+                            <li><strong className="text-slate-400">Cielo Oscuro/Nublado (≤ 15 klx):</strong> Incremento de ≥ 10% HR (10min) o ≥ 12% HR (20min).</li>
+                            <li><strong className="text-slate-400">Cielo Intermedio (15 klx &lt; Lux ≤ 26 klx):</strong> Caída de iluminancia y ≥ 8% HR (10min) o ≥ 10% HR (20min).</li>
+                            <li><strong className="text-slate-400">Cielo Soleado (&gt; 26 klx):</strong> Caída brusca de iluminancia y ≥ 6% HR (10min) o ≥ 8% HR (20min).</li>
+                          </ul>
                         </li>
                         <li>
-                          <strong className="text-slate-300">De Noche [4:00 pm - 8:00 am]:</strong> Fórmula B Calibrada. Exige caída térmica de al menos 0.50°C (con HR &gt;= 98.0%) o 0.35°C (con HR &lt; 98.0%), y subida de humedad según la variabilidad de calma previa.
+                          <strong className="text-slate-300">Inferencia Nocturna [5:00 pm - 8:00 am Caracas]:</strong> Caída térmica abrupta (≥ 0.7°C o 0.8°C en 30 minutos) con incremento abrupto de humedad (≥ 3.0% HR) o pre-saturación (≥ 98.0% HR) sin rebote de iluminancia.
                         </li>
                       </ul>
                     </div>
 
-                    {/* Regla 2: Criterios de Cierre */}
+                    {/* Columna 2: Criterios de Cese */}
                     <div className="flex flex-col gap-2">
                       <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-green-400 uppercase">
-                        <span>♻️ Criterios de Cierre</span>
+                        <span>♻️ Criterios de Cese</span>
                       </div>
                       <p className="leading-relaxed">
-                        Infiere el término de la precipitación según los siguientes disparadores climáticos:
+                        El término de la lluvia se infiere dinámicamente cuando el clima se estabiliza, descartando precipitaciones inferiores a 15 minutos:
                       </p>
                       <ul className="list-disc space-y-1.5 pl-4 leading-relaxed">
                         <li>
-                          <strong className="text-slate-300">Despeje Solar (Día):</strong> La iluminancia sube por encima del umbral elástico calculado en base a la caída de luz en la tormenta.
+                          <strong className="text-slate-300">Cese por Estancamiento:</strong> Calma atmosférica sostenida (variación local de temperatura ≤ 0.4°C y humedad ≤ 1.0% HR durante 10 minutos).
+                          <ul className="mt-1 list-circle space-y-1 pl-4">
+                            <li><strong className="text-slate-400">Excepción de Saturación (100% HR):</strong> Se ignora la humedad al estar inerte y se evalúa únicamente la estabilidad de la temperatura.</li>
+                            <li><strong className="text-slate-400">Guardia de Tendencia:</strong> Bloquea el cierre si hay enfriamiento en curso en una ventana de 30 minutos (humedad normal) o 50 minutos (al 100% HR).</li>
+                          </ul>
                         </li>
                         <li>
-                          <strong className="text-slate-300">Recuperación Adaptativa (Día):</strong> Retorno térmico e hídrico. La temperatura sube un 35% de lo caído y la humedad baja un 15% del ascenso.
+                          <strong className="text-slate-300">Cese por Variación Térmica (Lluvia Intermitente):</strong> Recuperación térmica acelerada y drástica de ≥ 0.6°C desde la temperatura mínima registrada en la tormenta.
                         </li>
                         <li>
-                          <strong className="text-slate-300">Estancamiento (Día/Noche):</strong> Si tras 15 minutos la atmósfera entra en calma (variación de temp &lt;= 0.4°C y hum &lt;= 1.0% en 10 min).
-                        </li>
-                      </ul>
-                    </div>
-
-                    {/* Regla 3: Salvaguardas */}
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-blue-400 uppercase">
-                        <span>🛡️ Salvaguardas de Seguridad</span>
-                      </div>
-                      <p className="leading-relaxed">
-                        Límites de protección globales para evitar eventos infinitos por pérdidas de señal:
-                      </p>
-                      <ul className="list-disc space-y-1.5 pl-4 leading-relaxed">
-                        <li>
-                          <strong className="text-slate-300">Duración máxima:</strong> Cierre forzado del evento al alcanzar los 120 minutos (2 horas).
+                          <strong className="text-slate-300">Recuperación Adaptativa (Día):</strong> La temperatura recupera al menos el 35% de lo caído y la humedad disminuye un 15% del ascenso.
                         </li>
                         <li>
-                          <strong className="text-slate-300">Límite de Estancamiento:</strong> Criterio global de calma atmosférica (15 minutos mínimo de lluvia).
+                          <strong className="text-slate-300">Recuperación Solar (Día):</strong> La iluminancia rebota por encima del umbral elástico calculado en base a la oscurecimiento de la tormenta.
                         </li>
                       </ul>
                     </div>

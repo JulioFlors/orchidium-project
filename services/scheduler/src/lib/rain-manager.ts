@@ -1269,18 +1269,61 @@ export async function evaluateClimateInference(): Promise<void> {
         if (isHumStagnant && diffTemp <= tempCeseThreshold) {
           let allowStagnantClose = true
 
-          // Guardia Térmica Unificada (B0, B1, B2)
+          // Guardia Térmica Unificada (B0 a B4 si saturado, B0 a B2 de lo contrario)
           if (isDay) {
-            if (tempBatches.length >= 3) {
-              const maxTemp30 = Math.max(tempBatches[0].max, tempBatches[1].max, tempBatches[2].max)
-              const caidaNeta30 = maxTemp30 - tempBatches[0].min
+            if (isSaturated) {
+              if (tempBatches.length >= 5) {
+                const maxTemp50 = Math.max(
+                  tempBatches[0].max,
+                  tempBatches[1].max,
+                  tempBatches[2].max,
+                  tempBatches[3].max,
+                  tempBatches[4].max,
+                )
+                const caidaNeta50 = maxTemp50 - tempBatches[0].min
 
-              allowStagnantClose = caidaNeta30 <= 0.4
-            } else if (tempBatches.length >= 2) {
-              const maxTemp20 = Math.max(tempBatches[0].max, tempBatches[1].max)
-              const caidaNeta20 = maxTemp20 - tempBatches[0].min
+                allowStagnantClose = caidaNeta50 <= 0.4
+              } else if (tempBatches.length >= 4) {
+                const maxTemp40 = Math.max(
+                  tempBatches[0].max,
+                  tempBatches[1].max,
+                  tempBatches[2].max,
+                  tempBatches[3].max,
+                )
+                const caidaNeta40 = maxTemp40 - tempBatches[0].min
 
-              allowStagnantClose = caidaNeta20 <= 0.4
+                allowStagnantClose = caidaNeta40 <= 0.4
+              } else if (tempBatches.length >= 3) {
+                const maxTemp30 = Math.max(
+                  tempBatches[0].max,
+                  tempBatches[1].max,
+                  tempBatches[2].max,
+                )
+                const caidaNeta30 = maxTemp30 - tempBatches[0].min
+
+                allowStagnantClose = caidaNeta30 <= 0.4
+              } else if (tempBatches.length >= 2) {
+                const maxTemp20 = Math.max(tempBatches[0].max, tempBatches[1].max)
+                const caidaNeta20 = maxTemp20 - tempBatches[0].min
+
+                allowStagnantClose = caidaNeta20 <= 0.4
+              }
+            } else {
+              if (tempBatches.length >= 3) {
+                const maxTemp30 = Math.max(
+                  tempBatches[0].max,
+                  tempBatches[1].max,
+                  tempBatches[2].max,
+                )
+                const caidaNeta30 = maxTemp30 - tempBatches[0].min
+
+                allowStagnantClose = caidaNeta30 <= 0.4
+              } else if (tempBatches.length >= 2) {
+                const maxTemp20 = Math.max(tempBatches[0].max, tempBatches[1].max)
+                const caidaNeta20 = maxTemp20 - tempBatches[0].min
+
+                allowStagnantClose = caidaNeta20 <= 0.4
+              }
             }
           }
 

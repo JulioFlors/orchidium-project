@@ -223,7 +223,9 @@ function CustomTooltip({
       if (data.startedAt && typeof data.startedAt !== 'boolean' && data.baselineAgeMinutes !== undefined && data.baselineAgeMinutes !== null) {
         try {
           const startTime = new Date(data.startedAt as any)
-          const baselineTime = new Date(startTime.getTime() - Number(data.baselineAgeMinutes) * 60 * 1000)
+          const bAge = Number(data.baselineAgeMinutes)
+          const adjustedAge = bAge > 10 ? bAge - 10 : 10
+          const baselineTime = new Date(startTime.getTime() - adjustedAge * 60 * 1000)
           
           const rawTimeStr = baselineTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
           baselineTimeStr = rawTimeStr.toLowerCase()
@@ -301,6 +303,14 @@ function CustomTooltip({
       const showStartLux = isWithinSolarTimeRange(data.startedAt as any)
       const showEndLux = isWithinSolarTimeRange(data.endedAt as any)
 
+      // Helper para formatear valores con signo explícito y limpio
+      const formatMetricValue = (val: number | null, emoji: string, label: string, unit: string): string => {
+        if (val === null || val === undefined) return ''
+        const sign = val > 0 ? '+' : val < 0 ? '-' : ''
+        const absVal = Math.abs(val).toFixed(1)
+        return `${emoji} ${label} ${sign}${absVal}${unit}`
+      }
+
       // 4. Parsear razones para las reglas en la parte inferior
       let triggerTitle = 'Inferencia de Lluvia'
       let triggerDetails = ''
@@ -309,10 +319,10 @@ function CustomTooltip({
         // Mapeo estructurado moderno
         const type = data.triggerType
         if (type === 'NIGHT_20M') {
-          triggerTitle = 'Inferencia Nocturna 20m'
+          triggerTitle = 'Inferencia Nocturna 10min'
         } else {
-          // DAY_RAMA_A_OSCURO_20M, etc.
-          const timeLabel = type.endsWith('_30M') ? '30m' : '20m'
+          // DAY_RAMA_A_OSCURO_20M -> 10min, DAY_RAMA_A_OSCURO_30M -> 20min
+          const timeLabel = type.endsWith('_30M') ? '20min' : '10min'
           let skyLabel = 'Cielo Oscuro'
           if (type.includes('_NUBLADO_')) skyLabel = 'Cielo Nublado'
           else if (type.includes('_INTERMEDIO_')) skyLabel = 'Cielo Intermedio'
@@ -326,11 +336,13 @@ function CustomTooltip({
         const lDrop = getNumberOrNull(data.triggerLuxDropPct)
 
         const detailsParts: string[] = []
-        if (hRise !== null) detailsParts.push(`💧 Subida HR +${hRise.toFixed(1)}%`)
-        if (tDrop !== null) detailsParts.push(`🌡️ Caída térmica ${tDrop.toFixed(1)}°C`)
-        if (lDrop !== null && lDrop > 0 && !type.includes('NIGHT')) detailsParts.push(`⛅ Caída Lux ${lDrop.toFixed(0)}%`)
+        if (hRise !== null) detailsParts.push(formatMetricValue(hRise, '💧', 'HR', '%'))
+        if (tDrop !== null) detailsParts.push(formatMetricValue(tDrop, '🌡️', 'Temp', '°C'))
+        if (lDrop !== null && lDrop > 0 && !type.includes('NIGHT')) {
+          detailsParts.push(`☀️ Ilum -${lDrop.toFixed(0)}%`)
+        }
 
-        triggerDetails = detailsParts.join('   |   ')
+        triggerDetails = detailsParts.join('  |  ')
       } else if (typeof data.triggerReason === 'string') {
         // Fallback para eventos antiguos por regex
         const triggerStr = data.triggerReason
@@ -344,11 +356,15 @@ function CustomTooltip({
 
         const hrMatch = triggerStr.match(/Incremento de \+?([^%\s,]+)/)
         const tempMatch = triggerStr.match(/caída térmica de ([^°C\s,]+)/)
-        const hrVal = hrMatch ? hrMatch[1].trim() : ''
-        const tempVal = tempMatch ? tempMatch[1].trim() : ''
+        const hrVal = hrMatch ? parseFloat(hrMatch[1].trim()) : null
+        const tempVal = tempMatch ? parseFloat(tempMatch[1].trim()) : null
 
-        if (hrVal && tempVal) {
-          triggerDetails = `💧 Subida HR ${hrVal}%   |   🌡️ Caída térmica ${tempVal}°C`
+        const detailsParts: string[] = []
+        if (hrVal !== null && !isNaN(hrVal)) detailsParts.push(formatMetricValue(hrVal, '💧', 'HR', '%'))
+        if (tempVal !== null && !isNaN(tempVal)) detailsParts.push(formatMetricValue(-Math.abs(tempVal), '🌡️', 'Temp', '°C'))
+
+        if (detailsParts.length > 0) {
+          triggerDetails = detailsParts.join('  |  ')
         }
       }
 
@@ -364,23 +380,23 @@ function CustomTooltip({
           const tempRecVal = eTemp !== null && sTemp !== null ? eTemp - sTemp : null
           const humDropVal = sHum !== null && eHum !== null ? sHum - eHum : null
           const parts: string[] = []
-          if (humDropVal !== null) parts.push(`💧 Caída HR ${humDropVal.toFixed(1)}%`)
-          if (tempRecVal !== null) parts.push(`🌡️ Subida térmica +${tempRecVal.toFixed(1)}°C`)
-          closeDetails = parts.join('   |   ')
+          if (humDropVal !== null) parts.push(formatMetricValue(-Math.abs(humDropVal), '💧', 'HR', '%'))
+          if (tempRecVal !== null) parts.push(formatMetricValue(Math.abs(tempRecVal), '🌡️', 'Temp', '°C'))
+          closeDetails = parts.join('  |  ')
         } else if (type === 'SOLAR_RECOVERY') {
           closeTitle = 'Cese por recuperación solar'
           const luxMax = getNumberOrNull(data.closeLuxMax) ?? eLux ?? 0
-          closeDetails = `⛅ Iluminancia ${formatTooltipValue(luxMax, 'lx')} lx`
+          closeDetails = `⛅ Ilum ${formatTooltipValue(luxMax, 'lx')} lx`
         } else if (type === 'THERMAL_VARIATION') {
           closeTitle = 'Cese por Variación Térmica'
           const minTemp = getNumberOrNull(data.closeMinTemp) ?? 0
           const tempRecovery = getNumberOrNull(data.closeTempRecovery) ?? 0
-          closeDetails = `🌡️ Temperatura ${minTemp.toFixed(1)}°C   |   🌡️ Recuperación +${tempRecovery.toFixed(2)}°C`
+          closeDetails = `🌡️ Temperatura ${minTemp.toFixed(1)}°C  |  🌡️ Variación +${tempRecovery.toFixed(1)}°C`
         } else if (type.startsWith('STAGNANT')) {
           closeTitle = 'Cese por estancamiento'
           const tempVar = getNumberOrNull(data.closeTempVar) ?? 0
           const humVar = getNumberOrNull(data.closeHumVar) ?? 0
-          closeDetails = `💧 Variación ${humVar.toFixed(1)}%   |   🌡️ Variación ${tempVar.toFixed(1)}°C`
+          closeDetails = `💧 Variación ${humVar.toFixed(1)}%  |  🌡️ Variación ${tempVar.toFixed(1)}°C`
         }
       } else if (typeof data.closeReason === 'string') {
         // Fallback para eventos antiguos por regex
@@ -391,16 +407,24 @@ function CustomTooltip({
           closeTitle = 'Cese por Variación Térmica'
           const recMatch = reasonStr.match(/recTemp=\+?([^°C\s,)]+)/)
           const minMatch = reasonStr.match(/minTemp=([^°C\s,)]+)/)
-          const recVal = recMatch ? recMatch[1].trim() : '0.0'
-          const minVal = minMatch ? minMatch[1].trim() : '0.0'
-          closeDetails = `🌡️ Temperatura ${minVal}°C   |   🌡️ Recuperación +${recVal}°C`
+          const recVal = recMatch ? parseFloat(recMatch[1].trim()) : null
+          const minVal = minMatch ? parseFloat(minMatch[1].trim()) : null
+          
+          const parts: string[] = []
+          if (minVal !== null && !isNaN(minVal)) parts.push(`🌡️ Temperatura ${minVal.toFixed(1)}°C`)
+          if (recVal !== null && !isNaN(recVal)) parts.push(`🌡️ Variación +${recVal.toFixed(1)}°C`)
+          closeDetails = parts.join('  |  ')
         } else if (reasonUpper.includes('STAGNANT') || reasonUpper.includes('ESTANCAMIENTO')) {
           closeTitle = 'Cese por estancamiento'
           const dtMatch = reasonStr.match(/dT=([^°C\s,]+)/)
           const dhMatch = reasonStr.match(/dH=([^%\s,]+)/)
-          const dtVal = dtMatch ? dtMatch[1].trim() : '0.0'
-          const dhVal = dhMatch ? dhMatch[1].trim() : '0.0'
-          closeDetails = `💧 Variación ${dhVal}%   |   🌡️ Variación ${dtVal}°C`
+          const dtVal = dtMatch ? parseFloat(dtMatch[1].trim()) : null
+          const dhVal = dhMatch ? parseFloat(dhMatch[1].trim()) : null
+          
+          const parts: string[] = []
+          if (dhVal !== null && !isNaN(dhVal)) parts.push(`💧 Variación ${dhVal.toFixed(1)}%`)
+          if (dtVal !== null && !isNaN(dtVal)) parts.push(`🌡️ Variación ${dtVal.toFixed(1)}°C`)
+          closeDetails = parts.join('  |  ')
         } else if (reasonUpper.includes('SOLAR_RECOVERY') || reasonUpper.includes('SOLAR')) {
           closeTitle = 'Cese por recuperación solar'
           let displayLux = '--'
@@ -410,14 +434,18 @@ function CustomTooltip({
             const luxMatch = reasonStr.match(/Lux(?: max)?:\s*([^°C\s,lx]+)/)
             displayLux = luxMatch ? formatTooltipValue(luxMatch[1].trim(), 'lx') : '--'
           }
-          closeDetails = `⛅ Iluminancia ${displayLux} lx`
+          closeDetails = `⛅ Ilum ${displayLux} lx`
         } else if (reasonUpper.includes('BASELINE_RECOVERY') || reasonUpper.includes('RECUPERACIÓN')) {
           closeTitle = 'Cese por recuperación adaptativa'
           const tempMatch = reasonStr.match(/Temp:\s*([^°C\s,)]+)/)
           const humMatch = reasonStr.match(/Hum:\s*([^%\s,)]+)/)
-          const tempVal = tempMatch ? tempMatch[1].trim() : ''
-          const humVal = humMatch ? humMatch[1].trim() : ''
-          closeDetails = `💧 Caída HR ${humVal}%   |   🌡️ Subida térmica ${tempVal}°C`
+          const tempVal = tempMatch ? parseFloat(tempMatch[1].trim()) : null
+          const humVal = humMatch ? parseFloat(humMatch[1].trim()) : null
+          
+          const parts: string[] = []
+          if (humVal !== null && !isNaN(humVal)) parts.push(formatMetricValue(-Math.abs(humVal), '💧', 'HR', '%'))
+          if (tempVal !== null && !isNaN(tempVal)) parts.push(formatMetricValue(Math.abs(tempVal), '🌡️', 'Temp', '°C'))
+          closeDetails = parts.join('  |  ')
         }
       }
 
@@ -452,7 +480,7 @@ function CustomTooltip({
               {baselineTimeText}
             </span>
             <span className="text-foreground/85 font-semibold">
-              🌡️ Temp: {formatVal(bTemp, '°C')} | 💧 Hum: {formatVal(bHum, '%')}{showBaselineLux ? ` | ☀️ Ilum: ${formatVal(bLux, 'lx')}` : ''}
+              💧 HR {formatVal(bHum, '%')}  |  🌡️ Temp {formatVal(bTemp, '°C')}{showBaselineLux ? `  |  ☀️ Ilum ${formatVal(bLux, 'lx')}` : ''}
             </span>
           </div>
 
@@ -462,7 +490,7 @@ function CustomTooltip({
               Condiciones climáticas a las {data.startTime}
             </span>
             <span className="text-foreground/85 font-semibold">
-              🌡️ Temp: {formatVal(sTemp, '°C')} | 💧 Hum: {formatVal(sHum, '%')}{showStartLux ? ` | ☀️ Ilum: ${formatVal(sLux, 'lx')}` : ''}
+              💧 HR {formatVal(sHum, '%')}  |  🌡️ Temp {formatVal(sTemp, '°C')}{showStartLux ? `  |  ☀️ Ilum ${formatVal(sLux, 'lx')}` : ''}
             </span>
           </div>
 
@@ -473,7 +501,7 @@ function CustomTooltip({
                 Condiciones climáticas a las {data.endTime}
               </span>
               <span className="text-foreground/85 font-semibold">
-                🌡️ Temp: {formatVal(eTemp, '°C')} | 💧 Hum: {formatVal(eHum, '%')}{showEndLux ? ` | ☀️ Ilum: ${formatVal(eLux, 'lx')}` : ''}
+                💧 HR {formatVal(eHum, '%')}  |  🌡️ Temp {formatVal(eTemp, '°C')}{showEndLux ? `  |  ☀️ Ilum ${formatVal(eLux, 'lx')}` : ''}
               </span>
             </div>
           )}

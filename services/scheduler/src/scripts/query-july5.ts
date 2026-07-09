@@ -1,36 +1,48 @@
-import { influxClient } from '../lib/influx'
+import { prisma } from '@package/database'
 
-function rowTimeToDate(rawTime: unknown): Date {
-  if (rawTime instanceof Date) return rawTime
-  const s = String(rawTime)
+function toCaracasStr(date: Date | null): string {
+  if (!date) return 'N/A'
 
-  if (isNaN(Number(s))) return new Date(s)
-
-  return s.length > 13 ? new Date(Number(s.substring(0, 13))) : new Date(Number(s))
+  return date.toLocaleString('es-VE', {
+    timeZone: 'America/Caracas',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  })
 }
 
 async function main() {
-  const start = '2026-07-05T15:00:00Z' // 11:00 AM Caracas
-  const end = '2026-07-05T22:00:00Z' // 6:00 PM Caracas
+  const events = await prisma.rainEvent.findMany({
+    where: {
+      startedAt: {
+        gte: new Date('2026-07-05T04:00:00.000Z'), // 5 de Julio 00:00 Caracas
+        lte: new Date('2026-07-06T04:00:00.000Z'), // 6 de Julio 00:00 Caracas
+      },
+    },
+    orderBy: {
+      startedAt: 'asc',
+    },
+  })
 
-  const query = `
-    SELECT time, temperature, humidity, illuminance
-    FROM "environment_metrics"
-    WHERE "zone" = 'EXTERIOR'
-      AND time >= '${start}'
-      AND time <= '${end}'
-    ORDER BY time ASC
-  `
+  console.log(`\n======================================================`)
+  console.log(`  EVENTOS DE LLUVIA POSTGRES - DOMINGO 5 DE JULIO`)
+  console.log(`======================================================\n`)
 
-  const stream = influxClient.query(query)
+  for (const e of events) {
+    const isVirtual = e.inferred
 
-  console.log('time,temp,hum,lux')
-  for await (const row of stream) {
-    const tDate = rowTimeToDate(row.time)
-    const tCaracas = new Date(tDate.getTime() - 4 * 60 * 60 * 1000).toISOString().slice(11, 19)
-
-    console.log(`${tCaracas},${row.temperature},${row.humidity},${row.illuminance}`)
+    console.log(`[${isVirtual ? 'VIRTUAL' : 'FÍSICO'}] ID: ${e.id}`)
+    console.log(`Inicio: ${toCaracasStr(e.startedAt)}`)
+    console.log(`Fin:    ${toCaracasStr(e.endedAt)}`)
+    console.log(`Trigger Type:   ${e.triggerType}`)
+    console.log(`Trigger Detail: ${e.triggerReason}`)
+    console.log(`Close Type:     ${e.closeType}`)
+    console.log(`Close Detail:   ${e.closeReason}`)
+    console.log(`------------------------------------------------------\n`)
   }
 }
 
 main()
+  .catch(console.error)
+  .finally(() => prisma.$disconnect())
