@@ -1,8 +1,8 @@
 import { influxClient } from '../lib/influx'
 
 async function main() {
-  const start = new Date('2026-07-09T12:00:00Z') // 08:00 am Caracas
-  const end = new Date('2026-07-09T14:30:00Z')   // 10:30 am Caracas
+  const start = new Date('2026-07-09T12:50:00Z') // 08:50 am Caracas
+  const end = new Date('2026-07-09T13:30:00Z')   // 09:30 am Caracas
 
   const query = `
     SELECT time, temperature, humidity, illuminance

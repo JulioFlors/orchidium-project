@@ -319,16 +319,30 @@ function CustomTooltip({
         // Mapeo estructurado moderno
         const type = data.triggerType
         if (type === 'NIGHT_20M') {
-          triggerTitle = 'Inferencia Nocturna 10min'
+          triggerTitle = '🌙 Cielo Nocturno 10min'
         } else {
-          // DAY_RAMA_A_OSCURO_20M -> 10min, DAY_RAMA_A_OSCURO_30M -> 20min, DAY_RAMA_A_OSCURO_40M -> 30min
           const timeLabel = type.endsWith('_40M') ? '30min' : (type.endsWith('_30M') ? '20min' : '10min')
           let skyLabel = 'Cielo Oscuro'
-          if (type.includes('_NUBLADO_')) skyLabel = 'Cielo Nublado'
-          else if (type.includes('_INTERMEDIO_')) skyLabel = 'Cielo Intermedio'
-          else if (type.includes('_SOLEADO_')) skyLabel = 'Cielo Soleado'
+          let emoji = '☁️'
+          if (type.includes('_NUBLADO_')) {
+            skyLabel = 'Cielo Nublado'
+            emoji = '☁️'
+          } else if (type.includes('_INTERMEDIO_')) {
+            skyLabel = 'Cielo Intermedio'
+            emoji = '⛅'
+          } else if (type.includes('_SOLEADO_')) {
+            skyLabel = 'Cielo Soleado'
+            emoji = '☀️'
+          }
           
-          triggerTitle = `Inferencia Diurna ${skyLabel} ${timeLabel}`
+          let bifLabel = ''
+          if (type.includes('_SENSIBLE_')) {
+            bifLabel = ' Sensible'
+          } else if (type.includes('_ROBUSTO_')) {
+            bifLabel = ' Robusto'
+          }
+          
+          triggerTitle = `${emoji} ${skyLabel}${bifLabel} ${timeLabel}`
         }
 
         const tDrop = getNumberOrNull(data.triggerTempDrop)
@@ -535,7 +549,7 @@ function CustomTooltip({
           {/* Regla de Inicio */}
           {data.triggerReason && (
             <div className="border-input-outline/30 flex flex-col gap-0.5 border-t pt-2">
-              <span className="font-bold text-purple-400">🌧️ {triggerTitle}</span>
+              <span className="font-bold text-purple-400">{data.triggerType ? '' : '🌧️ '}{triggerTitle}</span>
               <span className="text-foreground/85 leading-relaxed font-semibold">
                 {triggerDetails}
               </span>

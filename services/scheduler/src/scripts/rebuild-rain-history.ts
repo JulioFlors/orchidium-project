@@ -245,26 +245,29 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
         let luxCondition = false
         let tempDropThreshold = -3.0
-        let humRiseThreshold = 10.0
+        let humRiseThreshold = 12.0
+        let isSensible = false
 
         if (baseLux1 <= 15000) {
           // Rama A (Cielo muy nublado: <= 15 klx)
           luxCondition = true
           tempDropThreshold = -1.5
-          humRiseThreshold = 10.0
+          humRiseThreshold = 12.0
         } else if (baseLux1 <= 26000) {
           // Rama C (Cielo intermedio: 15 klx < Lux <= 26 klx)
           luxCondition = currentMinLux <= baseLux1 * 0.6
           if (currentMinLux <= 15000) {
+            isSensible = true
             tempDropThreshold = -1.5
-            humRiseThreshold = 8.0
+            humRiseThreshold = 10.0
           }
         } else {
           // Rama B (Cielo soleado: > 26 klx)
           luxCondition = currentMinLux <= baseLux1 * 0.4
           if (currentMinLux <= 15000) {
+            isSensible = true
             tempDropThreshold = -2.0
-            humRiseThreshold = 8.0
+            humRiseThreshold = 10.0
           }
         }
 
@@ -288,9 +291,9 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           } else if (baseLux1 <= 15000) {
             triggerType = 'DAY_RAMA_A_NUBLADO_20M'
           } else if (baseLux1 <= 26000) {
-            triggerType = 'DAY_RAMA_C_INTERMEDIO_20M'
+            triggerType = isSensible ? 'DAY_RAMA_C_INTERMEDIO_SENSIBLE_20M' : 'DAY_RAMA_C_INTERMEDIO_ROBUSTO_20M'
           } else {
-            triggerType = 'DAY_RAMA_B_SOLEADO_20M'
+            triggerType = isSensible ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_20M' : 'DAY_RAMA_B_SOLEADO_ROBUSTO_20M'
           }
         }
 
@@ -303,26 +306,29 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
           let luxCondition2 = false
           let tempDropThreshold2 = -3.0
-          let humRiseThreshold2 = 12.0
+          let humRiseThreshold2 = 14.0
+          let isSensible = false
 
           if (baseLux2 <= 15000) {
             // Rama A (Cielo muy nublado: <= 15 klx)
             luxCondition2 = true
             tempDropThreshold2 = -2.5
-            humRiseThreshold2 = 12.0
+            humRiseThreshold2 = 14.0
           } else if (baseLux2 <= 26000) {
             // Rama C (Cielo intermedio: 15 klx < Lux <= 26 klx)
             luxCondition2 = currentMinLux <= baseLux2 * 0.6
             if (currentMinLux <= 15000) {
+              isSensible = true
               tempDropThreshold2 = -2.5
-              humRiseThreshold2 = 10.0
+              humRiseThreshold2 = 12.0
             }
           } else {
             // Rama B (Cielo soleado: > 26 klx)
             luxCondition2 = currentMinLux <= baseLux2 * 0.4
             if (currentMinLux <= 15000) {
+              isSensible = true
               tempDropThreshold2 = -3.0
-              humRiseThreshold2 = 10.0
+              humRiseThreshold2 = 12.0
             }
           }
 
@@ -346,9 +352,9 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             } else if (baseLux2 <= 15000) {
               triggerType = 'DAY_RAMA_A_NUBLADO_30M'
             } else if (baseLux2 <= 26000) {
-              triggerType = 'DAY_RAMA_C_INTERMEDIO_30M'
+              triggerType = isSensible ? 'DAY_RAMA_C_INTERMEDIO_SENSIBLE_30M' : 'DAY_RAMA_C_INTERMEDIO_ROBUSTO_30M'
             } else {
-              triggerType = 'DAY_RAMA_B_SOLEADO_30M'
+              triggerType = isSensible ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_30M' : 'DAY_RAMA_B_SOLEADO_ROBUSTO_30M'
             }
           }
 
@@ -362,26 +368,29 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
             let luxCondition3 = false
             let tempDropThreshold3 = -4.0
-            let humRiseThreshold3 = 14.0
+            let humRiseThreshold3 = 18.0
+            let isSensible = false
 
             if (baseLux3 <= 15000) {
               // Rama A (Cielo muy nublado: <= 15 klx)
               luxCondition3 = true
               tempDropThreshold3 = -3.5
-              humRiseThreshold3 = 14.0
+              humRiseThreshold3 = 18.0
             } else if (baseLux3 <= 26000) {
               // Rama C (Cielo intermedio: 15 klx < Lux <= 26 klx)
               luxCondition3 = currentMinLux <= baseLux3 * 0.6
               if (currentMinLux <= 15000) {
+                isSensible = true
                 tempDropThreshold3 = -3.5
-                humRiseThreshold3 = 12.0
+                humRiseThreshold3 = 14.0
               }
             } else {
               // Rama B (Cielo soleado: > 26 klx)
               luxCondition3 = currentMinLux <= baseLux3 * 0.4
               if (currentMinLux <= 15000) {
+                isSensible = true
                 tempDropThreshold3 = -4.0
-                humRiseThreshold3 = 12.0
+                humRiseThreshold3 = 14.0
               }
             }
 
@@ -405,9 +414,9 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
               } else if (baseLux3 <= 15000) {
                 triggerType = 'DAY_RAMA_A_NUBLADO_40M'
               } else if (baseLux3 <= 26000) {
-                triggerType = 'DAY_RAMA_C_INTERMEDIO_40M'
+                triggerType = isSensible ? 'DAY_RAMA_C_INTERMEDIO_SENSIBLE_40M' : 'DAY_RAMA_C_INTERMEDIO_ROBUSTO_40M'
               } else {
-                triggerType = 'DAY_RAMA_B_SOLEADO_40M'
+                triggerType = isSensible ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_40M' : 'DAY_RAMA_B_SOLEADO_ROBUSTO_40M'
               }
             }
           }
@@ -985,11 +994,7 @@ function pushBatchMetrics(
     const low5 = sortedAsc.slice(0, Math.min(5, sortedAsc.length))
 
     min = low5.reduce((sum, val) => sum + val, 0) / low5.length
-
-    const sortedDesc = [...values].sort((a, b) => b - a)
-    const high5 = sortedDesc.slice(0, Math.min(5, sortedDesc.length))
-
-    max = high5.reduce((sum, val) => sum + val, 0) / high5.length
+    max = values.reduce((sum, val) => sum + val, 0) / values.length
   }
 
   queue.unshift({ min, max, timestamp, samples })
