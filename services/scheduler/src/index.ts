@@ -2,6 +2,7 @@ import { prisma, TaskStatus, CollisionGuard, ZoneType, DeviceStatus } from '@pac
 import { Cron } from 'croner'
 
 import { Logger, colors } from './lib/logger'
+import { influxClient } from './lib/influx'
 import { InferenceEngine } from './lib/inference-engine'
 import {
   mqttClient,
@@ -597,11 +598,14 @@ function setupMqttHandlers() {
             // Ignorar señales de desconexión lwt si el nodo se durmió limpiamente
             return
           }
+          const wasOffline = emaManager.connectionState === 'offline'
           emaManager.setOffline()
-          Logger.node(
-            'OFFLINE',
-            `Weather Station Orquideario (${message === 'lwt_disconnect' ? 'BROKER' : 'NODE'})`,
-          )
+          if (!wasOffline) {
+            Logger.node(
+              'OFFLINE',
+              `Weather Station Orquideario (${message === 'lwt_disconnect' ? 'BROKER' : 'NODE'})`,
+            )
+          }
 
           // Evaluar si preservamos las solicitudes de auditoría recientes (<9min)
           const keepRequested = Date.now() - lastEmaAuditAckAt < 9 * 60 * 1000
@@ -1151,6 +1155,62 @@ function checkAndSleepEma() {
 }
 
 /**
+ * Inicializa los latidos históricos de EMA y Actuador desde InfluxDB para reactivar watchdogs tras un reinicio.
+ */
+async function initializeHeartbeatsFromInflux() {
+  try {
+    const query = `
+      SELECT time, value, zone
+      FROM system_events
+      WHERE source = 'Weather_Station' AND event_type = 'Device_Status'
+      ORDER BY time DESC
+      LIMIT 10
+    `
+    const stream = influxClient.query(query)
+    for await (const row of stream) {
+      if (row.zone === 'ZONA_A' && row.time) {
+        const timeStr = String(row.time)
+        const ts = timeStr.length > 13 ? Number(timeStr.substring(0, 13)) : Number(timeStr)
+        if (!isNaN(ts)) {
+          lastEmaHeartbeat = ts
+          Logger.info(`[INICIALIZACIÓN] Último latido EMA (ZONA_A) en InfluxDB: ${new Date(ts).toISOString()} (${row.value})`)
+          if (row.value === 'sleep') {
+            isEmaSleeping = true
+          }
+          break
+        }
+      }
+    }
+  } catch (error) {
+    Logger.error('Error al inicializar latido de EMA desde InfluxDB:', error)
+  }
+
+  try {
+    const queryActuator = `
+      SELECT time, value
+      FROM system_events
+      WHERE source = 'Actuator_Controller' AND event_type = 'Device_Status'
+      ORDER BY time DESC
+      LIMIT 5
+    `
+    const streamActuator = influxClient.query(queryActuator)
+    for await (const row of streamActuator) {
+      if (row.time) {
+        const timeStr = String(row.time)
+        const ts = timeStr.length > 13 ? Number(timeStr.substring(0, 13)) : Number(timeStr)
+        if (!isNaN(ts)) {
+          lastFirmwareHeartbeat = ts
+          Logger.info(`[INICIALIZACIÓN] Último latido Actuador en InfluxDB: ${new Date(ts).toISOString()} (${row.value})`)
+          break
+        }
+      }
+    }
+  } catch (error) {
+    Logger.error('Error al inicializar latido de Actuador desde InfluxDB:', error)
+  }
+}
+
+/**
  * Watchdog de inactividad de la Estación EMA:
  * Si el nodo está registrado como online/sleep pero no hemos recibido telemetrías
  * ni estados en 30 minutos (ventana de tolerancia que cubre el ciclo de sleep de 20min),
@@ -1693,6 +1753,9 @@ async function initScheduler() {
 
   // 0.1. Verificación retroactiva de estadísticas diarias (últimos 7 días)
   await checkAndRecoverMissingStats()
+
+  // 0.2. Inicializar latidos históricos desde InfluxDB
+  await initializeHeartbeatsFromInflux()
 
   setInterval(() => {
     RainManager.checkRainOrphanTimeout().catch((err: Error | unknown) =>

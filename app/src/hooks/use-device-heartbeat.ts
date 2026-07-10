@@ -34,7 +34,12 @@ export const useDeviceHeartbeat = (
     | { payload: unknown; receivedAt: number; isRetained: boolean }
     | undefined
 
-  const currentHeartbeat = statusData?.receivedAt || initialHeartbeat
+  const isRetained = statusData?.isRetained ?? false
+  const currentHeartbeat =
+    statusData && !isRetained
+      ? statusData.receivedAt
+      : (initialHeartbeat || null)
+
   const rawStatus = statusData ? String(statusData.payload).trim() : initialStatus.trim()
 
   const isEmaTopic = topic.includes('Weather_Station')
@@ -50,35 +55,23 @@ export const useDeviceHeartbeat = (
         ? 'online'
         : rawStatus
 
-  // Lógica de Estado Efectivo:
-  // Si el mensaje es 'online' o 'sleep', verificamos su frescura
   const lastKnownHeartbeat = currentHeartbeat
-  const isCacheFresh =
-    lastKnownHeartbeat && now > 0 ? now - lastKnownHeartbeat < offlineThreshold : true
-
-  const effectiveStatus =
-    (normalizedStatus === 'online' || normalizedStatus === 'sleep') && !isCacheFresh
-      ? 'unknown'
-      : normalizedStatus
-
-  // Cálculo de Zombie y Dead
   const lastHeartbeat = lastKnownHeartbeat
-  const isZombie =
-    lastHeartbeat !== null &&
-    (effectiveStatus === 'online' || effectiveStatus === 'sleep') &&
-    now > 0 &&
-    now - lastHeartbeat > zombieThreshold
 
-  const isDead =
-    lastHeartbeat !== null &&
-    (effectiveStatus === 'online' || effectiveStatus === 'sleep') &&
-    now > 0 &&
-    now - lastHeartbeat > offlineThreshold
-
-  // 4. Calcular Estado Final
   let connectionState: DeviceConnectionState = 'offline'
 
-  if (effectiveStatus === 'unknown') {
+  if (lastKnownHeartbeat !== null && now > 0) {
+    const elapsed = now - lastKnownHeartbeat
+
+    if (elapsed > offlineThreshold) {
+      connectionState = 'offline'
+    } else if (elapsed > zombieThreshold) {
+      connectionState = 'zombie'
+    } else {
+      connectionState = normalizedStatus as DeviceConnectionState
+    }
+  } else {
+    // Si no tenemos ningún latido conocido en absoluto (ej. inicio de suscripción y BD vacía)
     if (now > 0 && startedAt > 0) {
       const searchDuration = now - startedAt
 
@@ -88,14 +81,6 @@ export const useDeviceHeartbeat = (
     } else {
       connectionState = 'unknown'
     }
-  } else if (effectiveStatus === 'online') {
-    if (isDead) connectionState = 'offline'
-    else if (isZombie) connectionState = 'zombie'
-    else connectionState = 'online'
-  } else if (effectiveStatus === 'sleep') {
-    if (isDead) connectionState = 'offline'
-    else if (isZombie) connectionState = 'zombie'
-    else connectionState = 'sleep'
   }
 
   return {

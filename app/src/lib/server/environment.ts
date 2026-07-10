@@ -697,13 +697,15 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
  * Se usa para la hidratación SSR del estado de conexión.
  */
 export async function getLastHeartbeat(source: string, zone?: ZoneType) {
+  const zoneFilter = zone ? `AND zone = '${zone}'` : ''
   const query = `
     SELECT * 
     FROM system_events 
     WHERE source = '${source}' 
     AND event_type = 'Device_Status' 
-    AND time >= now() - interval '24 hours'
+    ${zoneFilter}
     ORDER BY time DESC
+    LIMIT 1
   `
 
   try {

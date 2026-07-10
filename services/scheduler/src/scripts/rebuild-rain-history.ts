@@ -218,7 +218,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
     const date = new Date(timestampMs)
     const caracasHour = (date.getUTCHours() - 4 + 24) % 24
-    const isDay = caracasHour >= 8 && caracasHour < 17
+    const isDay = caracasHour >= 7 && caracasHour < 18
 
     if (!isTelemetryRainActive) {
       if (lastRainClosedAt !== null && timestampMs - lastRainClosedAt < 10 * 60 * 1000) return
@@ -485,7 +485,9 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
         let preciseStartMs = timestampMs
         const baselineT = calculatedBaselineTemp ?? tempBatches[1]?.max ?? baselineTemp
         const samplesT = tempBatches[0].samples
-        const dropThreshold = isDay ? -1.2 : -0.35
+        // Estimación retrospectiva del inicio preciso de lluvia:
+        // De día busca caída térmica de -1.2°C; de noche se ajusta a -0.20°C para absorber inercia del sensor.
+        const dropThreshold = isDay ? -1.2 : -0.20
         const matchingSample = samplesT.find((s) => s.value - baselineT <= dropThreshold)
 
         if (matchingSample) {
@@ -819,8 +821,34 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             }
 
             if (allowStagnantClose) {
-              const lastSample = tempBatches[0].samples[tempBatches[0].samples.length - 1]
-              const preciseEndMs = lastSample ? lastSample.timestamp : timestampMs
+              let preciseEndMs = timestampMs
+              const tempSamples = tempBatches[0].samples
+              const humSamples = humBatches[0].samples
+
+              if (tempSamples.length > 0 && humSamples.length > 0) {
+                const lastSample = tempSamples[tempSamples.length - 1]
+                preciseEndMs = lastSample.timestamp
+
+                const lastT = lastSample.value
+                const lastH = humSamples[humSamples.length - 1].value
+
+                // Iterar retrospectivamente de atrás hacia adelante en el lote actual
+                // buscando el punto exacto en el que comenzó a estabilizarse el clima
+                for (let i = tempSamples.length - 1; i >= 0; i--) {
+                  const tSample = tempSamples[i]
+                  const hSample = humSamples.find((s) => Math.abs(s.timestamp - tSample.timestamp) < 5000)
+                  if (hSample) {
+                    const diffT = Math.abs(tSample.value - lastT)
+                    const diffH = Math.abs(hSample.value - lastH)
+
+                    if (diffT <= 0.1 && diffH <= 0.2) {
+                      preciseEndMs = tSample.timestamp
+                    } else {
+                      break
+                    }
+                  }
+                }
+              }
 
               const endSampleT =
                 tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
