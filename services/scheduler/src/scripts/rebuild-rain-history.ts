@@ -822,26 +822,34 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
             if (allowStagnantClose) {
               let preciseEndMs = timestampMs
-              const tempSamples = tempBatches[0].samples
-              const humSamples = humBatches[0].samples
 
-              if (tempSamples.length > 0 && humSamples.length > 0) {
-                const lastSample = tempSamples[tempSamples.length - 1]
+              const combinedTempSamples: Sample[] = []
+              const combinedHumSamples: Sample[] = []
+
+              if (tempBatches.length >= 1) combinedTempSamples.push(...tempBatches[0].samples)
+              if (tempBatches.length >= 2) combinedTempSamples.push(...tempBatches[1].samples)
+
+              if (humBatches.length >= 1) combinedHumSamples.push(...humBatches[0].samples)
+              if (humBatches.length >= 2) combinedHumSamples.push(...humBatches[1].samples)
+
+              combinedTempSamples.sort((a, b) => b.timestamp - a.timestamp)
+              combinedHumSamples.sort((a, b) => b.timestamp - a.timestamp)
+
+              if (combinedTempSamples.length > 0 && combinedHumSamples.length > 0) {
+                const lastSample = combinedTempSamples[0]
                 preciseEndMs = lastSample.timestamp
 
                 const lastT = lastSample.value
-                const lastH = humSamples[humSamples.length - 1].value
+                const lastHSample = combinedHumSamples.find((s) => Math.abs(s.timestamp - lastSample.timestamp) < 5000)
+                const lastH = lastHSample ? lastHSample.value : combinedHumSamples[0].value
 
-                // Iterar retrospectivamente de atrás hacia adelante en el lote actual
-                // buscando el punto exacto en el que comenzó a estabilizarse el clima
-                for (let i = tempSamples.length - 1; i >= 0; i--) {
-                  const tSample = tempSamples[i]
-                  const hSample = humSamples.find((s) => Math.abs(s.timestamp - tSample.timestamp) < 5000)
+                for (const tSample of combinedTempSamples) {
+                  const hSample = combinedHumSamples.find((s) => Math.abs(s.timestamp - tSample.timestamp) < 5000)
                   if (hSample) {
                     const diffT = Math.abs(tSample.value - lastT)
                     const diffH = Math.abs(hSample.value - lastH)
 
-                    if (diffT <= 0.1 && diffH <= 0.2) {
+                    if (diffT <= 0.15 && diffH <= 0.5) {
                       preciseEndMs = tSample.timestamp
                     } else {
                       break
@@ -852,12 +860,15 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
               const endSampleT =
                 tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
+                (tempBatches.length >= 2 && tempBatches[1].samples.find((s) => s.timestamp === preciseEndMs)) ||
                 tempBatches[0].samples[tempBatches[0].samples.length - 1]
               const endSampleH =
                 humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
+                (humBatches.length >= 2 && humBatches[1].samples.find((s) => s.timestamp === preciseEndMs)) ||
                 humBatches[0].samples[humBatches[0].samples.length - 1]
               const endSampleL =
                 luxBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
+                (luxBatches.length >= 2 && luxBatches[1].samples.find((s) => s.timestamp === preciseEndMs)) ||
                 luxBatches[0].samples[luxBatches[0].samples.length - 1]
 
               const isSustained = durationMin >= 60
@@ -950,7 +961,10 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           currentIntervalStartMs = tMs
         }
 
-        if (tMs - currentIntervalStartMs >= BATCH_INTERVAL_MS) {
+        const hasEnoughSamples = tempBuffer.length >= 10 && humBuffer.length >= 10
+        const isTimeWindowExceeded = tMs - currentIntervalStartMs >= BATCH_INTERVAL_MS
+
+        if (hasEnoughSamples || isTimeWindowExceeded) {
           await flushIntervalAndEvaluate(currentIntervalStartMs)
           currentIntervalStartMs = tMs
         }

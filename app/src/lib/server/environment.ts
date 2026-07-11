@@ -697,34 +697,27 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
  * Se usa para la hidratación SSR del estado de conexión.
  */
 export async function getLastHeartbeat(source: string, zone?: ZoneType) {
-  const zoneFilter = zone ? `AND zone = '${zone}'` : ''
-  const query = `
-    SELECT * 
-    FROM system_events 
-    WHERE source = '${source}' 
-    AND event_type = 'Device_Status' 
-    ${zoneFilter}
-    ORDER BY time DESC
-    LIMIT 1
-  `
+  let deviceName = source
+  if (source === 'Weather_Station' && zone) {
+    deviceName = `Weather_Station_${zone}`
+  }
 
   try {
-    const reader = influxClient.query(query)
+    const latestLog = await prisma.deviceLog.findFirst({
+      where: { device: deviceName },
+      orderBy: { timestamp: 'desc' },
+    })
 
-    for await (const row of reader as AsyncIterable<InfluxRow>) {
-      if (zone && row.zone !== zone) continue
-
-      if (row.time) {
-        return {
-          timestamp: new Date(safeTimeToISO(row.time)).getTime(),
-          status: String(row.value || 'unknown'),
-        }
+    if (latestLog) {
+      return {
+        timestamp: latestLog.timestamp.getTime(),
+        status: latestLog.status.toLowerCase(),
       }
     }
 
     return null
   } catch (error) {
-    Logger.error(`Error al obtener el último latido para ${source}:`, error)
+    Logger.error(`Error al obtener el último latido para ${deviceName} desde Postgres:`, error)
 
     return null
   }

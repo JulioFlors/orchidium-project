@@ -1154,59 +1154,42 @@ function checkAndSleepEma() {
   }
 }
 
-/**
- * Inicializa los latidos históricos de EMA y Actuador desde InfluxDB para reactivar watchdogs tras un reinicio.
- */
-async function initializeHeartbeatsFromInflux() {
+async function initializeHeartbeatsFromPostgres() {
   try {
-    const query = `
-      SELECT time, value, zone
-      FROM system_events
-      WHERE source = 'Weather_Station' AND event_type = 'Device_Status'
-      ORDER BY time DESC
-      LIMIT 10
-    `
-    const stream = influxClient.query(query)
-    for await (const row of stream) {
-      if (row.zone === 'ZONA_A' && row.time) {
-        const timeStr = String(row.time)
-        const ts = timeStr.length > 13 ? Number(timeStr.substring(0, 13)) : Number(timeStr)
-        if (!isNaN(ts)) {
-          lastEmaHeartbeat = ts
-          Logger.info(`[INICIALIZACIÓN] Último latido EMA (ZONA_A) en InfluxDB: ${new Date(ts).toISOString()} (${row.value})`)
-          if (row.value === 'sleep') {
-            isEmaSleeping = true
-          }
-          break
-        }
+    const latestEmaLog = await prisma.deviceLog.findFirst({
+      where: { device: 'Weather_Station_ZONA_A' },
+      orderBy: { timestamp: 'desc' },
+    })
+
+    if (latestEmaLog) {
+      const ts = latestEmaLog.timestamp.getTime()
+      lastEmaHeartbeat = ts
+      Logger.info(`[INICIALIZACIÓN] Último latido EMA (ZONA_A) en Postgres: ${latestEmaLog.timestamp.toISOString()} (${latestEmaLog.status})`)
+      if (latestEmaLog.status === 'SLEEP') {
+        isEmaSleeping = true
+        emaManager.setOffline()
+      } else if (latestEmaLog.status === 'OFFLINE') {
+        isEmaSleeping = false
+        emaManager.setOffline()
       }
     }
   } catch (error) {
-    Logger.error('Error al inicializar latido de EMA desde InfluxDB:', error)
+    Logger.error('Error al inicializar latido de EMA desde Postgres:', error)
   }
 
   try {
-    const queryActuator = `
-      SELECT time, value
-      FROM system_events
-      WHERE source = 'Actuator_Controller' AND event_type = 'Device_Status'
-      ORDER BY time DESC
-      LIMIT 5
-    `
-    const streamActuator = influxClient.query(queryActuator)
-    for await (const row of streamActuator) {
-      if (row.time) {
-        const timeStr = String(row.time)
-        const ts = timeStr.length > 13 ? Number(timeStr.substring(0, 13)) : Number(timeStr)
-        if (!isNaN(ts)) {
-          lastFirmwareHeartbeat = ts
-          Logger.info(`[INICIALIZACIÓN] Último latido Actuador en InfluxDB: ${new Date(ts).toISOString()} (${row.value})`)
-          break
-        }
-      }
+    const latestActuatorLog = await prisma.deviceLog.findFirst({
+      where: { device: 'Actuator_Controller' },
+      orderBy: { timestamp: 'desc' },
+    })
+
+    if (latestActuatorLog) {
+      const ts = latestActuatorLog.timestamp.getTime()
+      lastFirmwareHeartbeat = ts
+      Logger.info(`[INICIALIZACIÓN] Último latido Actuador en Postgres: ${latestActuatorLog.timestamp.toISOString()} (${latestActuatorLog.status})`)
     }
   } catch (error) {
-    Logger.error('Error al inicializar latido de Actuador desde InfluxDB:', error)
+    Logger.error('Error al inicializar latido de Actuador desde Postgres:', error)
   }
 }
 
@@ -1754,8 +1737,8 @@ async function initScheduler() {
   // 0.1. Verificación retroactiva de estadísticas diarias (últimos 7 días)
   await checkAndRecoverMissingStats()
 
-  // 0.2. Inicializar latidos históricos desde InfluxDB
-  await initializeHeartbeatsFromInflux()
+  // 0.2. Inicializar latidos históricos desde Postgres
+  await initializeHeartbeatsFromPostgres()
 
   setInterval(() => {
     RainManager.checkRainOrphanTimeout().catch((err: Error | unknown) =>

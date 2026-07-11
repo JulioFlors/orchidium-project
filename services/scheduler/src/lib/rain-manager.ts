@@ -171,6 +171,7 @@ export function pushClimateBatch(
  */
 export async function hydrateState(): Promise<void> {
   try {
+    // 1. Recuperar eventos huérfanos de Postgres
     const openPhysical = await prisma.rainEvent.findFirst({
       where: { zone: 'EXTERIOR', endedAt: null, isInfered: false },
       orderBy: { startedAt: 'desc' },
@@ -196,8 +197,112 @@ export async function hydrateState(): Promise<void> {
         `[RainManager] Evento virtual huérfano recuperado (ID: ${openVirtual.id.slice(0, 8)})`,
       )
     }
+
+    // 2. Hidratar los batches en memoria desde InfluxDB (últimos 75 min)
+    const BATCH_MS = 10 * 60 * 1000
+    const query = `
+      SELECT time, temperature, humidity, illuminance
+      FROM "environment_metrics"
+      WHERE "zone" = 'EXTERIOR'
+        AND time >= now() - INTERVAL '75 minutes'
+      ORDER BY time ASC
+    `
+    const stream = influxClient.query(query)
+    const bins: { [binStartMs: number]: { temp: Sample[]; hum: Sample[]; lux: Sample[] } } = {}
+
+    for await (const row of stream) {
+      const tDate = rowTimeToDate(row.time)
+      const tMs = tDate.getTime()
+      const binStartMs = Math.floor(tMs / BATCH_MS) * BATCH_MS
+
+      if (!bins[binStartMs]) {
+        bins[binStartMs] = { temp: [], hum: [], lux: [] }
+      }
+
+      if (row.temperature != null) {
+        const tVal = Number(row.temperature)
+        if (tVal > 5.0 && tVal < 55.0) {
+          bins[binStartMs].temp.push({ value: tVal, timestamp: tMs })
+        }
+      }
+      if (row.humidity != null) {
+        const hVal = Number(row.humidity)
+        if (hVal > 10.0 && hVal <= 100.0) {
+          bins[binStartMs].hum.push({ value: hVal, timestamp: tMs })
+        }
+      }
+      if (row.illuminance != null) {
+        const lVal = Number(row.illuminance)
+        if (lVal >= 0) {
+          bins[binStartMs].lux.push({ value: lVal, timestamp: tMs })
+        }
+      } else {
+        const sampleHour = (tDate.getUTCHours() - 4 + 24) % 24
+        if (sampleHour >= 19 || sampleHour < 5) {
+          bins[binStartMs].lux.push({ value: 0, timestamp: tMs })
+        }
+      }
+    }
+
+    const sortedBins = Object.keys(bins)
+      .map(Number)
+      .sort((a, b) => b - a)
+
+    const newTempBatches: BatchSummary[] = []
+    const newHumBatches: BatchSummary[] = []
+    const newLuxBatches: BatchSummary[] = []
+
+    for (const binStartMs of sortedBins) {
+      const bData = bins[binStartMs]
+      const sampleHour = (new Date(binStartMs).getUTCHours() - 4 + 24) % 24
+      const isSolar = sampleHour >= 5 && sampleHour < 19
+      const hasLux = bData.lux.length >= 5 || !isSolar
+
+      if (bData.temp.length >= 5 && bData.hum.length >= 5 && hasLux) {
+        if (bData.lux.length < 5) {
+          bData.lux = Array(5).fill({ value: 0, timestamp: binStartMs })
+        }
+        const tempVals = bData.temp.map((s) => s.value)
+        const humVals = bData.hum.map((s) => s.value)
+        const luxVals = bData.lux.map((s) => s.value)
+
+        newTempBatches.push({
+          min: Math.min(...tempVals),
+          max: Math.max(...tempVals),
+          timestamp: binStartMs,
+          samples: bData.temp,
+        })
+        newHumBatches.push({
+          min: Math.min(...humVals),
+          max: Math.max(...humVals),
+          timestamp: binStartMs,
+          samples: bData.hum,
+        })
+        const sortedLuxAsc = [...luxVals].sort((a, b) => a - b)
+        const low5Lux = sortedLuxAsc.slice(0, Math.min(5, sortedLuxAsc.length))
+        const minLuxAvg = low5Lux.reduce((sum, val) => sum + val, 0) / low5Lux.length
+
+        const sortedLuxDesc = [...luxVals].sort((a, b) => b - a)
+        const high5Lux = sortedLuxDesc.slice(0, Math.min(5, sortedLuxDesc.length))
+        const maxLuxAvg = high5Lux.reduce((sum, val) => sum + val, 0) / high5Lux.length
+
+        newLuxBatches.push({
+          min: minLuxAvg,
+          max: maxLuxAvg,
+          timestamp: binStartMs,
+          samples: bData.lux,
+        })
+      }
+    }
+
+    if (newTempBatches.length > 0) {
+      tempBatches.splice(0, tempBatches.length, ...newTempBatches)
+      humBatches.splice(0, humBatches.length, ...newHumBatches)
+      luxBatches.splice(0, luxBatches.length, ...newLuxBatches)
+      Logger.rain(`[RainManager] Hidratación inicial completa: ${tempBatches.length} lotes climáticos cargados.`)
+    }
   } catch (err) {
-    Logger.error('[RainManager] Error hidratando estado de lluvia desde Postgres:', err)
+    Logger.error('[RainManager] Error hidratando estado de lluvia:', err)
   }
 }
 
@@ -582,119 +687,7 @@ export async function evaluatePhysicalRainVeto(
 export async function evaluateClimateInference(): Promise<void> {
   const nowMs = Date.now()
 
-  // 1. Hidratar las colas de batches en tiempo real directamente desde InfluxDB (para resiliencia ante reinicios y sincronización de intervalos)
-  const BATCH_MS = 10 * 60 * 1000
-  const query = `
-    SELECT time, temperature, humidity, illuminance
-    FROM "environment_metrics"
-    WHERE "zone" = 'EXTERIOR'
-      AND time >= now() - INTERVAL '75 minutes'
-    ORDER BY time ASC
-  `
-
-  try {
-    const stream = influxClient.query(query)
-    const bins: { [binStartMs: number]: { temp: Sample[]; hum: Sample[]; lux: Sample[] } } = {}
-
-    for await (const row of stream) {
-      const tDate = rowTimeToDate(row.time)
-      const tMs = tDate.getTime()
-      const binStartMs = Math.floor(tMs / BATCH_MS) * BATCH_MS
-
-      if (!bins[binStartMs]) {
-        bins[binStartMs] = { temp: [], hum: [], lux: [] }
-      }
-
-      if (row.temperature != null) {
-        const tVal = Number(row.temperature)
-
-        if (tVal > 5.0 && tVal < 55.0) {
-          bins[binStartMs].temp.push({ value: tVal, timestamp: tMs })
-        }
-      }
-      if (row.humidity != null) {
-        const hVal = Number(row.humidity)
-
-        if (hVal > 10.0 && hVal <= 100.0) {
-          bins[binStartMs].hum.push({ value: hVal, timestamp: tMs })
-        }
-      }
-      if (row.illuminance != null) {
-        const lVal = Number(row.illuminance)
-
-        if (lVal >= 0) {
-          bins[binStartMs].lux.push({ value: lVal, timestamp: tMs })
-        }
-      } else {
-        const sampleHour = (tDate.getUTCHours() - 4 + 24) % 24
-
-        if (sampleHour >= 19 || sampleHour < 5) {
-          bins[binStartMs].lux.push({ value: 0, timestamp: tMs })
-        }
-      }
-    }
-
-    const sortedBins = Object.keys(bins)
-      .map(Number)
-      .sort((a, b) => b - a)
-
-    const newTempBatches: BatchSummary[] = []
-    const newHumBatches: BatchSummary[] = []
-    const newLuxBatches: BatchSummary[] = []
-
-    for (const binStartMs of sortedBins) {
-      const bData = bins[binStartMs]
-      const sampleHour = (new Date(binStartMs).getUTCHours() - 4 + 24) % 24
-      const isSolar = sampleHour >= 5 && sampleHour < 19
-      const hasLux = bData.lux.length >= 5 || !isSolar
-
-      if (bData.temp.length >= 5 && bData.hum.length >= 5 && hasLux) {
-        if (bData.lux.length < 5) {
-          bData.lux = Array(5).fill({ value: 0, timestamp: binStartMs })
-        }
-        const tempVals = bData.temp.map((s) => s.value)
-        const humVals = bData.hum.map((s) => s.value)
-        const luxVals = bData.lux.map((s) => s.value)
-
-        newTempBatches.push({
-          min: Math.min(...tempVals),
-          max: Math.max(...tempVals),
-          timestamp: binStartMs,
-          samples: bData.temp,
-        })
-        newHumBatches.push({
-          min: Math.min(...humVals),
-          max: Math.max(...humVals),
-          timestamp: binStartMs,
-          samples: bData.hum,
-        })
-        const sortedLuxAsc = [...luxVals].sort((a, b) => a - b)
-        const low5Lux = sortedLuxAsc.slice(0, Math.min(5, sortedLuxAsc.length))
-        const minLuxAvg = low5Lux.reduce((sum, val) => sum + val, 0) / low5Lux.length
-
-        const sortedLuxDesc = [...luxVals].sort((a, b) => b - a)
-        const high5Lux = sortedLuxDesc.slice(0, Math.min(5, sortedLuxDesc.length))
-        const maxLuxAvg = high5Lux.reduce((sum, val) => sum + val, 0) / high5Lux.length
-
-        newLuxBatches.push({
-          min: minLuxAvg,
-          max: maxLuxAvg,
-          timestamp: binStartMs,
-          samples: bData.lux,
-        })
-      }
-    }
-
-    if (newTempBatches.length > 0) {
-      tempBatches.splice(0, tempBatches.length, ...newTempBatches)
-      humBatches.splice(0, humBatches.length, ...newHumBatches)
-      luxBatches.splice(0, luxBatches.length, ...newLuxBatches)
-    }
-  } catch (err) {
-    Logger.error('[RainManager] Error al hidratar colas de lluvia desde InfluxDB:', err)
-  }
-
-  // 2. Necesitamos al menos 3 batches en cada cola para poder evaluar derivadas
+  // 1. Necesitamos al menos 3 batches en cada cola para poder evaluar derivadas
   if (tempBatches.length < 3 || humBatches.length < 3 || luxBatches.length < 3) {
     return
   }
@@ -1394,23 +1387,33 @@ export async function evaluateClimateInference(): Promise<void> {
             const tempSamples = tempBatches[0].samples
             const humSamples = humBatches[0].samples
 
-            if (tempSamples.length > 0 && humSamples.length > 0) {
-              const lastSample = tempSamples[tempSamples.length - 1]
+            const combinedTempSamples: Sample[] = []
+            const combinedHumSamples: Sample[] = []
+
+            if (tempBatches.length >= 1) combinedTempSamples.push(...tempBatches[0].samples)
+            if (tempBatches.length >= 2) combinedTempSamples.push(...tempBatches[1].samples)
+
+            if (humBatches.length >= 1) combinedHumSamples.push(...humBatches[0].samples)
+            if (humBatches.length >= 2) combinedHumSamples.push(...humBatches[1].samples)
+
+            combinedTempSamples.sort((a, b) => b.timestamp - a.timestamp)
+            combinedHumSamples.sort((a, b) => b.timestamp - a.timestamp)
+
+            if (combinedTempSamples.length > 0 && combinedHumSamples.length > 0) {
+              const lastSample = combinedTempSamples[0]
               preciseEndMs = lastSample.timestamp
 
               const lastT = lastSample.value
-              const lastH = humSamples[humSamples.length - 1].value
+              const lastHSample = combinedHumSamples.find((s) => Math.abs(s.timestamp - lastSample.timestamp) < 5000)
+              const lastH = lastHSample ? lastHSample.value : combinedHumSamples[0].value
 
-              // Iterar retrospectivamente de atrás hacia adelante en el lote actual
-              // buscando el punto exacto en el que comenzó a estabilizarse el clima
-              for (let i = tempSamples.length - 1; i >= 0; i--) {
-                const tSample = tempSamples[i]
-                const hSample = humSamples.find((s) => Math.abs(s.timestamp - tSample.timestamp) < 5000)
+              for (const tSample of combinedTempSamples) {
+                const hSample = combinedHumSamples.find((s) => Math.abs(s.timestamp - tSample.timestamp) < 5000)
                 if (hSample) {
                   const diffT = Math.abs(tSample.value - lastT)
                   const diffH = Math.abs(hSample.value - lastH)
 
-                  if (diffT <= 0.1 && diffH <= 0.2) {
+                  if (diffT <= 0.15 && diffH <= 0.5) {
                     preciseEndMs = tSample.timestamp
                   } else {
                     break
@@ -1421,12 +1424,15 @@ export async function evaluateClimateInference(): Promise<void> {
 
             const endSampleT =
               tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
+              (tempBatches.length >= 2 && tempBatches[1].samples.find((s) => s.timestamp === preciseEndMs)) ||
               tempBatches[0].samples[tempBatches[0].samples.length - 1]
             const endSampleH =
               humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
+              (humBatches.length >= 2 && humBatches[1].samples.find((s) => s.timestamp === preciseEndMs)) ||
               humBatches[0].samples[humBatches[0].samples.length - 1]
             const endSampleL =
               luxBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
+              (luxBatches.length >= 2 && luxBatches[1].samples.find((s) => s.timestamp === preciseEndMs)) ||
               luxBatches[0].samples[luxBatches[0].samples.length - 1]
 
             const isSustained = durationMin >= 60
