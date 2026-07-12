@@ -167,6 +167,21 @@ export function pushClimateBatch(
 }
 
 /**
+ * Determina si una marca de tiempo corresponde al horario diurno de Caracas (7:00 AM a 6:00 PM VET).
+ */
+export function isDaytime(timestampMs: number): boolean {
+  const date = new Date(timestampMs)
+  const caracasHour = parseInt(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Caracas',
+      hour: '2-digit',
+      hour12: false,
+    }).format(date),
+  )
+  return caracasHour >= 7 && caracasHour < 18
+}
+
+/**
  * Hidrata el estado inicial de eventos de lluvia abiertos desde Postgres.
  */
 export async function hydrateState(): Promise<void> {
@@ -687,8 +702,23 @@ export async function evaluatePhysicalRainVeto(
 export async function evaluateClimateInference(): Promise<void> {
   const nowMs = Date.now()
 
-  // 1. Necesitamos al menos 3 batches en cada cola para poder evaluar derivadas
-  if (tempBatches.length < 3 || humBatches.length < 3 || luxBatches.length < 3) {
+  // 1. Autogenerar batches de lux de fallback si la cola está vacía o incompleta (ej: de noche o por fallo de hidratación)
+  // para evitar TypeError en accesos directos a luxBatches[0] y bloqueos de retorno temprano.
+  while (luxBatches.length < 4) {
+    const refTimestamp = tempBatches.length > luxBatches.length
+      ? tempBatches[luxBatches.length].timestamp
+      : nowMs - luxBatches.length * 10 * 60 * 1000
+
+    luxBatches.push({
+      min: 0,
+      max: 0,
+      timestamp: refTimestamp,
+      samples: Array(10).fill({ value: 0, timestamp: refTimestamp }),
+    })
+  }
+
+  // 2. Necesitamos al menos 3 batches en temp y hum para poder evaluar derivadas
+  if (tempBatches.length < 3 || humBatches.length < 3) {
     return
   }
 
@@ -697,14 +727,13 @@ export async function evaluateClimateInference(): Promise<void> {
   const currentMaxHum = humBatches[0].max
   const currentMinLux = luxBatches[0].min
 
-  const caracasHour = parseInt(
-    new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/Caracas',
-      hour: '2-digit',
-      hour12: false,
-    }).format(new Date(tempBatches[0].timestamp)),
-  )
-  const isDay = caracasHour >= 7 && caracasHour < 18
+  const isDay = isDaytime(tempBatches[0].timestamp)
+
+  // Durante el día, sí requerimos que haya un lote de lux real válido para las reglas diurnas.
+  // Si todos los samples son 0, significa que la cola de lux sigue siendo ficticia (sensor offline o atascado en 0 lx de día).
+  if (isDay && luxBatches[0].max === 0 && luxBatches[0].samples.every((s) => s.value === 0)) {
+    return
+  }
 
   // A. Evaluar Inicio de Lluvia Inferida
   if (!inferedRainActive) {

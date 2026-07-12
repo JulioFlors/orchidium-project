@@ -2,6 +2,7 @@ import { prisma, ZoneType } from '@package/database'
 
 import { influxClient } from '../lib/influx'
 import { Logger } from '../lib/logger'
+import { isDaytime } from '../lib/rain-manager'
 
 const ENV_BACKFILL_DAYS = process.env.BACKFILL_DAYS
   ? parseInt(process.env.BACKFILL_DAYS, 10)
@@ -210,15 +211,34 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
     humBuffer = []
     luxBuffer = []
 
-    if (tempBatches.length < 4 || humBatches.length < 4 || luxBatches.length < 4) return
+    // 1. Autogenerar batches de lux de fallback si la cola está vacía o incompleta (ej: por lagunas de datos o noche)
+    // para evitar TypeError en accesos directos a luxBatches[0] y bloqueos de retorno temprano.
+    while (luxBatches.length < 4) {
+      const refTimestamp = tempBatches.length > luxBatches.length
+        ? tempBatches[luxBatches.length].timestamp
+        : timestampMs - luxBatches.length * 10 * 60 * 1000
+
+      luxBatches.push({
+        min: 0,
+        max: 0,
+        timestamp: refTimestamp,
+        samples: Array(10).fill({ value: 0, timestamp: refTimestamp }),
+      })
+    }
+
+    if (tempBatches.length < 4 || humBatches.length < 4) return
 
     const currentMinTemp = tempBatches[0].min
     const currentMaxHum = humBatches[0].max
     const currentMinLux = luxBatches[0].min
 
-    const date = new Date(timestampMs)
-    const caracasHour = (date.getUTCHours() - 4 + 24) % 24
-    const isDay = caracasHour >= 7 && caracasHour < 18
+    const isDay = isDaytime(timestampMs)
+
+    // Durante el día, sí requerimos que haya un lote de lux real válido para las reglas diurnas.
+    // Si todos los samples son 0, significa que la cola de lux sigue siendo ficticia (sensor offline o atascado en 0 lx de día).
+    if (isDay && luxBatches[0].max === 0 && luxBatches[0].samples.every((s) => s.value === 0)) {
+      return
+    }
 
     if (!isTelemetryRainActive) {
       if (lastRainClosedAt !== null && timestampMs - lastRainClosedAt < 10 * 60 * 1000) return
