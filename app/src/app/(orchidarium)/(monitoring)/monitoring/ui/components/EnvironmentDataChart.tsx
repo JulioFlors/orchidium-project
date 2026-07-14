@@ -1,6 +1,8 @@
 'use client'
 
 import { useMemo } from 'react'
+import { Calendar } from 'lucide-react'
+import useSWR from 'swr'
 import {
   Area,
   AreaChart,
@@ -505,7 +507,7 @@ function CustomTooltip({
       }
 
       return (
-        <div className="bg-surface border-input-outline relative z-50 flex max-w-[340px] flex-col gap-3 overflow-visible rounded-lg border p-3 text-xs shadow-md outline-none">
+        <div className="bg-surface border-input-outline relative z-50 flex max-w-85 flex-col gap-3 overflow-visible rounded-lg border p-3 text-xs shadow-md outline-none">
           {/* Encabezado Cronológico */}
           <div className="text-foreground flex flex-col gap-1 text-xs font-bold">
             <span className="flex items-center gap-1.5 text-xs text-primary">📅 {formattedTime}</span>
@@ -573,7 +575,7 @@ function CustomTooltip({
       <div className="bg-surface border-input-outline relative z-50 flex flex-col overflow-visible rounded-lg border p-3 text-xs shadow-md outline-none">
         {hasStats ? (
           dataKey === 'temperature' || dataKey === 'humidity' ? (
-            <div className="flex min-w-[280px] flex-col gap-3">
+            <div className="flex min-w-70 flex-col gap-3">
               {/* Bloque 1: Consolidado 24h */}
               <div className="flex flex-col gap-1">
                 <span className="text-foreground flex items-center gap-1 text-xs font-bold">
@@ -716,7 +718,7 @@ function CustomTooltip({
               </div>
             </div>
           ) : dataKey === 'illuminance' ? (
-            <div className="flex min-w-[280px] flex-col gap-3">
+            <div className="flex min-w-70 flex-col gap-3">
               {/* Cabecera de fecha */}
               <div className="flex flex-col gap-1">
                 <span className="text-foreground flex items-center gap-1 text-xs font-bold">
@@ -956,6 +958,14 @@ export function EnvironmentDataChart({
   chartType = 'area',
   allowedRanges,
 }: EnvironmentDataChartProps) {
+  const { data: dateRange } = useSWR<{ minDate: string; maxDate: string }>(
+    '/api/environment/available-range',
+    async (url: string) => {
+      const res = await fetch(url)
+      return res.json()
+    }
+  )
+
   const getTimeFormatter = (r: string) => {
     const opts: Intl.DateTimeFormatOptions = { timeZone: 'America/Caracas' }
 
@@ -999,6 +1009,122 @@ export function EnvironmentDataChart({
   }
 
   const gradientId = `color-${dataKey}`
+
+  const getEmptyStateNode = () => {
+    let dateText = ''
+    const isHoy = range === 'today' || range === '24h'
+    const isAyer = range === 'yesterday' || range === '1D'
+    const isCustom = /^\d{4}-\d{2}-\d{2}$/.test(range)
+
+    const renderDate = (textStr: string) => (
+      <span className="font-bold" style={{ color }}>
+        {textStr}
+      </span>
+    )
+
+    const renderSensorHighlight = (sensorName: string) => (
+      <span className="text-primary font-bold">{sensorName}</span>
+    )
+
+    if (isHoy) dateText = 'Hoy'
+    else if (isAyer) dateText = 'Ayer'
+    else if (isCustom) dateText = formatSelectedDate(range)
+    else return <span className="text-sm font-semibold text-primary">Sin telemetría disponible</span>
+
+    // 1. Sensor de lluvia (lluvia física)
+    if (dataKey === 'duration' && title === 'Sensor de lluvia') {
+      if (isHoy) {
+        return (
+          <span>
+            {renderDate('Hoy')}, no se han registrado eventos de lluvia.
+          </span>
+        )
+      }
+      if (isAyer) {
+        return (
+          <span>
+            {renderDate('Ayer')}, no se registraron eventos de lluvia.
+          </span>
+        )
+      }
+      return (
+        <span>
+          No se registraron eventos para el {renderDate(dateText)}
+        </span>
+      )
+    }
+
+    // 2. Lluvia Inferida
+    if (dataKey === 'duration' && title === 'Lluvia Inferida') {
+      if (isHoy) {
+        return (
+          <span>
+            {renderDate('Hoy')}, no se han registrado eventos de lluvia inferida.
+          </span>
+        )
+      }
+      if (isAyer) {
+        return (
+          <span>
+            {renderDate('Ayer')}, no se registraron eventos de lluvia inferida.
+          </span>
+        )
+      }
+      return (
+        <span>
+          No se registraron eventos para el {renderDate(dateText)}
+        </span>
+      )
+    }
+
+    // 3. Humedad y Temperatura
+    if (dataKey === 'temperature' || dataKey === 'humidity') {
+      if (isHoy) {
+        return (
+          <span>
+            {renderDate('Hoy')}, no se ha registrado telemetría del {renderSensorHighlight('sensor DTH22')}.
+          </span>
+        )
+      }
+      if (isAyer) {
+        return (
+          <span>
+            {renderDate('Ayer')}, no se registró telemetría del {renderSensorHighlight('sensor DTH22')}.
+          </span>
+        )
+      }
+      return (
+        <span>
+          No se registró telemetría del {renderSensorHighlight('sensor DTH22')} para el {renderDate(dateText)}
+        </span>
+      )
+    }
+
+    // 4. Iluminancia
+    if (dataKey === 'illuminance') {
+      if (isHoy) {
+        return (
+          <span>
+            {renderDate('Hoy')}, no se ha registrado telemetría del {renderSensorHighlight('sensor BH1750')}.
+          </span>
+        )
+      }
+      if (isAyer) {
+        return (
+          <span>
+            {renderDate('Ayer')}, no se registró telemetría del {renderSensorHighlight('sensor BH1750')}.
+          </span>
+        )
+      }
+      return (
+        <span>
+          No se registró telemetría del {renderSensorHighlight('sensor BH1750')} para el {renderDate(dateText)}
+        </span>
+      )
+    }
+
+    return <span className="text-sm font-semibold text-primary">Sin telemetría disponible</span>
+  }
 
   const chartDataFiltered = useMemo(() => {
     return data.filter((d) => d[dataKey] != null)
@@ -1390,11 +1516,31 @@ export function EnvironmentDataChart({
     return r
   }
 
+  const formatSelectedDate = (ymd: string) => {
+    const parts = ymd.split('-')
+    if (parts.length !== 3) return ymd
+    const [year, month, day] = parts
+    const shortYear = year.slice(-2)
+    return `${day}/${month}/${shortYear}`
+  }
+
+  const handleButtonClick = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const inputEl = document.getElementById(`date-picker-${dataKey}`) as HTMLInputElement | null
+    if (inputEl) {
+      try {
+        inputEl.showPicker()
+      } catch {
+        inputEl.click()
+      }
+    }
+  }
+
   const rangeOptions =
     allowedRanges ||
     (dataKey === 'illuminance'
       ? ['8-16h', '5-19h', '1D', '30d', 'all']
-      : ['24h', '1D', '7d', '30d', 'all'])
+      : ['24h', '1D', '30d', 'all'])
 
   return (
     <div
@@ -1448,11 +1594,57 @@ export function EnvironmentDataChart({
               {getRangeLabel(r)}
             </button>
           ))}
+
+          <div className="relative mx-px flex items-center">
+            <button
+              className={clsx(
+                'focus-visible:outline-accessibility mx-px cursor-pointer rounded-md px-3 py-1 text-xs font-semibold uppercase outline-transparent focus-visible:outline-2 focus-visible:-outline-offset-2 transition-colors duration-150',
+                'flex items-center gap-1.5 justify-center tds-sm:flex-none flex-1 text-center min-h-6',
+                /^\d{4}-\d{2}-\d{2}$/.test(range)
+                  ? 'bg-surface text-primary shadow-sm'
+                  : 'text-secondary hover:text-primary hover:[--icon-color:white]',
+              )}
+              style={{ '--param-color': color } as React.CSSProperties}
+              type="button"
+              onClick={handleButtonClick}
+            >
+              <Calendar
+                className="h-4 w-4 transition-colors duration-150"
+                strokeWidth={2.3}
+                style={{ color: 'var(--icon-color, var(--param-color))' } as React.CSSProperties}
+              />
+              {/^\d{4}-\d{2}-\d{2}$/.test(range) && (
+                <span>{formatSelectedDate(range)}</span>
+              )}
+            </button>
+            <input
+              id={`date-picker-${dataKey}`}
+              type="date"
+              min={dateRange?.minDate || '2026-05-25'}
+              max={dateRange?.maxDate}
+              value={/^\d{4}-\d{2}-\d{2}$/.test(range) ? range : ''}
+              className="absolute pointer-events-none opacity-0 w-0 h-0"
+              onChange={(e) => {
+                const val = e.target.value
+                if (val) {
+                  onRangeChange(val)
+                }
+              }}
+            />
+          </div>
         </div>
       </div>
 
       <div className="w-full">
-        <ResponsiveContainer height={280} minHeight={0} minWidth={0} width="100%">
+        {chartDataFiltered.length === 0 ? (
+          <div className="flex h-70 w-full flex-col items-center justify-center text-center gap-2 border border-dashed border-input-outline rounded-lg bg-surface/50 p-6">
+            <Calendar className="h-10 w-10 opacity-75" strokeWidth={2.2} style={{ color }} />
+            <div className="text-sm font-semibold text-primary leading-relaxed">
+              {getEmptyStateNode()}
+            </div>
+          </div>
+        ) : (
+          <ResponsiveContainer height={280} minHeight={0} minWidth={0} width="100%">
           {chartType === 'area' ? (
             <AreaChart accessibilityLayer={false} data={chartDataFiltered}>
               <defs>
@@ -1570,6 +1762,7 @@ export function EnvironmentDataChart({
             </BarChart>
           )}
         </ResponsiveContainer>
+        )}
       </div>
 
       <hr className="border-input-outline my-2 w-full" />

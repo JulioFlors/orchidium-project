@@ -26,6 +26,7 @@ interface ActionMenuProps {
    * Requiere que el padre tenga la clase 'group'.
    */
   hoverOnly?: boolean
+  align?: 'left' | 'right'
 }
 
 export function ActionMenu({
@@ -33,6 +34,7 @@ export function ActionMenu({
   className,
   triggerClassName,
   hoverOnly = true,
+  align = 'right',
 }: ActionMenuProps) {
   const [isOpen, setIsOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -123,7 +125,10 @@ export function ActionMenu({
         {isOpen && (
           <motion.div
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="border-input-outline bg-surface absolute right-0 z-1 mt-1 w-max min-w-40 origin-top-right overflow-hidden rounded-md border py-1.5 shadow-xl"
+            className={cn(
+              'border-input-outline bg-surface absolute z-30 mt-1 w-max min-w-40 overflow-hidden rounded-md border py-1.5 shadow-xl',
+              align === 'left' ? 'left-0 origin-top-left' : 'right-0 origin-top-right',
+            )}
             exit={{ opacity: 0, scale: 0.95, y: 5 }}
             initial={{ opacity: 0, scale: 0.95, y: 5 }}
             role="menu"

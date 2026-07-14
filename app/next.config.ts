@@ -36,6 +36,25 @@ const nextConfig: NextConfig = {
     deviceSizes: [640, 768, 1024, 1920],
     imageSizes: [16, 32, 64, 128, 256],
   },
+  async redirects() {
+    return [
+      {
+        source: '/genus',
+        destination: '/catalog',
+        permanent: true,
+      },
+      {
+        source: '/species',
+        destination: '/catalog',
+        permanent: true,
+      },
+      {
+        source: '/species/:path*',
+        destination: '/catalog/:path*',
+        permanent: true,
+      },
+    ]
+  },
 }
 
 export default nextConfig

@@ -28,6 +28,7 @@ export interface Species {
   name: string
   slug: string
   description?: string | null
+  glowColor?: string | null
 
   // Propiedades que vienen de las relaciones de Prisma
   images: string[]

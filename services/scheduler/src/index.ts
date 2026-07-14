@@ -591,8 +591,6 @@ function setupMqttHandlers() {
             emaAuditState.active[key] = false
           }
           publishEmaAuditState()
-
-          await saveDeviceLog('Weather_Station_ZONA_A', 'SLEEP', 'Suspendido')
         } else if (message === 'lwt_disconnect' || message === 'offline') {
           if (isEmaSleeping) {
             // Ignorar señales de desconexión lwt si el nodo se durmió limpiamente
@@ -786,7 +784,7 @@ function setupMqttHandlers() {
             }
             isEmaSleeping = true
             emaManager.setOffline()
-            saveDeviceLog('Weather_Station_ZONA_A', 'SLEEP', 'Suspendido (ACK)')
+            saveDeviceLog('Weather_Station_ZONA_A', 'SLEEP', 'Suspendido')
           } else {
             checkAndSleepEma()
           }
@@ -1143,7 +1141,7 @@ function checkAndSleepEma() {
     emaSleepFallbackTimer = setTimeout(() => {
       isEmaSleeping = true
       emaManager.setOffline()
-      saveDeviceLog('Weather_Station_ZONA_A', 'SLEEP', 'Suspendido (Fallback Sleep)')
+      saveDeviceLog('Weather_Station_ZONA_A', 'SLEEP', 'Suspendido forzado')
       Logger.info('⚠️ EMA marcado en SLEEP tras timeout de acuse (Fallback)')
       mqttClient.publish('PristinoPlant/Weather_Station/ZONA_A/status', 'sleep', {
         retain: true,

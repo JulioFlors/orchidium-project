@@ -102,18 +102,11 @@ export const adminRoutes: AdminRoute[] = [
     layout: 'hybrid',
     items: [
       {
-        name: 'Catálogo Especies',
-        url: '/species',
+        name: 'Catálogo',
+        url: '/catalog',
         icon: <IoLeafOutline />,
         image: '/imgs/psyduck_0054.webp',
-        description: 'Gestión taxonómica',
-      },
-      {
-        name: 'Géneros',
-        url: '/genus',
-        icon: <IoListOutline />,
-        image: '/imgs/psyduck_0054.webp',
-        description: 'Gestión de géneros biológicos',
+        description: 'Gestión de catálogo botánico',
       },
       {
         name: 'Gestión Stock',

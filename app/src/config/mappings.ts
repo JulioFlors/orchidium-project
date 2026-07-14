@@ -200,7 +200,7 @@ export const MetricLabels: Record<string, string> = {
   humidity: 'Humedad Relativa',
   illuminance: 'Iluminancia',
   rain_intensity: 'Precipitación',
-  rain_events: 'Eventos de Lluvia',
+  rain_events: 'Sensor de lluvia',
   dli: 'DLI (Luz Acumulada)',
   vpd_avg: 'VPD (Presión de Vapor)',
   dif: 'DIF (Contraste Térmico)',

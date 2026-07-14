@@ -575,7 +575,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
           dataKey: 'duration',
           color: '#3b82f6',
           unit: 'min',
-          title: 'Eventos de Lluvia',
+          title: 'Sensor de lluvia',
           icon: <CloudRain className="h-4 w-4" />,
           chartType: 'bar' as const,
           customData:
@@ -1036,7 +1036,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               icon={<CloudRain className="h-6 w-6" />}
               isActive={selectedMetric === 'rain_events'}
               isLoading={isPhysicalRainLoading}
-              title="Eventos de Lluvia"
+              title="Sensor de lluvia"
               unit="Eventos"
               value={!physicalRainData ? '--' : parsedRainData.physical.count}
               onClick={() => setSelectedMetric('rain_events')}
@@ -1092,7 +1092,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
             />
 
             <EnvironmentCard
-              className="tds-sm:col-span-2 tds-sm:order-6 tds-lg:col-span-2"
+              className="tds-sm:order-6 tds-lg:col-span-2"
               color={climate.color}
               description={climate.description}
               icon={climate.icon}
@@ -1145,9 +1145,9 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
 
             {/* Guía Explicativa de Inferencia (Colapsable) */}
             {selectedMetric === 'rain_inferred' && (
-              <div className="border-input-outline bg-surface/30 mt-6 rounded-xl border p-4 backdrop-blur-sm transition-all duration-200">
+              <div className="border-input-outline bg-surface/30 mt-6 rounded-xl border backdrop-blur-sm transition-all duration-200 focus-within:ring-2 focus-within:ring-accessibility focus-within:ring-offset-2 focus-within:ring-offset-canvas">
                 <button
-                  className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg text-left font-semibold text-slate-200 focus:ring-2 focus:ring-accessibility focus:ring-offset-2 focus:ring-offset-canvas focus:outline-none"
+                  className="flex w-full cursor-pointer items-center justify-between gap-3 p-4 text-left font-semibold text-slate-200 focus:outline-none"
                   type="button"
                   onClick={() => setIsInfoOpen(!isInfoOpen)}
                 >
@@ -1163,56 +1163,92 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
                 </button>
 
                 {isInfoOpen && (
-                  <div className="mt-4 grid grid-cols-1 gap-6 border-t border-slate-800/60 pt-4 text-xs text-slate-400 md:grid-cols-2">
+                  <div className="px-4 pb-4 pt-4 grid grid-cols-1 gap-6 text-xs text-secondary md:grid-cols-2">
                     {/* Columna 1: Criterios de Inicio */}
                     <div className="flex flex-col gap-2">
-                      <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-amber-400 uppercase">
-                        <span>⚡ Criterios de Inicio</span>
+                      <div className="text-sm font-bold flex items-center gap-1.5">
+                        <span>🌧️ <span className="text-purple-400">Criterios de Inicio</span></span>
                       </div>
                       <p className="leading-relaxed">
-                        El motor evalúa cambios climáticos repentinos comparando las métricas actuales con el bloque de calma previa de hace 10 o 20 minutos (10min / 20min):
+                        Las reglas que determinan la apertura del evento según el horario son las siguientes:
                       </p>
-                      <ul className="list-disc space-y-1.5 pl-4 leading-relaxed">
-                        <li>
-                          <strong className="text-slate-300">Inferencia Diurna [8:00 am - 5:00 pm Caracas]:</strong> Choque térmico, hídrico y lumínico. Exige caídas de temperatura de al menos 1.5°C (10min) o 2.5°C (20min) y ascensos de humedad según la iluminancia previa:
-                          <ul className="mt-1 list-circle space-y-1 pl-4">
-                            <li><strong className="text-slate-400">Cielo Oscuro/Nublado (≤ 15 klx):</strong> Incremento de ≥ 10% HR (10min) o ≥ 12% HR (20min).</li>
-                            <li><strong className="text-slate-400">Cielo Intermedio (15 klx &lt; Lux ≤ 26 klx):</strong> Caída de iluminancia y ≥ 8% HR (10min) o ≥ 10% HR (20min).</li>
-                            <li><strong className="text-slate-400">Cielo Soleado (&gt; 26 klx):</strong> Caída brusca de iluminancia y ≥ 6% HR (10min) o ≥ 8% HR (20min).</li>
+                      
+                      <div className="flex flex-col gap-4 mt-1">
+                        <div>
+                          <h4 className="text-primary font-bold">☀️ Inferencia Diurna [7:00 am - 6:00 pm]:</h4>
+                          <p className="leading-relaxed mt-1">
+                            Choque térmico, hídrico y lumínico. Exige caídas de temperatura (base de -1.5°C e incrementos de -0.5°C por paso temporal) y ascensos de humedad bajo dos configuraciones:
+                          </p>
+                          <ul className="list-disc space-y-1 pl-4 mt-1 leading-relaxed">
+                            <li>
+                              <span className="text-primary font-semibold">Configuración Sensible (Inicio):</span>
+                              <br />
+                              Paso 1 (20 min): -1.5°C | +10.0% HR (Nublado, ≤15 klx) o +8.0% HR (Intermedio/Soleado).
+                              <br />
+                              Paso 2 (30 min): -2.0°C | +12.0% HR (Nublado) o +10.0% HR.
+                              <br />
+                              Paso 3 (40 min): -2.5°C | +14.0% HR (Nublado) o +12.0% HR.
+                            </li>
+                            <li>
+                              <span className="text-primary font-semibold">Protección por Gradiente:</span> Si la humedad no alcanza la configuración robusta (+12%, +14% o +16% HR), se requiere un gradiente rápido minuto a minuto: humedad ≥1.8% en 1 min, ≥2.5% en 2 min, o caída térmica ≤-0.5°C en 1 min.
+                            </li>
                           </ul>
-                        </li>
-                        <li>
-                          <strong className="text-slate-300">Inferencia Nocturna [5:00 pm - 8:00 am Caracas]:</strong> Caída térmica abrupta (≥ 0.7°C o 0.8°C en 30 minutos) con incremento abrupto de humedad (≥ 3.0% HR) o pre-saturación (≥ 98.0% HR) sin rebote de iluminancia.
-                        </li>
-                      </ul>
+                        </div>
+
+                        <div className="border-t border-slate-800/40 pt-3">
+                          <h4 className="text-primary font-bold">🌙 Inferencia Nocturna [6:00 pm - 7:00 am]:</h4>
+                          <p className="leading-relaxed mt-1">
+                            Caída térmica abrupta (≥ 1.6x de variabilidad previa de 30 min) con incremento hídrico (≥ 1.4x de variabilidad previa) o presaturación (≥ 98% HR) sin evaluaciones solares.
+                          </p>
+                        </div>
+                      </div>
                     </div>
 
                     {/* Columna 2: Criterios de Cese */}
                     <div className="flex flex-col gap-2">
-                      <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-green-400 uppercase">
-                        <span>♻️ Criterios de Cese</span>
+                      <div className="text-sm font-bold flex items-center gap-1.5">
+                        <span>☁️ <span className="text-purple-400">Criterios de Cese</span></span>
                       </div>
                       <p className="leading-relaxed">
-                        El término de la lluvia se infiere dinámicamente cuando el clima se estabiliza, descartando precipitaciones inferiores a 15 minutos:
+                        Las reglas que determinan el cierre del evento son las siguientes:
                       </p>
-                      <ul className="list-disc space-y-1.5 pl-4 leading-relaxed">
-                        <li>
-                          <strong className="text-slate-300">Cese por Estancamiento:</strong> Calma atmosférica sostenida (variación local de temperatura ≤ 0.4°C y humedad ≤ 1.0% HR durante 10 minutos).
-                          <ul className="mt-1 list-circle space-y-1 pl-4">
-                            <li><strong className="text-slate-400">Excepción de Saturación (100% HR):</strong> Se ignora la humedad al estar inerte y se evalúa únicamente la estabilidad de la temperatura.</li>
-                            <li><strong className="text-slate-400">Guardia de Tendencia:</strong> Bloquea el cierre si hay enfriamiento en curso en una ventana de 30 minutos (humedad normal) o 50 minutos (al 100% HR).</li>
-                          </ul>
-                        </li>
-                        <li>
-                          <strong className="text-slate-300">Cese por Variación Térmica (Lluvia Intermitente):</strong> Recuperación térmica acelerada y drástica de ≥ 0.6°C desde la temperatura mínima registrada en la tormenta.
-                        </li>
-                        <li>
-                          <strong className="text-slate-300">Recuperación Adaptativa (Día):</strong> La temperatura recupera al menos el 35% de lo caído y la humedad disminuye un 15% del ascenso.
-                        </li>
-                        <li>
-                          <strong className="text-slate-300">Recuperación Solar (Día):</strong> La iluminancia rebota por encima del umbral elástico calculado en base a la oscurecimiento de la tormenta.
-                        </li>
-                      </ul>
+
+                      <div className="flex flex-col gap-3 mt-1">
+                        <div>
+                          <span className="text-primary font-bold">Cese por Estancamiento:</span>{' '}
+                          <span>
+                            Calma atmosférica sostenida (variación de temperatura ≤ 0.4°C y humedad ≤ 1.0% HR durante 10 min). En saturación (100% HR) solo se evalúa la temperatura.
+                          </span>
+                        </div>
+
+                        <div>
+                          <span className="text-primary font-bold">Guardia Térmica Unificada (Lotes Deslizantes):</span>{' '}
+                          <span>
+                            Bloquea el cierre por estancamiento si se detecta un enfriamiento activo (caída neta &gt; 0.4°C) evaluando los últimos lotes deslizantes de 10 minutos (hasta 30 minutos acumulados, o hasta 50 minutos si el aire está saturado al 100% HR).
+                          </span>
+                        </div>
+
+                        <div>
+                          <span className="text-primary font-bold">Cese por Variación Térmica:</span>{' '}
+                          <span>
+                            Recuperación térmica de ≥ 0.6°C desde la temperatura mínima registrada durante el evento de lluvia.
+                          </span>
+                        </div>
+
+                        <div>
+                          <span className="text-primary font-bold">Recuperación Adaptativa:</span>{' '}
+                          <span>
+                            La temperatura recupera al menos el 35% de lo caído y la humedad disminuye un 15% del ascenso de la lluvia.
+                          </span>
+                        </div>
+
+                        <div>
+                          <span className="text-primary font-bold">Recuperación Solar:</span>{' '}
+                          <span>
+                            La iluminancia rebota por el umbral elástico calculado a partir del oscurecimiento de la tormenta (sólo diurno).
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}

@@ -87,6 +87,7 @@ model Species {
   variants    ProductVariant[]
   genus       Genus            @relation(fields: [genusId], references: [id], onDelete: Cascade)
   images      SpeciesImage[]
+  glowColor   String?
 
   @@index([genusId])
 }

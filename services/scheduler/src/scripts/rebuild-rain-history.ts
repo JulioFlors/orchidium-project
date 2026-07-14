@@ -2,7 +2,7 @@ import { prisma, ZoneType } from '@package/database'
 
 import { influxClient } from '../lib/influx'
 import { Logger } from '../lib/logger'
-import { isDaytime } from '../lib/rain-manager'
+import { isDaytime, getHumGradientMetrics, getTempGradientMetrics } from '../lib/rain-manager'
 
 const ENV_BACKFILL_DAYS = process.env.BACKFILL_DAYS
   ? parseInt(process.env.BACKFILL_DAYS, 10)
@@ -265,21 +265,24 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
         let luxCondition = false
         let tempDropThreshold = -3.0
-        let humRiseThreshold = 12.0
+        let humRobust = 12.0
+        let humSensitive = 12.0
         let isSensible = false
 
         if (baseLux1 <= 15000) {
           // Rama A (Cielo muy nublado: <= 15 klx)
           luxCondition = true
           tempDropThreshold = -1.5
-          humRiseThreshold = 12.0
+          humRobust = 12.0
+          humSensitive = 10.0
         } else if (baseLux1 <= 26000) {
           // Rama C (Cielo intermedio: 15 klx < Lux <= 26 klx)
           luxCondition = currentMinLux <= baseLux1 * 0.6
           if (currentMinLux <= 15000) {
             isSensible = true
             tempDropThreshold = -1.5
-            humRiseThreshold = 10.0
+            humRobust = 10.0
+            humSensitive = 8.0
           }
         } else {
           // Rama B (Cielo soleado: > 26 klx)
@@ -287,33 +290,46 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           if (currentMinLux <= 15000) {
             isSensible = true
             tempDropThreshold = -2.0
-            humRiseThreshold = 10.0
+            humRobust = 10.0
+            humSensitive = 8.0
           }
         }
 
         const humCondition =
-          dHum1 >= humRiseThreshold ||
-          (baseHum1 >= 90.0 && baseHum1 <= 95.0 && currentMaxHum >= 98.0)
+          dHum1 >= humSensitive || (baseHum1 >= 90.0 && baseHum1 <= 95.0 && currentMaxHum >= 98.0)
 
         if (dTemp1 <= tempDropThreshold && humCondition && luxCondition) {
-          triggered = true
-          triggerReason = `Inferencia de Día: Incremento de +${dHum1.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp1).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
-          calculatedBaselineTemp = baseTemp1
-          calculatedBaselineHum = baseHum1
-          calculatedBaselineLux = baseLux1
-          calculatedBaselineAgeMinutes = 20
-          tempDeltaTemp = dTemp1
-          tempDeltaHum = dHum1
-          dropPct = baseLux1 > 0 ? ((baseLux1 - currentMinLux) / baseLux1) * 100 : 0
+          let passesGradient = true
+          const isPreSaturated = baseHum1 >= 90.0 && baseHum1 <= 95.0 && currentMaxHum >= 98.0
 
-          if (baseLux1 <= 10000) {
-            triggerType = 'DAY_RAMA_A_OSCURO_20M'
-          } else if (baseLux1 <= 15000) {
-            triggerType = 'DAY_RAMA_A_NUBLADO_20M'
-          } else if (baseLux1 <= 26000) {
-            triggerType = isSensible ? 'DAY_RAMA_C_INTERMEDIO_SENSIBLE_20M' : 'DAY_RAMA_C_INTERMEDIO_ROBUSTO_20M'
-          } else {
-            triggerType = isSensible ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_20M' : 'DAY_RAMA_B_SOLEADO_ROBUSTO_20M'
+          if (dHum1 < humRobust && !isPreSaturated) {
+            const hSlopes = getHumGradientMetrics(humBatches[0].samples)
+            const tSlopes = getTempGradientMetrics(tempBatches[0].samples)
+            const hasSteepHum = hSlopes.max1m >= 1.8 || hSlopes.max2m >= 2.5
+            const hasSteepTemp = tSlopes.maxDrop1m <= -0.5
+            passesGradient = hasSteepHum || hasSteepTemp
+          }
+
+          if (passesGradient) {
+            triggered = true
+            triggerReason = `Inferencia de Día (20M): Incremento de +${dHum1.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp1).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
+            calculatedBaselineTemp = baseTemp1
+            calculatedBaselineHum = baseHum1
+            calculatedBaselineLux = baseLux1
+            calculatedBaselineAgeMinutes = 20
+            tempDeltaTemp = dTemp1
+            tempDeltaHum = dHum1
+            dropPct = baseLux1 > 0 ? ((baseLux1 - currentMinLux) / baseLux1) * 100 : 0
+
+            if (baseLux1 <= 10000) {
+              triggerType = 'DAY_RAMA_A_OSCURO_20M'
+            } else if (baseLux1 <= 15000) {
+              triggerType = 'DAY_RAMA_A_NUBLADO_20M'
+            } else if (baseLux1 <= 26000) {
+              triggerType = isSensible ? 'DAY_RAMA_C_INTERMEDIO_SENSIBLE_20M' : 'DAY_RAMA_C_INTERMEDIO_ROBUSTO_20M'
+            } else {
+              triggerType = isSensible ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_20M' : 'DAY_RAMA_B_SOLEADO_ROBUSTO_20M'
+            }
           }
         }
 
@@ -326,21 +342,24 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
           let luxCondition2 = false
           let tempDropThreshold2 = -3.0
-          let humRiseThreshold2 = 14.0
+          let humRobust = 14.0
+          let humSensitive = 14.0
           let isSensible = false
 
           if (baseLux2 <= 15000) {
             // Rama A (Cielo muy nublado: <= 15 klx)
             luxCondition2 = true
             tempDropThreshold2 = -2.5
-            humRiseThreshold2 = 14.0
+            humRobust = 14.0
+            humSensitive = 12.0
           } else if (baseLux2 <= 26000) {
             // Rama C (Cielo intermedio: 15 klx < Lux <= 26 klx)
             luxCondition2 = currentMinLux <= baseLux2 * 0.6
             if (currentMinLux <= 15000) {
               isSensible = true
               tempDropThreshold2 = -2.5
-              humRiseThreshold2 = 12.0
+              humRobust = 12.0
+              humSensitive = 10.0
             }
           } else {
             // Rama B (Cielo soleado: > 26 klx)
@@ -348,33 +367,46 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             if (currentMinLux <= 15000) {
               isSensible = true
               tempDropThreshold2 = -3.0
-              humRiseThreshold2 = 12.0
+              humRobust = 12.0
+              humSensitive = 10.0
             }
           }
 
           const humCondition2 =
-            dHum2 >= humRiseThreshold2 ||
-            (baseHum2 >= 88.0 && baseHum2 <= 95.0 && currentMaxHum >= 98.0)
+            dHum2 >= humSensitive || (baseHum2 >= 88.0 && baseHum2 <= 95.0 && currentMaxHum >= 98.0)
 
           if (dTemp2 <= tempDropThreshold2 && humCondition2 && luxCondition2) {
-            triggered = true
-            triggerReason = `Inferencia de Día: Incremento de +${dHum2.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp2).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
-            calculatedBaselineTemp = baseTemp2
-            calculatedBaselineHum = baseHum2
-            calculatedBaselineLux = baseLux2
-            calculatedBaselineAgeMinutes = 30
-            tempDeltaTemp = dTemp2
-            tempDeltaHum = dHum2
-            dropPct = baseLux2 > 0 ? ((baseLux2 - currentMinLux) / baseLux2) * 100 : 0
+            let passesGradient = true
+            const isPreSaturated = baseHum2 >= 88.0 && baseHum2 <= 95.0 && currentMaxHum >= 98.0
 
-            if (baseLux2 <= 10000) {
-              triggerType = 'DAY_RAMA_A_OSCURO_30M'
-            } else if (baseLux2 <= 15000) {
-              triggerType = 'DAY_RAMA_A_NUBLADO_30M'
-            } else if (baseLux2 <= 26000) {
-              triggerType = isSensible ? 'DAY_RAMA_C_INTERMEDIO_SENSIBLE_30M' : 'DAY_RAMA_C_INTERMEDIO_ROBUSTO_30M'
-            } else {
-              triggerType = isSensible ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_30M' : 'DAY_RAMA_B_SOLEADO_ROBUSTO_30M'
+            if (dHum2 < humRobust && !isPreSaturated) {
+              const hSlopes = getHumGradientMetrics(humBatches[0].samples)
+              const tSlopes = getTempGradientMetrics(tempBatches[0].samples)
+              const hasSteepHum = hSlopes.max1m >= 1.8 || hSlopes.max2m >= 2.5
+              const hasSteepTemp = tSlopes.maxDrop1m <= -0.5
+              passesGradient = hasSteepHum || hasSteepTemp
+            }
+
+            if (passesGradient) {
+              triggered = true
+              triggerReason = `Inferencia de Día (30M): Incremento de +${dHum2.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp2).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
+              calculatedBaselineTemp = baseTemp2
+              calculatedBaselineHum = baseHum2
+              calculatedBaselineLux = baseLux2
+              calculatedBaselineAgeMinutes = 30
+              tempDeltaTemp = dTemp2
+              tempDeltaHum = dHum2
+              dropPct = baseLux2 > 0 ? ((baseLux2 - currentMinLux) / baseLux2) * 100 : 0
+
+              if (baseLux2 <= 10000) {
+                triggerType = 'DAY_RAMA_A_OSCURO_30M'
+              } else if (baseLux2 <= 15000) {
+                triggerType = 'DAY_RAMA_A_NUBLADO_30M'
+              } else if (baseLux2 <= 26000) {
+                triggerType = isSensible ? 'DAY_RAMA_C_INTERMEDIO_SENSIBLE_30M' : 'DAY_RAMA_C_INTERMEDIO_ROBUSTO_30M'
+              } else {
+                triggerType = isSensible ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_30M' : 'DAY_RAMA_B_SOLEADO_ROBUSTO_30M'
+              }
             }
           }
 
@@ -388,21 +420,24 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
             let luxCondition3 = false
             let tempDropThreshold3 = -4.0
-            let humRiseThreshold3 = 18.0
+            let humRobust = 18.0
+            let humSensitive = 18.0
             let isSensible = false
 
             if (baseLux3 <= 15000) {
               // Rama A (Cielo muy nublado: <= 15 klx)
               luxCondition3 = true
               tempDropThreshold3 = -3.5
-              humRiseThreshold3 = 18.0
+              humRobust = 16.0
+              humSensitive = 14.0
             } else if (baseLux3 <= 26000) {
               // Rama C (Cielo intermedio: 15 klx < Lux <= 26 klx)
               luxCondition3 = currentMinLux <= baseLux3 * 0.6
               if (currentMinLux <= 15000) {
                 isSensible = true
                 tempDropThreshold3 = -3.5
-                humRiseThreshold3 = 14.0
+                humRobust = 14.0
+                humSensitive = 12.0
               }
             } else {
               // Rama B (Cielo soleado: > 26 klx)
@@ -410,33 +445,46 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
               if (currentMinLux <= 15000) {
                 isSensible = true
                 tempDropThreshold3 = -4.0
-                humRiseThreshold3 = 14.0
+                humRobust = 14.0
+                humSensitive = 12.0
               }
             }
 
             const humCondition3 =
-              dHum3 >= humRiseThreshold3 ||
-              (baseHum3 >= 86.0 && baseHum3 <= 95.0 && currentMaxHum >= 98.0)
+              dHum3 >= humSensitive || (baseHum3 >= 86.0 && baseHum3 <= 95.0 && currentMaxHum >= 98.0)
 
             if (dTemp3 <= tempDropThreshold3 && humCondition3 && luxCondition3) {
-              triggered = true
-              triggerReason = `Inferencia de Día: Incremento de +${dHum3.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp3).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
-              calculatedBaselineTemp = baseTemp3
-              calculatedBaselineHum = baseHum3
-              calculatedBaselineLux = baseLux3
-              calculatedBaselineAgeMinutes = 40
-              tempDeltaTemp = dTemp3
-              tempDeltaHum = dHum3
-              dropPct = baseLux3 > 0 ? ((baseLux3 - currentMinLux) / baseLux3) * 100 : 0
+              let passesGradient = true
+              const isPreSaturated = baseHum3 >= 86.0 && baseHum3 <= 95.0 && currentMaxHum >= 98.0
 
-              if (baseLux3 <= 10000) {
-                triggerType = 'DAY_RAMA_A_OSCURO_40M'
-              } else if (baseLux3 <= 15000) {
-                triggerType = 'DAY_RAMA_A_NUBLADO_40M'
-              } else if (baseLux3 <= 26000) {
-                triggerType = isSensible ? 'DAY_RAMA_C_INTERMEDIO_SENSIBLE_40M' : 'DAY_RAMA_C_INTERMEDIO_ROBUSTO_40M'
-              } else {
-                triggerType = isSensible ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_40M' : 'DAY_RAMA_B_SOLEADO_ROBUSTO_40M'
+              if (dHum3 < humRobust && !isPreSaturated) {
+                const hSlopes = getHumGradientMetrics(humBatches[0].samples)
+                const tSlopes = getTempGradientMetrics(tempBatches[0].samples)
+                const hasSteepHum = hSlopes.max1m >= 1.8 || hSlopes.max2m >= 2.5
+                const hasSteepTemp = tSlopes.maxDrop1m <= -0.5
+                passesGradient = hasSteepHum || hasSteepTemp
+              }
+
+              if (passesGradient) {
+                triggered = true
+                triggerReason = `Inferencia de Día (40M): Incremento de +${dHum3.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp3).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
+                calculatedBaselineTemp = baseTemp3
+                calculatedBaselineHum = baseHum3
+                calculatedBaselineLux = baseLux3
+                calculatedBaselineAgeMinutes = 40
+                tempDeltaTemp = dTemp3
+                tempDeltaHum = dHum3
+                dropPct = baseLux3 > 0 ? ((baseLux3 - currentMinLux) / baseLux3) * 100 : 0
+
+                if (baseLux3 <= 10000) {
+                  triggerType = 'DAY_RAMA_A_OSCURO_40M'
+                } else if (baseLux3 <= 15000) {
+                  triggerType = 'DAY_RAMA_A_NUBLADO_40M'
+                } else if (baseLux3 <= 26000) {
+                  triggerType = isSensible ? 'DAY_RAMA_C_INTERMEDIO_SENSIBLE_40M' : 'DAY_RAMA_C_INTERMEDIO_ROBUSTO_40M'
+                } else {
+                  triggerType = isSensible ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_40M' : 'DAY_RAMA_B_SOLEADO_ROBUSTO_40M'
+                }
               }
             }
           }
@@ -462,8 +510,8 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
         const varHumCur = maxHumCur - minHumCur
 
         const tempFloor = minHumPre >= 98.0 ? 0.8 : 0.7
-        const tempDropThreshold = Math.max(tempFloor, varTempPre * 1.8)
-        const humRiseThreshold = Math.max(3.0, varHumPre * 1.6)
+        const tempDropThreshold = Math.max(tempFloor, varTempPre * 1.6)
+        const humRiseThreshold = Math.max(3.0, varHumPre * 1.4)
 
         // Dirección y tendencias
         const trendTemp = tempBatches[0].min - tempBatches[2].max
@@ -527,15 +575,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
         minTempInRain = tempBatches[0].min
         maxHumInRain = humBatches[0].max
 
-        const startSampleT =
-          tempBatches[0].samples.find((s) => s.timestamp === preciseStartMs) ||
-          tempBatches[0].samples[0]
-        const startSampleH =
-          humBatches[0].samples.find((s) => s.timestamp === preciseStartMs) ||
-          humBatches[0].samples[0]
-        const startSampleL =
-          luxBatches[0].samples.find((s) => s.timestamp === preciseStartMs) ||
-          luxBatches[0].samples[0]
+
 
         await openVirtualEvent(
           new Date(preciseStartMs),

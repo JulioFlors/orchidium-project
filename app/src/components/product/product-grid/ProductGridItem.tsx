@@ -39,11 +39,15 @@ export function ProductGridItem({ product, index }: Props) {
   const { formatRange } = useFormatPrice()
   const priceLabel = formatRange(minPrice, maxPrice)
 
-  // Obtenemos dinámicamente el color dominante vibrante de la primera imagen
-  const { color } = useImageColor(getImageUrl(product.images[0]))
+  // Obtenemos dinámicamente el color dominante vibrante de la primera imagen si no hay color guardado
+  const { color } = useImageColor(product.glowColor ? '' : getImageUrl(product.images[0]))
 
   // Color RGB para el background del glow
-  const glowColor = color ? `rgb(${color.r}, ${color.g}, ${color.b})` : 'rgb(128, 128, 128)'
+  const glowColor = product.glowColor
+    ? product.glowColor
+    : color
+      ? `rgb(${color.r}, ${color.g}, ${color.b})`
+      : 'rgb(128, 128, 128)'
 
   return (
     <div

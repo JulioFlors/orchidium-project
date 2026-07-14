@@ -128,6 +128,9 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
   midnightVET.setUTCHours(0, 0, 0, 0)
   const midnightVETInUTC = new Date(midnightVET.getTime() + VET_OFFSET)
 
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+  const isCustomDate = dateRegex.test(range)
+
   if (
     range === '30m' ||
     range === '90m' ||
@@ -136,7 +139,8 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
     range === '24h' ||
     range === '5-19h' ||
     range === '8-16h' ||
-    range === '1D'
+    range === '1D' ||
+    isCustomDate
   ) {
     let timeFilter = `AND time >= now() - interval '24 hours'`
 
@@ -170,6 +174,22 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
         const start = yesterdayMidnightVETInUTC
         const end = new Date(yesterdayMidnightVETInUTC.getTime() + 24 * 3600000 - 1000)
 
+        timeFilter = `AND time >= TIMESTAMP '${start.toISOString()}' AND time <= TIMESTAMP '${end.toISOString()}'`
+      }
+    } else if (isCustomDate) {
+      const [year, month, day] = range.split('-').map(Number)
+      // Crear rango de 00:00 a 23:59:59 local de Caracas (-04:00)
+      // En UTC, 00:00 VET es 04:00 UTC.
+      const start = new Date(Date.UTC(year, month - 1, day, 4, 0, 0, 0))
+      // 23:59:59.999 VET es 03:59:59.999 UTC del día siguiente.
+      const end = new Date(start.getTime() + 24 * 3600000 - 1)
+
+      if (metric === 'illuminance') {
+        // Para iluminancia, filtrar período diurno (5h a 19h local)
+        const startDay = new Date(start.getTime() + 5 * 3600000)
+        const endDay = new Date(start.getTime() + 19 * 3600000 + 59 * 1000)
+        timeFilter = `AND time >= TIMESTAMP '${startDay.toISOString()}' AND time <= TIMESTAMP '${endDay.toISOString()}'`
+      } else {
         timeFilter = `AND time >= TIMESTAMP '${start.toISOString()}' AND time <= TIMESTAMP '${end.toISOString()}'`
       }
     }
@@ -764,45 +784,33 @@ export async function getRainSummaryInternal(range: string, zone: ZoneType) {
   let startDate = new Date()
   let endDate: Date | undefined = undefined
 
-  switch (range) {
-    case 'today': {
-      const caracasOffset = -4 * 60 // -240 minutos
-      const now = new Date()
-      const caracasTime = new Date(
-        now.getTime() + (caracasOffset + now.getTimezoneOffset()) * 60000,
-      )
-
-      caracasTime.setHours(0, 0, 0, 0)
-      startDate = new Date(
-        caracasTime.getTime() - (caracasOffset + now.getTimezoneOffset()) * 60000,
-      )
-      break
-    }
-    case 'yesterday':
-    case '1D': {
-      const caracasOffset = -4 * 60 // -240 minutos
-      const now = new Date()
-      const caracasTime = new Date(
-        now.getTime() + (caracasOffset + now.getTimezoneOffset()) * 60000,
-      )
-
-      const caracasYesterdayStart = new Date(caracasTime)
-
-      caracasYesterdayStart.setDate(caracasYesterdayStart.getDate() - 1)
-      caracasYesterdayStart.setHours(0, 0, 0, 0)
-
-      const caracasYesterdayEnd = new Date(caracasYesterdayStart)
-
-      caracasYesterdayEnd.setHours(23, 59, 59, 999)
-
-      startDate = new Date(
-        caracasYesterdayStart.getTime() - (caracasOffset + now.getTimezoneOffset()) * 60000,
-      )
-      endDate = new Date(
-        caracasYesterdayEnd.getTime() - (caracasOffset + now.getTimezoneOffset()) * 60000,
-      )
-      break
-    }
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+  if (dateRegex.test(range)) {
+    const [year, month, day] = range.split('-').map(Number)
+    // Rango de 00:00 a 23:59:59.999 local de Caracas (-04:00)
+    startDate = new Date(Date.UTC(year, month - 1, day, 4, 0, 0, 0))
+    endDate = new Date(startDate.getTime() + 24 * 3600000 - 1)
+  } else {
+    switch (range) {
+      case 'today': {
+        const VET_OFFSET = 4 * 3600000
+        const now = new Date()
+        const midnightVET = new Date(now.getTime() - VET_OFFSET)
+        midnightVET.setUTCHours(0, 0, 0, 0)
+        startDate = new Date(midnightVET.getTime() + VET_OFFSET)
+        break
+      }
+      case 'yesterday':
+      case '1D': {
+        const VET_OFFSET = 4 * 3600000
+        const now = new Date()
+        const midnightVET = new Date(now.getTime() - VET_OFFSET)
+        midnightVET.setUTCHours(0, 0, 0, 0)
+        const todayMidnightInUTC = new Date(midnightVET.getTime() + VET_OFFSET)
+        startDate = new Date(todayMidnightInUTC.getTime() - 24 * 3600000)
+        endDate = new Date(todayMidnightInUTC.getTime() - 1)
+        break
+      }
     case '12h':
       startDate = new Date(Date.now() - 12 * 3600000)
       break
@@ -821,6 +829,7 @@ export async function getRainSummaryInternal(range: string, zone: ZoneType) {
     default:
       startDate = new Date(Date.now() - 24 * 3600000)
   }
+}
 
   try {
     const rainEvents = await prisma.rainEvent.findMany({
@@ -976,4 +985,56 @@ export async function getRainEventTelemetryInternal(eventId: string) {
 
     return null
   }
+}
+
+export async function getAvailableTelemetryRange(): Promise<{ minDate: string; maxDate: string }> {
+  let minDate = '2026-05-25' // Fallback si no hay datos
+  const searchStart = new Date('2026-05-20T00:00:00Z')
+  const now = new Date()
+
+  let found = false
+  while (searchStart < now && !found) {
+    const nextSearch = new Date(searchStart.getTime())
+    nextSearch.setUTCMonth(nextSearch.getUTCMonth() + 1) // Avanzar 1 mes para acotar la búsqueda
+
+    const query = `
+      SELECT time 
+      FROM environment_metrics 
+      WHERE zone = '${ZoneType.EXTERIOR}'
+        AND time >= '${searchStart.toISOString()}'
+        AND time < '${nextSearch.toISOString()}'
+      ORDER BY time ASC 
+      LIMIT 1
+    `
+    try {
+      const reader = influxClient.query(query)
+      for await (const row of reader as AsyncIterable<any>) {
+        if (row.time) {
+          const d = new Date(safeTimeToISO(row.time))
+          const year = d.getUTCFullYear()
+          const month = String(d.getUTCMonth() + 1).padStart(2, '0')
+          const day = String(d.getUTCDate()).padStart(2, '0')
+          minDate = `${year}-${month}-${day}`
+          found = true
+          break
+        }
+      }
+    } catch (error) {
+      Logger.error(`Error al consultar rango de fecha mínima (${searchStart.toISOString()} - ${nextSearch.toISOString()}):`, error)
+      break // Abortar en caso de error para evitar loops infinitos
+    }
+
+    searchStart.setTime(nextSearch.getTime())
+  }
+
+  const todayStr = new Date().toLocaleDateString('en-US', {
+    timeZone: 'America/Caracas',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+  const [m, d, y] = todayStr.split('/')
+  const maxDate = `${y}-${m}-${d}`
+
+  return { minDate, maxDate }
 }

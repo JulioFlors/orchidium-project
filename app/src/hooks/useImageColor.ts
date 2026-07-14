@@ -191,8 +191,10 @@ export function useImageColor(imageUrl?: string | null) {
 
     img.crossOrigin = 'anonymous' // Crucial para S3 y proveedores externos
 
-    // Anexar querystring de caché en caso de dev-mode u orígenes ruidosos
-    img.src = imageUrl.startsWith('http') ? imageUrl : `${window.location.origin}${imageUrl}`
+    // Pasar imágenes externas por el proxy CORS del backend para evitar restricciones de Canvas
+    img.src = imageUrl.startsWith('http')
+      ? `/api/image-proxy?url=${encodeURIComponent(imageUrl)}`
+      : `${window.location.origin}${imageUrl}`
 
     const onLoad = () => {
       const rgb = getDominantVibrantColor(img)

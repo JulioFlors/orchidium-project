@@ -67,7 +67,12 @@ export async function getSpeciesById(id: string) {
 // CREATE
 // ─────────────────────────────────────────────────────────────
 
-export async function createSpecies(data: { name: string; genusId: string; description?: string }) {
+export async function createSpecies(data: {
+  name: string
+  genusId: string
+  description?: string
+  glowColor?: string
+}) {
   try {
     const slug = toSlug(data.name)
     const species = await prisma.species.create({
@@ -76,10 +81,11 @@ export async function createSpecies(data: { name: string; genusId: string; descr
         slug,
         genusId: data.genusId,
         description: data.description?.trim() ?? null,
+        glowColor: data.glowColor?.trim() ?? null,
       },
     })
 
-    revalidatePath('/species')
+    revalidatePath('/catalog')
 
     return { ok: true, species }
   } catch (err) {
@@ -95,7 +101,7 @@ export async function createSpecies(data: { name: string; genusId: string; descr
 
 export async function updateSpecies(
   id: string,
-  data: { name: string; genusId: string; description?: string },
+  data: { name: string; genusId: string; description?: string; glowColor?: string },
 ) {
   try {
     const slug = toSlug(data.name)
@@ -106,10 +112,11 @@ export async function updateSpecies(
         slug,
         genusId: data.genusId,
         description: data.description?.trim() ?? null,
+        glowColor: data.glowColor?.trim() ?? null,
       },
     })
 
-    revalidatePath('/species')
+    revalidatePath('/catalog')
 
     return { ok: true, species }
   } catch (err) {
@@ -144,7 +151,7 @@ export async function deleteSpecies(id: string) {
     }
 
     await prisma.species.delete({ where: { id } })
-    revalidatePath('/species')
+    revalidatePath('/catalog')
 
     return { ok: true }
   } catch (err) {
@@ -163,7 +170,7 @@ export async function addSpeciesImage(speciesId: string, url: string) {
   try {
     const image = await prisma.speciesImage.create({ data: { speciesId, url } })
 
-    revalidatePath('/species')
+    revalidatePath('/catalog')
 
     return { ok: true, image }
   } catch (err) {
@@ -190,7 +197,7 @@ export async function deleteSpeciesImage(imageId: string) {
 
     await prisma.speciesImage.delete({ where: { id: imageId } })
     await deleteR2Object(r2Key)
-    revalidatePath('/species')
+    revalidatePath('/catalog')
 
     return { ok: true }
   } catch (err) {
@@ -218,7 +225,7 @@ export async function toggleSpeciesFeatured(id: string, isFeatured: boolean) {
       `[Species] toggleSpeciesFeatured llamado para ID ${id} con valor ${isFeatured} (deshabilitado en producción)`,
     )
 
-    revalidatePath('/species')
+    revalidatePath('/catalog')
     revalidatePath('/')
     revalidatePath('/shop-manager')
 

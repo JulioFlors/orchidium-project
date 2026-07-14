@@ -85,13 +85,12 @@ export const useDeviceHeartbeat = (
     connectionState = 'unknown'
   } else if (lastKnownHeartbeat !== null && now > 0) {
     const elapsed = now - lastKnownHeartbeat
+    const isLiveMqtt = statusData && !isRetained
 
-    if (elapsed > offlineThreshold) {
-      connectionState = 'offline'
-    } else if (elapsed > zombieThreshold) {
-      connectionState = 'zombie'
-    } else {
-      // Normalizar los posibles payloads de desconexión y vida a un estado unificado
+    if (!isEmaTopic && !isLiveMqtt) {
+      // Para el Actuador, cuando los datos provienen de Postgres o mensajes retenidos,
+      // confiamos en el estado de la base de datos directamente, ya que esta solo
+      // almacena cambios y el scheduler se encarga de marcarlo offline si falla.
       const normalizedStatus =
         rawStatus === 'lwt_disconnect' || rawStatus === 'offline'
           ? 'offline'
@@ -99,6 +98,21 @@ export const useDeviceHeartbeat = (
             ? 'online'
             : rawStatus
       connectionState = normalizedStatus as DeviceConnectionState
+    } else {
+      // Para el EMA o para mensajes MQTT en tiempo real, aplicamos los umbrales de inactividad
+      if (elapsed > offlineThreshold) {
+        connectionState = 'offline'
+      } else if (elapsed > zombieThreshold) {
+        connectionState = 'zombie'
+      } else {
+        const normalizedStatus =
+          rawStatus === 'lwt_disconnect' || rawStatus === 'offline'
+            ? 'offline'
+            : ['online', 'ping', 'reboot'].includes(rawStatus)
+              ? 'online'
+              : rawStatus
+        connectionState = normalizedStatus as DeviceConnectionState
+      }
     }
   } else {
     // Si no tenemos ningún latido conocido en absoluto (ej. inicio de suscripción y BD vacía)
