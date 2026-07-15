@@ -8,9 +8,9 @@ import {
   Title,
   Subtitle,
   TeslaSection,
-  TeslaValuesSection,
   TeslaContactSection,
   HeroSlideshow,
+  ProductSlideshow,
 } from '@/components'
 
 export const metadata: Metadata = {
@@ -171,23 +171,18 @@ export default async function HomePage() {
       {/* Carrusel Superior Horizontal con Autoplay y navegación por teclado/bullets */}
       <HeroSlideshow slides={heroSlidesData} />
 
-      {/* SECCIÓN 5: Promesas de Valor */}
-      <TeslaValuesSection />
-
       {/* SECCIÓN 6: Los más vendidos (Especies Destacadas) */}
       {featuredProducts.length > 0 && (
         <section
-          className="bg-canvas relative flex min-h-dvh w-full snap-start flex-col justify-between overflow-y-auto pt-24 pb-16"
+          className="bg-canvas relative flex min-h-dvh w-full snap-start flex-col overflow-y-auto  my-8 mx-4 sm:mx-4.5 lg:mx-5"
           id="productos-destacados"
-        >
-          <div className="mx-auto w-full max-w-7xl grow px-4 sm:px-6 lg:px-8">
-            <div className="mb-8 text-center">
-              <Title title="Los más vendidos" />
-              <Subtitle subtitle="Las especies favoritas de nuestros coleccionistas en Ciudad Guayana" />
-            </div>
+        > 
+            <Title title="Los más vendidos" />
 
-            <ProductGrid index={0} products={featuredProducts} />
-          </div>
+            <div className="mt-9">
+              <ProductSlideshow products={featuredProducts} />
+            </div>
+ 
         </section>
       )}
 

@@ -6,11 +6,17 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { MdEdit, MdDelete, MdInfo, MdFolder, MdCategory, MdSpa } from 'react-icons/md'
 
-import { CatalogSpeciesCard } from './CatalogSpeciesCard'
+import {
+  CatalogSpeciesCard,
+  TypeManagerModal,
+  GenusFormModal,
+  SpeciesFormModal,
+} from './components'
 import { EnvironmentCard } from '../../../(monitoring)/monitoring/ui/components/EnvironmentCard'
-import { Button, Heading, ActionMenu, Modal } from '@/components'
-import { updateGenus, deleteGenus } from '@/actions'
+import { Heading, ActionMenu } from '@/components'
+import { updateGenus, deleteGenus, createGenus, createSpecies } from '@/actions'
 import { useToastStore } from '@/store/toast/toast.store'
+import { useFormDraftStore } from '@/store'
 
 // ─────────────────────────────────────────────────────────────
 // Interfaces y Tipos
@@ -80,7 +86,9 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false)
   const [isGenusModalOpen, setIsGenusModalOpen] = useState(false)
   const [editingGenus, setEditingGenus] = useState<Genus | null>(null)
-  const [genusFormName, setGenusFormName] = useState('')
+
+  // Estados para creación de Especie
+  const [isSpeciesCreateModalOpen, setIsSpeciesCreateModalOpen] = useState(false)
 
   // Conteo Cuantitativo
   const totalSpecies = speciesList.length
@@ -113,38 +121,55 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
   // Handlers para Géneros
   function openEditGenus(genus: Genus) {
     setEditingGenus(genus)
-    setGenusFormName(genus.name)
     setIsGenusModalOpen(true)
   }
 
-  function handleSaveGenus() {
-    if (!editingGenus || !genusFormName.trim()) return
+  function handleSaveOrCreateGenus(name: string, type: PlantType) {
+    if (editingGenus) {
+      // Caso de Edición
+      startTransition(async () => {
+        const result = await updateGenus(editingGenus.id, {
+          name: name.trim(),
+          type: editingGenus.type, // Limitamos edición estrictamente al nombre
+        })
 
-    startTransition(async () => {
-      const result = await updateGenus(editingGenus.id, {
-        name: genusFormName.trim(),
-        type: editingGenus.type, // Limitamos edición estrictamente al nombre
+        if (result.ok && result.genus) {
+          addToast('Género actualizado correctamente.', 'success')
+          // Actualizar en el estado local
+          setGeneraList((prev) =>
+            prev.map((g) => (g.id === editingGenus.id ? { ...g, name: name.trim() } : g)),
+          )
+          setSpeciesList((prev) =>
+            prev.map((s) =>
+              s.genusId === editingGenus.id
+                ? { ...s, genus: { ...s.genus, name: name.trim() } }
+                : s,
+            ),
+          )
+          setIsGenusModalOpen(false)
+          setEditingGenus(null)
+        } else {
+          addToast(result.message || 'Error al actualizar el género.', 'error')
+        }
       })
+    } else {
+      // Caso de Creación
+      startTransition(async () => {
+        const result = await createGenus({
+          name: name.trim(),
+          type,
+        })
 
-      if (result.ok && result.genus) {
-        addToast('Género actualizado correctamente.', 'success')
-        // Actualizar en el estado local
-        setGeneraList((prev) =>
-          prev.map((g) => (g.id === editingGenus.id ? { ...g, name: genusFormName.trim() } : g)),
-        )
-        setSpeciesList((prev) =>
-          prev.map((s) =>
-            s.genusId === editingGenus.id
-              ? { ...s, genus: { ...s.genus, name: genusFormName.trim() } }
-              : s,
-          ),
-        )
-        setIsGenusModalOpen(false)
-        setEditingGenus(null)
-      } else {
-        addToast(result.message || 'Error al actualizar el género.', 'error')
-      }
-    })
+        if (result.ok && result.genus) {
+          addToast('Género creado con éxito.', 'success')
+          setGeneraList((prev) => [...prev, result.genus as Genus])
+          useFormDraftStore.getState().clearDraft('catalog-genus-form')
+          setIsGenusModalOpen(false)
+        } else {
+          addToast(result.message || 'Error al crear el género.', 'error')
+        }
+      })
+    }
   }
 
   function handleDeleteGenusClick(genus: Genus) {
@@ -170,6 +195,58 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
         setGeneraList((prev) => prev.filter((g) => g.id !== genus.id))
       } else {
         addToast(result.message || 'Error al eliminar el género.', 'error')
+      }
+    })
+  }
+
+  // Handlers para Especies
+  function openCreateSpecies() {
+    setIsSpeciesCreateModalOpen(true)
+  }
+
+  function handleSaveSpecies(data: { name: string; genusId: string; description: string; glowColor: string }) {
+    if (!data.name.trim()) {
+      addToast('El nombre de la especie es obligatorio.', 'warning')
+      return
+    }
+    if (!data.genusId) {
+      addToast('Debes seleccionar un género.', 'warning')
+      return
+    }
+
+    startTransition(async () => {
+      const result = await createSpecies({
+        name: data.name.trim(),
+        genusId: data.genusId,
+        description: data.description,
+        glowColor: data.glowColor,
+      })
+
+      if (result.ok && result.species) {
+        addToast('Especie creada con éxito.', 'success')
+        const genusObj = generaList.find((g) => g.id === data.genusId)
+        if (genusObj) {
+          const newSpecies: Species = {
+            id: result.species.id,
+            name: result.species.name,
+            slug: result.species.slug,
+            description: result.species.description,
+            genusId: result.species.genusId,
+            genus: genusObj,
+            images: [],
+            glowColor: result.species.glowColor,
+            _count: {
+              variants: 0,
+              plants: 0,
+            },
+          }
+          setSpeciesList((prev) => [...prev, newSpecies])
+        }
+        useFormDraftStore.getState().clearDraft('catalog-species-form')
+        setIsSpeciesCreateModalOpen(false)
+        router.push(`/catalog/${result.species.id}`)
+      } else {
+        addToast(result.message || 'Error al crear la especie.', 'error')
       }
     })
   }
@@ -202,7 +279,6 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
           value={totalGenera}
           onClick={() => {
             setEditingGenus(null)
-            setGenusFormName('')
             setIsGenusModalOpen(true)
           }}
         />
@@ -213,7 +289,7 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
           title="Especies en Catálogo"
           unit="especies"
           value={totalSpecies}
-          onClick={() => router.push('/catalog/new')}
+          onClick={openCreateSpecies}
         />
       </div>
 
@@ -288,15 +364,19 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
                                   onClick: () => handleDeleteGenusClick(genusObj),
                                 },
                               ]}
-                              triggerClassName="h-6 w-6"
+                              triggerClassName="h-7 w-7 mt-1.5"
                             />
                           )}
                         </div>
 
-                        {/* Grid de Cards de Especies */}
-                        <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-3 tds-2xl:grid-cols-4 mt-6 grid gap-x-4 gap-y-2">
-                          {speciesInGenus.map((species, i) => (
-                            <CatalogSpeciesCard key={species.id} index={i} species={species} />
+                        {/* Listado de Especies */}
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                          {speciesInGenus.map((species, speciesIndex) => (
+                            <CatalogSpeciesCard
+                              key={species.id}
+                              index={speciesIndex}
+                              species={species}
+                            />
                           ))}
                         </div>
                       </div>
@@ -309,82 +389,34 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
         </div>
       )}
 
-      {/* Modal Informativo: Tipos de Plantas */}
-      <Modal
+      {/* Modales Extrayendo Lógica */}
+      <TypeManagerModal
         isOpen={isTypeModalOpen}
-        size="md"
-        title="Tipos de Plantas Estáticos"
+        plantTypeSingleLabels={PLANT_TYPE_SINGLE_LABELS}
         onClose={() => setIsTypeModalOpen(false)}
-      >
-        <div className="flex flex-col gap-4">
-          <p className="text-secondary text-sm leading-relaxed">
-            Actualmente, los tipos de plantas están definidos como una enumeración estática en la base de datos para preservar la estabilidad de ruteo y navegación comercial.
-          </p>
-          <div className="border-input-outline divide-input-outline flex flex-col divide-y rounded-lg border bg-zinc-50/50 dark:bg-zinc-900/50">
-            {Object.entries(PLANT_TYPE_SINGLE_LABELS).map(([key, label]) => (
-              <div key={key} className="flex items-center justify-between p-3.5">
-                <span className="text-primary text-sm font-semibold">{label}</span>
-                <span className="text-secondary font-mono text-xs opacity-60">{key}</span>
-              </div>
-            ))}
-          </div>
-          <div className="mt-2 flex justify-end">
-            <Button size="sm" variant="secondary" onClick={() => setIsTypeModalOpen(false)}>
-              Cerrar
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      />
 
-      {/* Modal: Edición de Género */}
-      <Modal
+      <GenusFormModal
+        editingGenus={editingGenus}
         isOpen={isGenusModalOpen}
-        size="md"
-        title={editingGenus ? 'Editar Género' : 'Gestor de Géneros'}
-        onClose={() => setIsGenusModalOpen(false)}
-      >
-        <div className="flex flex-col gap-4">
-          {editingGenus ? (
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-secondary text-xs font-semibold uppercase opacity-60">
-                  Nombre del Género
-                </label>
-                <input
-                  className="input-base"
-                  placeholder="Ej: Cattleya"
-                  type="text"
-                  value={genusFormName}
-                  onChange={(e) => setGenusFormName(e.target.value)}
-                />
-              </div>
-              <div className="flex items-center gap-1.5 rounded-lg bg-zinc-50 p-3 text-xs text-zinc-500 dark:bg-zinc-900/50">
-                <MdInfo className="h-4 w-4 text-purple-500" />
-                <span>Por seguridad, el tipo de planta ({PLANT_TYPE_SINGLE_LABELS[editingGenus.type]}) no puede ser modificado.</span>
-              </div>
-              <div className="mt-4 flex justify-end gap-3">
-                <Button variant="secondary" onClick={() => setIsGenusModalOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button disabled={isPending} onClick={handleSaveGenus}>
-                  {isPending ? 'Guardando...' : 'Guardar Cambios'}
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-4">
-              <p className="text-secondary text-sm">
-                Para registrar un nuevo género botánico o asociarlo a especies, ingresa a la configuración o utiliza los formularios rápidos de creación.
-              </p>
-              <div className="mt-2 flex justify-end">
-                <Button size="sm" variant="secondary" onClick={() => setIsGenusModalOpen(false)}>
-                  Cerrar
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-      </Modal>
+        isPending={isPending}
+        plantTypeLabels={PLANT_TYPE_LABELS}
+        plantTypeSingleLabels={PLANT_TYPE_SINGLE_LABELS}
+        onClose={() => {
+          setIsGenusModalOpen(false)
+          setEditingGenus(null)
+        }}
+        onSave={handleSaveOrCreateGenus}
+      />
+
+      <SpeciesFormModal
+        generaList={generaList}
+        isOpen={isSpeciesCreateModalOpen}
+        isPending={isPending}
+        plantTypeLabels={PLANT_TYPE_LABELS}
+        onClose={() => setIsSpeciesCreateModalOpen(false)}
+        onSave={handleSaveSpecies}
+      />
     </div>
   )
 }

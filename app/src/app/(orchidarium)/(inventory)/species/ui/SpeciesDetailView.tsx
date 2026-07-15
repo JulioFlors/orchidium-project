@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { PiLeafFill, PiImagesFill, PiArrowLeftBold } from 'react-icons/pi'
 import { MdSave, MdClose, MdDelete } from 'react-icons/md'
 
-import { Button, ImageUploader } from '@/components'
+import { Button, ImageUploader, FormField, Input, SelectDropdown, Textarea } from '@/components'
 import {
   createSpecies,
   updateSpecies,
@@ -320,99 +320,89 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
             <h2 className="text-primary text-lg font-bold">Información Taxonómica</h2>
           </div>
 
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-            <div className="flex flex-col gap-1.5 sm:col-span-1">
-              <label className="text-secondary text-sm font-medium" htmlFor="species-name">
-                Nombre Científico *
-              </label>
-              <input
-                className="input-base"
-                id="species-name"
-                placeholder="Ej: Cattleya trianae"
-                type="text"
-                value={form.name}
-                onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-secondary text-sm font-medium" htmlFor="plant-type">
-                Tipo de Planta *
-              </label>
-              <select
-                className="input-base"
-                id="plant-type"
-                value={selectedPlantType}
-                onChange={(e) => handlePlantTypeChange(e.target.value as PlantType)}
-              >
-                {Object.entries(PLANT_TYPE_LABELS).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-secondary text-sm font-medium" htmlFor="species-genus">
-                Género *
-              </label>
-              <select
-                className="input-base"
-                id="species-genus"
-                value={form.genusId}
-                onChange={(e) => setForm((p) => ({ ...p, genusId: e.target.value }))}
-              >
-                {filteredGenera.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-secondary text-sm font-medium" htmlFor="species-glow">
-                Color de Hover (Ambient Glow)
-              </label>
-              <div className="flex items-center gap-3">
-                <select
-                  className="input-base flex-1"
-                  id="species-glow"
-                  value={form.glowColor}
-                  onChange={(e) => setForm((p) => ({ ...p, glowColor: e.target.value }))}
-                >
-                  <option value="rgb(16, 185, 129)">Verde Esmeralda</option>
-                  <option value="rgb(236, 72, 153)">Magenta Vibrante</option>
-                  <option value="rgb(249, 115, 22)">Naranja Sol</option>
-                  <option value="rgb(168, 85, 247)">Púrpura Orquídea</option>
-                  <option value="rgb(234, 179, 8)">Amarillo Cactus</option>
-                  <option value="rgb(6, 182, 212)">Azul / Cian</option>
-                  <option value="rgb(239, 68, 68)">Rojo Flor</option>
-                  {!['rgb(16, 185, 129)', 'rgb(236, 72, 153)', 'rgb(249, 115, 22)', 'rgb(168, 85, 247)', 'rgb(234, 179, 8)', 'rgb(6, 182, 212)', 'rgb(239, 68, 68)'].includes(form.glowColor) && (
-                    <option value={form.glowColor}>Personalizado/Sugerido: {form.glowColor}</option>
-                  )}
-                </select>
-                <div
-                  className="h-9 w-9 rounded-lg border border-input-outline shadow-inner transition-colors duration-300"
-                  style={{ backgroundColor: form.glowColor }}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <FormField htmlFor="species-name" label="Nombre Científico *">
+                <Input
+                  id="species-name"
+                  placeholder="Ej: Cattleya trianae"
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
                 />
-              </div>
+              </FormField>
+            </div>
+
+            <div>
+              <FormField htmlFor="plant-type" label="Tipo de Planta *">
+                <SelectDropdown
+                  id="plant-type"
+                  options={Object.entries(PLANT_TYPE_LABELS).map(([value, label]) => ({
+                    value,
+                    label,
+                  }))}
+                  value={selectedPlantType}
+                  onChange={(val) => handlePlantTypeChange(val as PlantType)}
+                />
+              </FormField>
+            </div>
+
+            <div>
+              <FormField htmlFor="species-genus" label="Género *">
+                <SelectDropdown
+                  id="species-genus"
+                  emptyMessage="No hay géneros disponibles"
+                  options={filteredGenera.map((g) => ({
+                    value: g.id,
+                    label: g.name,
+                  }))}
+                  placeholder="Selecciona un género..."
+                  value={form.genusId}
+                  onChange={(val) => setForm((p) => ({ ...p, genusId: val as string }))}
+                />
+              </FormField>
+            </div>
+
+            <div className="sm:col-span-2">
+              <FormField htmlFor="species-glow" label="Color de Hover (Ambient Glow)">
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <SelectDropdown
+                      id="species-glow"
+                      options={[
+                        { value: 'rgb(16, 185, 129)', label: 'Verde Esmeralda' },
+                        { value: 'rgb(236, 72, 153)', label: 'Magenta Vibrante' },
+                        { value: 'rgb(249, 115, 22)', label: 'Naranja Sol' },
+                        { value: 'rgb(168, 85, 247)', label: 'Púrpura Orquídea' },
+                        { value: 'rgb(234, 179, 8)', label: 'Amarillo Cactus' },
+                        { value: 'rgb(6, 182, 212)', label: 'Azul / Cian' },
+                        { value: 'rgb(239, 68, 68)', label: 'Rojo Flor' },
+                        ...((form.glowColor && !['rgb(16, 185, 129)', 'rgb(236, 72, 153)', 'rgb(249, 115, 22)', 'rgb(168, 85, 247)', 'rgb(234, 179, 8)', 'rgb(6, 182, 212)', 'rgb(239, 68, 68)'].includes(form.glowColor))
+                          ? [{ value: form.glowColor, label: `Personalizado/Sugerido: ${form.glowColor}` }]
+                          : [])
+                      ]}
+                      value={form.glowColor}
+                      onChange={(val) => setForm((p) => ({ ...p, glowColor: val as string }))}
+                    />
+                  </div>
+                  <div
+                    className="h-9 w-9 rounded-lg border border-input-outline shadow-inner transition-colors duration-300"
+                    style={{ backgroundColor: form.glowColor }}
+                  />
+                </div>
+              </FormField>
             </div>
           </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-secondary text-sm font-medium" htmlFor="species-desc">
-              Descripción
-            </label>
-            <textarea
-              className="input-base min-h-[140px] resize-none"
+          <FormField htmlFor="species-desc" label="Descripción">
+            <Textarea
+              className="min-h-[140px] resize-none"
               id="species-desc"
               placeholder="Detalles sobre cuidados, origen, hábitat..."
               value={form.description}
               onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
             />
-          </div>
+          </FormField>
         </div>
 
         {/* Galería de Fotos */}

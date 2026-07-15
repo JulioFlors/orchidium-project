@@ -1109,14 +1109,14 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
 
       <div className="mt-2 w-full">
         {isChartLoading && !chartData.length ? (
-          <div className="border-input-outline bg-surface/50 flex h-[400px] w-full animate-pulse items-center justify-center rounded-xl border border-dashed">
+          <div className="border-input-outline bg-surface/50 flex h-100 w-full animate-pulse items-center justify-center rounded-xl border border-dashed">
             <div className="flex flex-col items-center gap-4">
               <div className="bg-primary/10 h-10 w-10 rounded-full" />
               <div className="bg-primary/10 h-3 w-32 rounded-md" />
             </div>
           </div>
         ) : !selectedMetric ? (
-          <div className="bg-surface/50 border-input-outline flex h-[400px] w-full items-center justify-center rounded-md border border-dashed">
+          <div className="bg-surface/50 border-input-outline flex h-100 w-full items-center justify-center rounded-md border border-dashed">
             <div className="text-secondary flex flex-col items-center gap-3">
               <div className="bg-hover-overlay flex h-12 w-12 items-center justify-center rounded-full">
                 <FaChartLine className="text-primary h-6 w-6" />
@@ -1129,7 +1129,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
             <EnvironmentDataChart
               allowedRanges={
                 selectedMetric === 'rain_events' || selectedMetric === 'rain_inferred'
-                  ? ['today', 'yesterday', '7d', '30d', 'all']
+                  ? ['today', '7d', '30d', 'all']
                   : undefined
               }
               chartType={chartProps.chartType as 'area' | 'bar'}

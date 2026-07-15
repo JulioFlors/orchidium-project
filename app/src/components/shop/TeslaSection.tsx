@@ -11,6 +11,7 @@ interface Props {
   title: string
   subtitle: string
   image: string
+  mobileImage?: string
   primaryButtonText: string
   primaryButtonHref?: string
   onPrimaryClick?: () => void
@@ -22,6 +23,7 @@ export function TeslaSection({
   title,
   subtitle,
   image,
+  mobileImage,
   primaryButtonText,
   primaryButtonHref,
   onPrimaryClick,
@@ -29,17 +31,42 @@ export function TeslaSection({
   priority = false,
 }: Props) {
   return (
-    <section className="relative flex h-[calc(100dvh-36px)] tds-xs:h-[calc(100dvh-56px)] w-full snap-start flex-col items-center justify-end overflow-hidden pb-12 tds-sm:pb-16 tds-lg:pb-24">
+    <section className="relative flex h-[calc(100dvh-36px)] tds-xs:h-[calc(100dvh-56px)] tds-lg:h-dvh w-full snap-start flex-col items-center justify-end overflow-hidden pb-12 tds-sm:pb-16 tds-lg:pb-24">
       {/* Imagen de fondo a pantalla completa */}
       <div className="absolute inset-0 -z-10 h-full w-full">
-        <Image
-          fill
-          alt={title}
-          className="object-cover"
-          priority={priority}
-          sizes="100vw"
-          src={getImageUrl(image)}
-        />
+        {mobileImage ? (
+          <>
+            <div className="block tds-sm:hidden relative h-full w-full">
+              <Image
+                fill
+                alt={title}
+                className="object-cover"
+                priority={priority}
+                sizes="100vw"
+                src={getImageUrl(mobileImage)}
+              />
+            </div>
+            <div className="hidden tds-sm:block relative h-full w-full">
+              <Image
+                fill
+                alt={title}
+                className="object-cover"
+                priority={priority}
+                sizes="100vw"
+                src={getImageUrl(image)}
+              />
+            </div>
+          </>
+        ) : (
+          <Image
+            fill
+            alt={title}
+            className="object-cover"
+            priority={priority}
+            sizes="100vw"
+            src={getImageUrl(image)}
+          />
+        )}
         <div className="absolute inset-0 bg-black/20" />
       </div>
 

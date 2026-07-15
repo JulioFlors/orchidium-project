@@ -17,6 +17,7 @@ interface Slide {
   title: string
   subtitle: string
   image: string
+  mobileImage?: string
   href: string
 }
 
@@ -67,14 +68,39 @@ export function HeroSlideshow({ slides }: Props) {
           <SwiperSlide key={index} className="relative h-full w-full">
             {/* Imagen de fondo a pantalla completa */}
             <div className="absolute inset-0 -z-10 h-full w-full">
-              <Image
-                fill
-                alt={slide.title}
-                className="object-cover"
-                priority={index === 0}
-                sizes="100vw"
-                src={getImageUrl(slide.image)}
-              />
+              {slide.mobileImage ? (
+                <>
+                  <div className="block tds-sm:hidden relative h-full w-full">
+                    <Image
+                      fill
+                      alt={slide.title}
+                      className="object-cover"
+                      priority={index === 0}
+                      sizes="100vw"
+                      src={getImageUrl(slide.mobileImage)}
+                    />
+                  </div>
+                  <div className="hidden tds-sm:block relative h-full w-full">
+                    <Image
+                      fill
+                      alt={slide.title}
+                      className="object-cover"
+                      priority={index === 0}
+                      sizes="100vw"
+                      src={getImageUrl(slide.image)}
+                    />
+                  </div>
+                </>
+              ) : (
+                <Image
+                  fill
+                  alt={slide.title}
+                  className="object-cover"
+                  priority={index === 0}
+                  sizes="100vw"
+                  src={getImageUrl(slide.image)}
+                />
+              )}
               <div className="absolute inset-0 bg-black/20" />
             </div>
 

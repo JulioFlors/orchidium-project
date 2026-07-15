@@ -25,3 +25,4 @@ export * from './product-grid/ProductGridItem'
 export * from './product-grid/ProductGridItemSkeleton'
 
 export * from './product-grid/ProductGridSkeleton'
+export * from './product-grid/ProductSlideshow'

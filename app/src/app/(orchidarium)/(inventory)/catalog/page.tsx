@@ -1,11 +1,11 @@
 import type { Metadata } from 'next'
 
-import { CatalogView } from './ui/CatalogView'
+import { CatalogView } from './ui'
 
 import { getSpecies, getGenera } from '@/actions'
 
 export const metadata: Metadata = {
-  title: 'Catálogo Unificado',
+  title: 'Catálogo',
 }
 
 export default async function CatalogPage() {

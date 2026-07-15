@@ -1539,7 +1539,7 @@ export function EnvironmentDataChart({
   const rangeOptions =
     allowedRanges ||
     (dataKey === 'illuminance'
-      ? ['8-16h', '5-19h', '1D', '30d', 'all']
+      ? ['8-16h', '5-19h', '30d', 'all']
       : ['24h', '1D', '30d', 'all'])
 
   return (
