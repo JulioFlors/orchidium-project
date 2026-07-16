@@ -3,13 +3,17 @@ import { influxClient } from '../lib/influx'
 function rowTimeToDate(rawTime: unknown): Date {
   if (rawTime instanceof Date) return rawTime
   const s = String(rawTime)
+
   if (isNaN(Number(s))) return new Date(s)
+
   return s.length > 13 ? new Date(Number(s.substring(0, 13))) : new Date(Number(s))
 }
 
 async function main() {
-  console.log('Querying InfluxDB for July 9, 22:00:00 to July 10, 00:00:00 UTC (6:00pm to 8:00pm Caracas)...')
-  
+  console.log(
+    'Querying InfluxDB for July 9, 22:00:00 to July 10, 00:00:00 UTC (6:00pm to 8:00pm Caracas)...',
+  )
+
   const query = `
     SELECT time, temperature, humidity, illuminance, rain_intensity
     FROM "environment_metrics"
@@ -21,6 +25,7 @@ async function main() {
 
   const samples: any[] = []
   const stream = influxClient.query(query)
+
   for await (const row of stream) {
     samples.push({
       time: rowTimeToDate(row.time),
@@ -34,8 +39,9 @@ async function main() {
   console.log(`Found ${samples.length} telemetry samples.`)
   for (const s of samples) {
     const localStr = s.time.toLocaleString('es-VE', { timeZone: 'America/Caracas' })
+
     console.log(
-      `[${localStr}] Temp: ${s.temperature != null ? s.temperature.toFixed(1) : 'N/A'}°C | Hum: ${s.humidity != null ? s.humidity.toFixed(1) : 'N/A'}% | Lux: ${s.illuminance != null ? s.illuminance.toFixed(0) : 'N/A'} | RainIntensity: ${s.rain_intensity}`
+      `[${localStr}] Temp: ${s.temperature != null ? s.temperature.toFixed(1) : 'N/A'}°C | Hum: ${s.humidity != null ? s.humidity.toFixed(1) : 'N/A'}% | Lux: ${s.illuminance != null ? s.illuminance.toFixed(0) : 'N/A'} | RainIntensity: ${s.rain_intensity}`,
     )
   }
 }

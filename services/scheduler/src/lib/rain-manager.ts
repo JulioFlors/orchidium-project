@@ -579,7 +579,7 @@ export async function evaluateClimateInference(): Promise<void> {
     let calculatedBaselineLux: number | null = null
     let triggerType: string | null = null
 
-    // Paso 1 (20 minutos para Día / Ventana de 40 minutos para Noche)
+    // Paso 1 — Diurno: 10 min previos a B0 / Noche: ventana de 30 min (B1-B3)
     const baseTemp1 = tempBatches[1].max
     const baseHum1 = humBatches[1].min
     const baseLux1 = luxBatches[1].max
@@ -637,7 +637,7 @@ export async function evaluateClimateInference(): Promise<void> {
 
         if (passesGradient) {
           triggered = true
-          tempBaselineAgeMinutes = 20
+          tempBaselineAgeMinutes = 10
           tempDeltaTemp = dTemp1
           tempDeltaHum = dHum1
           dropPct = baseLux1 > 0 ? ((baseLux1 - currentMinLux) / baseLux1) * 100 : 0
@@ -646,17 +646,17 @@ export async function evaluateClimateInference(): Promise<void> {
           calculatedBaselineLux = baseLux1
 
           if (baseLux1 <= 10000) {
-            triggerType = 'DAY_RAMA_A_OSCURO_20M'
+            triggerType = 'DAY_RAMA_A_OSCURO_10M'
           } else if (baseLux1 <= 15000) {
-            triggerType = 'DAY_RAMA_A_NUBLADO_20M'
+            triggerType = 'DAY_RAMA_A_NUBLADO_10M'
           } else if (baseLux1 <= 26000) {
             triggerType = isSensible
-              ? 'DAY_RAMA_C_INTERMEDIO_SENSIBLE_20M'
-              : 'DAY_RAMA_C_INTERMEDIO_ROBUSTO_20M'
+              ? 'DAY_RAMA_C_INTERMEDIO_SENSIBLE_10M'
+              : 'DAY_RAMA_C_INTERMEDIO_ROBUSTO_10M'
           } else {
             triggerType = isSensible
-              ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_20M'
-              : 'DAY_RAMA_B_SOLEADO_ROBUSTO_20M'
+              ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_10M'
+              : 'DAY_RAMA_B_SOLEADO_ROBUSTO_10M'
           }
         }
       }
@@ -727,7 +727,7 @@ export async function evaluateClimateInference(): Promise<void> {
       }
     }
 
-    // Paso 2 (30 minutos para Día / Saltado en Noche)
+    // Paso 2 — Diurno: 20 min previos a B0 (Solo día, saltado en noche)
     if (!triggered && isDay) {
       const baseTemp2 = tempBatches[2].max
       const baseHum2 = humBatches[2].min
@@ -785,7 +785,7 @@ export async function evaluateClimateInference(): Promise<void> {
 
         if (passesGradient) {
           triggered = true
-          tempBaselineAgeMinutes = 30
+          tempBaselineAgeMinutes = 20
           tempDeltaTemp = dTemp2
           tempDeltaHum = dHum2
           dropPct = baseLux2 > 0 ? ((baseLux2 - currentMinLux) / baseLux2) * 100 : 0
@@ -794,106 +794,17 @@ export async function evaluateClimateInference(): Promise<void> {
           calculatedBaselineLux = baseLux2
 
           if (baseLux2 <= 10000) {
-            triggerType = 'DAY_RAMA_A_OSCURO_30M'
+            triggerType = 'DAY_RAMA_A_OSCURO_20M'
           } else if (baseLux2 <= 15000) {
-            triggerType = 'DAY_RAMA_A_NUBLADO_30M'
+            triggerType = 'DAY_RAMA_A_NUBLADO_20M'
           } else if (baseLux2 <= 26000) {
             triggerType = isSensible
-              ? 'DAY_RAMA_C_INTERMEDIO_SENSIBLE_30M'
-              : 'DAY_RAMA_C_INTERMEDIO_ROBUSTO_30M'
+              ? 'DAY_RAMA_C_INTERMEDIO_SENSIBLE_20M'
+              : 'DAY_RAMA_C_INTERMEDIO_ROBUSTO_20M'
           } else {
             triggerType = isSensible
-              ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_30M'
-              : 'DAY_RAMA_B_SOLEADO_ROBUSTO_30M'
-          }
-        }
-      }
-    }
-
-    // Paso 3 (40 minutos para Día / Saltado en Noche)
-    if (
-      !triggered &&
-      isDay &&
-      tempBatches.length >= 4 &&
-      humBatches.length >= 4 &&
-      luxBatches.length >= 4
-    ) {
-      const baseTemp3 = tempBatches[3].max
-      const baseHum3 = humBatches[3].min
-      const baseLux3 = luxBatches[3].max
-      const dTemp3 = currentMinTemp - baseTemp3
-      const dHum3 = currentMaxHum - baseHum3
-
-      let luxCondition = false
-      let tempDropThreshold = -4.0
-      let humRobust = 18.0
-      let humSensitive = 18.0
-      let isSensible = false
-
-      if (baseLux3 <= 15000) {
-        // Rama A (Cielo muy nublado: <= 15 klx)
-        luxCondition = true
-        tempDropThreshold = -3.5
-        humRobust = 16.0
-        humSensitive = 14.0
-      } else if (baseLux3 <= 26000) {
-        // Rama C (Cielo intermedio: 15 klx < Lux <= 26 klx)
-        luxCondition = currentMinLux <= baseLux3 * 0.6
-        if (currentMinLux <= 15000) {
-          isSensible = true
-          tempDropThreshold = -3.5
-          humRobust = 14.0
-          humSensitive = 12.0
-        }
-      } else {
-        // Rama B (Cielo soleado: > 26 klx)
-        luxCondition = currentMinLux <= baseLux3 * 0.4
-        if (currentMinLux <= 15000) {
-          isSensible = true
-          tempDropThreshold = -4.0
-          humRobust = 14.0
-          humSensitive = 12.0
-        }
-      }
-
-      const humCondition =
-        dHum3 >= humSensitive || (baseHum3 >= 86.0 && baseHum3 <= 95.0 && currentMaxHum >= 98.0)
-
-      if (dTemp3 <= tempDropThreshold && humCondition && luxCondition) {
-        let passesGradient = true
-        const isPreSaturated = baseHum3 >= 86.0 && baseHum3 <= 95.0 && currentMaxHum >= 98.0
-
-        if (dHum3 < humRobust && !isPreSaturated) {
-          const hSlopes = getHumGradientMetrics(humBatches[0].samples)
-          const tSlopes = getTempGradientMetrics(tempBatches[0].samples)
-          const hasSteepHum = hSlopes.max1m >= 1.8 || hSlopes.max2m >= 2.5
-          const hasSteepTemp = tSlopes.maxDrop1m <= -0.5
-
-          passesGradient = hasSteepHum || hasSteepTemp
-        }
-
-        if (passesGradient) {
-          triggered = true
-          tempBaselineAgeMinutes = 40
-          tempDeltaTemp = dTemp3
-          tempDeltaHum = dHum3
-          dropPct = baseLux3 > 0 ? ((baseLux3 - currentMinLux) / baseLux3) * 100 : 0
-          calculatedBaselineTemp = baseTemp3
-          calculatedBaselineHum = baseHum3
-          calculatedBaselineLux = baseLux3
-
-          if (baseLux3 <= 10000) {
-            triggerType = 'DAY_RAMA_A_OSCURO_40M'
-          } else if (baseLux3 <= 15000) {
-            triggerType = 'DAY_RAMA_A_NUBLADO_40M'
-          } else if (baseLux3 <= 26000) {
-            triggerType = isSensible
-              ? 'DAY_RAMA_C_INTERMEDIO_SENSIBLE_40M'
-              : 'DAY_RAMA_C_INTERMEDIO_ROBUSTO_40M'
-          } else {
-            triggerType = isSensible
-              ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_40M'
-              : 'DAY_RAMA_B_SOLEADO_ROBUSTO_40M'
+              ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_20M'
+              : 'DAY_RAMA_B_SOLEADO_ROBUSTO_20M'
           }
         }
       }
@@ -1010,8 +921,7 @@ export async function evaluateClimateInference(): Promise<void> {
         // El timestamp del cese es la primera muestra del lote (inicio del bloque de sol pleno).
         if (!closedByRecovery && inferedBaselineLux !== null && minLuxInRain !== null) {
           const allSamplesAbove26k =
-            luxBatches[0].samples.length > 0 &&
-            luxBatches[0].samples.every((s) => s.value >= 26000)
+            luxBatches[0].samples.length > 0 && luxBatches[0].samples.every((s) => s.value >= 26000)
 
           if (allSamplesAbove26k) {
             closedByRecovery = true
@@ -1072,7 +982,8 @@ export async function evaluateClimateInference(): Promise<void> {
           const currentTemp = tempBatches[0].min
           const currentHum = humBatches[0].max
 
-          const isLuxRecovered = currentAverageLux >= luxRecoveryThreshold && currentAverageLux >= 15000
+          const isLuxRecovered =
+            currentAverageLux >= luxRecoveryThreshold && currentAverageLux >= 15000
           const isTempRecovered = minTempInRain !== null && currentTemp >= minTempInRain + 2.0
           const isHumRecovered = maxHumInRain !== null && currentHum <= maxHumInRain - 3.0
 
@@ -1122,7 +1033,6 @@ export async function evaluateClimateInference(): Promise<void> {
             )
           }
         }
-
       }
 
       // 4. ☁️ Variación Térmica (Diurna, evaluada al final para dar prioridad a las reglas solares)

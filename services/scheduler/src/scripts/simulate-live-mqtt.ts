@@ -3,7 +3,9 @@ import { influxClient } from '../lib/influx'
 function rowTimeToDate(rawTime: unknown): Date {
   if (rawTime instanceof Date) return rawTime
   const s = String(rawTime)
+
   if (isNaN(Number(s))) return new Date(s)
+
   return s.length > 13 ? new Date(Number(s.substring(0, 13))) : new Date(Number(s))
 }
 
@@ -23,8 +25,8 @@ const tempBatches: BatchSummary[] = []
 const humBatches: BatchSummary[] = []
 const luxBatches: BatchSummary[] = []
 
-let inferedRainActive = false
-let lastInferedRainClosedAt: number | null = null
+const inferedRainActive = false
+const lastInferedRainClosedAt: number | null = null
 
 function pushBatchMetrics(queue: BatchSummary[], values: number[], now: number, isLux = false) {
   if (values.length === 0) return
@@ -43,6 +45,7 @@ function pushBatchMetrics(queue: BatchSummary[], values: number[], now: number, 
     if (isLux) {
       const sortedAsc = [...allValues].sort((a, b) => a - b)
       const low5 = sortedAsc.slice(0, Math.min(5, sortedAsc.length))
+
       queue[0].min = low5.reduce((sum, val) => sum + val, 0) / low5.length
       queue[0].max = allValues.reduce((sum, val) => sum + val, 0) / allValues.length
     } else {
@@ -56,6 +59,7 @@ function pushBatchMetrics(queue: BatchSummary[], values: number[], now: number, 
     if (isLux && values.length > 0) {
       const sortedAsc = [...values].sort((a, b) => a - b)
       const low5 = sortedAsc.slice(0, Math.min(5, sortedAsc.length))
+
       min = low5.reduce((sum, val) => sum + val, 0) / low5.length
       max = values.reduce((sum, val) => sum + val, 0) / values.length
     }
@@ -144,7 +148,7 @@ function evaluateClimateInference(nowMs: number): boolean {
 
 async function main() {
   console.log('Querying InfluxDB for the event of July 10 (7:23pm VET)...')
-  
+
   // Query from 6:30pm (22:30 UTC) to 8:00pm (00:00 UTC July 11)
   const query = `
     SELECT time, temperature, humidity, illuminance
@@ -157,6 +161,7 @@ async function main() {
 
   const rows: any[] = []
   const stream = influxClient.query(query)
+
   for await (const row of stream) {
     rows.push(row)
   }
@@ -172,6 +177,7 @@ async function main() {
   `
   const preRows: any[] = []
   const preStream = influxClient.query(preQuery)
+
   for await (const row of preStream) {
     preRows.push(row)
   }
@@ -179,24 +185,32 @@ async function main() {
   // Hydrate batches
   const BATCH_MS = 10 * 60 * 1000
   const bins: { [binStartMs: number]: { temp: number[]; hum: number[]; lux: number[] } } = {}
+
   for (const row of preRows) {
     const tMs = rowTimeToDate(row.time).getTime()
     const binStartMs = Math.floor(tMs / BATCH_MS) * BATCH_MS
+
     if (!bins[binStartMs]) bins[binStartMs] = { temp: [], hum: [], lux: [] }
     if (row.temperature != null) bins[binStartMs].temp.push(Number(row.temperature))
     if (row.humidity != null) bins[binStartMs].hum.push(Number(row.humidity))
     if (row.illuminance != null) bins[binStartMs].lux.push(Number(row.illuminance))
   }
 
-  const sortedBins = Object.keys(bins).map(Number).sort((a, b) => b - a)
+  const sortedBins = Object.keys(bins)
+    .map(Number)
+    .sort((a, b) => b - a)
+
   for (const binStartMs of sortedBins) {
     const b = bins[binStartMs]
+
     if (b.temp.length > 0) pushBatchMetrics(tempBatches, b.temp, binStartMs)
     if (b.hum.length > 0) pushBatchMetrics(humBatches, b.hum, binStartMs)
     if (b.lux.length > 0) pushBatchMetrics(luxBatches, b.lux, binStartMs, true)
   }
 
-  console.log(`State hydrated. tempBatches: ${tempBatches.length}, humBatches: ${humBatches.length}, luxBatches: ${luxBatches.length}`)
+  console.log(
+    `State hydrated. tempBatches: ${tempBatches.length}, humBatches: ${humBatches.length}, luxBatches: ${luxBatches.length}`,
+  )
 
   // Ahora simulamos la llegada de los mensajes MQTT de las 7:23 PM (23:23 UTC)
   // Agrupamos las lecturas reales de InfluxDB en ventanas de 10 min
@@ -207,21 +221,32 @@ async function main() {
 
   for (const row of rows) {
     const tMs = rowTimeToDate(row.time).getTime()
+
     if (currentStartMs === 0) currentStartMs = tMs
 
     if (tMs - currentStartMs >= BATCH_MS) {
-      const localTime = new Date(currentStartMs).toLocaleString('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit' })
+      const localTime = new Date(currentStartMs).toLocaleString('es-VE', {
+        timeZone: 'America/Caracas',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+
       console.log(`\n--- Simulación de llegada de MQTT a las ${localTime} ---`)
 
       // En el live scheduler, llegan 3 mensajes MQTT separados:
-      
+
       // 1. Llega lote de temperatura
       console.log(`[MQTT] Recibido batch de temperatura (${tempValues.length} muestras)`)
       pushBatchMetrics(tempBatches, tempValues, currentStartMs)
       let trig = evaluateClimateInference(currentStartMs)
+
       console.log(`  -> Evaluación 1 (sólo Temp actualizada): Trigger = ${trig ? 'SÍ' : 'NO'}`)
-      console.log(`     tempBatches[0] timestamp: ${new Date(tempBatches[0].timestamp).toLocaleTimeString()}`)
-      console.log(`     humBatches[0] timestamp: ${new Date(humBatches[0].timestamp).toLocaleTimeString()}`)
+      console.log(
+        `     tempBatches[0] timestamp: ${new Date(tempBatches[0].timestamp).toLocaleTimeString()}`,
+      )
+      console.log(
+        `     humBatches[0] timestamp: ${new Date(humBatches[0].timestamp).toLocaleTimeString()}`,
+      )
 
       // 2. Llega lote de humedad (10ms después)
       console.log(`[MQTT] Recibido batch de humedad (${humValues.length} muestras)`)
@@ -233,7 +258,9 @@ async function main() {
       console.log(`[MQTT] Recibido batch de lux (${luxValues.length} muestras)`)
       pushBatchMetrics(luxBatches, luxValues, currentStartMs, true)
       trig = evaluateClimateInference(currentStartMs)
-      console.log(`  -> Evaluación 3 (Temp + Hum + Lux actualizadas): Trigger = ${trig ? 'SÍ' : 'NO'}`)
+      console.log(
+        `  -> Evaluación 3 (Temp + Hum + Lux actualizadas): Trigger = ${trig ? 'SÍ' : 'NO'}`,
+      )
 
       if (trig) {
         console.log(`🎉 ¡EVENTO DETECTADO CORRECTAMENTE EN LA EVALUACIÓN 3!`)

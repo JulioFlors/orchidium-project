@@ -8,7 +8,9 @@ async function main() {
   })
 
   for (const e of events) {
-    console.log(`ID: ${e.id} | Start: ${e.startedAt.toLocaleString('es-VE')} | End: ${e.endedAt?.toLocaleString('es-VE') ?? 'OPEN'} | Virtual: ${e.isInfered} | Type: ${e.triggerType} | Reason: ${e.triggerReason} | ClosedBy: ${e.closedBy}`)
+    console.log(
+      `ID: ${e.id} | Start: ${e.startedAt.toLocaleString('es-VE')} | End: ${e.endedAt?.toLocaleString('es-VE') ?? 'OPEN'} | Virtual: ${e.isInfered} | Type: ${e.triggerType} | Reason: ${e.triggerReason} | ClosedBy: ${e.closedBy}`,
+    )
   }
 }
 

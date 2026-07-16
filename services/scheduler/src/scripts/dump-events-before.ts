@@ -1,5 +1,6 @@
-import { prisma } from '@package/database'
 import * as fs from 'fs'
+
+import { prisma } from '@package/database'
 
 async function main() {
   console.log('Querying all inferred rain events before the thresholds change...')
@@ -10,7 +11,7 @@ async function main() {
 
   console.log(`Found ${events.length} inferred events.`)
 
-  const data = events.map(ev => ({
+  const data = events.map((ev) => ({
     id: ev.id,
     startedAt: ev.startedAt.toISOString(),
     endedAt: ev.endedAt ? ev.endedAt.toISOString() : null,
@@ -25,13 +26,15 @@ async function main() {
     closedBy: ev.closedBy,
   }))
 
-  const targetPath = 'C:\\Users\\Julio\\.gemini\\antigravity\\brain\\087a6557-ed4b-44aa-aac9-3a1c185d9ae4\\scratch\\events_before.json'
+  const targetPath =
+    'C:\\Users\\Julio\\.gemini\\antigravity\\brain\\087a6557-ed4b-44aa-aac9-3a1c185d9ae4\\scratch\\events_before.json'
+
   fs.writeFileSync(targetPath, JSON.stringify(data, null, 2))
   console.log(`Saved baseline to ${targetPath}`)
 }
 
 main()
-  .catch(err => {
+  .catch((err) => {
     console.error(err)
     process.exit(1)
   })

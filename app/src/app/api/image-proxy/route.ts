@@ -17,7 +17,9 @@ export async function GET(req: NextRequest) {
     })
 
     if (!response.ok) {
-      return new NextResponse(`Failed to fetch image: ${response.statusText}`, { status: response.status })
+      return new NextResponse(`Failed to fetch image: ${response.statusText}`, {
+        status: response.status,
+      })
     }
 
     const contentType = response.headers.get('content-type') || 'image/webp'

@@ -3,7 +3,9 @@ import { influxClient } from '../lib/influx'
 function rowTimeToDate(rawTime: unknown): Date {
   if (rawTime instanceof Date) return rawTime
   const s = String(rawTime)
+
   if (isNaN(Number(s))) return new Date(s)
+
   return s.length > 13 ? new Date(Number(s.substring(0, 13))) : new Date(Number(s))
 }
 
@@ -19,7 +21,12 @@ interface BatchSummary {
   samples: Sample[]
 }
 
-function pushBatchMetrics(queue: BatchSummary[], samples: Sample[], timestamp: number, isLux = false) {
+function pushBatchMetrics(
+  queue: BatchSummary[],
+  samples: Sample[],
+  timestamp: number,
+  isLux = false,
+) {
   const values = samples.map((s) => s.value)
   let min = Math.min(...values)
   let max = Math.max(...values)
@@ -27,6 +34,7 @@ function pushBatchMetrics(queue: BatchSummary[], samples: Sample[], timestamp: n
   if (isLux && values.length > 0) {
     const sortedAsc = [...values].sort((a, b) => a - b)
     const low5 = sortedAsc.slice(0, Math.min(5, sortedAsc.length))
+
     min = low5.reduce((sum, val) => sum + val, 0) / low5.length
     max = values.reduce((sum, val) => sum + val, 0) / values.length
   }
@@ -38,7 +46,7 @@ function pushBatchMetrics(queue: BatchSummary[], samples: Sample[], timestamp: n
 async function main() {
   console.log('=== SIMULACIÓN COMPARATIVA DE VARIABILIDAD Y MULTIPLICADORES ===')
   console.log('Rango: 9 de Julio, 6:00 pm (22:00 UTC) a 8:00 pm (00:00 UTC)')
-  
+
   const query = `
     SELECT time, temperature, humidity, illuminance
     FROM "environment_metrics"
@@ -50,6 +58,7 @@ async function main() {
 
   const rows: any[] = []
   const stream = influxClient.query(query)
+
   for await (const row of stream) {
     rows.push(row)
   }
@@ -65,6 +74,7 @@ async function main() {
   `
   const preRows: any[] = []
   const preStream = influxClient.query(preQuery)
+
   for await (const row of preStream) {
     preRows.push(row)
   }
@@ -80,6 +90,7 @@ async function main() {
 
   for (const row of preRows) {
     const tMs = rowTimeToDate(row.time).getTime()
+
     if (currentStartMs === 0) currentStartMs = tMs
 
     if (tMs - currentStartMs >= INTERVAL_MS) {
@@ -90,7 +101,8 @@ async function main() {
       currentStartMs = tMs
     }
 
-    if (row.temperature != null) tempSamples.push({ timestamp: tMs, value: Number(row.temperature) })
+    if (row.temperature != null)
+      tempSamples.push({ timestamp: tMs, value: Number(row.temperature) })
     if (row.humidity != null) humSamples.push({ timestamp: tMs, value: Number(row.humidity) })
   }
 
@@ -101,6 +113,7 @@ async function main() {
 
   for (const row of rows) {
     const tMs = rowTimeToDate(row.time).getTime()
+
     if (currentStartMs === 0) currentStartMs = tMs
 
     if (tMs - currentStartMs >= INTERVAL_MS) {
@@ -114,7 +127,8 @@ async function main() {
       currentStartMs = tMs
     }
 
-    if (row.temperature != null) tempSamples.push({ timestamp: tMs, value: Number(row.temperature) })
+    if (row.temperature != null)
+      tempSamples.push({ timestamp: tMs, value: Number(row.temperature) })
     if (row.humidity != null) humSamples.push({ timestamp: tMs, value: Number(row.humidity) })
   }
 }
@@ -122,7 +136,7 @@ async function main() {
 function evaluateAndPrint(
   timestampMs: number,
   tempBatches: BatchSummary[],
-  humBatches: BatchSummary[]
+  humBatches: BatchSummary[],
 ) {
   if (tempBatches.length < 4 || humBatches.length < 4) return
 
@@ -163,34 +177,54 @@ function evaluateAndPrint(
   const isPreSaturated = currentMaxHum >= 98.0 || humBatches[1].min >= 95.0
 
   console.log(`\n========================================================================`)
-  console.log(`Evaluación Lote: ${localTime} | Temp Mín B0: ${currentMinTemp}°C | Hum Máx B0: ${currentMaxHum}%`)
-  console.log(`Variabilidad Previa (b1,b2,b3) -> varTempPre: ${varTempPre.toFixed(2)}°C | varHumPre: ${varHumPre.toFixed(2)}%`)
-  console.log(`Cambio Actual (b0,b1,b2)       -> varTempCur: ${varTempCur.toFixed(2)}°C | varHumCur: ${varHumCur.toFixed(2)}%`)
-  console.log(`Tendencias -> Caída Temp: ${isTempFalling} (${trendTemp.toFixed(2)}) | Subida Hum: ${isHumRising} (+${trendHum.toFixed(2)}) | PreSaturado: ${isPreSaturated}`)
+  console.log(
+    `Evaluación Lote: ${localTime} | Temp Mín B0: ${currentMinTemp}°C | Hum Máx B0: ${currentMaxHum}%`,
+  )
+  console.log(
+    `Variabilidad Previa (b1,b2,b3) -> varTempPre: ${varTempPre.toFixed(2)}°C | varHumPre: ${varHumPre.toFixed(2)}%`,
+  )
+  console.log(
+    `Cambio Actual (b0,b1,b2)       -> varTempCur: ${varTempCur.toFixed(2)}°C | varHumCur: ${varHumCur.toFixed(2)}%`,
+  )
+  console.log(
+    `Tendencias -> Caída Temp: ${isTempFalling} (${trendTemp.toFixed(2)}) | Subida Hum: ${isHumRising} (+${trendHum.toFixed(2)}) | PreSaturado: ${isPreSaturated}`,
+  )
 
   // 1. Configuración Original (T: 1.8, H: 1.6)
   const tFloorOrig = minHumPre >= 98.0 ? 0.8 : 0.7
   const tThresholdOrig = Math.max(tFloorOrig, varTempPre * 1.8)
   const hThresholdOrig = Math.max(3.0, varHumPre * 1.6)
-  const triggeredOrig = (varTempCur >= tThresholdOrig && isTempFalling) && 
-                        ((varHumCur >= hThresholdOrig && isHumRising) || isPreSaturated)
+  const triggeredOrig =
+    varTempCur >= tThresholdOrig &&
+    isTempFalling &&
+    ((varHumCur >= hThresholdOrig && isHumRising) || isPreSaturated)
 
   // 2. Configuración Sensibilidad A (-2 puntos: T: 1.6, H: 1.4)
   const tThresholdA = Math.max(tFloorOrig, varTempPre * 1.6)
   const hThresholdA = Math.max(3.0, varHumPre * 1.4)
-  const triggeredA = (varTempCur >= tThresholdA && isTempFalling) && 
-                      ((varHumCur >= hThresholdA && isHumRising) || isPreSaturated)
+  const triggeredA =
+    varTempCur >= tThresholdA &&
+    isTempFalling &&
+    ((varHumCur >= hThresholdA && isHumRising) || isPreSaturated)
 
   // 3. Configuración Sensibilidad B (-4 puntos: T: 1.4, H: 1.2)
   const tThresholdB = Math.max(tFloorOrig, varTempPre * 1.4)
   const hThresholdB = Math.max(3.0, varHumPre * 1.2)
-  const triggeredB = (varTempCur >= tThresholdB && isTempFalling) && 
-                      ((varHumCur >= hThresholdB && isHumRising) || isPreSaturated)
+  const triggeredB =
+    varTempCur >= tThresholdB &&
+    isTempFalling &&
+    ((varHumCur >= hThresholdB && isHumRising) || isPreSaturated)
 
   console.log(`  ----------------------------------------------------------------------`)
-  console.log(`  [ORIGINAL] Mult T: 1.8 | H: 1.6 -> Req dT: ${tThresholdOrig.toFixed(2)} | Req dH: ${hThresholdOrig.toFixed(2)} -> DISPARA: ${triggeredOrig ? 'SÍ' : 'NO'}`)
-  console.log(`  [SIM A -2] Mult T: 1.6 | H: 1.4 -> Req dT: ${tThresholdA.toFixed(2)} | Req dH: ${hThresholdA.toFixed(2)} -> DISPARA: ${triggeredA ? 'SÍ' : 'NO'}`)
-  console.log(`  [SIM B -4] Mult T: 1.4 | H: 1.2 -> Req dT: ${tThresholdB.toFixed(2)} | Req dH: ${hThresholdB.toFixed(2)} -> DISPARA: ${triggeredB ? 'SÍ' : 'NO'}`)
+  console.log(
+    `  [ORIGINAL] Mult T: 1.8 | H: 1.6 -> Req dT: ${tThresholdOrig.toFixed(2)} | Req dH: ${hThresholdOrig.toFixed(2)} -> DISPARA: ${triggeredOrig ? 'SÍ' : 'NO'}`,
+  )
+  console.log(
+    `  [SIM A -2] Mult T: 1.6 | H: 1.4 -> Req dT: ${tThresholdA.toFixed(2)} | Req dH: ${hThresholdA.toFixed(2)} -> DISPARA: ${triggeredA ? 'SÍ' : 'NO'}`,
+  )
+  console.log(
+    `  [SIM B -4] Mult T: 1.4 | H: 1.2 -> Req dT: ${tThresholdB.toFixed(2)} | Req dH: ${hThresholdB.toFixed(2)} -> DISPARA: ${triggeredB ? 'SÍ' : 'NO'}`,
+  )
 }
 
 main()

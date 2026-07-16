@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import type { Species, PlantType } from '@/interfaces'
 
 import prisma from '@package/database'
+
 import { getLandingSpecies, getShopLayoutConfig } from '@/actions'
 import {
   ProductGrid,
@@ -95,12 +96,13 @@ export default async function HomePage() {
 
   // Obtener slugs de especies del Hero
   const heroSpeciesIds = layoutConfig?.heroSlides.map((s) => s.speciesId).filter(Boolean) || []
-  const heroSpeciesList = heroSpeciesIds.length > 0
-    ? await prisma.species.findMany({
-        where: { id: { in: heroSpeciesIds } },
-        select: { id: true, slug: true, name: true },
-      })
-    : []
+  const heroSpeciesList =
+    heroSpeciesIds.length > 0
+      ? await prisma.species.findMany({
+          where: { id: { in: heroSpeciesIds } },
+          select: { id: true, slug: true, name: true },
+        })
+      : []
 
   const heroSlidesData = [
     {
@@ -112,19 +114,22 @@ export default async function HomePage() {
     {
       defaultTitle: 'Rosas del Desierto',
       defaultSubtitle: 'Bonsáis naturales de floración extraordinaria',
-      defaultImage: 'plants/adenium_obesum/multiple-petals/adenium-obesum-marbella/marbella_0_2000.webp',
+      defaultImage:
+        'plants/adenium_obesum/multiple-petals/adenium-obesum-marbella/marbella_0_2000.webp',
       defaultHref: '/category/plants/adenium_obesum',
     },
     {
       defaultTitle: 'Cactus',
       defaultSubtitle: 'Especies exóticas de colección y bajo mantenimiento',
-      defaultImage: 'plants/cactus/mammillaria/mammillaria-vetula-ssp-gracilis/mammillaria-vetula-ssp-gracilis_0_2000.webp',
+      defaultImage:
+        'plants/cactus/mammillaria/mammillaria-vetula-ssp-gracilis/mammillaria-vetula-ssp-gracilis_0_2000.webp',
       defaultHref: '/category/plants/cactus',
     },
     {
       defaultTitle: 'Suculentas',
       defaultSubtitle: 'Geometrías botánicas y colores extraordinarios',
-      defaultImage: 'plants/succulents/crassula/crassula-capitella-campfire/crassula-capitella-campfire_0_2000.webp',
+      defaultImage:
+        'plants/succulents/crassula/crassula-capitella-campfire/crassula-capitella-campfire_0_2000.webp',
       defaultHref: '/category/plants/succulents',
     },
   ].map((def, index) => {
@@ -149,19 +154,25 @@ export default async function HomePage() {
     {
       title: 'Rosas del Desierto',
       subtitle: 'Bonsáis naturales de floración extraordinaria',
-      image: heroSlidesData[1]?.image || 'plants/adenium_obesum/multiple-petals/adenium-obesum-marbella/marbella_0_2000.webp',
+      image:
+        heroSlidesData[1]?.image ||
+        'plants/adenium_obesum/multiple-petals/adenium-obesum-marbella/marbella_0_2000.webp',
       href: '/category/plants/adenium_obesum',
     },
     {
       title: 'Cactus',
       subtitle: 'Especies exóticas de colección y bajo mantenimiento',
-      image: heroSlidesData[2]?.image || 'plants/cactus/mammillaria/mammillaria-vetula-ssp-gracilis/mammillaria-vetula-ssp-gracilis_0_2000.webp',
+      image:
+        heroSlidesData[2]?.image ||
+        'plants/cactus/mammillaria/mammillaria-vetula-ssp-gracilis/mammillaria-vetula-ssp-gracilis_0_2000.webp',
       href: '/category/plants/cactus',
     },
     {
       title: 'Suculentas',
       subtitle: 'Geometrías botánicas y colores extraordinarios',
-      image: heroSlidesData[3]?.image || 'plants/succulents/crassula/crassula-capitella-campfire/crassula-capitella-campfire_0_2000.webp',
+      image:
+        heroSlidesData[3]?.image ||
+        'plants/succulents/crassula/crassula-capitella-campfire/crassula-capitella-campfire_0_2000.webp',
       href: '/category/plants/succulents',
     },
   ]
@@ -174,15 +185,14 @@ export default async function HomePage() {
       {/* SECCIÓN 6: Los más vendidos (Especies Destacadas) */}
       {featuredProducts.length > 0 && (
         <section
-          className="bg-canvas relative flex w-full flex-col py-13.5 px-5"
+          className="bg-canvas relative flex w-full flex-col px-5 py-13.5"
           id="productos-destacados"
-        > 
-            <Title title="Los más vendidos" />
+        >
+          <Title title="Los más vendidos" />
 
-            <div className="mt-8">
-              <ProductSlideshow products={featuredProducts} />
-            </div>
- 
+          <div className="mt-8">
+            <ProductSlideshow products={featuredProducts} />
+          </div>
         </section>
       )}
 

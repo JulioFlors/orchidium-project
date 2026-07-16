@@ -77,9 +77,12 @@ export function LandingHeader({
       if (route.slug === 'plants') {
         const updatedCategories = route.categories?.map((cat) => {
           let imageUrl = cat.image
-          if (cat.slug === 'orchids') imageUrl = layoutConfig.categories.orchids.imageUrl || cat.image
+
+          if (cat.slug === 'orchids')
+            imageUrl = layoutConfig.categories.orchids.imageUrl || cat.image
           if (cat.slug === 'cactus') imageUrl = layoutConfig.categories.cactus.imageUrl || cat.image
-          if (cat.slug === 'succulents') imageUrl = layoutConfig.categories.succulents.imageUrl || cat.image
+          if (cat.slug === 'succulents')
+            imageUrl = layoutConfig.categories.succulents.imageUrl || cat.image
           if (cat.slug === 'adenium_obesum')
             imageUrl = layoutConfig.categories.adenium_obesum.imageUrl || cat.image
 
@@ -101,6 +104,7 @@ export function LandingHeader({
           featuredItem,
         }
       }
+
       return route
     })
   }, [layoutConfig])

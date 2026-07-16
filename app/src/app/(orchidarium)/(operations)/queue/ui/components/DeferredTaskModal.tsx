@@ -19,10 +19,7 @@ const plannerSchema = z.object({
     { message: 'Debes seleccionar un circuito' },
   ),
   zone: z.literal(ZoneType.ZONA_A),
-  duration: z.coerce
-    .number()
-    .min(1, 'Mínimo 1 minuto')
-    .max(25, 'Máximo 25 minutos'),
+  duration: z.coerce.number().min(1, 'Mínimo 1 minuto').max(25, 'Máximo 25 minutos'),
   scheduledAt: z
     .string()
     .min(1, 'Debes seleccionar fecha y hora')
@@ -113,6 +110,7 @@ export function DeferredTaskModal({ isOpen, onClose, onSubmitSuccess }: Props) {
   // Interceptar el submit exitoso y limpiar borrador
   const submitHandler = async (data: z.input<typeof plannerSchema>) => {
     const parsedData = plannerSchema.parse(data)
+
     await onSubmitSuccess(parsedData)
     clearDraft(draftKey)
     handleClose()

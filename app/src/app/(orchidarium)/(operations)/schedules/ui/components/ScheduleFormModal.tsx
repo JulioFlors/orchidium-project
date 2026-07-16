@@ -215,8 +215,10 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
         cronTrigger: cron,
         durationMinutes: parsedData.duration,
         zones: [parsedData.zone],
-        fertilizationProgramId: parsedData.purpose === 'FERTIGATION' ? parsedData.fertilizationProgramId : null,
-        phytosanitaryProgramId: parsedData.purpose === 'FUMIGATION' ? parsedData.phytosanitaryProgramId : null,
+        fertilizationProgramId:
+          parsedData.purpose === 'FERTIGATION' ? parsedData.fertilizationProgramId : null,
+        phytosanitaryProgramId:
+          parsedData.purpose === 'FUMIGATION' ? parsedData.phytosanitaryProgramId : null,
       })
 
       if (res.success) {

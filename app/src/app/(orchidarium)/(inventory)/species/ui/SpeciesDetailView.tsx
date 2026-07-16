@@ -132,7 +132,10 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
       form.genusId !== initialSpecies.genusId ||
       form.description !== (initialSpecies.description ?? '') ||
       form.glowColor !== (initialSpecies.glowColor ?? 'rgb(16, 185, 129)')
-    : form.name !== '' || form.genusId !== (genera[0]?.id ?? '') || form.description !== '' || form.glowColor !== 'rgb(16, 185, 129)'
+    : form.name !== '' ||
+      form.genusId !== (genera[0]?.id ?? '') ||
+      form.description !== '' ||
+      form.glowColor !== 'rgb(16, 185, 129)'
 
   // Manejar Salir / Cancelar
   function handleBack() {
@@ -233,12 +236,15 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
       // Sugerir color de hover si es la primera imagen subida
       if (images.length === 0) {
         const img = new Image()
+
         img.crossOrigin = 'anonymous'
         img.src = getImageUrl(image.url)
         img.onload = () => {
           const rgb = getDominantVibrantColor(img)
+
           if (rgb) {
             const suggestedColor = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
+
             setForm((p) => ({ ...p, glowColor: suggestedColor }))
             addToast(`Sugerencia de color de hover: ${suggestedColor}`, 'info')
           }
@@ -350,8 +356,8 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
             <div>
               <FormField htmlFor="species-genus" label="Género *">
                 <SelectDropdown
-                  id="species-genus"
                   emptyMessage="No hay géneros disponibles"
+                  id="species-genus"
                   options={filteredGenera.map((g) => ({
                     value: g.id,
                     label: g.name,
@@ -377,16 +383,30 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
                         { value: 'rgb(234, 179, 8)', label: 'Amarillo Cactus' },
                         { value: 'rgb(6, 182, 212)', label: 'Azul / Cian' },
                         { value: 'rgb(239, 68, 68)', label: 'Rojo Flor' },
-                        ...((form.glowColor && !['rgb(16, 185, 129)', 'rgb(236, 72, 153)', 'rgb(249, 115, 22)', 'rgb(168, 85, 247)', 'rgb(234, 179, 8)', 'rgb(6, 182, 212)', 'rgb(239, 68, 68)'].includes(form.glowColor))
-                          ? [{ value: form.glowColor, label: `Personalizado/Sugerido: ${form.glowColor}` }]
-                          : [])
+                        ...(form.glowColor &&
+                        ![
+                          'rgb(16, 185, 129)',
+                          'rgb(236, 72, 153)',
+                          'rgb(249, 115, 22)',
+                          'rgb(168, 85, 247)',
+                          'rgb(234, 179, 8)',
+                          'rgb(6, 182, 212)',
+                          'rgb(239, 68, 68)',
+                        ].includes(form.glowColor)
+                          ? [
+                              {
+                                value: form.glowColor,
+                                label: `Personalizado/Sugerido: ${form.glowColor}`,
+                              },
+                            ]
+                          : []),
                       ]}
                       value={form.glowColor}
                       onChange={(val) => setForm((p) => ({ ...p, glowColor: val as string }))}
                     />
                   </div>
                   <div
-                    className="h-9 w-9 rounded-lg border border-input-outline shadow-inner transition-colors duration-300"
+                    className="border-input-outline h-9 w-9 rounded-lg border shadow-inner transition-colors duration-300"
                     style={{ backgroundColor: form.glowColor }}
                   />
                 </div>

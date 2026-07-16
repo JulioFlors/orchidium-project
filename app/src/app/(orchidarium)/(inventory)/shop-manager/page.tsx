@@ -40,4 +40,3 @@ export default async function ShopManagerPage() {
 
   return <ShopView initialData={formattedSpecies} initialLayoutConfig={layoutConfig} />
 }
-

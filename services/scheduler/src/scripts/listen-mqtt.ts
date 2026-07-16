@@ -20,7 +20,7 @@ async function main() {
 
   console.log('Listening for 45 seconds...')
   await new Promise((resolve) => setTimeout(resolve, 45000))
-  
+
   console.log('Disconnecting...')
   client.end()
 }

@@ -11,6 +11,7 @@ async function main() {
     LIMIT 20
   `
   const stream = influxClient.query(query)
+
   for await (const row of stream) {
     console.log(row)
   }

@@ -1,13 +1,7 @@
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
-import {
-  CloudRain,
-  Thermometer,
-  Sun,
-  Cloud,
-  Moon,
-} from 'lucide-react'
+import { CloudRain, Thermometer, Sun, Cloud, Moon } from 'lucide-react'
 import { FaChartLine } from 'react-icons/fa6'
 import { IoWaterOutline } from 'react-icons/io5'
 import useSWR from 'swr'
@@ -270,6 +264,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     if (!selectedMetric) return false
     if (selectedMetric === 'rain_events') return isPhysicalRainLoading
     if (selectedMetric === 'rain_inferred') return isInferredRainLoading
+
     return isChartLoading
   }, [selectedMetric, isPhysicalRainLoading, isInferredRainLoading, isChartLoading])
 
@@ -296,14 +291,22 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     const isPhysicalActive = physicalRainData?.isActive || false
     const isInferredActive = inferredRainData?.isInferredActive || false
 
+    const nowTs = new Date().getTime()
+
     const physicalDuration = physicalEvents.reduce((acc, ev) => {
       const isAct = !ev.endedAt
-      const dur = isAct ? Math.round((Date.now() - new Date(ev.startedAt || ev.time).getTime()) / 1000) : ev.duration
+      const dur = isAct
+        ? Math.round((nowTs - new Date(ev.startedAt || ev.time).getTime()) / 1000)
+        : ev.duration
+
       return acc + dur
     }, 0)
     const inferredDuration = inferredEvents.reduce((acc, ev) => {
       const isAct = !ev.endedAt
-      const dur = isAct ? Math.round((Date.now() - new Date(ev.startedAt || ev.time).getTime()) / 1000) : ev.duration
+      const dur = isAct
+        ? Math.round((nowTs - new Date(ev.startedAt || ev.time).getTime()) / 1000)
+        : ev.duration
+
       return acc + dur
     }, 0)
 
@@ -588,8 +591,12 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               .map((ev: RainEvent) => {
                 const startDate = new Date(ev.time)
                 const isAct = !ev.endedAt
-                const durSec = isAct ? Math.round((Date.now() - startDate.getTime()) / 1000) : ev.duration
-                const endDate = isAct ? new Date() : new Date(startDate.getTime() + ev.duration * 1000)
+                const durSec = isAct
+                  ? Math.round((Date.now() - startDate.getTime()) / 1000)
+                  : ev.duration
+                const endDate = isAct
+                  ? new Date()
+                  : new Date(startDate.getTime() + ev.duration * 1000)
 
                 return {
                   time: ev.time,
@@ -616,8 +623,12 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               .map((ev: RainEvent) => {
                 const startDate = new Date(ev.time)
                 const isAct = !ev.endedAt
-                const durSec = isAct ? Math.round((Date.now() - startDate.getTime()) / 1000) : ev.duration
-                const endDate = isAct ? new Date() : new Date(startDate.getTime() + ev.duration * 1000)
+                const durSec = isAct
+                  ? Math.round((Date.now() - startDate.getTime()) / 1000)
+                  : ev.duration
+                const endDate = isAct
+                  ? new Date()
+                  : new Date(startDate.getTime() + ev.duration * 1000)
 
                 return {
                   time: ev.time,
@@ -715,14 +726,23 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     }
 
     // ─── PRIORIDAD 3: Lluvia activa (Física o Inferida) ───────────────────
-    const isRainingNow = rainState === 'Raining' || parsedRainData.physical.isActive || parsedRainData.inferred.isActive
+    const isRainingNow =
+      rainState === 'Raining' ||
+      parsedRainData.physical.isActive ||
+      parsedRainData.inferred.isActive
+
     if (isRainingNow) {
       const isVirtual = parsedRainData.inferred.isActive && !parsedRainData.physical.isActive
+
       return {
         label: 'Lloviendo',
         icon: <CloudRain className="h-6 w-6 text-blue-400" />,
         color: 'blue' as const,
-        description: isVirtual ? 'Inferencia termodinámica activa' : (rain > 0 ? `Intensidad: ${rain.toFixed(0)}%` : 'Precipitación detectada'),
+        description: isVirtual
+          ? 'Inferencia termodinámica activa'
+          : rain > 0
+            ? `Intensidad: ${rain.toFixed(0)}%`
+            : 'Precipitación detectada',
         status: 'warning' as const,
       }
     }

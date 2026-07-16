@@ -42,16 +42,16 @@ export const useDeviceHeartbeat = (
     : 'Actuator_Controller'
 
   // Consultar el estado en Postgres mediante API usando SWR
-  const { data: dbData, isLoading: dbLoading } = useSWR<{ timestamp: number; status: string } | null>(
-    `/api/environment/device-status?device=${deviceName}`,
-    fetcher,
-    {
-      refreshInterval: 30000,
-      fallbackData: initialHeartbeat && initialStatus !== 'unknown'
+  const { data: dbData, isLoading: dbLoading } = useSWR<{
+    timestamp: number
+    status: string
+  } | null>(`/api/environment/device-status?device=${deviceName}`, fetcher, {
+    refreshInterval: 30000,
+    fallbackData:
+      initialHeartbeat && initialStatus !== 'unknown'
         ? { timestamp: initialHeartbeat, status: initialStatus }
         : undefined,
-    }
-  )
+  })
 
   const statusData = messages[topic] as
     | { payload: unknown; receivedAt: number; isRetained: boolean }
@@ -62,14 +62,10 @@ export const useDeviceHeartbeat = (
   // El latido efectivo proviene del mensaje MQTT en vivo si existe y no es retenido.
   // Si no hay mensaje en vivo o es retenido, usamos los datos de Postgres (dbData).
   const currentHeartbeat =
-    statusData && !isRetained
-      ? statusData.receivedAt
-      : (dbData?.timestamp || null)
+    statusData && !isRetained ? statusData.receivedAt : dbData?.timestamp || null
 
   const rawStatus =
-    statusData && !isRetained
-      ? String(statusData.payload).trim()
-      : (dbData?.status || 'unknown')
+    statusData && !isRetained ? String(statusData.payload).trim() : dbData?.status || 'unknown'
 
   const zombieThreshold = isEmaTopic ? 62 * 60 * 1000 : 75000 // 62 min para EMA, 75s para Actuador
   const offlineThreshold = isEmaTopic ? 65 * 60 * 1000 : 145000 // 65 min para EMA, 145s para Actuador
@@ -97,6 +93,7 @@ export const useDeviceHeartbeat = (
           : ['online', 'ping', 'reboot'].includes(rawStatus)
             ? 'online'
             : rawStatus
+
       connectionState = normalizedStatus as DeviceConnectionState
     } else {
       // Para el EMA o para mensajes MQTT en tiempo real, aplicamos los umbrales de inactividad
@@ -111,6 +108,7 @@ export const useDeviceHeartbeat = (
             : ['online', 'ping', 'reboot'].includes(rawStatus)
               ? 'online'
               : rawStatus
+
         connectionState = normalizedStatus as DeviceConnectionState
       }
     }

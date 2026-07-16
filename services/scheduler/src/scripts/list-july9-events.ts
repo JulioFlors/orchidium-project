@@ -16,7 +16,7 @@ async function main() {
   console.log(`Found ${events.length} virtual events:`)
   for (const e of events) {
     console.log(
-      `- ID: ${e.id} | Start: ${e.startedAt.toLocaleString('es-VE', { timeZone: 'America/Caracas' })} | End: ${e.endedAt?.toLocaleString('es-VE', { timeZone: 'America/Caracas' }) || 'OPEN'} | Type: ${e.triggerType} | Reason: ${e.triggerReason}`
+      `- ID: ${e.id} | Start: ${e.startedAt.toLocaleString('es-VE', { timeZone: 'America/Caracas' })} | End: ${e.endedAt?.toLocaleString('es-VE', { timeZone: 'America/Caracas' }) || 'OPEN'} | Type: ${e.triggerType} | Reason: ${e.triggerReason}`,
     )
   }
 }

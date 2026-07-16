@@ -18,8 +18,8 @@ export function OrchidariumView() {
           </section>
 
           {/* Panel de Auditoría Biológica en tiempo real */}
-          <section className="flex flex-col gap-6 border-t border-input-outline pt-6">
-            <h3 className="text-primary font-bold text-lg leading-tight font-sans">
+          <section className="border-input-outline flex flex-col gap-6 border-t pt-6">
+            <h3 className="text-primary font-sans text-lg leading-tight font-bold">
               Monitoreo y Auditoría Biológica
             </h3>
             <BiologicalAuditPanel />
@@ -29,4 +29,3 @@ export function OrchidariumView() {
     </div>
   )
 }
-

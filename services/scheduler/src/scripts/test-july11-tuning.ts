@@ -22,7 +22,9 @@ interface StepData {
 function rowTimeToDate(rawTime: unknown): Date {
   if (rawTime instanceof Date) return rawTime
   const s = String(rawTime)
+
   if (isNaN(Number(s))) return new Date(s)
+
   return s.length > 13 ? new Date(Number(s.substring(0, 13))) : new Date(Number(s))
 }
 
@@ -40,6 +42,7 @@ async function loadDataRange(startQuery: Date, endQuery: Date): Promise<StepData
   const flushInterval = (timestampMs: number) => {
     if (tempBuffer.length > 0) {
       const allVals = tempBuffer.map((s) => s.value)
+
       tempBatches.push({
         min: Math.min(...allVals),
         max: Math.max(...allVals),
@@ -48,6 +51,7 @@ async function loadDataRange(startQuery: Date, endQuery: Date): Promise<StepData
       })
     } else if (tempBatches.length > 0) {
       const prev = tempBatches[tempBatches.length - 1]
+
       tempBatches.push({
         min: prev.min,
         max: prev.max,
@@ -58,6 +62,7 @@ async function loadDataRange(startQuery: Date, endQuery: Date): Promise<StepData
 
     if (humBuffer.length > 0) {
       const allVals = humBuffer.map((s) => s.value)
+
       humBatches.push({
         min: Math.min(...allVals),
         max: Math.max(...allVals),
@@ -66,6 +71,7 @@ async function loadDataRange(startQuery: Date, endQuery: Date): Promise<StepData
       })
     } else if (humBatches.length > 0) {
       const prev = humBatches[humBatches.length - 1]
+
       humBatches.push({
         min: prev.min,
         max: prev.max,
@@ -77,14 +83,16 @@ async function loadDataRange(startQuery: Date, endQuery: Date): Promise<StepData
     const tDate = new Date(timestampMs)
     const sampleHour = (tDate.getUTCHours() - 4 + 24) % 24
     const isSolar = sampleHour >= 5 && sampleHour < 19
-    const effectiveLuxBuffer = luxBuffer.length >= 5 || !isSolar
-      ? [...luxBuffer]
-      : Array(5).fill({ value: 0, timestamp: timestampMs })
+    const effectiveLuxBuffer =
+      luxBuffer.length >= 5 || !isSolar
+        ? [...luxBuffer]
+        : Array(5).fill({ value: 0, timestamp: timestampMs })
 
     if (effectiveLuxBuffer.length > 0) {
       const allVals = effectiveLuxBuffer.map((s) => s.value)
       const sortedAsc = [...allVals].sort((a, b) => a - b)
       const low5 = sortedAsc.slice(0, Math.min(5, sortedAsc.length))
+
       luxBatches.push({
         min: low5.reduce((sum, val) => sum + val, 0) / low5.length,
         max: allVals.reduce((sum, val) => sum + val, 0) / allVals.length,
@@ -93,6 +101,7 @@ async function loadDataRange(startQuery: Date, endQuery: Date): Promise<StepData
       })
     } else if (luxBatches.length > 0) {
       const prev = luxBatches[luxBatches.length - 1]
+
       luxBatches.push({
         min: prev.min,
         max: prev.max,
@@ -144,17 +153,21 @@ async function loadDataRange(startQuery: Date, endQuery: Date): Promise<StepData
 
       if (row.temperature != null) {
         const tVal = Number(row.temperature)
+
         if (tVal > 5.0 && tVal < 55.0) tempBuffer.push({ value: tVal, timestamp: tMs })
       }
       if (row.humidity != null) {
         const hVal = Number(row.humidity)
+
         if (hVal > 10.0 && hVal <= 100.0) humBuffer.push({ value: hVal, timestamp: tMs })
       }
       if (row.illuminance != null) {
         const lVal = Number(row.illuminance)
+
         if (lVal >= 0) luxBuffer.push({ value: lVal, timestamp: tMs })
       } else {
         const sampleHour = (tDate.getUTCHours() - 4 + 24) % 24
+
         if (sampleHour >= 19 || sampleHour < 5) {
           luxBuffer.push({ value: 0, timestamp: tMs })
         }
@@ -187,14 +200,18 @@ function getSlopeMetrics(samples: Sample[]): { max1m: number; max2m: number } {
   let max1m = 0
   let max2m = 0
   const sorted = [...samples].sort((a, b) => a.timestamp - b.timestamp)
+
   for (let i = 1; i < sorted.length; i++) {
     const diff = sorted[i].value - sorted[i - 1].value
+
     if (diff > max1m) max1m = diff
     if (i >= 2) {
       const diff2 = sorted[i].value - sorted[i - 2].value
+
       if (diff2 > max2m) max2m = diff2
     }
   }
+
   return { max1m, max2m }
 }
 
@@ -203,14 +220,18 @@ function getTempSlopeMetrics(samples: Sample[]): { maxDrop1m: number; maxDrop2m:
   let maxDrop1m = 0
   let maxDrop2m = 0
   const sorted = [...samples].sort((a, b) => a.timestamp - b.timestamp)
+
   for (let i = 1; i < sorted.length; i++) {
     const diff = sorted[i].value - sorted[i - 1].value
+
     if (diff < maxDrop1m) maxDrop1m = diff
     if (i >= 2) {
       const diff2 = sorted[i].value - sorted[i - 2].value
+
       if (diff2 > maxDrop2m) maxDrop2m = diff2
     }
   }
+
   return { maxDrop1m, maxDrop2m }
 }
 
@@ -231,7 +252,7 @@ function runSimulation(
     dayTempProgression: { base: number; step: number }
     dayHumOffset: number // 0.0 para original, 2.0 para sensible 1
     useVeto: boolean
-  }
+  },
 ): SimResult[] {
   const tempBatches: BatchSummary[] = []
   const humBatches: BatchSummary[] = []
@@ -260,7 +281,13 @@ function runSimulation(
     const timestampMs = tempBatches[0].timestamp
 
     const isDay = isDaytime(timestampMs)
-    const timeStr = new Date(timestampMs).toLocaleString('es-VE', { timeZone: 'America/Caracas', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
+    const timeStr = new Date(timestampMs).toLocaleString('es-VE', {
+      timeZone: 'America/Caracas',
+      hour: '2-digit',
+      minute: '2-digit',
+      day: '2-digit',
+      month: '2-digit',
+    })
 
     if (!rainActive) {
       let triggered = false
@@ -301,15 +328,20 @@ function runSimulation(
         const isHumRobustMet1 = dHum1 >= humRobust1
         const isHumPreSaturated1 = baseHum1 >= 90.0 && baseHum1 <= 95.0 && currentMaxHum >= 98.0
 
-        if (dTemp1 <= tempDropThreshold1 && luxCondition1 && (isHumSensitiveMet1 || isHumPreSaturated1)) {
+        if (
+          dTemp1 <= tempDropThreshold1 &&
+          luxCondition1 &&
+          (isHumSensitiveMet1 || isHumPreSaturated1)
+        ) {
           let vetoPassed = true
           let vetoReason = ''
-          
+
           if (options.useVeto && !isHumRobustMet1 && !isHumPreSaturated1) {
             const hSlopes = getSlopeMetrics(humBatches[0].samples)
             const tSlopes = getTempSlopeMetrics(tempBatches[0].samples)
             const hasSteepHum = hSlopes.max1m >= 1.8 || hSlopes.max2m >= 2.5
             const hasSteepTemp = tSlopes.maxDrop1m <= -0.5
+
             vetoPassed = hasSteepHum || hasSteepTemp
             vetoReason = ` [Veto: Hum1m=${hSlopes.max1m.toFixed(1)}%, Temp1m=${tSlopes.maxDrop1m.toFixed(1)}°C | Pasó=${vetoPassed}]`
           }
@@ -346,7 +378,8 @@ function runSimulation(
             humSensitive2 = 12.0 - options.dayHumOffset
           } else {
             luxCondition2 = currentMinLux <= baseLux2 * 0.4
-            tempDropThreshold2 = options.dayTempProgression.base - 0.5 + options.dayTempProgression.step
+            tempDropThreshold2 =
+              options.dayTempProgression.base - 0.5 + options.dayTempProgression.step
             humRobust2 = 12.0
             humSensitive2 = 12.0 - options.dayHumOffset
           }
@@ -355,7 +388,11 @@ function runSimulation(
           const isHumRobustMet2 = dHum2 >= humRobust2
           const isHumPreSaturated2 = baseHum2 >= 88.0 && baseHum2 <= 95.0 && currentMaxHum >= 98.0
 
-          if (dTemp2 <= tempDropThreshold2 && luxCondition2 && (isHumSensitiveMet2 || isHumPreSaturated2)) {
+          if (
+            dTemp2 <= tempDropThreshold2 &&
+            luxCondition2 &&
+            (isHumSensitiveMet2 || isHumPreSaturated2)
+          ) {
             let vetoPassed = true
             let vetoReason = ''
 
@@ -364,6 +401,7 @@ function runSimulation(
               const tSlopes = getTempSlopeMetrics(tempBatches[0].samples)
               const hasSteepHum = hSlopes.max1m >= 1.8 || hSlopes.max2m >= 2.5
               const hasSteepTemp = tSlopes.maxDrop1m <= -0.5
+
               vetoPassed = hasSteepHum || hasSteepTemp
               vetoReason = ` [Veto: Hum1m=${hSlopes.max1m.toFixed(1)}%, Temp1m=${tSlopes.maxDrop1m.toFixed(1)}°C | Pasó=${vetoPassed}]`
             }
@@ -377,7 +415,12 @@ function runSimulation(
         }
 
         // --- PASO 3 (40 Minutos) ---
-        if (!triggered && tempBatches.length >= 4 && humBatches.length >= 4 && luxBatches.length >= 4) {
+        if (
+          !triggered &&
+          tempBatches.length >= 4 &&
+          humBatches.length >= 4 &&
+          luxBatches.length >= 4
+        ) {
           const baseTemp3 = tempBatches[3].max
           const baseHum3 = humBatches[3].min
           const baseLux3 = luxBatches[3].max
@@ -391,17 +434,20 @@ function runSimulation(
 
           if (baseLux3 <= 15000) {
             luxCondition3 = true
-            tempDropThreshold3 = options.dayTempProgression.base + options.dayTempProgression.step * 2
+            tempDropThreshold3 =
+              options.dayTempProgression.base + options.dayTempProgression.step * 2
             humRobust3 = 16.0
             humSensitive3 = 16.0 - options.dayHumOffset
           } else if (baseLux3 <= 26000) {
             luxCondition3 = currentMinLux <= baseLux3 * 0.6
-            tempDropThreshold3 = options.dayTempProgression.base + options.dayTempProgression.step * 2
+            tempDropThreshold3 =
+              options.dayTempProgression.base + options.dayTempProgression.step * 2
             humRobust3 = 14.0
             humSensitive3 = 14.0 - options.dayHumOffset
           } else {
             luxCondition3 = currentMinLux <= baseLux3 * 0.4
-            tempDropThreshold3 = options.dayTempProgression.base - 0.5 + options.dayTempProgression.step * 2
+            tempDropThreshold3 =
+              options.dayTempProgression.base - 0.5 + options.dayTempProgression.step * 2
             humRobust3 = 14.0
             humSensitive3 = 14.0 - options.dayHumOffset
           }
@@ -410,7 +456,11 @@ function runSimulation(
           const isHumRobustMet3 = dHum3 >= humRobust3
           const isHumPreSaturated3 = baseHum3 >= 86.0 && baseHum3 <= 95.0 && currentMaxHum >= 98.0
 
-          if (dTemp3 <= tempDropThreshold3 && luxCondition3 && (isHumSensitiveMet3 || isHumPreSaturated3)) {
+          if (
+            dTemp3 <= tempDropThreshold3 &&
+            luxCondition3 &&
+            (isHumSensitiveMet3 || isHumPreSaturated3)
+          ) {
             let vetoPassed = true
             let vetoReason = ''
 
@@ -419,6 +469,7 @@ function runSimulation(
               const tSlopes = getTempSlopeMetrics(tempBatches[0].samples)
               const hasSteepHum = hSlopes.max1m >= 1.8 || hSlopes.max2m >= 2.5
               const hasSteepTemp = tSlopes.maxDrop1m <= -0.5
+
               vetoPassed = hasSteepHum || hasSteepTemp
               vetoReason = ` [Veto: Hum1m=${hSlopes.max1m.toFixed(1)}%, Temp1m=${tSlopes.maxDrop1m.toFixed(1)}°C | Pasó=${vetoPassed}]`
             }
@@ -484,6 +535,7 @@ function runSimulation(
       // CIERRE
       const currentTemp = tempBatches[0].min
       const currentHum = humBatches[0].max
+
       minTempInRain = Math.min(minTempInRain, currentMinTemp)
       maxHumInRain = Math.max(maxHumInRain, currentMaxHum)
 
@@ -494,10 +546,10 @@ function runSimulation(
       if (timestampMs - rainStartedAtMs >= 30 * 60 * 1000) {
         const last3BatchesT = [tempBatches[0], tempBatches[1], tempBatches[2]]
         const last3BatchesH = [humBatches[0], humBatches[1], humBatches[2]]
-        const tMax = Math.max(...last3BatchesT.map(b => b.max))
-        const tMin = Math.min(...last3BatchesT.map(b => b.min))
-        const hMax = Math.max(...last3BatchesH.map(b => b.max))
-        const hMin = Math.min(...last3BatchesH.map(b => b.min))
+        const tMax = Math.max(...last3BatchesT.map((b) => b.max))
+        const tMin = Math.min(...last3BatchesT.map((b) => b.min))
+        const hMax = Math.max(...last3BatchesH.map((b) => b.max))
+        const hMin = Math.min(...last3BatchesH.map((b) => b.min))
         const tVar = tMax - tMin
         const hVar = hMax - hMin
 
@@ -509,6 +561,7 @@ function runSimulation(
 
       // Cierre por recuperación térmica (+0.6°C)
       const tempRecovery = currentTemp - minTempInRain
+
       if (!closeTriggered && tempRecovery >= 0.6) {
         closeTriggered = true
         closeReason = `Recuperación térmica (+${tempRecovery.toFixed(2)}°C)`
@@ -523,6 +576,7 @@ function runSimulation(
       if (closeTriggered) {
         rainActive = false
         const lastResult = results[results.length - 1]
+
         if (lastResult) {
           lastResult.endedAtStr = timeStr
           lastResult.reason += ` | Cerrado por: ${closeReason}`
@@ -537,8 +591,8 @@ function runSimulation(
 
 async function main() {
   const startJuly11 = new Date('2026-07-11T04:00:00Z')
-  const endJuly12 = new Date('2026-07-13T04:00:00Z') 
-  
+  const endJuly12 = new Date('2026-07-13T04:00:00Z')
+
   console.log(`📡 [INFO] Consultando InfluxDB para el 11 y 12 de Julio...`)
   const targetData = await loadDataRange(startJuly11, endJuly12)
 
@@ -567,6 +621,7 @@ async function main() {
 
   for (const config of configList) {
     const res = runSimulation(targetData, config)
+
     console.log(`\n🔸 Configuración: ${config.name} (Encontró ${res.length} eventos)`)
     if (res.length === 0) {
       console.log('  ❌ Ningún evento detectado.')

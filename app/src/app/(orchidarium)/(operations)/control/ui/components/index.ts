@@ -1,3 +1,3 @@
 export * from './FertigationModal'
-export * from './ControlGrid'
 
+export * from './ControlGrid'

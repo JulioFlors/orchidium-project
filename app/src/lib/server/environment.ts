@@ -203,6 +203,7 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
         // Para iluminancia, filtrar período diurno (5h a 19h local)
         const startDay = new Date(start.getTime() + 5 * 3600000)
         const endDay = new Date(start.getTime() + 19 * 3600000 + 59 * 1000)
+
         timeFilter = `AND time >= TIMESTAMP '${startDay.toISOString()}' AND time <= TIMESTAMP '${endDay.toISOString()}'`
       } else {
         timeFilter = `AND time >= TIMESTAMP '${start.toISOString()}' AND time <= TIMESTAMP '${end.toISOString()}'`
@@ -733,6 +734,7 @@ export async function getSensorDataInternal(range: string, zone: ZoneType, metri
  */
 export async function getLastHeartbeat(source: string, zone?: ZoneType) {
   let deviceName = source
+
   if (source === 'Weather_Station' && zone) {
     deviceName = `Weather_Station_${zone}`
   }
@@ -800,8 +802,10 @@ export async function getRainSummaryInternal(range: string, zone: ZoneType) {
   let endDate: Date | undefined = undefined
 
   const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+
   if (dateRegex.test(range)) {
     const [year, month, day] = range.split('-').map(Number)
+
     // Rango de 00:00 a 23:59:59.999 local de Caracas (-04:00)
     startDate = new Date(Date.UTC(year, month - 1, day, 4, 0, 0, 0))
     endDate = new Date(startDate.getTime() + 24 * 3600000 - 1)
@@ -811,6 +815,7 @@ export async function getRainSummaryInternal(range: string, zone: ZoneType) {
         const VET_OFFSET = 4 * 3600000
         const now = new Date()
         const midnightVET = new Date(now.getTime() - VET_OFFSET)
+
         midnightVET.setUTCHours(0, 0, 0, 0)
         startDate = new Date(midnightVET.getTime() + VET_OFFSET)
         break
@@ -820,31 +825,33 @@ export async function getRainSummaryInternal(range: string, zone: ZoneType) {
         const VET_OFFSET = 4 * 3600000
         const now = new Date()
         const midnightVET = new Date(now.getTime() - VET_OFFSET)
+
         midnightVET.setUTCHours(0, 0, 0, 0)
         const todayMidnightInUTC = new Date(midnightVET.getTime() + VET_OFFSET)
+
         startDate = new Date(todayMidnightInUTC.getTime() - 24 * 3600000)
         endDate = new Date(todayMidnightInUTC.getTime() - 1)
         break
       }
-    case '12h':
-      startDate = new Date(Date.now() - 12 * 3600000)
-      break
-    case '24h':
-      startDate = new Date(Date.now() - 24 * 3600000)
-      break
-    case '7d':
-      startDate = new Date(Date.now() - 7 * 24 * 3600000)
-      break
-    case '30d':
-      startDate = new Date(Date.now() - 30 * 24 * 3600000)
-      break
-    case 'all':
-      startDate = new Date(0)
-      break
-    default:
-      startDate = new Date(Date.now() - 24 * 3600000)
+      case '12h':
+        startDate = new Date(Date.now() - 12 * 3600000)
+        break
+      case '24h':
+        startDate = new Date(Date.now() - 24 * 3600000)
+        break
+      case '7d':
+        startDate = new Date(Date.now() - 7 * 24 * 3600000)
+        break
+      case '30d':
+        startDate = new Date(Date.now() - 30 * 24 * 3600000)
+        break
+      case 'all':
+        startDate = new Date(0)
+        break
+      default:
+        startDate = new Date(Date.now() - 24 * 3600000)
+    }
   }
-}
 
   try {
     const rainEvents = await prisma.rainEvent.findMany({

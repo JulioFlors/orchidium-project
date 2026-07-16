@@ -14,15 +14,11 @@ export function TypeManagerModal({
   plantTypeSingleLabels,
 }: TypeManagerModalProps) {
   return (
-    <Modal
-      isOpen={isOpen}
-      size="md"
-      title="Tipos de Plantas"
-      onClose={onClose}
-    >
+    <Modal isOpen={isOpen} size="md" title="Tipos de Plantas" onClose={onClose}>
       <div className="flex flex-col gap-4">
         <p className="text-secondary text-sm">
-          Los tipos de plantas definen las categorías taxonómicas generales del orquidario y determinan el comportamiento del riego y la fertilización.
+          Los tipos de plantas definen las categorías taxonómicas generales del orquidario y
+          determinan el comportamiento del riego y la fertilización.
         </p>
         <div className="border-input-outline divide-input-outline flex flex-col divide-y rounded-lg border bg-zinc-50/50 dark:bg-zinc-900/50">
           {Object.entries(plantTypeSingleLabels).map(([key, label]) => (

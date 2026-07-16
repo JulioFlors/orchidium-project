@@ -3,7 +3,9 @@ import { influxClient } from '../lib/influx'
 function rowTimeToDate(rawTime: unknown): Date {
   if (rawTime instanceof Date) return rawTime
   const s = String(rawTime)
+
   if (isNaN(Number(s))) return new Date(s)
+
   return s.length > 13 ? new Date(Number(s.substring(0, 13))) : new Date(Number(s))
 }
 
@@ -21,13 +23,15 @@ interface BatchSummary {
 
 function pushBatchMetrics(queue: BatchSummary[], sample: Sample) {
   const now = sample.timestamp
+
   if (queue.length === 0 || now - queue[0].timestamp >= 10 * 60 * 1000) {
     queue.unshift({ min: sample.value, max: sample.value, timestamp: now, samples: [sample] })
     if (queue.length > 6) queue.pop()
   } else {
     queue[0].samples.push(sample)
-    queue[0].samples = queue[0].samples.filter(s => now - s.timestamp < 10 * 60 * 1000)
-    const values = queue[0].samples.map(s => s.value)
+    queue[0].samples = queue[0].samples.filter((s) => now - s.timestamp < 10 * 60 * 1000)
+    const values = queue[0].samples.map((s) => s.value)
+
     queue[0].min = Math.min(...values)
     queue[0].max = Math.max(...values)
   }
@@ -35,7 +39,7 @@ function pushBatchMetrics(queue: BatchSummary[], sample: Sample) {
 
 async function main() {
   console.log('Running detailed gradient analysis for July 9, 6:30pm to 8:00pm Caracas time...')
-  
+
   const query = `
     SELECT time, temperature, humidity
     FROM "environment_metrics"
@@ -47,6 +51,7 @@ async function main() {
 
   const rows: any[] = []
   const stream = influxClient.query(query)
+
   for await (const row of stream) {
     rows.push(row)
   }
@@ -54,13 +59,20 @@ async function main() {
   const tempBatches: BatchSummary[] = []
   const humBatches: BatchSummary[] = []
 
-  console.log('\nMinute-by-minute calculations:');
-  console.log('---------------------------------------------------------------------------------------------------------------------');
-  console.log('Time      | Temp  | Hum   | varTPre | tDropTh | varTCur | trendT  | varHPre | hRiseTh | varHCur | trendH  | Triggered');
-  console.log('---------------------------------------------------------------------------------------------------------------------');
+  console.log('\nMinute-by-minute calculations:')
+  console.log(
+    '---------------------------------------------------------------------------------------------------------------------',
+  )
+  console.log(
+    'Time      | Temp  | Hum   | varTPre | tDropTh | varTCur | trendT  | varHPre | hRiseTh | varHCur | trendH  | Triggered',
+  )
+  console.log(
+    '---------------------------------------------------------------------------------------------------------------------',
+  )
 
   for (const row of rows) {
     const tMs = rowTimeToDate(row.time).getTime()
+
     if (row.temperature == null || row.humidity == null) continue
 
     const tempVal = Number(row.temperature)
@@ -109,13 +121,18 @@ async function main() {
 
     const triggered = isTempDropAbrupt && (isHumRiseAbrupt || isPreSaturated)
 
-    const timeStr = new Date(tMs).toLocaleString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Caracas' })
+    const timeStr = new Date(tMs).toLocaleString('es-VE', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      timeZone: 'America/Caracas',
+    })
 
     console.log(
       `${timeStr} | ${tempVal.toFixed(1)}°C | ${humVal.toFixed(1)}% | ` +
-      `${varTempPre.toFixed(2)}    | ${tempDropThreshold.toFixed(2)}    | ${varTempCur.toFixed(2)}    | ${trendTemp.toFixed(2)}   | ` +
-      `${varHumPre.toFixed(2)}    | ${humRiseThreshold.toFixed(2)}    | ${varHumCur.toFixed(2)}    | ${trendHum.toFixed(2)}   | ` +
-      `${triggered ? 'YES' : 'NO'}`
+        `${varTempPre.toFixed(2)}    | ${tempDropThreshold.toFixed(2)}    | ${varTempCur.toFixed(2)}    | ${trendTemp.toFixed(2)}   | ` +
+        `${varHumPre.toFixed(2)}    | ${humRiseThreshold.toFixed(2)}    | ${varHumCur.toFixed(2)}    | ${trendHum.toFixed(2)}   | ` +
+        `${triggered ? 'YES' : 'NO'}`,
     )
   }
 }

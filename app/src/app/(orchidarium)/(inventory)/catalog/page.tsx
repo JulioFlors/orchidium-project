@@ -15,5 +15,5 @@ export default async function CatalogPage() {
   const species = speciesRes.species || []
   const genera = generaRes.genera || []
 
-  return <CatalogView initialSpecies={species} initialGenera={genera} />
+  return <CatalogView initialGenera={genera} initialSpecies={species} />
 }

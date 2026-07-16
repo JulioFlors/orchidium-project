@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import type { PotSize } from '@package/database/enums'
+
+import { useState, useEffect } from 'react'
 import { PiStorefrontFill } from 'react-icons/pi'
 
 import { Modal, Button, FormField, Input, SelectDropdown } from '@/components'
@@ -31,7 +32,12 @@ interface VariantFormModalProps {
   editingVariant: Variant | null
   targetSpecies: SpeciesWithStoreData | null
   isPending: boolean
-  onSave: (formValues: { size: PotSize; price: number; quantity: number; available: boolean }) => void
+  onSave: (formValues: {
+    size: PotSize
+    price: number
+    quantity: number
+    available: boolean
+  }) => void
   potSizes: PotSize[]
   potSizeLabels: Record<PotSize, string>
 }
@@ -64,7 +70,9 @@ export function VariantFormModal({
           available: editingVariant.available,
         })
       } else {
-        const nextAvailableSize = potSizes.find((s) => !targetSpecies?.variants.some((v) => v.size === s)) || potSizes[0]
+        const nextAvailableSize =
+          potSizes.find((s) => !targetSpecies?.variants.some((v) => v.size === s)) || potSizes[0]
+
         setForm({
           size: nextAvailableSize,
           price: 0,
@@ -138,7 +146,7 @@ export function VariantFormModal({
 
           <div className="flex flex-col justify-end">
             <div
-              className="input-base text-primary bg-surface dark:bg-canvas rounded-md border border-input-outline p-2 flex cursor-pointer items-center justify-between"
+              className="input-base text-primary bg-surface dark:bg-canvas border-input-outline flex cursor-pointer items-center justify-between rounded-md border p-2"
               role="button"
               tabIndex={0}
               onClick={() => setForm((p) => ({ ...p, available: !p.available }))}

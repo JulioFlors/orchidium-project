@@ -22,22 +22,22 @@ export function ProductSlideshow({ products }: Props) {
   return (
     <div className="main-swiper-interactive-area w-full select-none">
       <Swiper
-        className="w-full"
-        loop={true}
-        grabCursor={true}
-        navigation={true}
-        modules={[Mousewheel, Navigation]}
-        mousewheel={{
-          forceToAxis: true,
-        }}
-        slidesPerView={1.15}
-        spaceBetween={16}
+        grabCursor
+        loop
+        navigation
         breakpoints={{
           1024: {
             slidesPerView: 3.15,
             spaceBetween: 24,
           },
         }}
+        className="w-full"
+        modules={[Mousewheel, Navigation]}
+        mousewheel={{
+          forceToAxis: true,
+        }}
+        slidesPerView={1.15}
+        spaceBetween={16}
         style={
           {
             '--swiper-navigation-color': '#ffffff',
@@ -48,7 +48,7 @@ export function ProductSlideshow({ products }: Props) {
       >
         {products.map((product, i) => (
           <SwiperSlide key={product.slug} className="!h-auto !items-stretch !justify-start">
-            <div className="w-full h-full flex flex-col">
+            <div className="flex h-full w-full flex-col">
               <ProductGridItem index={i} product={product} showGlow={false} />
             </div>
           </SwiperSlide>

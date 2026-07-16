@@ -10,9 +10,16 @@ async function main() {
 
   console.log(`Latest 10 inferred events in database:`)
   for (const ev of events) {
-    const localStart = new Date(ev.startedAt).toLocaleString('es-VE', { timeZone: 'America/Caracas' })
-    const localEnd = ev.endedAt ? new Date(ev.endedAt).toLocaleString('es-VE', { timeZone: 'America/Caracas' }) : 'In progress'
-    console.log(`- ID: ${ev.id.substring(0, 8)} | Start: ${localStart} | End: ${localEnd} | Type: ${ev.triggerType}`)
+    const localStart = new Date(ev.startedAt).toLocaleString('es-VE', {
+      timeZone: 'America/Caracas',
+    })
+    const localEnd = ev.endedAt
+      ? new Date(ev.endedAt).toLocaleString('es-VE', { timeZone: 'America/Caracas' })
+      : 'In progress'
+
+    console.log(
+      `- ID: ${ev.id.substring(0, 8)} | Start: ${localStart} | End: ${localEnd} | Type: ${ev.triggerType}`,
+    )
   }
 }
 

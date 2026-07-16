@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import clsx from 'clsx'
 import { PiCheckCircleFill, PiImageSquareFill } from 'react-icons/pi'
+
 import { getImageUrl } from '@/lib'
 
 interface MediaPickerProps {
@@ -25,7 +26,7 @@ export function MediaPicker({
       'aspect-square': aspectRatio === 'square',
       'aspect-[21/9]': aspectRatio === 'hero',
       'aspect-[4/3]': aspectRatio === 'category',
-    }
+    },
   )
 
   return (
@@ -44,31 +45,32 @@ export function MediaPicker({
           <div className="grid grid-cols-3 gap-3">
             {images.map((url) => {
               const isSelected = selectedImage === url
+
               return (
                 <button
                   key={url}
-                  type="button"
-                  onClick={() => onSelect(url)}
                   className={clsx(
-                    'group relative aspect-square overflow-hidden rounded-lg border-2 bg-surface transition-all duration-300 focus:outline-none',
+                    'group bg-surface relative aspect-square overflow-hidden rounded-lg border-2 transition-all duration-300 focus:outline-none',
                     isSelected
                       ? 'border-emerald-500 ring-2 ring-emerald-500/20'
-                      : 'border-input-outline hover:border-zinc-400 dark:hover:border-zinc-600'
+                      : 'border-input-outline hover:border-zinc-400 dark:hover:border-zinc-600',
                   )}
+                  type="button"
+                  onClick={() => onSelect(url)}
                 >
                   <Image
-                    src={getImageUrl(url)}
-                    alt="Miniatura"
                     fill
+                    alt="Miniatura"
                     className={clsx(
                       'object-cover transition-all duration-300 group-hover:scale-105',
-                      selectedImage && !isSelected && 'opacity-50'
+                      selectedImage && !isSelected && 'opacity-50',
                     )}
                     sizes="(max-width: 768px) 33vw, 15vw"
+                    src={getImageUrl(url)}
                   />
                   {isSelected && (
                     <div className="absolute top-1.5 right-1.5 z-10 text-emerald-500">
-                      <PiCheckCircleFill className="h-5 w-5 bg-white rounded-full dark:bg-zinc-900" />
+                      <PiCheckCircleFill className="h-5 w-5 rounded-full bg-white dark:bg-zinc-900" />
                     </div>
                   )}
                 </button>
@@ -86,14 +88,14 @@ export function MediaPicker({
         <div className={previewClass}>
           {selectedImage ? (
             <Image
-              src={getImageUrl(selectedImage)}
-              alt="Previsualización"
               fill
+              alt="Previsualización"
               className="object-cover"
               sizes="(max-width: 768px) 100vw, 50vw"
+              src={getImageUrl(selectedImage)}
             />
           ) : (
-            <div className="flex h-full w-full flex-col items-center justify-center p-6 text-center text-sm text-zinc-500 min-h-[160px]">
+            <div className="flex h-full min-h-[160px] w-full flex-col items-center justify-center p-6 text-center text-sm text-zinc-500">
               <PiImageSquareFill className="mb-2 h-8 w-8 opacity-30" />
               Selecciona una imagen de la galería para ver el encuadre
             </div>

@@ -96,11 +96,12 @@ export async function registerFlowering(data: {
     // el resto (cactus, suculentas, adenium, bromelias) usan EXTERIOR.
     const isOrchid = plant.species.genus.type === 'ORCHID'
     const targetZone: ZoneType = isOrchid
-      ? (plant.location?.zone || 'ZONA_A' as ZoneType)
-      : 'EXTERIOR' as ZoneType
+      ? plant.location?.zone || ('ZONA_A' as ZoneType)
+      : ('EXTERIOR' as ZoneType)
 
     // 3. Consultar las métricas de DailyEnvironmentStat de los últimos 7 días
     const dateLimit = new Date(data.startDate)
+
     dateLimit.setDate(dateLimit.getDate() - 7)
 
     const stats = await prisma.dailyEnvironmentStat.findMany({
@@ -122,20 +123,44 @@ export async function registerFlowering(data: {
     let humNightAverage = null
 
     if (stats.length > 0) {
-      let dliSum = 0, dliCount = 0
-      let difSum = 0, difCount = 0
-      let tempDaySum = 0, tempDayCount = 0
-      let tempNightSum = 0, tempNightCount = 0
-      let humDaySum = 0, humDayCount = 0
-      let humNightSum = 0, humNightCount = 0
+      let dliSum = 0,
+        dliCount = 0
+      let difSum = 0,
+        difCount = 0
+      let tempDaySum = 0,
+        tempDayCount = 0
+      let tempNightSum = 0,
+        tempNightCount = 0
+      let humDaySum = 0,
+        humDayCount = 0
+      let humNightSum = 0,
+        humNightCount = 0
 
       for (const stat of stats) {
-        if (stat.dli !== null && stat.dli !== undefined) { dliSum += stat.dli; dliCount++; }
-        if (stat.dif !== null && stat.dif !== undefined) { difSum += stat.dif; difCount++; }
-        if (stat.avgTempDay !== null && stat.avgTempDay !== undefined) { tempDaySum += stat.avgTempDay; tempDayCount++; }
-        if (stat.avgTempNight !== null && stat.avgTempNight !== undefined) { tempNightSum += stat.avgTempNight; tempNightCount++; }
-        if (stat.avgHumDay !== null && stat.avgHumDay !== undefined) { humDaySum += stat.avgHumDay; humDayCount++; }
-        if (stat.avgHumNight !== null && stat.avgHumNight !== undefined) { humNightSum += stat.avgHumNight; humNightCount++; }
+        if (stat.dli !== null && stat.dli !== undefined) {
+          dliSum += stat.dli
+          dliCount++
+        }
+        if (stat.dif !== null && stat.dif !== undefined) {
+          difSum += stat.dif
+          difCount++
+        }
+        if (stat.avgTempDay !== null && stat.avgTempDay !== undefined) {
+          tempDaySum += stat.avgTempDay
+          tempDayCount++
+        }
+        if (stat.avgTempNight !== null && stat.avgTempNight !== undefined) {
+          tempNightSum += stat.avgTempNight
+          tempNightCount++
+        }
+        if (stat.avgHumDay !== null && stat.avgHumDay !== undefined) {
+          humDaySum += stat.avgHumDay
+          humDayCount++
+        }
+        if (stat.avgHumNight !== null && stat.avgHumNight !== undefined) {
+          humNightSum += stat.avgHumNight
+          humNightCount++
+        }
       }
 
       if (dliCount > 0) dliAtInduction = dliSum / dliCount
@@ -278,4 +303,3 @@ export async function getActiveBiologicalEvents() {
     }
   }
 }
-

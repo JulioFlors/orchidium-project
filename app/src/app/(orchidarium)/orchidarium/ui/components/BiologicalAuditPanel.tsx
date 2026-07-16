@@ -8,6 +8,7 @@ import {
   PiCalendarXFill,
   PiArrowClockwiseBold,
 } from 'react-icons/pi'
+
 import { Badge, Button } from '@/components'
 import { getActiveBiologicalEvents, endFlowering } from '@/actions'
 import { useToastStore } from '@/store/toast/toast.store'
@@ -66,6 +67,7 @@ export function BiologicalAuditPanel() {
   const loadData = async () => {
     setIsLoading(true)
     const res = await getActiveBiologicalEvents()
+
     if (res.success && res.data) {
       setFloweringEvents(res.data.floweringEvents as unknown as FloweringEvent[])
       setPestSightings(res.data.pestSightings as unknown as PestSighting[])
@@ -84,6 +86,7 @@ export function BiologicalAuditPanel() {
 
     startTransition(async () => {
       const res = await endFlowering(eventId, new Date())
+
       if (res.success) {
         addToast('Floración finalizada correctamente.', 'success')
         loadData()
@@ -108,34 +111,34 @@ export function BiologicalAuditPanel() {
     <div className="flex flex-col gap-6">
       {/* Cabecera y controles de pestaña */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <div className="flex items-center gap-2 border-input-outline border pb-1 rounded-lg p-1 bg-surface/20">
+        <div className="border-input-outline bg-surface/20 flex items-center gap-2 rounded-lg border p-1 pb-1">
           <button
-            type="button"
-            onClick={() => setActiveTab('flowering')}
-            className={`flex items-center gap-2 px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${
+            className={`flex items-center gap-2 rounded-md px-4 py-1.5 text-xs font-semibold transition-all ${
               activeTab === 'flowering'
                 ? 'bg-emerald-500 text-white shadow-sm'
                 : 'text-secondary hover:text-primary'
             }`}
+            type="button"
+            onClick={() => setActiveTab('flowering')}
           >
             <PiFlowerFill className="h-4 w-4" />
             Floración Activa ({floweringEvents.length})
           </button>
           <button
-            type="button"
-            onClick={() => setActiveTab('pests')}
-            className={`flex items-center gap-2 px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${
+            className={`flex items-center gap-2 rounded-md px-4 py-1.5 text-xs font-semibold transition-all ${
               activeTab === 'pests'
                 ? 'bg-emerald-500 text-white shadow-sm'
                 : 'text-secondary hover:text-primary'
             }`}
+            type="button"
+            onClick={() => setActiveTab('pests')}
           >
             <PiBugFill className="h-4 w-4" />
             Plagas Recientes ({pestSightings.length})
           </button>
         </div>
 
-        <Button size="sm" variant="secondary" onClick={loadData} disabled={isLoading}>
+        <Button disabled={isLoading} size="sm" variant="secondary" onClick={loadData}>
           <PiArrowClockwiseBold className={`mr-1.5 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           Actualizar Panel
         </Button>
@@ -155,26 +158,25 @@ export function BiologicalAuditPanel() {
                   event.tempDayAverage !== null ||
                   event.tempNightAverage !== null ||
                   event.dliAtInduction !== null
+
                 return (
                   <div
                     key={event.id}
-                    className="border-input-outline bg-surface/10 hover:border-zinc-300 dark:hover:border-zinc-700 flex flex-col justify-between rounded-xl border p-5 transition-all duration-300"
+                    className="border-input-outline bg-surface/10 flex flex-col justify-between rounded-xl border p-5 transition-all duration-300 hover:border-zinc-300 dark:hover:border-zinc-700"
                   >
                     <div>
                       {/* Cabecera Tarjeta */}
                       <div className="flex items-start justify-between border-b border-zinc-100 pb-3 dark:border-zinc-800/50">
                         <div>
-                          <Badge variant="secondary">
-                            {event.plant.species.genus.name}
-                          </Badge>
-                          <h4 className="text-primary mt-1 font-bold text-lg leading-tight font-sans">
+                          <Badge variant="secondary">{event.plant.species.genus.name}</Badge>
+                          <h4 className="text-primary mt-1 font-sans text-lg leading-tight font-bold">
                             {event.plant.species.name}
                           </h4>
                           <span className="text-secondary font-mono text-[10px] opacity-40">
                             Planta ID: {event.plant.id.slice(-6).toUpperCase()}
                           </span>
                         </div>
-                        <span className="text-secondary text-xs font-semibold flex items-center gap-1">
+                        <span className="text-secondary flex items-center gap-1 text-xs font-semibold">
                           <PiCalendarFill className="text-emerald-500" />
                           {new Date(event.startDate).toLocaleDateString('es-ES', {
                             day: 'numeric',
@@ -185,14 +187,14 @@ export function BiologicalAuditPanel() {
 
                       {/* Climatología de Inducción */}
                       <div className="py-4">
-                        <span className="text-secondary text-[10px] font-bold tracking-wider uppercase opacity-55 block mb-2">
+                        <span className="text-secondary mb-2 block text-[10px] font-bold tracking-wider uppercase opacity-55">
                           Métricas de Inducción (Últimos 7 días)
                         </span>
 
                         {hasWeather ? (
                           <div className="grid grid-cols-3 gap-3">
-                            <div className="bg-surface/30 rounded-lg p-2.5 border border-input-outline">
-                              <span className="text-secondary text-[9px] font-semibold block uppercase opacity-50">
+                            <div className="bg-surface/30 border-input-outline rounded-lg border p-2.5">
+                              <span className="text-secondary block text-[9px] font-semibold uppercase opacity-50">
                                 Luz (DLI)
                               </span>
                               <span className="text-primary font-mono text-xs font-black">
@@ -201,8 +203,8 @@ export function BiologicalAuditPanel() {
                                   : 'N/D'}
                               </span>
                             </div>
-                            <div className="bg-surface/30 rounded-lg p-2.5 border border-input-outline">
-                              <span className="text-secondary text-[9px] font-semibold block uppercase opacity-50">
+                            <div className="bg-surface/30 border-input-outline rounded-lg border p-2.5">
+                              <span className="text-secondary block text-[9px] font-semibold uppercase opacity-50">
                                 Temp Día/Noc
                               </span>
                               <span className="text-primary font-mono text-xs font-black">
@@ -211,8 +213,8 @@ export function BiologicalAuditPanel() {
                                   : 'N/D'}
                               </span>
                             </div>
-                            <div className="bg-surface/30 rounded-lg p-2.5 border border-input-outline">
-                              <span className="text-secondary text-[9px] font-semibold block uppercase opacity-50">
+                            <div className="bg-surface/30 border-input-outline rounded-lg border p-2.5">
+                              <span className="text-secondary block text-[9px] font-semibold uppercase opacity-50">
                                 Hum Día/Noc
                               </span>
                               <span className="text-primary font-mono text-xs font-black">
@@ -223,13 +225,13 @@ export function BiologicalAuditPanel() {
                             </div>
                           </div>
                         ) : (
-                          <div className="text-secondary/40 text-xs italic bg-surface/20 rounded-lg p-3 text-center border border-dashed border-input-outline">
+                          <div className="text-secondary/40 bg-surface/20 border-input-outline rounded-lg border border-dashed p-3 text-center text-xs italic">
                             Sin datos de telemetría climatológica de inducción
                           </div>
                         )}
 
                         {event.notes && (
-                          <p className="text-secondary text-xs italic mt-3 bg-zinc-50 dark:bg-zinc-900 p-2 rounded border border-input-outline font-mono">
+                          <p className="text-secondary border-input-outline mt-3 rounded border bg-zinc-50 p-2 font-mono text-xs italic dark:bg-zinc-900">
                             "{event.notes}"
                           </p>
                         )}
@@ -237,15 +239,16 @@ export function BiologicalAuditPanel() {
                     </div>
 
                     {/* Botón Finalizar */}
-                    <div className="border-t border-zinc-100 pt-3 dark:border-zinc-800/50 flex items-center justify-between">
-                      <span className="text-secondary text-[10px] font-semibold opacity-55 uppercase">
-                        Zona: {event.plant.location?.zone || 'EXTERIOR'} / Mesa {event.plant.location?.table || 'N/A'}
+                    <div className="flex items-center justify-between border-t border-zinc-100 pt-3 dark:border-zinc-800/50">
+                      <span className="text-secondary text-[10px] font-semibold uppercase opacity-55">
+                        Zona: {event.plant.location?.zone || 'EXTERIOR'} / Mesa{' '}
+                        {event.plant.location?.table || 'N/A'}
                       </span>
                       <button
+                        className="flex items-center gap-1.5 rounded-lg border border-red-500/10 px-3 py-1.5 text-xs font-bold text-red-500 transition-colors hover:bg-red-500/10 focus:outline-none"
+                        disabled={isPending}
                         type="button"
                         onClick={() => handleEndFlowering(event.id)}
-                        disabled={isPending}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-red-500 hover:bg-red-500/10 rounded-lg transition-colors border border-red-500/10 focus:outline-none"
                       >
                         <PiCalendarXFill className="h-4 w-4" />
                         Finalizar Floración
@@ -256,7 +259,7 @@ export function BiologicalAuditPanel() {
               })}
 
               {floweringEvents.length === 0 && (
-                <div className="text-secondary/50 col-span-2 py-12 text-center text-sm italic border border-dashed border-input-outline rounded-xl">
+                <div className="text-secondary/50 border-input-outline col-span-2 rounded-xl border border-dashed py-12 text-center text-sm italic">
                   No hay plantas en floración activa en este momento.
                 </div>
               )}
@@ -268,6 +271,7 @@ export function BiologicalAuditPanel() {
             <div className="flex flex-col gap-4">
               {pestSightings.map((sighting) => {
                 const pestLabel = sighting.pest?.name || sighting.pestName || 'Plaga Desconocida'
+
                 return (
                   <div
                     key={sighting.id}
@@ -280,31 +284,35 @@ export function BiologicalAuditPanel() {
                       </div>
 
                       <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h4 className="text-primary font-bold text-base leading-tight font-sans">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="text-primary font-sans text-base leading-tight font-bold">
                             {pestLabel}
                           </h4>
-                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${getSeverityColor(sighting.severity)}`}>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[10px] font-black ${getSeverityColor(sighting.severity)}`}
+                          >
                             {sighting.severity}
                           </span>
                         </div>
-                        <p className="text-secondary text-xs mt-1">
+                        <p className="text-secondary mt-1 text-xs">
                           Zona: <span className="font-bold">{sighting.zone}</span>
                           {sighting.plant && (
                             <>
-                              {' '}• Planta: <span className="font-bold">{sighting.plant.species.name}</span>
+                              {' '}
+                              • Planta:{' '}
+                              <span className="font-bold">{sighting.plant.species.name}</span>
                             </>
                           )}
                         </p>
                         {sighting.notes && (
-                          <p className="text-secondary/70 text-xs italic mt-1 bg-surface/20 p-2 rounded font-sans">
+                          <p className="text-secondary/70 bg-surface/20 mt-1 rounded p-2 font-sans text-xs italic">
                             "{sighting.notes}"
                           </p>
                         )}
                       </div>
                     </div>
 
-                    <span className="text-secondary shrink-0 text-xs font-semibold flex items-center gap-1 self-end sm:self-center">
+                    <span className="text-secondary flex shrink-0 items-center gap-1 self-end text-xs font-semibold sm:self-center">
                       <PiCalendarFill className="text-zinc-500" />
                       {new Date(sighting.capturedAt).toLocaleDateString('es-ES', {
                         day: 'numeric',
@@ -318,7 +326,7 @@ export function BiologicalAuditPanel() {
               })}
 
               {pestSightings.length === 0 && (
-                <div className="text-secondary/50 py-12 text-center text-sm italic border border-dashed border-input-outline rounded-xl">
+                <div className="text-secondary/50 border-input-outline rounded-xl border border-dashed py-12 text-center text-sm italic">
                   No hay avistamientos de plagas registrados recientemente.
                 </div>
               )}

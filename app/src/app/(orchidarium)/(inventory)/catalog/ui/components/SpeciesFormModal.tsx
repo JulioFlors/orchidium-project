@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import type { PlantType } from '@package/database'
+
+import { useState, useEffect } from 'react'
 
 import { Button, Modal, FormField, Input, SelectDropdown, Textarea } from '@/components'
 import { useFormDraftStore } from '@/store'
@@ -35,16 +36,24 @@ export function SpeciesFormModal({
   const [speciesFormGlowColor, setSpeciesFormGlowColor] = useState('rgb(16, 185, 129)')
   const [speciesFormDescription, setSpeciesFormDescription] = useState('')
 
-  // Cargar borradores al abrir el modal
-  useEffect(() => {
+  const { getDraft, setDraft } = useFormDraftStore()
+
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen)
+
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen)
+
     if (isOpen) {
-      const draft = useFormDraftStore.getState().getDraft('catalog-species-form') as {
-        name: string
-        type: PlantType
-        genusId: string
-        glowColor: string
-        description: string
-      } | undefined
+      const draft = getDraft('catalog-species-form') as
+        | {
+            name: string
+            type: PlantType
+            genusId: string
+            glowColor: string
+            description: string
+          }
+        | undefined
+
       if (draft) {
         setSpeciesFormName(draft.name)
         setSelectedPlantType(draft.type)
@@ -55,17 +64,18 @@ export function SpeciesFormModal({
         setSpeciesFormName('')
         setSelectedPlantType('ORCHID')
         const firstGenus = generaList.find((g) => g.type === 'ORCHID')
+
         setSpeciesFormGenusId(firstGenus ? firstGenus.id : '')
         setSpeciesFormGlowColor('rgb(16, 185, 129)')
         setSpeciesFormDescription('')
       }
     }
-  }, [isOpen, generaList])
+  }
 
   // Guardar borradores en tiempo real
   useEffect(() => {
     if (isOpen) {
-      useFormDraftStore.getState().setDraft('catalog-species-form', {
+      setDraft('catalog-species-form', {
         name: speciesFormName,
         type: selectedPlantType,
         genusId: speciesFormGenusId,
@@ -80,11 +90,13 @@ export function SpeciesFormModal({
     speciesFormGlowColor,
     speciesFormDescription,
     isOpen,
+    setDraft,
   ])
 
   function handlePlantTypeChange(type: PlantType) {
     setSelectedPlantType(type)
     const firstGenus = generaList.find((g) => g.type === type)
+
     setSpeciesFormGenusId(firstGenus ? firstGenus.id : '')
   }
 
@@ -98,19 +110,14 @@ export function SpeciesFormModal({
   }
 
   return (
-    <Modal
-      isOpen={isOpen}
-      size="lg"
-      title="Crear Nueva Especie"
-      onClose={onClose}
-    >
+    <Modal isOpen={isOpen} size="lg" title="Crear Nueva Especie" onClose={onClose}>
       <div className="flex flex-col gap-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <FormField htmlFor="create-species-name" label="Nombre Científico *">
               <Input
                 id="create-species-name"
-                placeholder="Ej: Cattleya trianae"
+                placeholder=""
                 type="text"
                 value={speciesFormName}
                 onChange={(e) => setSpeciesFormName(e.target.value)}
@@ -135,8 +142,8 @@ export function SpeciesFormModal({
           <div>
             <FormField htmlFor="create-species-genus" label="Género *">
               <SelectDropdown
-                id="create-species-genus"
                 emptyMessage="No hay géneros disponibles"
+                id="create-species-genus"
                 options={generaList
                   .filter((g) => g.type === selectedPlantType)
                   .map((g) => ({
@@ -170,7 +177,7 @@ export function SpeciesFormModal({
                   />
                 </div>
                 <div
-                  className="h-9 w-9 rounded-lg border border-input-outline shadow-inner transition-colors duration-300"
+                  className="border-input-outline h-9 w-9 rounded-lg border shadow-inner transition-colors duration-300"
                   style={{ backgroundColor: speciesFormGlowColor }}
                 />
               </div>

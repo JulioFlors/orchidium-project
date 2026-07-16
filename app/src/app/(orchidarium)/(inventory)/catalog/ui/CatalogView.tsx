@@ -6,13 +6,15 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { MdEdit, MdDelete, MdInfo, MdFolder, MdCategory, MdSpa } from 'react-icons/md'
 
+import { EnvironmentCard } from '../../../(monitoring)/monitoring/ui/components/EnvironmentCard'
+
 import {
   CatalogSpeciesCard,
   TypeManagerModal,
   GenusFormModal,
   SpeciesFormModal,
 } from './components'
-import { EnvironmentCard } from '../../../(monitoring)/monitoring/ui/components/EnvironmentCard'
+
 import { Heading, ActionMenu } from '@/components'
 import { updateGenus, deleteGenus, createGenus, createSpecies } from '@/actions'
 import { useToastStore } from '@/store/toast/toast.store'
@@ -204,13 +206,20 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
     setIsSpeciesCreateModalOpen(true)
   }
 
-  function handleSaveSpecies(data: { name: string; genusId: string; description: string; glowColor: string }) {
+  function handleSaveSpecies(data: {
+    name: string
+    genusId: string
+    description: string
+    glowColor: string
+  }) {
     if (!data.name.trim()) {
       addToast('El nombre de la especie es obligatorio.', 'warning')
+
       return
     }
     if (!data.genusId) {
       addToast('Debes seleccionar un género.', 'warning')
+
       return
     }
 
@@ -225,6 +234,7 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
       if (result.ok && result.species) {
         addToast('Especie creada con éxito.', 'success')
         const genusObj = generaList.find((g) => g.id === data.genusId)
+
         if (genusObj) {
           const newSpecies: Species = {
             id: result.species.id,
@@ -240,6 +250,7 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
               plants: 0,
             },
           }
+
           setSpeciesList((prev) => [...prev, newSpecies])
         }
         useFormDraftStore.getState().clearDraft('catalog-species-form')
@@ -296,7 +307,9 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
       {/* Grid del Catálogo Estilo Tienda */}
       {speciesList.length === 0 ? (
         <div className="bg-canvas border-input-outline rounded-xl border border-dashed py-24 text-center">
-          <span className="text-secondary text-sm">No hay especies registradas en el catálogo.</span>
+          <span className="text-secondary text-sm">
+            No hay especies registradas en el catálogo.
+          </span>
         </div>
       ) : (
         <div className="mt-4 flex flex-col gap-12">
@@ -310,24 +323,21 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
             })
 
             return (
-              <div
-                key={type}
-                className="flex flex-col pb-8 last:pb-0"
-              >
+              <div key={type} className="flex flex-col pb-8 last:pb-0">
                 {/* Título del Tipo de Planta con ActionMenu */}
-                <div className="group relative z-8 flex items-center gap-2 mt-9">
-                  <h2 className="text-primary text-2xl font-bold tracking-tighter antialiased leading-none">
+                <div className="group relative z-8 mt-9 flex items-center gap-2">
+                  <h2 className="text-primary text-2xl leading-none font-bold tracking-tighter antialiased">
                     {PLANT_TYPE_LABELS[type]}
                   </h2>
                   <ActionMenu
+                    hoverOnly
                     align="left"
-                    hoverOnly={true}
                     items={[
                       {
                         label: 'Gestionar Tipo de Planta',
                         icon: <MdInfo />,
                         onClick: () => setIsTypeModalOpen(true),
-                      }
+                      },
                     ]}
                     triggerClassName="h-7 w-7"
                   />
@@ -343,14 +353,14 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
 
                     return (
                       <div key={genusId} className="flex flex-col">
-                        <div className="group tds-xs:sticky tds-xs:backdrop-blur-lg top-14 z-7 flex items-center gap-2 bg-canvas/30 dark:bg-canvas/60 mt-8 ml-1 w-[calc(100%-8px)]! px-0">
-                          <h3 className="text-primary text-xl font-medium tracking-wider antialiased leading-none py-4">
+                        <div className="group tds-xs:sticky tds-xs:backdrop-blur-lg bg-canvas/30 dark:bg-canvas/60 top-14 z-7 mt-8 ml-1 flex w-[calc(100%-8px)]! items-center gap-2 px-0">
+                          <h3 className="text-primary py-4 text-xl leading-none font-medium tracking-wider antialiased">
                             {genusName}
                           </h3>
                           {genusObj && (
                             <ActionMenu
+                              hoverOnly
                               align="left"
-                              hoverOnly={true}
                               items={[
                                 {
                                   label: 'Editar Nombre',
@@ -370,7 +380,7 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
                         </div>
 
                         {/* Listado de Especies */}
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                        <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                           {speciesInGenus.map((species, speciesIndex) => (
                             <CatalogSpeciesCard
                               key={species.id}

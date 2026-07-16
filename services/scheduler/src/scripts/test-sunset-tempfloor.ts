@@ -3,7 +3,9 @@ import { influxClient } from '../lib/influx'
 function rowTimeToDate(rawTime: unknown): Date {
   if (rawTime instanceof Date) return rawTime
   const s = String(rawTime)
+
   if (isNaN(Number(s))) return new Date(s)
+
   return s.length > 13 ? new Date(Number(s.substring(0, 13))) : new Date(Number(s))
 }
 
@@ -21,13 +23,15 @@ interface BatchSummary {
 
 function pushBatchMetrics(queue: BatchSummary[], sample: Sample, isLux = false) {
   const now = sample.timestamp
+
   if (queue.length === 0 || now - queue[0].timestamp >= 10 * 60 * 1000) {
     queue.unshift({ min: sample.value, max: sample.value, timestamp: now, samples: [sample] })
     if (queue.length > 6) queue.pop()
   } else {
     queue[0].samples.push(sample)
-    queue[0].samples = queue[0].samples.filter(s => now - s.timestamp < 10 * 60 * 1000)
-    const values = queue[0].samples.map(s => s.value)
+    queue[0].samples = queue[0].samples.filter((s) => now - s.timestamp < 10 * 60 * 1000)
+    const values = queue[0].samples.map((s) => s.value)
+
     queue[0].min = Math.min(...values)
     queue[0].max = Math.max(...values)
   }
@@ -46,6 +50,7 @@ async function simulateForFloor(tempFloor: number) {
 
   const rows: any[] = []
   const stream = influxClient.query(query)
+
   for await (const row of stream) {
     rows.push(row)
   }
@@ -57,6 +62,7 @@ async function simulateForFloor(tempFloor: number) {
 
   for (const row of rows) {
     const tMs = rowTimeToDate(row.time).getTime()
+
     if (row.temperature == null || row.humidity == null) continue
 
     pushBatchMetrics(tempBatches, { timestamp: tMs, value: Number(row.temperature) })
@@ -100,7 +106,9 @@ async function simulateForFloor(tempFloor: number) {
     }
   }
 
-  console.log(`With tempFloor = ${tempFloor}°C -> Event triggered at: ${triggerTime || 'DID NOT TRIGGER'}`)
+  console.log(
+    `With tempFloor = ${tempFloor}°C -> Event triggered at: ${triggerTime || 'DID NOT TRIGGER'}`,
+  )
 }
 
 async function main() {

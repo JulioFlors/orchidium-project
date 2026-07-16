@@ -24,7 +24,7 @@ interface Species {
   genusId: string
   genus: Genus
   images: SpeciesImage[]
-  glowColor?: string | null  // Soporte para color estático guardado en base de datos
+  glowColor?: string | null // Soporte para color estático guardado en base de datos
 }
 
 interface CatalogSpeciesCardProps {
@@ -35,15 +35,15 @@ interface CatalogSpeciesCardProps {
 export function CatalogSpeciesCard({ species, index }: CatalogSpeciesCardProps) {
   const rawImageUrl = species.images[0]?.url
   const formattedImageUrl = getImageUrl(rawImageUrl)
-  
+
   // Obtenemos el color dinámico por si no hay color guardado estáticamente
   const { color } = useImageColor(rawImageUrl ? formattedImageUrl : '')
-  
+
   // Determinamos el color de hover (dando prioridad al color guardado en base de datos si existe)
-  const glowColor = species.glowColor 
-    ? species.glowColor 
-    : color 
-      ? `rgb(${color.r}, ${color.g}, ${color.b})` 
+  const glowColor = species.glowColor
+    ? species.glowColor
+    : color
+      ? `rgb(${color.r}, ${color.g}, ${color.b})`
       : 'rgb(128, 128, 128)'
 
   return (
@@ -76,7 +76,7 @@ export function CatalogSpeciesCard({ species, index }: CatalogSpeciesCardProps) 
             {rawImageUrl ? (
               <img
                 alt={species.name}
-                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02] rounded-xl"
+                className="h-full w-full rounded-xl object-cover transition-transform duration-500 group-hover:scale-[1.02]"
                 src={formattedImageUrl}
               />
             ) : (
@@ -89,18 +89,21 @@ export function CatalogSpeciesCard({ species, index }: CatalogSpeciesCardProps) 
       </div>
 
       {/* Detalles del Catálogo (Identicos en tipografía y maquetación a la tienda, sin precio) */}
-      <div className="relative z-5 flex flex-row justify-between pt-2 pb-1" id={`${species.slug}__container-details`}>
+      <div
+        className="relative z-5 flex flex-row justify-between pt-2 pb-1"
+        id={`${species.slug}__container-details`}
+      >
         <div className="flex flex-col font-bold antialiased" id={`${species.slug}__main-details`}>
           <Link
-            className="text-primary tracking-tight text-balance hover:text-emerald-500 transition-colors"
+            className="text-primary tracking-tight text-balance transition-colors hover:text-emerald-500"
             href={`/catalog/${species.id}`}
             id={`${species.slug}__link`}
             tabIndex={-1}
           >
             {species.name}
           </Link>
-          <div className="flex items-center gap-1 mt-1 opacity-55">
-            <PiImagesFill size={10} className="text-secondary" />
+          <div className="mt-1 flex items-center gap-1 opacity-55">
+            <PiImagesFill className="text-secondary" size={10} />
             <span className="text-secondary text-[10px] font-semibold">
               {species.images.length} {species.images.length === 1 ? 'Foto' : 'Fotos'}
             </span>

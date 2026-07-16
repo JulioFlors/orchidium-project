@@ -229,7 +229,7 @@ export function SelectDropdown({
             aria-activedescendant={focusedIndex >= 0 ? `${id}-option-${focusedIndex}` : undefined}
             className={clsx(
               'border-input-outline bg-surface text-black-and-white absolute z-50 mt-1 max-h-60 w-full overflow-x-hidden overflow-y-auto rounded-md border px-1 py-1 shadow-xl',
-              'scrollbar-thin scrollbar-thumb-divider scrollbar-track-transparent outline-none!',
+              'scrollbar-thumb-divider scrollbar-thin scrollbar-track-transparent outline-none!',
               menuClassName,
             )}
             role="listbox"

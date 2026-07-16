@@ -1,9 +1,10 @@
 'use client'
 
+import type { Swiper as SwiperClass } from 'swiper'
+
 import { useRef } from 'react'
 import { Swiper, SwiperSlide } from 'swiper/react'
 import { Autoplay, Keyboard, Pagination } from 'swiper/modules'
-import type { Swiper as SwiperClass } from 'swiper'
 import Image from 'next/image'
 import Link from 'next/link'
 
@@ -30,7 +31,7 @@ export function HeroSlideshow({ slides }: Props) {
   const swiperRef = useRef<SwiperClass | null>(null)
 
   return (
-    <section 
+    <section
       className="relative h-dvh w-full overflow-hidden"
       // Control manual de Autoplay en Hover para garantizar detección sobre textos y botones
       onMouseEnter={() => {
@@ -45,17 +46,17 @@ export function HeroSlideshow({ slides }: Props) {
       }}
     >
       <Swiper
+        loop
         autoplay={{
           delay: 10000,
           disableOnInteraction: false,
         }}
-        className="hero-swiper h-full w-full"
         keyboard={{
           enabled: true,
           onlyInViewport: true,
         }}
         // Habilitar loop para que el retorno del último al primer slide sea continuo y fluido
-        loop={true}
+        className="hero-swiper h-full w-full"
         modules={[Autoplay, Keyboard, Pagination]}
         pagination={{
           clickable: true,
@@ -70,24 +71,24 @@ export function HeroSlideshow({ slides }: Props) {
             <div className="absolute inset-0 -z-10 h-full w-full">
               {slide.mobileImage ? (
                 <>
-                  <div className="block tds-sm:hidden relative h-full w-full">
+                  <div className="tds-sm:hidden relative block h-full w-full">
                     <Image
                       fill
                       alt={slide.title}
                       className="object-cover"
-                      priority={index === 0}
                       loading={index === 0 ? 'eager' : 'lazy'}
+                      priority={index === 0}
                       sizes="100vw"
                       src={getImageUrl(slide.mobileImage)}
                     />
                   </div>
-                  <div className="hidden tds-sm:block relative h-full w-full">
+                  <div className="tds-sm:block relative hidden h-full w-full">
                     <Image
                       fill
                       alt={slide.title}
                       className="object-cover"
-                      priority={index === 0}
                       loading={index === 0 ? 'eager' : 'lazy'}
+                      priority={index === 0}
                       sizes="100vw"
                       src={getImageUrl(slide.image)}
                     />
@@ -98,8 +99,8 @@ export function HeroSlideshow({ slides }: Props) {
                   fill
                   alt={slide.title}
                   className="object-cover"
-                  priority={index === 0}
                   loading={index === 0 ? 'eager' : 'lazy'}
+                  priority={index === 0}
                   sizes="100vw"
                   src={getImageUrl(slide.image)}
                 />
@@ -108,17 +109,17 @@ export function HeroSlideshow({ slides }: Props) {
             </div>
 
             {/* Contenido centrado en la parte inferior con padding responsivo */}
-            <div className="flex h-full w-full flex-col items-center justify-end pb-12 tds-sm:pb-16 tds-lg:pb-24">
+            <div className="tds-sm:pb-16 tds-lg:pb-24 flex h-full w-full flex-col items-center justify-end pb-12">
               <div className="relative z-10 flex w-full flex-col items-center px-4 text-center">
                 {/* Título responsivo optimizado para zoom extremo */}
-                <h2 className="text-2xl font-bold tracking-tight text-white tds-sm:text-4xl tds-lg:text-6xl">
+                <h2 className="tds-sm:text-4xl tds-lg:text-6xl text-2xl font-bold tracking-tight text-white">
                   {slide.title}
                 </h2>
 
                 {/* Botón Único de Acción responsivo */}
-                <div className="mt-4 tds-sm:mt-6 tds-lg:mt-8 flex w-full justify-center">
+                <div className="tds-sm:mt-6 tds-lg:mt-8 mt-4 flex w-full justify-center">
                   <Link
-                    className="flex h-10 tds-sm:h-11 tds-lg:h-12 w-48 tds-sm:w-56 tds-lg:w-64 items-center justify-center rounded-md bg-white/70 text-xs tds-sm:text-sm font-semibold text-[#171A20] shadow-md backdrop-blur-md transition-all hover:bg-white/85"
+                    className="tds-sm:h-11 tds-lg:h-12 tds-sm:w-56 tds-lg:w-64 tds-sm:text-sm flex h-10 w-48 items-center justify-center rounded-md bg-white/70 text-xs font-semibold text-[#171A20] shadow-md backdrop-blur-md transition-all hover:bg-white/85"
                     href={slide.href}
                   >
                     Comprar ahora

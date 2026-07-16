@@ -3,7 +3,9 @@ import { influxClient } from '../lib/influx'
 function rowTimeToDate(rawTime: unknown): Date {
   if (rawTime instanceof Date) return rawTime
   const s = String(rawTime)
+
   if (isNaN(Number(s))) return new Date(s)
+
   return s.length > 13 ? new Date(Number(s.substring(0, 13))) : new Date(Number(s))
 }
 
@@ -22,23 +24,24 @@ interface BatchSummary {
 // Emulates pushBatchMetrics for 10-minute sliding windows (sliding by 1 minute)
 function pushBatchMetrics(queue: BatchSummary[], sample: Sample, isLux = false) {
   const now = sample.timestamp
-  
+
   // If queue is empty or the latest batch is older than 10 minutes, create a new batch
   if (queue.length === 0 || now - queue[0].timestamp >= 10 * 60 * 1000) {
     queue.unshift({
       min: sample.value,
       max: sample.value,
       timestamp: now,
-      samples: [sample]
+      samples: [sample],
     })
     if (queue.length > 6) queue.pop()
   } else {
     // Otherwise, append to current batch
     queue[0].samples.push(sample)
     // Keep only samples from the last 10 minutes inside this batch
-    queue[0].samples = queue[0].samples.filter(s => now - s.timestamp < 10 * 60 * 1000)
-    
-    const values = queue[0].samples.map(s => s.value)
+    queue[0].samples = queue[0].samples.filter((s) => now - s.timestamp < 10 * 60 * 1000)
+
+    const values = queue[0].samples.map((s) => s.value)
+
     if (isLux && values.length > 0) {
       queue[0].min = Math.min(...values) // Simplified for test
       queue[0].max = values.reduce((sum, val) => sum + val, 0) / values.length
@@ -50,8 +53,10 @@ function pushBatchMetrics(queue: BatchSummary[], sample: Sample, isLux = false) 
 }
 
 async function main() {
-  console.log('Minute-by-minute simulation from 11:00pm (03:00 UTC) to 11:45pm (03:45 UTC) July 10...')
-  
+  console.log(
+    'Minute-by-minute simulation from 11:00pm (03:00 UTC) to 11:45pm (03:45 UTC) July 10...',
+  )
+
   const query = `
     SELECT time, temperature, humidity, illuminance
     FROM "environment_metrics"
@@ -63,6 +68,7 @@ async function main() {
 
   const rows: any[] = []
   const stream = influxClient.query(query)
+
   for await (const row of stream) {
     rows.push(row)
   }
@@ -78,6 +84,7 @@ async function main() {
   `
   const preRows: any[] = []
   const preStream = influxClient.query(preQuery)
+
   for await (const row of preStream) {
     preRows.push(row)
   }
@@ -89,9 +96,13 @@ async function main() {
   // Pre-populate sliding window
   for (const row of preRows) {
     const tMs = rowTimeToDate(row.time).getTime()
-    if (row.temperature != null) pushBatchMetrics(tempBatches, { timestamp: tMs, value: Number(row.temperature) })
-    if (row.humidity != null) pushBatchMetrics(humBatches, { timestamp: tMs, value: Number(row.humidity) })
-    if (row.illuminance != null) pushBatchMetrics(luxBatches, { timestamp: tMs, value: Number(row.illuminance) }, true)
+
+    if (row.temperature != null)
+      pushBatchMetrics(tempBatches, { timestamp: tMs, value: Number(row.temperature) })
+    if (row.humidity != null)
+      pushBatchMetrics(humBatches, { timestamp: tMs, value: Number(row.humidity) })
+    if (row.illuminance != null)
+      pushBatchMetrics(luxBatches, { timestamp: tMs, value: Number(row.illuminance) }, true)
   }
 
   console.log(`Pre-population complete. Temp batches count: ${tempBatches.length}`)
@@ -101,9 +112,12 @@ async function main() {
     const tDate = rowTimeToDate(row.time)
     const tMs = tDate.getTime()
 
-    if (row.temperature != null) pushBatchMetrics(tempBatches, { timestamp: tMs, value: Number(row.temperature) })
-    if (row.humidity != null) pushBatchMetrics(humBatches, { timestamp: tMs, value: Number(row.humidity) })
-    if (row.illuminance != null) pushBatchMetrics(luxBatches, { timestamp: tMs, value: Number(row.illuminance) }, true)
+    if (row.temperature != null)
+      pushBatchMetrics(tempBatches, { timestamp: tMs, value: Number(row.temperature) })
+    if (row.humidity != null)
+      pushBatchMetrics(humBatches, { timestamp: tMs, value: Number(row.humidity) })
+    if (row.illuminance != null)
+      pushBatchMetrics(luxBatches, { timestamp: tMs, value: Number(row.illuminance) }, true)
 
     evaluate(tMs, tempBatches, humBatches, luxBatches)
   }
@@ -113,11 +127,16 @@ function evaluate(
   timestampMs: number,
   tempBatches: BatchSummary[],
   humBatches: BatchSummary[],
-  luxBatches: BatchSummary[]
+  luxBatches: BatchSummary[],
 ) {
   if (tempBatches.length < 4 || humBatches.length < 4) return
 
-  const localTime = new Date(timestampMs).toLocaleString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'America/Caracas' })
+  const localTime = new Date(timestampMs).toLocaleString('es-VE', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    timeZone: 'America/Caracas',
+  })
 
   // 1. Current minute values
   const currentMinTemp = tempBatches[0].samples[tempBatches[0].samples.length - 1]?.value
@@ -152,7 +171,7 @@ function evaluate(
   const isTempFallingOrig = trendTempOrig < -0.1
   const trendHumOrig = humBatches[0].max - humBatches[2].min
   const isHumRisingOrig = trendHumOrig > 0.5
-  
+
   const isTempDropAbruptOrig = varTempCur >= tempDropThresholdOrig && isTempFallingOrig
   const isHumRiseAbruptOrig = varHumCur >= humRiseThresholdOrig && isHumRisingOrig
   const isPreSaturatedOrig = currentMaxHum >= 98.0 || humBatches[1].min >= 95.0
@@ -173,9 +192,15 @@ function evaluate(
   const triggerOpt = isTempDropAbruptOpt && (isHumRiseAbruptOpt || isPreSaturatedOrig)
 
   if (triggerOrig || triggerOpt) {
-    console.log(`[${localTime}] Temp: ${currentMinTemp.toFixed(1)}°C | Hum: ${currentMaxHum.toFixed(1)}%`)
-    console.log(`  ORIGINAL -> Trigger: ${triggerOrig} (Required DT: ${tempDropThresholdOrig.toFixed(2)}, Actual DT: ${varTempCur.toFixed(2)} | Required DH: ${humRiseThresholdOrig.toFixed(2)}, Actual DH: ${varHumCur.toFixed(2)})`)
-    console.log(`  OPTIMIZED -> Trigger: ${triggerOpt} (Required DT: ${tempDropThresholdOpt.toFixed(2)}, Actual DT: ${varTempCur.toFixed(2)} | Required DH: ${humRiseThresholdOpt.toFixed(2)}, Actual DH: ${varHumCur.toFixed(2)})`)
+    console.log(
+      `[${localTime}] Temp: ${currentMinTemp.toFixed(1)}°C | Hum: ${currentMaxHum.toFixed(1)}%`,
+    )
+    console.log(
+      `  ORIGINAL -> Trigger: ${triggerOrig} (Required DT: ${tempDropThresholdOrig.toFixed(2)}, Actual DT: ${varTempCur.toFixed(2)} | Required DH: ${humRiseThresholdOrig.toFixed(2)}, Actual DH: ${varHumCur.toFixed(2)})`,
+    )
+    console.log(
+      `  OPTIMIZED -> Trigger: ${triggerOpt} (Required DT: ${tempDropThresholdOpt.toFixed(2)}, Actual DT: ${varTempCur.toFixed(2)} | Required DH: ${humRiseThresholdOpt.toFixed(2)}, Actual DH: ${varHumCur.toFixed(2)})`,
+    )
   }
 }
 

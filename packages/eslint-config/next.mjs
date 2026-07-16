@@ -17,9 +17,9 @@ export const nextConfig = [
     files: ['**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}'],
     plugins: {
       react: fixupPluginRules(eslintPluginReact),
-      'react-hooks': fixupPluginRules(eslintPluginReactHooks),
-      'react-compiler': fixupPluginRules(eslintPluginReactCompiler),
-      'jsx-a11y': fixupPluginRules(eslintPluginJsxA11y),
+      'react-hooks': eslintPluginReactHooks,
+      'react-compiler': eslintPluginReactCompiler,
+      'jsx-a11y': eslintPluginJsxA11y,
     },
     languageOptions: {
       parserOptions: {
@@ -72,7 +72,7 @@ export const nextConfig = [
   {
     files: ['**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}'],
     plugins: {
-      next: fixupPluginRules(eslintPluginNext),
+      next: eslintPluginNext,
     },
     languageOptions: {
       globals: {

@@ -152,16 +152,48 @@ export async function getShopLayoutConfig() {
       // Devolver configuración por defecto basada en routes.tsx
       const defaultConfig: ShopLayoutConfig = {
         heroSlides: [
-          { speciesId: '', slug: '', title: 'Orquídea Destacada', imageUrl: 'plants/orchids/orchids.webp' },
-          { speciesId: '', slug: '', title: 'Rosa del Desierto Destacada', imageUrl: 'plants/adenium_obesum/multiple-petals/adenium-obesum-marbella/marbella_0_2000.webp' },
-          { speciesId: '', slug: '', title: 'Cactus Destacado', imageUrl: 'plants/cactus/mammillaria/mammillaria-prolifera-ssp-haitiensis/mammillaria-prolifera-ssp-haitiensis_0_2000.webp' },
-          { speciesId: '', slug: '', title: 'Suculenta Destacada', imageUrl: 'plants/succulents/pachyveria/pachyveria-scheideckeri/pachyveria-scheideckeri_2_2000.webp' },
+          {
+            speciesId: '',
+            slug: '',
+            title: 'Orquídea Destacada',
+            imageUrl: 'plants/orchids/orchids.webp',
+          },
+          {
+            speciesId: '',
+            slug: '',
+            title: 'Rosa del Desierto Destacada',
+            imageUrl:
+              'plants/adenium_obesum/multiple-petals/adenium-obesum-marbella/marbella_0_2000.webp',
+          },
+          {
+            speciesId: '',
+            slug: '',
+            title: 'Cactus Destacado',
+            imageUrl:
+              'plants/cactus/mammillaria/mammillaria-prolifera-ssp-haitiensis/mammillaria-prolifera-ssp-haitiensis_0_2000.webp',
+          },
+          {
+            speciesId: '',
+            slug: '',
+            title: 'Suculenta Destacada',
+            imageUrl:
+              'plants/succulents/pachyveria/pachyveria-scheideckeri/pachyveria-scheideckeri_2_2000.webp',
+          },
         ],
         categories: {
           orchids: { imageUrl: 'plants/orchids/orchids.webp' },
-          adenium_obesum: { imageUrl: 'plants/adenium_obesum/multiple-petals/adenium-obesum-marbella/marbella_0_2000.webp' },
-          cactus: { imageUrl: 'plants/cactus/mammillaria/mammillaria-prolifera-ssp-haitiensis/mammillaria-prolifera-ssp-haitiensis_0_2000.webp' },
-          succulents: { imageUrl: 'plants/succulents/pachyveria/pachyveria-scheideckeri/pachyveria-scheideckeri_2_2000.webp' },
+          adenium_obesum: {
+            imageUrl:
+              'plants/adenium_obesum/multiple-petals/adenium-obesum-marbella/marbella_0_2000.webp',
+          },
+          cactus: {
+            imageUrl:
+              'plants/cactus/mammillaria/mammillaria-prolifera-ssp-haitiensis/mammillaria-prolifera-ssp-haitiensis_0_2000.webp',
+          },
+          succulents: {
+            imageUrl:
+              'plants/succulents/pachyveria/pachyveria-scheideckeri/pachyveria-scheideckeri_2_2000.webp',
+          },
         },
         megamenu: {
           featuredItem: {
@@ -180,6 +212,7 @@ export async function getShopLayoutConfig() {
     return { ok: true, config: setting.value as unknown as ShopLayoutConfig }
   } catch (err) {
     Logger.error('[Store] Error al obtener shop_layout config:', err)
+
     return { ok: false, message: 'No se pudo cargar la configuración de la tienda.' }
   }
 }
@@ -205,7 +238,7 @@ export async function saveShopLayoutConfig(config: ShopLayoutConfig) {
     return { ok: true }
   } catch (err) {
     Logger.error('[Store] Error al guardar shop_layout config:', err)
+
     return { ok: false, message: 'No se pudo guardar la configuración de la tienda.' }
   }
 }
-

@@ -1,8 +1,9 @@
 'use client'
 
+import type { PlantType } from '@package/database'
+
 import { useState, useEffect } from 'react'
 import { MdInfo } from 'react-icons/md'
-import type { PlantType } from '@package/database'
 
 import { Button, Modal, FormField, Input, SelectDropdown } from '@/components'
 import { useFormDraftStore } from '@/store'
@@ -35,17 +36,27 @@ export function GenusFormModal({
   const [genusFormName, setGenusFormName] = useState('')
   const [genusFormType, setGenusFormType] = useState<PlantType>('ORCHID')
 
-  // Cargar borradores o datos de edición al abrir
-  useEffect(() => {
+  const { getDraft, setDraft } = useFormDraftStore()
+
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen)
+  const [prevEditingGenus, setPrevEditingGenus] = useState(editingGenus)
+
+  if (isOpen !== prevIsOpen || editingGenus !== prevEditingGenus) {
+    setPrevIsOpen(isOpen)
+    setPrevEditingGenus(editingGenus)
+
     if (isOpen) {
       if (editingGenus) {
         setGenusFormName(editingGenus.name)
         setGenusFormType(editingGenus.type)
       } else {
-        const draft = useFormDraftStore.getState().getDraft('catalog-genus-form') as {
-          name: string
-          type: PlantType
-        } | undefined
+        const draft = getDraft('catalog-genus-form') as
+          | {
+              name: string
+              type: PlantType
+            }
+          | undefined
+
         if (draft) {
           setGenusFormName(draft.name)
           setGenusFormType(draft.type)
@@ -55,17 +66,17 @@ export function GenusFormModal({
         }
       }
     }
-  }, [isOpen, editingGenus])
+  }
 
   // Guardar borradores para creación de género en tiempo real
   useEffect(() => {
     if (isOpen && !editingGenus) {
-      useFormDraftStore.getState().setDraft('catalog-genus-form', {
+      setDraft('catalog-genus-form', {
         name: genusFormName,
         type: genusFormType,
       })
     }
-  }, [genusFormName, genusFormType, isOpen, editingGenus])
+  }, [genusFormName, genusFormType, isOpen, editingGenus, setDraft])
 
   const handleSubmit = () => {
     onSave(genusFormName, genusFormType)
@@ -84,15 +95,18 @@ export function GenusFormModal({
             <FormField htmlFor="genusName" label="Nombre del Género">
               <Input
                 id="genusName"
-                placeholder="Ej: Cattleya"
+                placeholder=""
                 type="text"
                 value={genusFormName}
                 onChange={(e) => setGenusFormName(e.target.value)}
               />
             </FormField>
-            <div className="flex items-center gap-1.5 rounded-lg bg-zinc-50 p-3 text-xs text-zinc-500 dark:bg-zinc-900/50">
+            <div className="text-secondary flex items-center gap-1.5 rounded-lg bg-zinc-50 p-3 text-xs dark:bg-zinc-900/50">
               <MdInfo className="h-4 w-4 text-purple-500" />
-              <span>Por seguridad, el tipo de planta ({plantTypeSingleLabels[editingGenus.type]}) no puede ser modificado.</span>
+              <span>
+                Por seguridad, el tipo de planta ({plantTypeSingleLabels[editingGenus.type]}) no
+                puede ser modificado.
+              </span>
             </div>
             <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
               <Button variant="ghost" onClick={onClose}>
@@ -109,7 +123,7 @@ export function GenusFormModal({
               <FormField htmlFor="create-genus-name" label="Nombre del Género">
                 <Input
                   id="create-genus-name"
-                  placeholder="Ej: Cattleya"
+                  placeholder=""
                   type="text"
                   value={genusFormName}
                   onChange={(e) => setGenusFormName(e.target.value)}

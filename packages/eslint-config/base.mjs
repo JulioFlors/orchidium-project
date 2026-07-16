@@ -78,7 +78,7 @@ export const baseConfig = [
   {
     files: ['**/*.{js,mjs,cjs,jsx,ts,tsx,mts,cts}'],
     plugins: {
-      import: fixupPluginRules(eslintPluginImport),
+      import: eslintPluginImport,
     },
     rules: {
       'import/no-default-export': 'off',

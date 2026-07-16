@@ -1,10 +1,13 @@
-import { influxClient } from '../lib/influx'
 import { prisma } from '@package/database'
+
+import { influxClient } from '../lib/influx'
 
 function rowTimeToDate(rawTime: unknown): Date {
   if (rawTime instanceof Date) return rawTime
   const s = String(rawTime)
+
   if (isNaN(Number(s))) return new Date(s)
+
   return s.length > 13 ? new Date(Number(s.substring(0, 13))) : new Date(Number(s))
 }
 
@@ -17,8 +20,10 @@ interface MetricSample {
 }
 
 async function main() {
-  console.log('Querying InfluxDB for July 10, 02:00:00 to 03:35:00 UTC (10:00pm to 11:35pm Caracas)...')
-  
+  console.log(
+    'Querying InfluxDB for July 10, 02:00:00 to 03:35:00 UTC (10:00pm to 11:35pm Caracas)...',
+  )
+
   const query = `
     SELECT time, temperature, humidity, illuminance, rain_intensity
     FROM "environment_metrics"
@@ -29,8 +34,10 @@ async function main() {
   `
 
   const samples: MetricSample[] = []
+
   try {
     const stream = influxClient.query(query)
+
     for await (const row of stream) {
       samples.push({
         time: rowTimeToDate(row.time),
@@ -55,13 +62,17 @@ async function main() {
   console.log('\n--- Telemetry Samples (Caracas Local Time) ---')
   for (const s of samples) {
     const localStr = s.time.toLocaleString('es-VE', { timeZone: 'America/Caracas' })
+
     console.log(
-      `[${localStr}] Temp: ${s.temperature != null ? s.temperature.toFixed(1) : 'N/A'}°C | Hum: ${s.humidity != null ? s.humidity.toFixed(1) : 'N/A'}% | Lux: ${s.illuminance != null ? s.illuminance.toFixed(0) : 'N/A'} | RainIntensity: ${s.rain_intensity}`
+      `[${localStr}] Temp: ${s.temperature != null ? s.temperature.toFixed(1) : 'N/A'}°C | Hum: ${s.humidity != null ? s.humidity.toFixed(1) : 'N/A'}% | Lux: ${s.illuminance != null ? s.illuminance.toFixed(0) : 'N/A'} | RainIntensity: ${s.rain_intensity}`,
     )
   }
 
   // Check if physical rain triggered or if there was any rain_intensity > 0
-  const physicalRainSamples = samples.filter(s => s.rain_intensity != null && s.rain_intensity > 0)
+  const physicalRainSamples = samples.filter(
+    (s) => s.rain_intensity != null && s.rain_intensity > 0,
+  )
+
   console.log(`\nSamples with physical rain (rain_intensity > 0): ${physicalRainSamples.length}`)
 
   // Let's also check if there are any virtual rain events registered in PostgreSQL for this window
@@ -73,9 +84,12 @@ async function main() {
       },
     },
   })
+
   console.log(`\nVirtual rain events in DB during this window: ${dbEvents.length}`)
   for (const ev of dbEvents) {
-    console.log(`- Event ID: ${ev.id} started at ${ev.startedAt.toISOString()} | Closed: ${ev.endedAt?.toISOString()} | Type: ${ev.triggerType}`)
+    console.log(
+      `- Event ID: ${ev.id} started at ${ev.startedAt.toISOString()} | Closed: ${ev.endedAt?.toISOString()} | Type: ${ev.triggerType}`,
+    )
   }
 }
 

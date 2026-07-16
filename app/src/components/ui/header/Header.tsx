@@ -28,11 +28,7 @@ interface Props {
   layoutConfig?: ShopLayoutConfig | null
 }
 
-export function Header({
-  suggestions = [],
-  plantsNavData = [],
-  layoutConfig = null,
-}: Props) {
+export function Header({ suggestions = [], plantsNavData = [], layoutConfig = null }: Props) {
   // ----- Hooks -----
   const { isOrchidarium, isAuthLayout, pathname } = useNavigationContext()
 
@@ -57,9 +53,12 @@ export function Header({
       if (route.slug === 'plants') {
         const updatedCategories = route.categories?.map((cat) => {
           let imageUrl = cat.image
-          if (cat.slug === 'orchids') imageUrl = layoutConfig.categories.orchids.imageUrl || cat.image
+
+          if (cat.slug === 'orchids')
+            imageUrl = layoutConfig.categories.orchids.imageUrl || cat.image
           if (cat.slug === 'cactus') imageUrl = layoutConfig.categories.cactus.imageUrl || cat.image
-          if (cat.slug === 'succulents') imageUrl = layoutConfig.categories.succulents.imageUrl || cat.image
+          if (cat.slug === 'succulents')
+            imageUrl = layoutConfig.categories.succulents.imageUrl || cat.image
           if (cat.slug === 'adenium_obesum')
             imageUrl = layoutConfig.categories.adenium_obesum.imageUrl || cat.image
 
@@ -81,6 +80,7 @@ export function Header({
           featuredItem,
         }
       }
+
       return route
     })
   }, [layoutConfig])

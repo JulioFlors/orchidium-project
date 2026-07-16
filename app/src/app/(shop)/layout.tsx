@@ -51,9 +51,9 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
   return (
     <div className="flex min-h-dvh flex-col">
       <AdaptiveHeader
+        layoutConfig={layoutConfig}
         plantsNavData={plantsNavData || []}
         suggestions={suggestions || []}
-        layoutConfig={layoutConfig}
       />
 
       <Sidebar session={session} suggestions={suggestions || []} />

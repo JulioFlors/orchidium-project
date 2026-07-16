@@ -23,18 +23,14 @@ export function AdaptiveHeader({
   if (pathname === '/') {
     return (
       <LandingHeader
+        layoutConfig={layoutConfig}
         plantsNavData={plantsNavData}
         suggestions={suggestions}
-        layoutConfig={layoutConfig}
       />
     )
   }
 
   return (
-    <Header
-      plantsNavData={plantsNavData}
-      suggestions={suggestions}
-      layoutConfig={layoutConfig}
-    />
+    <Header layoutConfig={layoutConfig} plantsNavData={plantsNavData} suggestions={suggestions} />
   )
 }

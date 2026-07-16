@@ -214,9 +214,10 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
     // 1. Autogenerar batches de lux de fallback si la cola está vacía o incompleta (ej: por lagunas de datos o noche)
     // para evitar TypeError en accesos directos a luxBatches[0] y bloqueos de retorno temprano.
     while (luxBatches.length < 4) {
-      const refTimestamp = tempBatches.length > luxBatches.length
-        ? tempBatches[luxBatches.length].timestamp
-        : timestampMs - luxBatches.length * 10 * 60 * 1000
+      const refTimestamp =
+        tempBatches.length > luxBatches.length
+          ? tempBatches[luxBatches.length].timestamp
+          : timestampMs - luxBatches.length * 10 * 60 * 1000
 
       luxBatches.push({
         min: 0,
@@ -307,28 +308,33 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             const tSlopes = getTempGradientMetrics(tempBatches[0].samples)
             const hasSteepHum = hSlopes.max1m >= 1.8 || hSlopes.max2m >= 2.5
             const hasSteepTemp = tSlopes.maxDrop1m <= -0.5
+
             passesGradient = hasSteepHum || hasSteepTemp
           }
 
           if (passesGradient) {
             triggered = true
-            triggerReason = `Inferencia de Día (20M): Incremento de +${dHum1.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp1).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
+            triggerReason = `Inferencia de Día (10M): Incremento de +${dHum1.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp1).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
             calculatedBaselineTemp = baseTemp1
             calculatedBaselineHum = baseHum1
             calculatedBaselineLux = baseLux1
-            calculatedBaselineAgeMinutes = 20
+            calculatedBaselineAgeMinutes = 10
             tempDeltaTemp = dTemp1
             tempDeltaHum = dHum1
             dropPct = baseLux1 > 0 ? ((baseLux1 - currentMinLux) / baseLux1) * 100 : 0
 
             if (baseLux1 <= 10000) {
-              triggerType = 'DAY_RAMA_A_OSCURO_20M'
+              triggerType = 'DAY_RAMA_A_OSCURO_10M'
             } else if (baseLux1 <= 15000) {
-              triggerType = 'DAY_RAMA_A_NUBLADO_20M'
+              triggerType = 'DAY_RAMA_A_NUBLADO_10M'
             } else if (baseLux1 <= 26000) {
-              triggerType = isSensible ? 'DAY_RAMA_C_INTERMEDIO_SENSIBLE_20M' : 'DAY_RAMA_C_INTERMEDIO_ROBUSTO_20M'
+              triggerType = isSensible
+                ? 'DAY_RAMA_C_INTERMEDIO_SENSIBLE_10M'
+                : 'DAY_RAMA_C_INTERMEDIO_ROBUSTO_10M'
             } else {
-              triggerType = isSensible ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_20M' : 'DAY_RAMA_B_SOLEADO_ROBUSTO_20M'
+              triggerType = isSensible
+                ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_10M'
+                : 'DAY_RAMA_B_SOLEADO_ROBUSTO_10M'
             }
           }
         }
@@ -384,110 +390,38 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
               const tSlopes = getTempGradientMetrics(tempBatches[0].samples)
               const hasSteepHum = hSlopes.max1m >= 1.8 || hSlopes.max2m >= 2.5
               const hasSteepTemp = tSlopes.maxDrop1m <= -0.5
+
               passesGradient = hasSteepHum || hasSteepTemp
             }
 
             if (passesGradient) {
               triggered = true
-              triggerReason = `Inferencia de Día (30M): Incremento de +${dHum2.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp2).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
+              triggerReason = `Inferencia de Día (20M): Incremento de +${dHum2.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp2).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
               calculatedBaselineTemp = baseTemp2
               calculatedBaselineHum = baseHum2
               calculatedBaselineLux = baseLux2
-              calculatedBaselineAgeMinutes = 30
+              calculatedBaselineAgeMinutes = 20
               tempDeltaTemp = dTemp2
               tempDeltaHum = dHum2
               dropPct = baseLux2 > 0 ? ((baseLux2 - currentMinLux) / baseLux2) * 100 : 0
 
               if (baseLux2 <= 10000) {
-                triggerType = 'DAY_RAMA_A_OSCURO_30M'
+                triggerType = 'DAY_RAMA_A_OSCURO_20M'
               } else if (baseLux2 <= 15000) {
-                triggerType = 'DAY_RAMA_A_NUBLADO_30M'
+                triggerType = 'DAY_RAMA_A_NUBLADO_20M'
               } else if (baseLux2 <= 26000) {
-                triggerType = isSensible ? 'DAY_RAMA_C_INTERMEDIO_SENSIBLE_30M' : 'DAY_RAMA_C_INTERMEDIO_ROBUSTO_30M'
+                triggerType = isSensible
+                  ? 'DAY_RAMA_C_INTERMEDIO_SENSIBLE_20M'
+                  : 'DAY_RAMA_C_INTERMEDIO_ROBUSTO_20M'
               } else {
-                triggerType = isSensible ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_30M' : 'DAY_RAMA_B_SOLEADO_ROBUSTO_30M'
+                triggerType = isSensible
+                  ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_20M'
+                  : 'DAY_RAMA_B_SOLEADO_ROBUSTO_20M'
               }
             }
           }
 
-          // Paso 3 (40 minutos para Día / Saltado en Noche)
-          if (!triggered && tempBatches.length >= 4 && humBatches.length >= 4 && luxBatches.length >= 4) {
-            const baseTemp3 = tempBatches[3].max
-            const baseHum3 = humBatches[3].min
-            const baseLux3 = luxBatches[3].max
-            const dTemp3 = currentMinTemp - baseTemp3
-            const dHum3 = currentMaxHum - baseHum3
 
-            let luxCondition3 = false
-            let tempDropThreshold3 = -4.0
-            let humRobust = 18.0
-            let humSensitive = 18.0
-            let isSensible = false
-
-            if (baseLux3 <= 15000) {
-              // Rama A (Cielo muy nublado: <= 15 klx)
-              luxCondition3 = true
-              tempDropThreshold3 = -3.5
-              humRobust = 16.0
-              humSensitive = 14.0
-            } else if (baseLux3 <= 26000) {
-              // Rama C (Cielo intermedio: 15 klx < Lux <= 26 klx)
-              luxCondition3 = currentMinLux <= baseLux3 * 0.6
-              if (currentMinLux <= 15000) {
-                isSensible = true
-                tempDropThreshold3 = -3.5
-                humRobust = 14.0
-                humSensitive = 12.0
-              }
-            } else {
-              // Rama B (Cielo soleado: > 26 klx)
-              luxCondition3 = currentMinLux <= baseLux3 * 0.4
-              if (currentMinLux <= 15000) {
-                isSensible = true
-                tempDropThreshold3 = -4.0
-                humRobust = 14.0
-                humSensitive = 12.0
-              }
-            }
-
-            const humCondition3 =
-              dHum3 >= humSensitive || (baseHum3 >= 86.0 && baseHum3 <= 95.0 && currentMaxHum >= 98.0)
-
-            if (dTemp3 <= tempDropThreshold3 && humCondition3 && luxCondition3) {
-              let passesGradient = true
-              const isPreSaturated = baseHum3 >= 86.0 && baseHum3 <= 95.0 && currentMaxHum >= 98.0
-
-              if (dHum3 < humRobust && !isPreSaturated) {
-                const hSlopes = getHumGradientMetrics(humBatches[0].samples)
-                const tSlopes = getTempGradientMetrics(tempBatches[0].samples)
-                const hasSteepHum = hSlopes.max1m >= 1.8 || hSlopes.max2m >= 2.5
-                const hasSteepTemp = tSlopes.maxDrop1m <= -0.5
-                passesGradient = hasSteepHum || hasSteepTemp
-              }
-
-              if (passesGradient) {
-                triggered = true
-                triggerReason = `Inferencia de Día (40M): Incremento de +${dHum3.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp3).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
-                calculatedBaselineTemp = baseTemp3
-                calculatedBaselineHum = baseHum3
-                calculatedBaselineLux = baseLux3
-                calculatedBaselineAgeMinutes = 40
-                tempDeltaTemp = dTemp3
-                tempDeltaHum = dHum3
-                dropPct = baseLux3 > 0 ? ((baseLux3 - currentMinLux) / baseLux3) * 100 : 0
-
-                if (baseLux3 <= 10000) {
-                  triggerType = 'DAY_RAMA_A_OSCURO_40M'
-                } else if (baseLux3 <= 15000) {
-                  triggerType = 'DAY_RAMA_A_NUBLADO_40M'
-                } else if (baseLux3 <= 26000) {
-                  triggerType = isSensible ? 'DAY_RAMA_C_INTERMEDIO_SENSIBLE_40M' : 'DAY_RAMA_C_INTERMEDIO_ROBUSTO_40M'
-                } else {
-                  triggerType = isSensible ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_40M' : 'DAY_RAMA_B_SOLEADO_ROBUSTO_40M'
-                }
-              }
-            }
-          }
         }
       } else {
         // --- REGLAS NOCTURNAS (Fórmula B Calibrada + Filtro de Rocío) ---
@@ -555,7 +489,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
         const samplesT = tempBatches[0].samples
         // Estimación retrospectiva del inicio preciso de lluvia:
         // De día busca caída térmica de -1.2°C; de noche se ajusta a -0.20°C para absorber inercia del sensor.
-        const dropThreshold = isDay ? -1.2 : -0.20
+        const dropThreshold = isDay ? -1.2 : -0.2
         const matchingSample = samplesT.find((s) => s.value - baselineT <= dropThreshold)
 
         if (matchingSample) {
@@ -574,8 +508,6 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
         minLuxInRain = luxBatches[0].min
         minTempInRain = tempBatches[0].min
         maxHumInRain = humBatches[0].max
-
-
 
         await openVirtualEvent(
           new Date(preciseStartMs),
@@ -897,14 +829,20 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
               if (combinedTempSamples.length > 0 && combinedHumSamples.length > 0) {
                 const lastSample = combinedTempSamples[0]
+
                 preciseEndMs = lastSample.timestamp
 
                 const lastT = lastSample.value
-                const lastHSample = combinedHumSamples.find((s) => Math.abs(s.timestamp - lastSample.timestamp) < 5000)
+                const lastHSample = combinedHumSamples.find(
+                  (s) => Math.abs(s.timestamp - lastSample.timestamp) < 5000,
+                )
                 const lastH = lastHSample ? lastHSample.value : combinedHumSamples[0].value
 
                 for (const tSample of combinedTempSamples) {
-                  const hSample = combinedHumSamples.find((s) => Math.abs(s.timestamp - tSample.timestamp) < 5000)
+                  const hSample = combinedHumSamples.find(
+                    (s) => Math.abs(s.timestamp - tSample.timestamp) < 5000,
+                  )
+
                   if (hSample) {
                     const diffT = Math.abs(tSample.value - lastT)
                     const diffH = Math.abs(hSample.value - lastH)
@@ -920,15 +858,18 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
               const endSampleT =
                 tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-                (tempBatches.length >= 2 && tempBatches[1].samples.find((s) => s.timestamp === preciseEndMs)) ||
+                (tempBatches.length >= 2 &&
+                  tempBatches[1].samples.find((s) => s.timestamp === preciseEndMs)) ||
                 tempBatches[0].samples[tempBatches[0].samples.length - 1]
               const endSampleH =
                 humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-                (humBatches.length >= 2 && humBatches[1].samples.find((s) => s.timestamp === preciseEndMs)) ||
+                (humBatches.length >= 2 &&
+                  humBatches[1].samples.find((s) => s.timestamp === preciseEndMs)) ||
                 humBatches[0].samples[humBatches[0].samples.length - 1]
               const endSampleL =
                 luxBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-                (luxBatches.length >= 2 && luxBatches[1].samples.find((s) => s.timestamp === preciseEndMs)) ||
+                (luxBatches.length >= 2 &&
+                  luxBatches[1].samples.find((s) => s.timestamp === preciseEndMs)) ||
                 luxBatches[0].samples[luxBatches[0].samples.length - 1]
 
               const isSustained = durationMin >= 60

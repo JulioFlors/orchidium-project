@@ -202,7 +202,7 @@ function CustomTooltip({
     if (data.time && typeof data.time !== 'boolean') {
       try {
         const isMacroRange = range === '7d' || range === '30d' || range === 'all'
-        const showHour = data.isInfered ? false : (!isMacroRange || dataKey === 'duration')
+        const showHour = data.isInfered ? false : !isMacroRange || dataKey === 'duration'
 
         formattedTime = formatTooltipHeader(data.time as string | number | Date, showHour)
       } catch {
@@ -212,7 +212,7 @@ function CustomTooltip({
       try {
         const dateObj = typeof label === 'string' ? new Date(label) : new Date(Number(label))
         const isMacroRange = range === '7d' || range === '30d' || range === 'all'
-        const showHour = data.isInfered ? false : (!isMacroRange || dataKey === 'duration')
+        const showHour = data.isInfered ? false : !isMacroRange || dataKey === 'duration'
 
         formattedTime = formatTooltipHeader(dateObj, showHour)
       } catch {
@@ -222,15 +222,25 @@ function CustomTooltip({
 
     let baselineTimeText = 'Condiciones climáticas previas'
     let baselineTimeStr = '00:00'
+
     if (data.isInfered) {
-      if (data.startedAt && typeof data.startedAt !== 'boolean' && data.baselineAgeMinutes !== undefined && data.baselineAgeMinutes !== null) {
+      if (
+        data.startedAt &&
+        typeof data.startedAt !== 'boolean' &&
+        data.baselineAgeMinutes !== undefined &&
+        data.baselineAgeMinutes !== null
+      ) {
         try {
           const startTime = new Date(data.startedAt as any)
           const bAge = Number(data.baselineAgeMinutes)
           const adjustedAge = bAge > 10 ? bAge - 10 : 10
           const baselineTime = new Date(startTime.getTime() - adjustedAge * 60 * 1000)
-          
-          const rawTimeStr = baselineTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+
+          const rawTimeStr = baselineTime.toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+
           baselineTimeStr = rawTimeStr.toLowerCase()
           baselineTimeText = `Condiciones climáticas a las ${baselineTimeStr}`
         } catch {
@@ -249,8 +259,10 @@ function CustomTooltip({
         if (typeof val === 'number') return val
         if (typeof val === 'string') {
           const parsed = parseFloat(val)
+
           return isNaN(parsed) ? null : parsed
         }
+
         return null
       }
 
@@ -258,7 +270,7 @@ function CustomTooltip({
       const sTemp = getNumberOrNull(data.startTemp)
       const sHum = getNumberOrNull(data.startHum)
       const sLux = getNumberOrNull(data.startLux)
-      
+
       const eTemp = getNumberOrNull(data.endTemp)
       const eHum = getNumberOrNull(data.endHum)
       const eLux = getNumberOrNull(data.endLux)
@@ -272,12 +284,13 @@ function CustomTooltip({
         if (!timeVal) return false
         try {
           const d = new Date(timeVal)
+
           if (isNaN(d.getTime())) return false
-          
+
           const localHour = (d.getUTCHours() - 4 + 24) % 24
           const localMin = d.getUTCMinutes()
           const totalMinutes = localHour * 60 + localMin
-          
+
           return totalMinutes > 300 && totalMinutes < 1140 // > 5:00 AM y < 7:00 PM (19:00)
         } catch {
           return false
@@ -286,9 +299,16 @@ function CustomTooltip({
 
       // Calcular timestamp del baseline
       let baselineTime: Date | undefined
-      if (data.startedAt && typeof data.startedAt !== 'boolean' && data.baselineAgeMinutes !== undefined && data.baselineAgeMinutes !== null) {
+
+      if (
+        data.startedAt &&
+        typeof data.startedAt !== 'boolean' &&
+        data.baselineAgeMinutes !== undefined &&
+        data.baselineAgeMinutes !== null
+      ) {
         try {
           const startTime = new Date(data.startedAt as any)
+
           baselineTime = new Date(startTime.getTime() - Number(data.baselineAgeMinutes) * 60 * 1000)
         } catch {}
       }
@@ -298,6 +318,7 @@ function CustomTooltip({
         if (val === null || val === undefined) return '--'
         if (unit !== 'lx' && val <= 1.0) return '--'
         if (unit === 'lx') return `${formatTooltipValue(val, 'lx')} lx`
+
         return `${Number(val).toFixed(1)}${unit}`
       }
 
@@ -307,10 +328,16 @@ function CustomTooltip({
       const showEndLux = isWithinSolarTimeRange(data.endedAt as any)
 
       // Helper para formatear valores con signo explícito y limpio
-      const formatMetricValue = (val: number | null, emoji: string, label: string, unit: string): string => {
+      const formatMetricValue = (
+        val: number | null,
+        emoji: string,
+        label: string,
+        unit: string,
+      ): string => {
         if (val === null || val === undefined) return ''
         const sign = val > 0 ? '+' : val < 0 ? '-' : ''
         const absVal = Math.abs(val).toFixed(1)
+
         return `${emoji} ${label} ${sign}${absVal}${unit}`
       }
 
@@ -321,12 +348,14 @@ function CustomTooltip({
       if (data.triggerType && typeof data.triggerType === 'string') {
         // Mapeo estructurado moderno
         const type = data.triggerType
+
         if (type === 'NIGHT_20M') {
           triggerTitle = '🌙 Cielo Nocturno 10min'
         } else {
-          const timeLabel = type.endsWith('_40M') ? '30min' : (type.endsWith('_30M') ? '20min' : '10min')
+          const timeLabel = type.endsWith('_20M') ? '20min' : '10min'
           let skyLabel = 'Cielo Oscuro'
           let emoji = '☁️'
+
           if (type.includes('_NUBLADO_')) {
             skyLabel = 'Cielo Nublado'
             emoji = '☁️'
@@ -337,14 +366,15 @@ function CustomTooltip({
             skyLabel = 'Cielo Soleado'
             emoji = '☀️'
           }
-          
+
           let bifLabel = ''
+
           if (type.includes('_SENSIBLE_')) {
             bifLabel = ' Sensible'
           } else if (type.includes('_ROBUSTO_')) {
             bifLabel = ' Robusto'
           }
-          
+
           triggerTitle = `${emoji} ${skyLabel}${bifLabel} ${timeLabel}`
         }
 
@@ -353,6 +383,7 @@ function CustomTooltip({
         const lDrop = getNumberOrNull(data.triggerLuxDropPct)
 
         const detailsParts: string[] = []
+
         if (hRise !== null) detailsParts.push(formatMetricValue(hRise, '💧', 'HR', '%'))
         if (tDrop !== null) detailsParts.push(formatMetricValue(tDrop, '🌡️', 'Temp', '°C'))
         if (lDrop !== null && lDrop > 0 && !type.includes('NIGHT')) {
@@ -364,6 +395,7 @@ function CustomTooltip({
         // Fallback para eventos antiguos por regex
         const triggerStr = data.triggerReason
         const triggerParts = triggerStr.split(':')
+
         if (triggerParts.length > 1) {
           triggerTitle = triggerParts[0].trim()
           triggerDetails = triggerParts.slice(1).join(':').trim()
@@ -377,8 +409,11 @@ function CustomTooltip({
         const tempVal = tempMatch ? parseFloat(tempMatch[1].trim()) : null
 
         const detailsParts: string[] = []
-        if (hrVal !== null && !isNaN(hrVal)) detailsParts.push(formatMetricValue(hrVal, '💧', 'HR', '%'))
-        if (tempVal !== null && !isNaN(tempVal)) detailsParts.push(formatMetricValue(-Math.abs(tempVal), '🌡️', 'Temp', '°C'))
+
+        if (hrVal !== null && !isNaN(hrVal))
+          detailsParts.push(formatMetricValue(hrVal, '💧', 'HR', '%'))
+        if (tempVal !== null && !isNaN(tempVal))
+          detailsParts.push(formatMetricValue(-Math.abs(tempVal), '🌡️', 'Temp', '°C'))
 
         if (detailsParts.length > 0) {
           triggerDetails = detailsParts.join('  |  ')
@@ -391,6 +426,7 @@ function CustomTooltip({
       if (data.closeType && typeof data.closeType === 'string') {
         // Mapeo estructurado moderno
         const type = data.closeType
+
         if (type === 'BASELINE_RECOVERY') {
           closeTitle = 'Cese por recuperación adaptativa'
           const minTemp = getNumberOrNull(data.closeMinTemp)
@@ -399,18 +435,27 @@ function CustomTooltip({
 
           if (minTemp !== null && tempRecovery !== null && humVar !== null) {
             const maxHum = eHum !== null ? eHum + humVar : null
+
             closeDetails = (
               <div className="grid grid-cols-[auto_auto_1fr] gap-x-2 leading-relaxed">
                 {maxHum !== null && (
                   <>
-                    <span className="text-foreground/85 font-semibold">💧 HR max {formatTooltipValue(maxHum, '%')}%</span>
+                    <span className="text-foreground/85 font-semibold">
+                      💧 HR max {formatTooltipValue(maxHum, '%')}%
+                    </span>
                     <span className="text-foreground/50 font-semibold">|</span>
-                    <span className="text-foreground/85 font-semibold">Variación -{humVar.toFixed(1)}%</span>
+                    <span className="text-foreground/85 font-semibold">
+                      Variación -{humVar.toFixed(1)}%
+                    </span>
                   </>
                 )}
-                <span className="text-foreground/85 font-semibold">🌡️ Temp min {formatTooltipValue(minTemp, '°C')}°C</span>
+                <span className="text-foreground/85 font-semibold">
+                  🌡️ Temp min {formatTooltipValue(minTemp, '°C')}°C
+                </span>
                 <span className="text-foreground/50 font-semibold">|</span>
-                <span className="text-foreground/85 font-semibold">Variación +{tempRecovery.toFixed(1)}°C</span>
+                <span className="text-foreground/85 font-semibold">
+                  Variación +{tempRecovery.toFixed(1)}°C
+                </span>
               </div>
             )
           } else {
@@ -418,32 +463,43 @@ function CustomTooltip({
             const tempRecVal = eTemp !== null && sTemp !== null ? eTemp - sTemp : null
             const humDropVal = sHum !== null && eHum !== null ? sHum - eHum : null
             const parts: string[] = []
-            if (humDropVal !== null) parts.push(formatMetricValue(-Math.abs(humDropVal), '💧', 'HR', '%'))
-            if (tempRecVal !== null) parts.push(formatMetricValue(Math.abs(tempRecVal), '🌡️', 'Temp', '°C'))
+
+            if (humDropVal !== null)
+              parts.push(formatMetricValue(-Math.abs(humDropVal), '💧', 'HR', '%'))
+            if (tempRecVal !== null)
+              parts.push(formatMetricValue(Math.abs(tempRecVal), '🌡️', 'Temp', '°C'))
             closeDetails = parts.join('  |  ')
           }
         } else if (type === 'SOLAR_RECOVERY') {
           closeTitle = '☀️ Recuperación Solar'
           const luxMax = getNumberOrNull(data.closeLuxMax) ?? eLux ?? 0
+
           closeDetails = `☀️ Ilum promedio ${formatTooltipValue(luxMax, 'lx')} lx — todas las muestras del lote ≥ 26k lux`
         } else if (type === 'THERMAL_SOLAR_RECOVERY') {
           closeTitle = '🌤️ Recuperación Progresiva'
           const luxMax = getNumberOrNull(data.closeLuxMax) ?? eLux ?? 0
           const tempRecovery = getNumberOrNull(data.closeTempRecovery)
           const humVar = getNumberOrNull(data.closeHumVar)
+
           closeDetails = (
             <div className="grid grid-cols-[auto_auto_1fr] gap-x-2 leading-relaxed">
-              <span className="text-foreground/85 font-semibold">🌤️ Ilum promedio {formatTooltipValue(luxMax, 'lx')} lx</span>
+              <span className="text-foreground/85 font-semibold">
+                🌤️ Ilum promedio {formatTooltipValue(luxMax, 'lx')} lx
+              </span>
               {tempRecovery !== null && (
                 <>
                   <span className="text-foreground/50 font-semibold">|</span>
-                  <span className="text-foreground/85 font-semibold">🌡️ Recuperación +{tempRecovery.toFixed(1)}°C</span>
+                  <span className="text-foreground/85 font-semibold">
+                    🌡️ Recuperación +{tempRecovery.toFixed(1)}°C
+                  </span>
                 </>
               )}
               {humVar !== null && (
                 <>
                   <span className="text-foreground/50 font-semibold">|</span>
-                  <span className="text-foreground/85 font-semibold">💧 Caída -{humVar.toFixed(1)}% HR</span>
+                  <span className="text-foreground/85 font-semibold">
+                    💧 Caída -{humVar.toFixed(1)}% HR
+                  </span>
                 </>
               )}
             </div>
@@ -452,12 +508,14 @@ function CustomTooltip({
           closeTitle = 'Cese por variación térmica'
           const minTemp = getNumberOrNull(data.closeMinTemp) ?? 0
           const tempRecovery = getNumberOrNull(data.closeTempRecovery) ?? 0
+
           closeDetails = `🌡️ Temp min ${formatTooltipValue(minTemp, '°C')}°C  |  Variación +${tempRecovery.toFixed(1)}°C`
         } else if (type.startsWith('STAGNANT')) {
           closeTitle = 'Cese por estancamiento'
           const tempVar = getNumberOrNull(data.closeTempVar) ?? 0
           const humVar = getNumberOrNull(data.closeHumVar) ?? 0
           const isSaturated = eHum !== null && Math.round(eHum) >= 100
+
           if (isSaturated || humVar === null) {
             closeDetails = `🌡️ Variación ${tempVar.toFixed(1)}°C`
           } else {
@@ -469,14 +527,18 @@ function CustomTooltip({
         const reasonStr = data.closeReason
         const reasonUpper = reasonStr.toUpperCase()
 
-        if (reasonUpper.includes('CESE DE LLUVIA INTERMITENTE') || reasonUpper.includes('INTERMITENTE')) {
+        if (
+          reasonUpper.includes('CESE DE LLUVIA INTERMITENTE') ||
+          reasonUpper.includes('INTERMITENTE')
+        ) {
           closeTitle = 'Cese por variación térmica'
           const recMatch = reasonStr.match(/recTemp=\+?([^°C\s,)]+)/)
           const minMatch = reasonStr.match(/minTemp=([^°C\s,)]+)/)
           const recVal = recMatch ? parseFloat(recMatch[1].trim()) : null
           const minVal = minMatch ? parseFloat(minMatch[1].trim()) : null
-          
+
           const parts: string[] = []
+
           if (minVal !== null && !isNaN(minVal)) parts.push(`🌡️ Temp min ${minVal.toFixed(1)}°C`)
           if (recVal !== null && !isNaN(recVal)) parts.push(`Variación +${recVal.toFixed(1)}°C`)
           closeDetails = parts.join('  |  ')
@@ -486,35 +548,45 @@ function CustomTooltip({
           const dhMatch = reasonStr.match(/dH=([^%\s,]+)/)
           const dtVal = dtMatch ? parseFloat(dtMatch[1].trim()) : null
           const dhVal = dhMatch ? parseFloat(dhMatch[1].trim()) : null
-          
+
           const parts: string[] = []
+
           if (dhVal !== null && !isNaN(dhVal)) parts.push(`💧 Variación ${dhVal.toFixed(1)}%`)
           if (dtVal !== null && !isNaN(dtVal)) parts.push(`🌡️ Variación ${dtVal.toFixed(1)}°C`)
           closeDetails = parts.join('  |  ')
         } else if (reasonUpper.includes('SOLAR_RECOVERY') || reasonUpper.includes('SOLAR')) {
           closeTitle = 'Cese por recuperación solar'
           let displayLux = '--'
+
           if (eLux !== null) {
             displayLux = formatTooltipValue(eLux, 'lx')
           } else {
             const luxMatch = reasonStr.match(/Lux(?: max)?:\s*([^°C\s,lx]+)/)
+
             displayLux = luxMatch ? formatTooltipValue(luxMatch[1].trim(), 'lx') : '--'
           }
           closeDetails = `⛅ Ilum ${displayLux} lx`
-        } else if (reasonUpper.includes('BASELINE_RECOVERY') || reasonUpper.includes('RECUPERACIÓN')) {
+        } else if (
+          reasonUpper.includes('BASELINE_RECOVERY') ||
+          reasonUpper.includes('RECUPERACIÓN')
+        ) {
           closeTitle = 'Cese por recuperación adaptativa'
           const tempMatch = reasonStr.match(/Temp:\s*([^°C\s,)]+)/)
           const humMatch = reasonStr.match(/Hum:\s*([^%\s,)]+)/)
           const tempVal = tempMatch ? parseFloat(tempMatch[1].trim()) : null
           const humVal = humMatch ? parseFloat(humMatch[1].trim()) : null
-          
+
           const parts: string[] = []
-          if (humVal !== null && !isNaN(humVal)) parts.push(formatMetricValue(-Math.abs(humVal), '💧', 'HR', '%'))
-          if (tempVal !== null && !isNaN(tempVal)) parts.push(formatMetricValue(Math.abs(tempVal), '🌡️', 'Temp', '°C'))
+
+          if (humVal !== null && !isNaN(humVal))
+            parts.push(formatMetricValue(-Math.abs(humVal), '💧', 'HR', '%'))
+          if (tempVal !== null && !isNaN(tempVal))
+            parts.push(formatMetricValue(Math.abs(tempVal), '🌡️', 'Temp', '°C'))
           closeDetails = parts.join('  |  ')
         }
       }
       let closeIcon = '☁️'
+
       if (closeTitle.startsWith('☀️')) {
         closeIcon = '☀️'
       } else if (closeTitle.startsWith('🌤️')) {
@@ -526,28 +598,29 @@ function CustomTooltip({
       const formatDuration = (durationMin: number): string => {
         const hours = Math.floor(durationMin / 60)
         const minutes = Math.round(durationMin % 60)
-        return hours > 0
-          ? (minutes > 0 ? `${hours}h ${minutes}min` : `${hours}h`)
-          : `${minutes}min`
+
+        return hours > 0 ? (minutes > 0 ? `${hours}h ${minutes}min` : `${hours}h`) : `${minutes}min`
       }
 
       return (
         <div className="bg-surface border-input-outline relative z-50 flex max-w-85 flex-col gap-3 overflow-visible rounded-lg border p-3 text-xs shadow-md outline-none">
           {/* Encabezado Cronológico */}
           <div className="text-foreground flex flex-col gap-1 text-xs font-bold">
-            <span className="flex items-center gap-1.5 text-xs text-primary">📅 {formattedTime}</span>
-            <span className="flex items-center gap-1 text-[11px] font-semibold text-primary/80">
-              🌧️ {data.startTime}   |   {closeIcon} {data.endTime}   |   ⏱️ {formatDuration(Number(data.duration))}
+            <span className="text-primary flex items-center gap-1.5 text-xs">
+              📅 {formattedTime}
+            </span>
+            <span className="text-primary/80 flex items-center gap-1 text-[11px] font-semibold">
+              🌧️ {data.startTime} | {closeIcon} {data.endTime} | ⏱️{' '}
+              {formatDuration(Number(data.duration))}
             </span>
           </div>
 
           {/* 1. Calma Previa */}
           <div className="border-input-outline/30 flex flex-col gap-0.5 border-t pt-2">
-            <span className="font-bold text-purple-400">
-              {baselineTimeText}
-            </span>
+            <span className="font-bold text-purple-400">{baselineTimeText}</span>
             <span className="text-foreground/85 font-semibold">
-              💧 HR {formatVal(bHum, '%')}  |  🌡️ Temp {formatVal(bTemp, '°C')}{showBaselineLux ? `  |  ☀️ Ilum ${formatVal(bLux, 'lx')}` : ''}
+              💧 HR {formatVal(bHum, '%')} | 🌡️ Temp {formatVal(bTemp, '°C')}
+              {showBaselineLux ? `  |  ☀️ Ilum ${formatVal(bLux, 'lx')}` : ''}
             </span>
           </div>
 
@@ -557,7 +630,8 @@ function CustomTooltip({
               Condiciones climáticas a las {data.startTime}
             </span>
             <span className="text-foreground/85 font-semibold">
-              💧 HR {formatVal(sHum, '%')}  |  🌡️ Temp {formatVal(sTemp, '°C')}{showStartLux ? `  |  ☀️ Ilum ${formatVal(sLux, 'lx')}` : ''}
+              💧 HR {formatVal(sHum, '%')} | 🌡️ Temp {formatVal(sTemp, '°C')}
+              {showStartLux ? `  |  ☀️ Ilum ${formatVal(sLux, 'lx')}` : ''}
             </span>
           </div>
 
@@ -568,7 +642,8 @@ function CustomTooltip({
                 Condiciones climáticas a las {data.endTime}
               </span>
               <span className="text-foreground/85 font-semibold">
-                💧 HR {formatVal(eHum, '%')}  |  🌡️ Temp {formatVal(eTemp, '°C')}{showEndLux ? `  |  ☀️ Ilum ${formatVal(eLux, 'lx')}` : ''}
+                💧 HR {formatVal(eHum, '%')} | 🌡️ Temp {formatVal(eTemp, '°C')}
+                {showEndLux ? `  |  ☀️ Ilum ${formatVal(eLux, 'lx')}` : ''}
               </span>
             </div>
           )}
@@ -576,7 +651,10 @@ function CustomTooltip({
           {/* Regla de Inicio */}
           {data.triggerReason && (
             <div className="border-input-outline/30 flex flex-col gap-0.5 border-t pt-2">
-              <span className="font-bold text-purple-400">{data.triggerType ? '' : '🌧️ '}{triggerTitle}</span>
+              <span className="font-bold text-purple-400">
+                {data.triggerType ? '' : '🌧️ '}
+                {triggerTitle}
+              </span>
               <span className="text-foreground/85 leading-relaxed font-semibold">
                 {triggerDetails}
               </span>
@@ -586,10 +664,10 @@ function CustomTooltip({
           {/* Regla de Cese */}
           {data.closeReason && (
             <div className="border-input-outline/30 flex flex-col gap-0.5 border-t pt-2">
-              <span className="font-bold text-purple-400">{closeIcon} {closeTitle}</span>
-              <div className="text-foreground/85 leading-relaxed font-semibold">
-                {closeDetails}
-              </div>
+              <span className="font-bold text-purple-400">
+                {closeIcon} {closeTitle}
+              </span>
+              <div className="text-foreground/85 leading-relaxed font-semibold">{closeDetails}</div>
             </div>
           )}
         </div>
@@ -988,8 +1066,9 @@ export function EnvironmentDataChart({
     '/api/environment/available-range',
     async (url: string) => {
       const res = await fetch(url)
+
       return res.json()
-    }
+    },
   )
 
   const getTimeFormatter = (r: string) => {
@@ -1055,52 +1134,31 @@ export function EnvironmentDataChart({
     if (isHoy) dateText = 'Hoy'
     else if (isAyer) dateText = 'Ayer'
     else if (isCustom) dateText = formatSelectedDate(range)
-    else return <span className="text-sm font-semibold text-primary">Sin telemetría disponible</span>
+    else
+      return <span className="text-primary text-sm font-semibold">Sin telemetría disponible</span>
 
     // 1. Sensor de lluvia (lluvia física)
     if (dataKey === 'duration' && title === 'Sensor de lluvia') {
       if (isHoy) {
-        return (
-          <span>
-            {renderDate('Hoy')}, no se han registrado eventos de lluvia.
-          </span>
-        )
+        return <span>{renderDate('Hoy')}, no se han registrado eventos de lluvia.</span>
       }
       if (isAyer) {
-        return (
-          <span>
-            {renderDate('Ayer')}, no se registraron eventos de lluvia.
-          </span>
-        )
+        return <span>{renderDate('Ayer')}, no se registraron eventos de lluvia.</span>
       }
-      return (
-        <span>
-          No se registraron eventos para el {renderDate(dateText)}
-        </span>
-      )
+
+      return <span>No se registraron eventos para el {renderDate(dateText)}</span>
     }
 
     // 2. Lluvia Inferida
     if (dataKey === 'duration' && title === 'Lluvia Inferida') {
       if (isHoy) {
-        return (
-          <span>
-            {renderDate('Hoy')}, no se han registrado eventos de lluvia inferida.
-          </span>
-        )
+        return <span>{renderDate('Hoy')}, no se han registrado eventos de lluvia inferida.</span>
       }
       if (isAyer) {
-        return (
-          <span>
-            {renderDate('Ayer')}, no se registraron eventos de lluvia inferida.
-          </span>
-        )
+        return <span>{renderDate('Ayer')}, no se registraron eventos de lluvia inferida.</span>
       }
-      return (
-        <span>
-          No se registraron eventos para el {renderDate(dateText)}
-        </span>
-      )
+
+      return <span>No se registraron eventos para el {renderDate(dateText)}</span>
     }
 
     // 3. Humedad y Temperatura
@@ -1108,20 +1166,24 @@ export function EnvironmentDataChart({
       if (isHoy) {
         return (
           <span>
-            {renderDate('Hoy')}, no se ha registrado telemetría del {renderSensorHighlight('sensor DTH22')}.
+            {renderDate('Hoy')}, no se ha registrado telemetría del{' '}
+            {renderSensorHighlight('sensor DTH22')}.
           </span>
         )
       }
       if (isAyer) {
         return (
           <span>
-            {renderDate('Ayer')}, no se registró telemetría del {renderSensorHighlight('sensor DTH22')}.
+            {renderDate('Ayer')}, no se registró telemetría del{' '}
+            {renderSensorHighlight('sensor DTH22')}.
           </span>
         )
       }
+
       return (
         <span>
-          No se registró telemetría del {renderSensorHighlight('sensor DTH22')} para el {renderDate(dateText)}
+          No se registró telemetría del {renderSensorHighlight('sensor DTH22')} para el{' '}
+          {renderDate(dateText)}
         </span>
       )
     }
@@ -1131,25 +1193,29 @@ export function EnvironmentDataChart({
       if (isHoy) {
         return (
           <span>
-            {renderDate('Hoy')}, no se ha registrado telemetría del {renderSensorHighlight('sensor BH1750')}.
+            {renderDate('Hoy')}, no se ha registrado telemetría del{' '}
+            {renderSensorHighlight('sensor BH1750')}.
           </span>
         )
       }
       if (isAyer) {
         return (
           <span>
-            {renderDate('Ayer')}, no se registró telemetría del {renderSensorHighlight('sensor BH1750')}.
+            {renderDate('Ayer')}, no se registró telemetría del{' '}
+            {renderSensorHighlight('sensor BH1750')}.
           </span>
         )
       }
+
       return (
         <span>
-          No se registró telemetría del {renderSensorHighlight('sensor BH1750')} para el {renderDate(dateText)}
+          No se registró telemetría del {renderSensorHighlight('sensor BH1750')} para el{' '}
+          {renderDate(dateText)}
         </span>
       )
     }
 
-    return <span className="text-sm font-semibold text-primary">Sin telemetría disponible</span>
+    return <span className="text-primary text-sm font-semibold">Sin telemetría disponible</span>
   }
 
   const chartDataFiltered = useMemo(() => {
@@ -1544,15 +1610,18 @@ export function EnvironmentDataChart({
 
   const formatSelectedDate = (ymd: string) => {
     const parts = ymd.split('-')
+
     if (parts.length !== 3) return ymd
     const [year, month, day] = parts
     const shortYear = year.slice(-2)
+
     return `${day}/${month}/${shortYear}`
   }
 
   const handleButtonClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     const inputEl = document.getElementById(`date-picker-${dataKey}`) as HTMLInputElement | null
+
     if (inputEl) {
       try {
         inputEl.showPicker()
@@ -1564,9 +1633,7 @@ export function EnvironmentDataChart({
 
   const rangeOptions =
     allowedRanges ||
-    (dataKey === 'illuminance'
-      ? ['8-16h', '5-19h', '30d', 'all']
-      : ['24h', '1D', '30d', 'all'])
+    (dataKey === 'illuminance' ? ['8-16h', '5-19h', '30d', 'all'] : ['24h', '1D', '30d', 'all'])
 
   return (
     <div
@@ -1624,8 +1691,8 @@ export function EnvironmentDataChart({
           <div className="relative mx-px flex items-center">
             <button
               className={clsx(
-                'focus-visible:outline-accessibility mx-px cursor-pointer rounded-md px-3 py-1 text-xs font-semibold uppercase outline-transparent focus-visible:outline-2 focus-visible:-outline-offset-2 transition-colors duration-150',
-                'flex items-center gap-1.5 justify-center tds-sm:flex-none flex-1 text-center min-h-6',
+                'focus-visible:outline-accessibility mx-px cursor-pointer rounded-md px-3 py-1 text-xs font-semibold uppercase outline-transparent transition-colors duration-150 focus-visible:outline-2 focus-visible:-outline-offset-2',
+                'tds-sm:flex-none flex min-h-6 flex-1 items-center justify-center gap-1.5 text-center',
                 /^\d{4}-\d{2}-\d{2}$/.test(range)
                   ? 'bg-surface text-primary shadow-sm'
                   : 'text-secondary hover:text-primary hover:[--icon-color:white]',
@@ -1639,19 +1706,18 @@ export function EnvironmentDataChart({
                 strokeWidth={2.3}
                 style={{ color: 'var(--icon-color, var(--param-color))' } as React.CSSProperties}
               />
-              {/^\d{4}-\d{2}-\d{2}$/.test(range) && (
-                <span>{formatSelectedDate(range)}</span>
-              )}
+              {/^\d{4}-\d{2}-\d{2}$/.test(range) && <span>{formatSelectedDate(range)}</span>}
             </button>
             <input
+              className="pointer-events-none absolute h-0 w-0 opacity-0"
               id={`date-picker-${dataKey}`}
-              type="date"
-              min={dateRange?.minDate || '2026-05-25'}
               max={dateRange?.maxDate}
+              min={dateRange?.minDate || '2026-05-25'}
+              type="date"
               value={/^\d{4}-\d{2}-\d{2}$/.test(range) ? range : ''}
-              className="absolute pointer-events-none opacity-0 w-0 h-0"
               onChange={(e) => {
                 const val = e.target.value
+
                 if (val) {
                   onRangeChange(val)
                 }
@@ -1663,138 +1729,138 @@ export function EnvironmentDataChart({
 
       <div className="w-full">
         {isLoading ? (
-          <div className="border-input-outline bg-surface/50 flex h-70 w-full animate-pulse flex-col items-center justify-center text-center gap-2 border border-dashed rounded-lg p-6">
+          <div className="border-input-outline bg-surface/50 flex h-70 w-full animate-pulse flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-6 text-center">
             <div className="flex flex-col items-center gap-4">
-              <div className="bg-primary/10 h-10 w-10 rounded-full animate-bounce" />
+              <div className="bg-primary/10 h-10 w-10 animate-bounce rounded-full" />
               <div className="bg-primary/10 h-3 w-32 rounded-md" />
             </div>
           </div>
         ) : chartDataFiltered.length === 0 ? (
-          <div className="flex h-70 w-full flex-col items-center justify-center text-center gap-2 border border-dashed border-input-outline rounded-lg bg-surface/50 p-6">
+          <div className="border-input-outline bg-surface/50 flex h-70 w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed p-6 text-center">
             <Calendar className="h-10 w-10 opacity-75" strokeWidth={2.2} style={{ color }} />
-            <div className="text-sm font-semibold text-primary leading-relaxed">
+            <div className="text-primary text-sm leading-relaxed font-semibold">
               {getEmptyStateNode()}
             </div>
           </div>
         ) : (
           <ResponsiveContainer height={280} minHeight={0} minWidth={0} width="100%">
-          {chartType === 'area' ? (
-            <AreaChart accessibilityLayer={false} data={chartDataFiltered}>
-              <defs>
-                <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="5%" stopColor={color} stopOpacity={0.25} />
-                  <stop offset="95%" stopColor={color} stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid
-                stroke="var(--color-input-outline)"
-                strokeDasharray="3 3"
-                vertical={false}
-              />
-              <XAxis axisLine={false} dataKey="time" tick={false} tickLine={false} />
-              <YAxis
-                axisLine={false}
-                domain={dataKey === 'humidity' ? [0, 100] : ['auto', 'auto']}
-                fontSize={11}
-                stroke="var(--color-secondary)"
-                tickFormatter={(value) =>
-                  value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value.toFixed(1)
-                }
-                tickLine={false}
-                tickMargin={10}
-                width={45}
-              />
-              <Tooltip
-                animationDuration={0}
-                content={
-                  <CustomTooltip
-                    color={color}
-                    dataKey={dataKey}
-                    formatTime={formatLabelTime}
-                    range={range}
-                    title={title}
-                    unit={unit}
-                  />
-                }
-                cursor={{
-                  stroke: color,
-                  strokeWidth: 1,
-                  strokeDasharray: '4 4',
-                  fill: 'transparent',
-                }}
-                isAnimationActive={false}
-                wrapperStyle={{ outline: 'none' }}
-              />
+            {chartType === 'area' ? (
+              <AreaChart accessibilityLayer={false} data={chartDataFiltered}>
+                <defs>
+                  <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
+                    <stop offset="5%" stopColor={color} stopOpacity={0.25} />
+                    <stop offset="95%" stopColor={color} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid
+                  stroke="var(--color-input-outline)"
+                  strokeDasharray="3 3"
+                  vertical={false}
+                />
+                <XAxis axisLine={false} dataKey="time" tick={false} tickLine={false} />
+                <YAxis
+                  axisLine={false}
+                  domain={dataKey === 'humidity' ? [0, 100] : ['auto', 'auto']}
+                  fontSize={11}
+                  stroke="var(--color-secondary)"
+                  tickFormatter={(value) =>
+                    value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value.toFixed(1)
+                  }
+                  tickLine={false}
+                  tickMargin={10}
+                  width={45}
+                />
+                <Tooltip
+                  animationDuration={0}
+                  content={
+                    <CustomTooltip
+                      color={color}
+                      dataKey={dataKey}
+                      formatTime={formatLabelTime}
+                      range={range}
+                      title={title}
+                      unit={unit}
+                    />
+                  }
+                  cursor={{
+                    stroke: color,
+                    strokeWidth: 1,
+                    strokeDasharray: '4 4',
+                    fill: 'transparent',
+                  }}
+                  isAnimationActive={false}
+                  wrapperStyle={{ outline: 'none' }}
+                />
 
-              {/* Banda estadística (Solo en Macro-Visión) */}
-              {isMacro && (
+                {/* Banda estadística (Solo en Macro-Visión) */}
+                {isMacro && (
+                  <Area
+                    connectNulls
+                    animationDuration={200}
+                    dataKey={(d) => [d[`min_${dataKey}`], d[`max_${dataKey}`]]}
+                    fill={color}
+                    fillOpacity={0.1}
+                    stroke="none"
+                    type="monotone"
+                  />
+                )}
+
+                {/* Línea de Promedio / Principal */}
                 <Area
                   connectNulls
+                  activeDot={{ style: { outline: 'none' } }}
                   animationDuration={200}
-                  dataKey={(d) => [d[`min_${dataKey}`], d[`max_${dataKey}`]]}
-                  fill={color}
-                  fillOpacity={0.1}
-                  stroke="none"
+                  dataKey={dataKey}
+                  fill={isMacro ? 'none' : `url(#${gradientId})`}
+                  fillOpacity={1}
+                  stroke={color}
+                  strokeWidth={2}
                   type="monotone"
                 />
-              )}
-
-              {/* Línea de Promedio / Principal */}
-              <Area
-                connectNulls
-                activeDot={{ style: { outline: 'none' } }}
-                animationDuration={200}
-                dataKey={dataKey}
-                fill={isMacro ? 'none' : `url(#${gradientId})`}
-                fillOpacity={1}
-                stroke={color}
-                strokeWidth={2}
-                type="monotone"
-              />
-            </AreaChart>
-          ) : (
-            <BarChart accessibilityLayer={false} data={chartDataFiltered}>
-              <CartesianGrid
-                stroke="var(--color-input-outline)"
-                strokeDasharray="3 3"
-                vertical={false}
-              />
-              <XAxis axisLine={false} dataKey="time" tick={false} tickLine={false} />
-              <YAxis
-                axisLine={false}
-                fontSize={11}
-                stroke="var(--color-secondary)"
-                tickFormatter={(value) =>
-                  value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value.toFixed(1)
-                }
-                tickLine={false}
-                tickMargin={10}
-                width={45}
-              />
-              <Tooltip
-                animationDuration={0}
-                content={
-                  <CustomTooltip
-                    color={color}
-                    dataKey={dataKey}
-                    formatTime={formatLabelTime}
-                    range={range}
-                    title={title}
-                    unit={unit}
-                  />
-                }
-                cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
-                isAnimationActive={false}
-                wrapperStyle={{ outline: 'none' }}
-              />
-              <Bar animationDuration={200} dataKey={dataKey} radius={[4, 4, 0, 0]}>
-                {chartDataFiltered.map((entry) => (
-                  <Cell key={`cell-${String(entry.time)}`} fill={color} fillOpacity={1} />
-                ))}
-              </Bar>
-            </BarChart>
-          )}
-        </ResponsiveContainer>
+              </AreaChart>
+            ) : (
+              <BarChart accessibilityLayer={false} data={chartDataFiltered}>
+                <CartesianGrid
+                  stroke="var(--color-input-outline)"
+                  strokeDasharray="3 3"
+                  vertical={false}
+                />
+                <XAxis axisLine={false} dataKey="time" tick={false} tickLine={false} />
+                <YAxis
+                  axisLine={false}
+                  fontSize={11}
+                  stroke="var(--color-secondary)"
+                  tickFormatter={(value) =>
+                    value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value.toFixed(1)
+                  }
+                  tickLine={false}
+                  tickMargin={10}
+                  width={45}
+                />
+                <Tooltip
+                  animationDuration={0}
+                  content={
+                    <CustomTooltip
+                      color={color}
+                      dataKey={dataKey}
+                      formatTime={formatLabelTime}
+                      range={range}
+                      title={title}
+                      unit={unit}
+                    />
+                  }
+                  cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
+                  isAnimationActive={false}
+                  wrapperStyle={{ outline: 'none' }}
+                />
+                <Bar animationDuration={200} dataKey={dataKey} radius={[4, 4, 0, 0]}>
+                  {chartDataFiltered.map((entry) => (
+                    <Cell key={`cell-${String(entry.time)}`} fill={color} fillOpacity={1} />
+                  ))}
+                </Bar>
+              </BarChart>
+            )}
+          </ResponsiveContainer>
         )}
       </div>
 

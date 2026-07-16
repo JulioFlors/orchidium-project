@@ -31,12 +31,12 @@ export function TeslaSection({
   priority = false,
 }: Props) {
   return (
-    <section className="relative flex h-[calc(100dvh-36px)] tds-xs:h-[calc(100dvh-56px)] tds-lg:h-dvh w-full snap-start flex-col items-center justify-end overflow-hidden pb-12 tds-sm:pb-16 tds-lg:pb-24">
+    <section className="tds-xs:h-[calc(100dvh-56px)] tds-lg:h-dvh tds-sm:pb-16 tds-lg:pb-24 relative flex h-[calc(100dvh-36px)] w-full snap-start flex-col items-center justify-end overflow-hidden pb-12">
       {/* Imagen de fondo a pantalla completa */}
       <div className="absolute inset-0 -z-10 h-full w-full">
         {mobileImage ? (
           <>
-            <div className="block tds-sm:hidden relative h-full w-full">
+            <div className="tds-sm:hidden relative block h-full w-full">
               <Image
                 fill
                 alt={title}
@@ -46,7 +46,7 @@ export function TeslaSection({
                 src={getImageUrl(mobileImage)}
               />
             </div>
-            <div className="hidden tds-sm:block relative h-full w-full">
+            <div className="tds-sm:block relative hidden h-full w-full">
               <Image
                 fill
                 alt={title}
@@ -74,7 +74,7 @@ export function TeslaSection({
       <div className="relative z-10 flex w-full flex-col items-center px-4 text-center">
         {/* Título responsivo */}
         <motion.h2
-          className="text-2xl font-bold tracking-tight text-white tds-sm:text-4xl tds-lg:text-6xl"
+          className="tds-sm:text-4xl tds-lg:text-6xl text-2xl font-bold tracking-tight text-white"
           initial={{ opacity: 0, y: -20 }}
           transition={{ duration: 0.6, delay: 0.1 }}
           viewport={{ once: true }}
@@ -85,7 +85,7 @@ export function TeslaSection({
 
         {/* Subtítulo responsivo */}
         <motion.p
-          className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed font-medium text-white/90 tds-sm:text-lg tds-lg:text-2xl"
+          className="tds-sm:text-lg tds-lg:text-2xl mx-auto mt-4 max-w-2xl text-sm leading-relaxed font-medium text-white/90"
           initial={{ opacity: 0, y: -10 }}
           transition={{ duration: 0.6, delay: 0.2 }}
           viewport={{ once: true }}
@@ -96,7 +96,7 @@ export function TeslaSection({
 
         {/* Botón Único de Acción responsivo */}
         <motion.div
-          className="mt-4 tds-sm:mt-6 tds-lg:mt-8 flex w-full justify-center"
+          className="tds-sm:mt-6 tds-lg:mt-8 mt-4 flex w-full justify-center"
           initial={{ opacity: 0, y: 20 }}
           transition={{ duration: 0.6, delay: 0.3 }}
           viewport={{ once: true }}
@@ -104,14 +104,14 @@ export function TeslaSection({
         >
           {primaryButtonHref ? (
             <Link
-              className="flex h-10 tds-sm:h-11 tds-lg:h-12 w-48 tds-sm:w-56 tds-lg:w-64 items-center justify-center rounded-md bg-white/70 text-xs tds-sm:text-sm font-semibold text-[#171A20] shadow-md backdrop-blur-md transition-all hover:bg-white/85"
+              className="tds-sm:h-11 tds-lg:h-12 tds-sm:w-56 tds-lg:w-64 tds-sm:text-sm flex h-10 w-48 items-center justify-center rounded-md bg-white/70 text-xs font-semibold text-[#171A20] shadow-md backdrop-blur-md transition-all hover:bg-white/85"
               href={primaryButtonHref}
             >
               {primaryButtonText}
             </Link>
           ) : (
             <button
-              className="flex h-10 tds-sm:h-11 tds-lg:h-12 w-48 tds-sm:w-56 tds-lg:w-64 cursor-pointer items-center justify-center rounded-md bg-white/70 text-xs tds-sm:text-sm font-semibold text-[#171A20] shadow-md backdrop-blur-md transition-all hover:bg-white/85"
+              className="tds-sm:h-11 tds-lg:h-12 tds-sm:w-56 tds-lg:w-64 tds-sm:text-sm flex h-10 w-48 cursor-pointer items-center justify-center rounded-md bg-white/70 text-xs font-semibold text-[#171A20] shadow-md backdrop-blur-md transition-all hover:bg-white/85"
               type="button"
               onClick={onPrimaryClick}
             >

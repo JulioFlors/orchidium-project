@@ -3,24 +3,12 @@
 import type { PotSize } from '@package/database/enums'
 
 import { useState, useTransition } from 'react'
-import {
-  PiWarningFill,
-  PiCheckCircleFill,
-  PiCoinsFill,
-  PiPackageFill,
-} from 'react-icons/pi'
+import { PiWarningFill, PiCheckCircleFill, PiCoinsFill, PiPackageFill } from 'react-icons/pi'
 import { MdEdit, MdDelete, MdAdd } from 'react-icons/md'
 
-import {
-  Button,
-  Badge,
-  Card,
-  CardHeader,
-  CardTitle,
-  CardContent,
-  ActionMenu,
-} from '@/components'
 import { VariantFormModal } from './components'
+
+import { Button, Badge, Card, CardHeader, CardTitle, CardContent, ActionMenu } from '@/components'
 import { upsertVariant, deleteVariant, updateVariantStock } from '@/actions'
 import { useToastStore } from '@/store/toast/toast.store'
 
@@ -84,7 +72,12 @@ export function StockView({ initialData }: StockViewProps) {
     setEditingVariant(null)
   }
 
-  function handleSave(formValues: { size: PotSize; price: number; quantity: number; available: boolean }) {
+  function handleSave(formValues: {
+    size: PotSize
+    price: number
+    quantity: number
+    available: boolean
+  }) {
     if (!targetSpecies) return
 
     startTransition(async () => {
