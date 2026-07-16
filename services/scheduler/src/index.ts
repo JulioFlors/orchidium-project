@@ -2,7 +2,6 @@ import { prisma, TaskStatus, CollisionGuard, ZoneType, DeviceStatus } from '@pac
 import { Cron } from 'croner'
 
 import { Logger, colors } from './lib/logger'
-import { influxClient } from './lib/influx'
 import { InferenceEngine } from './lib/inference-engine'
 import {
   mqttClient,
@@ -27,6 +26,7 @@ import {
 } from './lib/task-manager'
 import { processDay, getCaracasMidnight } from './lib/telemetry-processor'
 import * as RainManager from './lib/rain-manager'
+import * as DropsSensorManager from './lib/drops-sensor-manager'
 
 // ---- Configuración de Reglas ----
 
@@ -597,6 +597,7 @@ function setupMqttHandlers() {
             return
           }
           const wasOffline = emaManager.connectionState === 'offline'
+
           emaManager.setOffline()
           if (!wasOffline) {
             Logger.node(
@@ -1048,9 +1049,9 @@ function setupMqttHandlers() {
             // Saneamiento Solar: Si es antes de las 8:00 AM o después de las 4:00 PM, forzar lux a 0
             const cleanLux = caracasHour < 8 || caracasHour >= 16 ? 0 : (lux ?? lastKnownLux ?? 0)
 
-            // Registrar muestras en el buffer de telemetría de RainManager
+            // Registrar muestras en el buffer de telemetría de DropsSensorManager
             if (lastKnownTemp !== null && lastKnownHum !== null) {
-              RainManager.pushTelemetrySample(cleanLux, lastKnownTemp, lastKnownHum)
+              DropsSensorManager.pushTelemetrySample(cleanLux, lastKnownTemp, lastKnownHum)
             }
 
             // Evaluar inferencia climática de lluvia
@@ -1058,7 +1059,7 @@ function setupMqttHandlers() {
 
             // Evaluar el veto climático inteligente sobre el sensor físico
             if (temp !== null && hum !== null) {
-              await RainManager.evaluatePhysicalRainVeto(cleanLux, temp, hum)
+              await DropsSensorManager.evaluatePhysicalRainVeto(cleanLux, temp, hum)
             }
           }
         } catch (err) {
@@ -1101,10 +1102,10 @@ function setupMqttHandlers() {
         }
 
         lastFirmwareHeartbeat = Date.now()
-        RainManager.updateFirmwareHeartbeat()
+        DropsSensorManager.updateFirmwareHeartbeat()
 
         lastRainState = state
-        await RainManager.handlePhysicalRainState(state, rainTimestamp)
+        await DropsSensorManager.handlePhysicalRainState(state, rainTimestamp)
 
         return
       }
@@ -1113,7 +1114,7 @@ function setupMqttHandlers() {
       if (topic.startsWith('PristinoPlant/Actuator_Controller/') || topic.includes('/EXTERIOR/')) {
         lastFirmwareHeartbeat = Date.now()
         if (topic.includes('/EXTERIOR/')) {
-          RainManager.updateFirmwareHeartbeat()
+          DropsSensorManager.updateFirmwareHeartbeat()
         }
       }
     } catch (error: Error | unknown) {
@@ -1161,8 +1162,11 @@ async function initializeHeartbeatsFromPostgres() {
 
     if (latestEmaLog) {
       const ts = latestEmaLog.timestamp.getTime()
+
       lastEmaHeartbeat = ts
-      Logger.info(`[INICIALIZACIÓN] Último latido EMA (ZONA_A) en Postgres: ${latestEmaLog.timestamp.toISOString()} (${latestEmaLog.status})`)
+      Logger.info(
+        `[INICIALIZACIÓN] Último latido EMA (ZONA_A) en Postgres: ${latestEmaLog.timestamp.toISOString()} (${latestEmaLog.status})`,
+      )
       if (latestEmaLog.status === 'SLEEP') {
         isEmaSleeping = true
         emaManager.setOffline()
@@ -1183,8 +1187,11 @@ async function initializeHeartbeatsFromPostgres() {
 
     if (latestActuatorLog) {
       const ts = latestActuatorLog.timestamp.getTime()
+
       lastFirmwareHeartbeat = ts
-      Logger.info(`[INICIALIZACIÓN] Último latido Actuador en Postgres: ${latestActuatorLog.timestamp.toISOString()} (${latestActuatorLog.status})`)
+      Logger.info(
+        `[INICIALIZACIÓN] Último latido Actuador en Postgres: ${latestActuatorLog.timestamp.toISOString()} (${latestActuatorLog.status})`,
+      )
     }
   } catch (error) {
     Logger.error('Error al inicializar latido de Actuador desde Postgres:', error)
@@ -1739,7 +1746,7 @@ async function initScheduler() {
   await initializeHeartbeatsFromPostgres()
 
   setInterval(() => {
-    RainManager.checkRainOrphanTimeout().catch((err: Error | unknown) =>
+    DropsSensorManager.checkRainOrphanTimeout().catch((err: Error | unknown) =>
       Logger.error('Error en watchdog de lluvia huérfana:', err),
     )
   }, 60_000)

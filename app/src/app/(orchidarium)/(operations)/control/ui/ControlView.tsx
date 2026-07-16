@@ -1,11 +1,8 @@
 'use client'
 
-import { IoFlaskOutline, IoWaterOutline } from 'react-icons/io5'
-import { MdDewPoint } from 'react-icons/md'
-import { PiSprayBottle } from 'react-icons/pi'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { FertigationModal } from './components'
+import { FertigationModal, ControlGrid } from './components'
 
 import { ZoneType } from '@/config/mappings'
 import {
@@ -17,7 +14,7 @@ import {
 import { useMqttStore } from '@/store'
 import { IrrigationCommand } from '@/interfaces'
 import { useDeviceHeartbeat, useToast } from '@/hooks'
-import { Heading, DeviceStatus, GlowCard } from '@/components'
+import { Heading, DeviceStatus } from '@/components'
 
 // Definición de Tópicos
 const TOPIC_PREFIX = 'PristinoPlant/Actuator_Controller'
@@ -433,64 +430,14 @@ export function ControlView() {
       />
 
       {/* Grid de Control */}
-      <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-4 grid grid-cols-1 gap-4">
-        {/* disabled: offline/connecting O sistema ocupado por OTRO circuito activo (no el propio) */}
-        <GlowCard
-          active={activeCircuits.irrigation}
-          color="blue"
-          disabled={
-            isConnecting ||
-            isOffline ||
-            (isSystemBusy && !activeCircuits.irrigation && !loadingCircuits['irrigation'])
-          }
-          icon={<IoWaterOutline />}
-          label="Riego por Aspersión"
-          pending={loadingCircuits['irrigation']}
-          onClick={() => toggleCircuit('irrigation')}
-        />
-
-        <GlowCard
-          active={activeCircuits.humidification}
-          color="cyan"
-          disabled={
-            isConnecting ||
-            isOffline ||
-            (isSystemBusy && !activeCircuits.humidification && !loadingCircuits['humidification'])
-          }
-          icon={<PiSprayBottle />}
-          label="Nebulización"
-          pending={loadingCircuits['humidification']}
-          onClick={() => toggleCircuit('humidification')}
-        />
-
-        <GlowCard
-          active={activeCircuits.soilWet}
-          color="purple"
-          disabled={
-            isConnecting ||
-            isOffline ||
-            (isSystemBusy && !activeCircuits.soilWet && !loadingCircuits['soilWet'])
-          }
-          icon={<MdDewPoint />}
-          label="Humectación del Suelo"
-          pending={loadingCircuits['soilWet']}
-          onClick={() => toggleCircuit('soilWet')}
-        />
-
-        <GlowCard
-          active={activeCircuits.fertigation}
-          color="amber"
-          disabled={
-            isConnecting ||
-            isOffline ||
-            (isSystemBusy && !activeCircuits.fertigation && !loadingCircuits['fertigation'])
-          }
-          icon={<IoFlaskOutline />}
-          label="Fertirriego"
-          pending={loadingCircuits['fertigation']}
-          onClick={() => toggleCircuit('fertigation')}
-        />
-      </div>
+      <ControlGrid
+        activeCircuits={activeCircuits}
+        isConnecting={isConnecting}
+        isOffline={isOffline}
+        isSystemBusy={isSystemBusy}
+        loadingCircuits={loadingCircuits}
+        onToggle={toggleCircuit}
+      />
 
       <FertigationModal
         isOpen={isModalOpen}

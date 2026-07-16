@@ -76,6 +76,7 @@ export function HeroSlideshow({ slides }: Props) {
                       alt={slide.title}
                       className="object-cover"
                       priority={index === 0}
+                      loading={index === 0 ? 'eager' : 'lazy'}
                       sizes="100vw"
                       src={getImageUrl(slide.mobileImage)}
                     />
@@ -86,6 +87,7 @@ export function HeroSlideshow({ slides }: Props) {
                       alt={slide.title}
                       className="object-cover"
                       priority={index === 0}
+                      loading={index === 0 ? 'eager' : 'lazy'}
                       sizes="100vw"
                       src={getImageUrl(slide.image)}
                     />
@@ -97,6 +99,7 @@ export function HeroSlideshow({ slides }: Props) {
                   alt={slide.title}
                   className="object-cover"
                   priority={index === 0}
+                  loading={index === 0 ? 'eager' : 'lazy'}
                   sizes="100vw"
                   src={getImageUrl(slide.image)}
                 />

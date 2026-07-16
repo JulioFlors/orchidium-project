@@ -4,7 +4,6 @@ import type { PotSize } from '@package/database/enums'
 
 import { useState, useTransition } from 'react'
 import {
-  PiStorefrontFill,
   PiWarningFill,
   PiCheckCircleFill,
   PiCoinsFill,
@@ -13,7 +12,6 @@ import {
 import { MdEdit, MdDelete, MdAdd } from 'react-icons/md'
 
 import {
-  Modal,
   Button,
   Badge,
   Card,
@@ -22,6 +20,7 @@ import {
   CardContent,
   ActionMenu,
 } from '@/components'
+import { VariantFormModal } from './components'
 import { upsertVariant, deleteVariant, updateVariantStock } from '@/actions'
 import { useToastStore } from '@/store/toast/toast.store'
 
@@ -66,35 +65,16 @@ export function StockView({ initialData }: StockViewProps) {
   const { addToast } = useToastStore()
   const [isPending, startTransition] = useTransition()
 
-  // Form State
-  const [form, setForm] = useState({
-    size: POT_SIZES[0],
-    price: 0,
-    quantity: 0,
-    available: true,
-  })
-
+  // Handlers para Variante
   function openCreate(species: SpeciesWithStoreData) {
     setTargetSpecies(species)
     setEditingVariant(null)
-    setForm({
-      size: POT_SIZES.find((s) => !species.variants.some((v) => v.size === s)) || POT_SIZES[0],
-      price: 0,
-      quantity: 0,
-      available: true,
-    })
     setIsModalOpen(true)
   }
 
   function openEdit(species: SpeciesWithStoreData, variant: Variant) {
     setTargetSpecies(species)
     setEditingVariant(variant)
-    setForm({
-      size: variant.size,
-      price: variant.price,
-      quantity: variant.quantity,
-      available: variant.available,
-    })
     setIsModalOpen(true)
   }
 
@@ -104,14 +84,14 @@ export function StockView({ initialData }: StockViewProps) {
     setEditingVariant(null)
   }
 
-  function handleSave() {
+  function handleSave(formValues: { size: PotSize; price: number; quantity: number; available: boolean }) {
     if (!targetSpecies) return
 
     startTransition(async () => {
       const result = await upsertVariant({
         id: editingVariant?.id,
         speciesId: targetSpecies.id,
-        ...form,
+        ...formValues,
       })
 
       if (!result.ok) {
@@ -344,104 +324,16 @@ export function StockView({ initialData }: StockViewProps) {
         </Card>
       ))}
 
-      <Modal
-        footer={
-          <>
-            <Button disabled={isPending} variant="secondary" onClick={closeModal}>
-              Cancelar
-            </Button>
-            <Button isLoading={isPending} onClick={handleSave}>
-              {editingVariant ? 'Guardar Cambios' : 'Crear Variante'}
-            </Button>
-          </>
-        }
-        icon={<PiStorefrontFill />}
+      <VariantFormModal
+        editingVariant={editingVariant}
         isOpen={isModalOpen}
-        title={
-          editingVariant
-            ? `Editar Variante: ${targetSpecies?.name}`
-            : `Nueva Variante: ${targetSpecies?.name}`
-        }
+        isPending={isPending}
+        potSizeLabels={POT_SIZE_LABELS}
+        potSizes={POT_SIZES}
+        targetSpecies={targetSpecies}
         onClose={closeModal}
-      >
-        <div className="grid grid-cols-1 gap-6">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-secondary text-sm font-medium" htmlFor="v-size">
-                Tamaño Maceta
-              </label>
-              <select
-                className="input-base text-primary bg-surface dark:bg-canvas rounded-md border border-input-outline p-2"
-                disabled={!!editingVariant}
-                id="v-size"
-                value={form.size}
-                onChange={(e) => setForm((p) => ({ ...p, size: e.target.value as PotSize }))}
-              >
-                {POT_SIZES.map((s) => (
-                  <option key={s} value={s}>
-                    {POT_SIZE_LABELS[s]}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-secondary text-sm font-medium" htmlFor="v-price">
-                Precio (Centavos USD)
-              </label>
-              <input
-                className="input-base text-primary bg-surface dark:bg-canvas rounded-md border border-input-outline p-2 font-mono"
-                id="v-price"
-                placeholder="Ej: 2500 (= $25.00)"
-                type="number"
-                value={form.price}
-                onChange={(e) => setForm((p) => ({ ...p, price: parseInt(e.target.value) || 0 }))}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-secondary text-sm font-medium" htmlFor="v-qty">
-                Stock Disponible
-              </label>
-              <input
-                className="input-base text-primary bg-surface dark:bg-canvas rounded-md border border-input-outline p-2"
-                id="v-qty"
-                type="number"
-                value={form.quantity}
-                onChange={(e) =>
-                  setForm((p) => ({ ...p, quantity: parseInt(e.target.value) || 0 }))
-                }
-              />
-            </div>
-
-            <div className="flex flex-col justify-end">
-              <div
-                className="input-base text-primary bg-surface dark:bg-canvas rounded-md border border-input-outline p-2 flex cursor-pointer items-center justify-between"
-                role="button"
-                tabIndex={0}
-                onClick={() => setForm((p) => ({ ...p, available: !p.available }))}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                     e.preventDefault()
-                     setForm((p) => ({ ...p, available: !p.available }))
-                  }
-                }}
-              >
-                <span className="text-sm font-medium">Publicar en tienda</span>
-                <div
-                  className={`h-4 w-8 rounded-full transition-colors ${form.available ? 'bg-emerald-500' : 'bg-red-400'} relative`}
-                >
-                  <div
-                    className={`absolute top-1 h-2 w-2 rounded-full bg-white transition-all ${form.available ? 'right-1' : 'left-1'}`}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </Modal>
+        onSave={handleSave}
+      />
     </div>
   )
 }

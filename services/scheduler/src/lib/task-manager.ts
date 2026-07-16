@@ -88,13 +88,14 @@ export async function recordTaskEvent(
         TaskStatus.COMPLETED,
         TaskStatus.CANCELLED,
         TaskStatus.EXPIRED,
+        TaskStatus.FAILED,
       ]
 
       const isCurrentTerminal = terminalStatuses.includes(currentTask.status)
       const isNewTerminal = terminalStatuses.includes(status)
       const isStatusChange = currentTask.status !== status
 
-      if (isCurrentTerminal && !isNewTerminal) {
+      if (isCurrentTerminal) {
         return null
       }
 

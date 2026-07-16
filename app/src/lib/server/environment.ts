@@ -12,6 +12,21 @@ import { influxClient } from './influxdb'
 
 import { ZoneMetrics, ZoneType } from '@/config/mappings'
 
+// =============================================================================
+// ⚙️  CONFIGURACIÓN DE RANGO DE TELEMETRÍA
+// =============================================================================
+// TELEMETRY_MIN_DATE define la fecha mínima seleccionable en los calendarios
+// de búsqueda histórica de las páginas /monitoring y /botanics.
+//
+// Establece el inicio del periodo de datos disponibles en InfluxDB para este
+// orchidarium. Actualiza este valor si la base de datos se reinicia o si el
+// sistema se instala en un nuevo orchidarium con datos desde otra fecha.
+//
+// Formato: 'YYYY-MM-DD' en UTC.
+// =============================================================================
+export const TELEMETRY_MIN_DATE = '2026-05-25'
+// =============================================================================
+
 const INFLUX_PHYSICAL_FIELDS = ['temperature', 'humidity', 'illuminance', 'rain_intensity']
 
 // Interfaz para el tipado de filas de InfluxDB
@@ -987,46 +1002,9 @@ export async function getRainEventTelemetryInternal(eventId: string) {
   }
 }
 
-export async function getAvailableTelemetryRange(): Promise<{ minDate: string; maxDate: string }> {
-  let minDate = '2026-05-25' // Fallback si no hay datos
-  const searchStart = new Date('2026-05-20T00:00:00Z')
-  const now = new Date()
-
-  let found = false
-  while (searchStart < now && !found) {
-    const nextSearch = new Date(searchStart.getTime())
-    nextSearch.setUTCMonth(nextSearch.getUTCMonth() + 1) // Avanzar 1 mes para acotar la búsqueda
-
-    const query = `
-      SELECT time 
-      FROM environment_metrics 
-      WHERE zone = '${ZoneType.EXTERIOR}'
-        AND time >= '${searchStart.toISOString()}'
-        AND time < '${nextSearch.toISOString()}'
-      ORDER BY time ASC 
-      LIMIT 1
-    `
-    try {
-      const reader = influxClient.query(query)
-      for await (const row of reader as AsyncIterable<any>) {
-        if (row.time) {
-          const d = new Date(safeTimeToISO(row.time))
-          const year = d.getUTCFullYear()
-          const month = String(d.getUTCMonth() + 1).padStart(2, '0')
-          const day = String(d.getUTCDate()).padStart(2, '0')
-          minDate = `${year}-${month}-${day}`
-          found = true
-          break
-        }
-      }
-    } catch (error) {
-      Logger.error(`Error al consultar rango de fecha mínima (${searchStart.toISOString()} - ${nextSearch.toISOString()}):`, error)
-      break // Abortar en caso de error para evitar loops infinitos
-    }
-
-    searchStart.setTime(nextSearch.getTime())
-  }
-
+export function getAvailableTelemetryRange(): { minDate: string; maxDate: string } {
+  // minDate es una constante documentada al inicio de este archivo.
+  // La fecha mínima es fija para este orchidarium y no requiere consultar InfluxDB.
   const todayStr = new Date().toLocaleDateString('en-US', {
     timeZone: 'America/Caracas',
     year: 'numeric',
@@ -1036,5 +1014,5 @@ export async function getAvailableTelemetryRange(): Promise<{ minDate: string; m
   const [m, d, y] = todayStr.split('/')
   const maxDate = `${y}-${m}-${d}`
 
-  return { minDate, maxDate }
+  return { minDate: TELEMETRY_MIN_DATE, maxDate }
 }

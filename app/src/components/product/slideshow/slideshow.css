@@ -67,10 +67,17 @@
   align-items: center;
   justify-content: center;
 
-  background-color: oklch(0.22 0.01 264.27 / 0.3);
+  background-color: oklch(0.22 0.01 264.27 / 0.7);
   border-radius: 50%;
   height: 40px;
   width: 40px;
+  transition: background-color 0.2s ease-in-out;
+  top: calc(50% - 28px) !important;
+}
+
+.main-swiper-interactive-area .swiper-button-prev:hover,
+.main-swiper-interactive-area .swiper-button-next:hover {
+  background-color: oklch(0.22 0.01 264.27 / 0.9);
 }
 
 /* ---- Ocultamiento de botones de navegación cuando están deshabilitados ---- */

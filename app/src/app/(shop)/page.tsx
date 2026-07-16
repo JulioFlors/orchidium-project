@@ -174,12 +174,12 @@ export default async function HomePage() {
       {/* SECCIÓN 6: Los más vendidos (Especies Destacadas) */}
       {featuredProducts.length > 0 && (
         <section
-          className="bg-canvas relative flex min-h-dvh w-full snap-start flex-col overflow-y-auto  my-8 mx-4 sm:mx-4.5 lg:mx-5"
+          className="bg-canvas relative flex w-full flex-col py-13.5 px-5"
           id="productos-destacados"
         > 
             <Title title="Los más vendidos" />
 
-            <div className="mt-9">
+            <div className="mt-8">
               <ProductSlideshow products={featuredProducts} />
             </div>
  
@@ -195,7 +195,7 @@ export default async function HomePage() {
               <Subtitle subtitle="Especies en floración real en nuestro invernadero en este momento" />
             </div>
 
-            <ProductGrid index={1} products={floweringProducts} />
+            <ProductGrid index={1} products={floweringProducts} showGlow={false} />
           </div>
         </section>
       )}

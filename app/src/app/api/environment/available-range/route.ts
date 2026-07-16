@@ -7,7 +7,7 @@ import { Logger } from '@/lib'
 
 export async function GET() {
   try {
-    const range = await getAvailableTelemetryRange()
+    const range = getAvailableTelemetryRange()
 
     return NextResponse.json(range)
   } catch (error) {

@@ -339,6 +339,7 @@ Pasos para preparar un servidor limpio (Ubuntu 24.04) para alojar el proyecto.
 
 ```bash
 # Actualizar el sistema
+# Actualizar vps
 apt update && apt upgrade -y
 
 # Instalar Docker (Script oficial)

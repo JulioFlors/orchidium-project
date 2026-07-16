@@ -7,15 +7,12 @@ import {
   Sun,
   Cloud,
   Moon,
-  Info,
-  ChevronDown,
-  ChevronUp,
 } from 'lucide-react'
 import { FaChartLine } from 'react-icons/fa6'
 import { IoWaterOutline } from 'react-icons/io5'
 import useSWR from 'swr'
 
-import { EnvironmentCard, EnvironmentDataChart } from './components'
+import { EnvironmentCard, EnvironmentDataChart, InferredRainGuide } from './components'
 
 import { ZoneType, ZoneMetrics, MetricLabels, MetricUnits } from '@/config/mappings'
 import { Heading, DeviceStatus } from '@/components'
@@ -136,7 +133,6 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
   })
 
   const [selectedMetric, setSelectedMetric] = useState<MetricType | null>(null)
-  const [isInfoOpen, setIsInfoOpen] = useState<boolean>(false)
 
   const [now, setNow] = useState(() => Date.now())
 
@@ -268,6 +264,14 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
       errorRetryInterval: 5000,
     },
   )
+
+  // ----- Carga de Gráfico Consolidado -----
+  const isLoadingMetric = useMemo(() => {
+    if (!selectedMetric) return false
+    if (selectedMetric === 'rain_events') return isPhysicalRainLoading
+    if (selectedMetric === 'rain_inferred') return isInferredRainLoading
+    return isChartLoading
+  }, [selectedMetric, isPhysicalRainLoading, isInferredRainLoading, isChartLoading])
 
   // ----- Sincronización de Errores (Notificaciones) -----
   useEffect(() => {
@@ -1108,7 +1112,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
       </div>
 
       <div className="mt-2 w-full">
-        {isChartLoading && !chartData.length ? (
+        {isLoadingMetric && !chartData.length && !physicalRainData && !inferredRainData ? (
           <div className="border-input-outline bg-surface/50 flex h-100 w-full animate-pulse items-center justify-center rounded-xl border border-dashed">
             <div className="flex flex-col items-center gap-4">
               <div className="bg-primary/10 h-10 w-10 rounded-full" />
@@ -1137,6 +1141,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               data={chartProps.customData || normalizedChartData}
               dataKey={chartProps.dataKey}
               icon={chartProps.icon}
+              isLoading={isLoadingMetric}
               range={currentRange}
               title={chartProps.title}
               unit={chartProps.unit}
@@ -1144,116 +1149,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
             />
 
             {/* Guía Explicativa de Inferencia (Colapsable) */}
-            {selectedMetric === 'rain_inferred' && (
-              <div className="border-input-outline bg-surface/30 mt-6 rounded-xl border backdrop-blur-sm transition-all duration-200 focus-within:ring-2 focus-within:ring-accessibility focus-within:ring-offset-2 focus-within:ring-offset-canvas">
-                <button
-                  className="flex w-full cursor-pointer items-center justify-between gap-3 p-4 text-left font-semibold text-slate-200 focus:outline-none"
-                  type="button"
-                  onClick={() => setIsInfoOpen(!isInfoOpen)}
-                >
-                  <div className="flex items-center gap-2 text-sm">
-                    <Info className="h-4 w-4 text-purple-400" />
-                    <span>Guía de Interpretación de Lluvia Inferida</span>
-                  </div>
-                  {isInfoOpen ? (
-                    <ChevronUp className="h-4 w-4 text-slate-400" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 text-slate-400" />
-                  )}
-                </button>
-
-                {isInfoOpen && (
-                  <div className="px-4 pb-4 pt-4 grid grid-cols-1 gap-6 text-xs text-secondary md:grid-cols-2">
-                    {/* Columna 1: Criterios de Inicio */}
-                    <div className="flex flex-col gap-2">
-                      <div className="text-sm font-bold flex items-center gap-1.5">
-                        <span>🌧️ <span className="text-purple-400">Criterios de Inicio</span></span>
-                      </div>
-                      <p className="leading-relaxed">
-                        Las reglas que determinan la apertura del evento según el horario son las siguientes:
-                      </p>
-                      
-                      <div className="flex flex-col gap-4 mt-1">
-                        <div>
-                          <h4 className="text-primary font-bold">☀️ Inferencia Diurna [7:00 am - 6:00 pm]:</h4>
-                          <p className="leading-relaxed mt-1">
-                            Choque térmico, hídrico y lumínico. Exige caídas de temperatura (base de -1.5°C e incrementos de -0.5°C por paso temporal) y ascensos de humedad bajo dos configuraciones:
-                          </p>
-                          <ul className="list-disc space-y-1 pl-4 mt-1 leading-relaxed">
-                            <li>
-                              <span className="text-primary font-semibold">Configuración Sensible (Inicio):</span>
-                              <br />
-                              Paso 1 (20 min): -1.5°C | +10.0% HR (Nublado, ≤15 klx) o +8.0% HR (Intermedio/Soleado).
-                              <br />
-                              Paso 2 (30 min): -2.0°C | +12.0% HR (Nublado) o +10.0% HR.
-                              <br />
-                              Paso 3 (40 min): -2.5°C | +14.0% HR (Nublado) o +12.0% HR.
-                            </li>
-                            <li>
-                              <span className="text-primary font-semibold">Protección por Gradiente:</span> Si la humedad no alcanza la configuración robusta (+12%, +14% o +16% HR), se requiere un gradiente rápido minuto a minuto: humedad ≥1.8% en 1 min, ≥2.5% en 2 min, o caída térmica ≤-0.5°C en 1 min.
-                            </li>
-                          </ul>
-                        </div>
-
-                        <div className="border-t border-slate-800/40 pt-3">
-                          <h4 className="text-primary font-bold">🌙 Inferencia Nocturna [6:00 pm - 7:00 am]:</h4>
-                          <p className="leading-relaxed mt-1">
-                            Caída térmica abrupta (≥ 1.6x de variabilidad previa de 30 min) con incremento hídrico (≥ 1.4x de variabilidad previa) o presaturación (≥ 98% HR) sin evaluaciones solares.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Columna 2: Criterios de Cese */}
-                    <div className="flex flex-col gap-2">
-                      <div className="text-sm font-bold flex items-center gap-1.5">
-                        <span>☁️ <span className="text-purple-400">Criterios de Cese</span></span>
-                      </div>
-                      <p className="leading-relaxed">
-                        Las reglas que determinan el cierre del evento son las siguientes:
-                      </p>
-
-                      <div className="flex flex-col gap-3 mt-1">
-                        <div>
-                          <span className="text-primary font-bold">Cese por Estancamiento:</span>{' '}
-                          <span>
-                            Calma atmosférica sostenida (variación de temperatura ≤ 0.4°C y humedad ≤ 1.0% HR durante 10 min). En saturación (100% HR) solo se evalúa la temperatura.
-                          </span>
-                        </div>
-
-                        <div>
-                          <span className="text-primary font-bold">Guardia Térmica Unificada (Lotes Deslizantes):</span>{' '}
-                          <span>
-                            Bloquea el cierre por estancamiento si se detecta un enfriamiento activo (caída neta &gt; 0.4°C) evaluando los últimos lotes deslizantes de 10 minutos (hasta 30 minutos acumulados, o hasta 50 minutos si el aire está saturado al 100% HR).
-                          </span>
-                        </div>
-
-                        <div>
-                          <span className="text-primary font-bold">Cese por Variación Térmica:</span>{' '}
-                          <span>
-                            Recuperación térmica de ≥ 0.6°C desde la temperatura mínima registrada durante el evento de lluvia.
-                          </span>
-                        </div>
-
-                        <div>
-                          <span className="text-primary font-bold">Recuperación Adaptativa:</span>{' '}
-                          <span>
-                            La temperatura recupera al menos el 35% de lo caído y la humedad disminuye un 15% del ascenso de la lluvia.
-                          </span>
-                        </div>
-
-                        <div>
-                          <span className="text-primary font-bold">Recuperación Solar:</span>{' '}
-                          <span>
-                            La iluminancia rebota por el umbral elástico calculado a partir del oscurecimiento de la tormenta (sólo diurno).
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+            {selectedMetric === 'rain_inferred' && <InferredRainGuide />}
           </>
         ) : null}
       </div>

@@ -185,7 +185,9 @@ export async function cancelManualTask(taskId: string, notes?: string) {
       let timeInfo = ''
 
       if (currentTask.status === 'IN_PROGRESS' && currentTask.actualStartAt) {
-        const elapsedMs = Date.now() - new Date(currentTask.actualStartAt).getTime()
+        const dbTimeResult = await tx.$queryRaw<{ now: Date }[]>`SELECT NOW() as now`
+        const dbNow = dbTimeResult[0]?.now || new Date()
+        const elapsedMs = dbNow.getTime() - new Date(currentTask.actualStartAt).getTime()
         const elapsedMin = Math.floor(elapsedMs / 60000)
         const elapsedSec = Math.floor((elapsedMs % 60000) / 1000)
         const remainingMin = Math.max(0, currentTask.duration - elapsedMin)

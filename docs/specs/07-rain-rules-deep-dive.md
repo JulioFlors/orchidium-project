@@ -115,12 +115,11 @@ Esta regla se activa después de que el evento lleva al menos **15 minutos** de 
 ## 5. Regla de Cese por Recuperación Solar (`SOLAR_RECOVERY`)
 
 ### A. Razonamiento Físico
-Durante el día, el fin de la tormenta se caracteriza por la disipación de la capa de nubes densas y el retorno de la radiación solar directa. La iluminancia solar (lux) experimenta un rebote rápido y pronunciado hacia los niveles de luz natural previos. 
-
-Para evitar cierres falsos por destellos solares cortos o claros transitorios de 5 minutos entre nubes (donde sigue lloviendo), el cese por recuperación solar exige una **validación cruzada multivariable**:
-1. La iluminancia máxima actual debe superar el umbral elástico adaptativo de recuperación.
-2. La temperatura no debe estar experimentando una caída libre en el lote actual (es decir, la variación del lote actual debe sugerir estabilidad térmica o calentamiento, $\Delta T_{B0} \ge -0.2^\circ\text{C}$).
-3. La humedad no debe estar en pleno ascenso de choque en el lote actual.
+Durante el día, el fin de la tormenta se caracteriza por la disipación de la capa de nubes densas y el retorno de la radiación solar directa. Para evitar cierres falsos por destellos solares cortos o claros transitorios de 5 minutos entre nubes (donde sigue lloviendo), el cese por recuperación solar exige que las lecturas del lote de 10 minutos (que ya aplanan los datos por promedio) cumplan con:
+1. **Recuperación Incondicional**: Cada una de las 10 muestras individuales del lote de 10 min debe ser $\ge 26,000$ lux (sin excepción). Esto garantiza que la luz solar sea plena y constante durante todos los minutos del lote, eliminando la posibilidad de un pico momentáneo dentro de un cielo aún encapotado.
+2. **Recuperación Condicional**: Promedio del lote de 10 min $\ge 15,000$ lux y por encima del umbral elástico calculado, acoplado a una validación cruzada:
+   - Recuperación térmica de $\ge 2.0^\circ\text{C}$ desde la temperatura mínima registrada en lluvia ($minTempInRain$).
+   - Caída de humedad de $\ge 3.0\%$ HR desde la humedad máxima registrada en lluvia ($maxHumInRain$).
 
 ### B. Funcionamiento en el Código
 Si el evento de lluvia está activo durante el día, evaluamos el lote actual ($B_0$):
@@ -131,7 +130,7 @@ Si el evento de lluvia está activo durante el día, evaluamos el lote actual ($
    \[\alpha = 1.0 - 0.65 \times relativeDrop\]
 3. El umbral elástico de recuperación solar se define como:
    \[luxRecoveryThreshold = minLuxInRain + \alpha \times (baselineLux - minLuxInRain)\]
-4. El cese se autoriza únicamente si $B_0.max \ge luxRecoveryThreshold$ **Y** la temperatura del lote actual no está cayendo drásticamente (temperatura estable o al alza, $B_0.max - B_0.min \le 0.4^\circ\text{C}$ o tendencia positiva), validando que no es un claro transitorio bajo una tormenta activa.
+4. El cese se autoriza de forma incondicional si $B_0.max \ge 26000$ (donde $B_0.max$ almacena el promedio del lote para Lux). Se autoriza de forma condicional si $B_0.max \ge luxRecoveryThreshold$ **Y** se verifica la recuperación térmica de $\ge 2.0^\circ\text{C}$ junto a la caída de humedad de $\ge 3.0\%$ HR.
 
 ### C. Validación de Campo
 * **Caso de Estudio**: En un día parcialmente nublado de tormentas rápidas, un desplome de luz desde $60,000$ lx (baseline) hasta $8,000$ lx (mínimo de lluvia) arroja una caída del $86\%$. El factor $\alpha$ se calcula en $0.44$, requiriendo que la luz recupere al menos el $44\%$ de la caída de luz, fijando el umbral de cese en $\approx 31,000$ lx. Cuando las nubes se abrieron, la luz subió a $35,000$ lx, y al no registrarse caídas térmicas en ese lote, la lluvia se cerró de forma inmediata.

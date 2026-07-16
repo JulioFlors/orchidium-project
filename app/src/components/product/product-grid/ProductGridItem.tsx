@@ -11,6 +11,7 @@ import { getImageUrl, useFormatPrice } from '@/lib'
 interface Props {
   product: Species
   index: number
+  showGlow?: boolean
 }
 
 // Calculamos si hay stock disponible y extraemos los límites del rango.
@@ -34,7 +35,7 @@ const getProductDisplayInfo = (variants: ProductVariant[]) => {
   }
 }
 
-export function ProductGridItem({ product, index }: Props) {
+export function ProductGridItem({ product, index, showGlow = true }: Props) {
   const { minPrice, maxPrice, hasStock } = getProductDisplayInfo(product.variants)
   const { formatRange } = useFormatPrice()
   const priceLabel = formatRange(minPrice, maxPrice)
@@ -56,14 +57,16 @@ export function ProductGridItem({ product, index }: Props) {
       id={`product--${product.slug}`}
     >
       {/* === AMBIENT GLOW === Fondo sólido de color que cubre TODA la card */}
-      <div
-        aria-hidden="true"
-        className="ambient-glow pointer-events-none absolute"
-        style={{
-          background: glowColor,
-          zIndex: 0,
-        }}
-      />
+      {showGlow && (
+        <div
+          aria-hidden="true"
+          className="ambient-glow pointer-events-none absolute"
+          style={{
+            background: glowColor,
+            zIndex: 0,
+          }}
+        />
+      )}
 
       {/* Contenido de la card (z-5 para estar por encima del glow) */}
       <div className="focus-product-card relative z-5" id={`${product.slug}__container-image`}>

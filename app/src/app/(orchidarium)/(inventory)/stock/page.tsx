@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 
-import { StockView } from './ui/StockView'
+import { StockView } from './ui'
 
 import { getStoreData } from '@/actions'
 

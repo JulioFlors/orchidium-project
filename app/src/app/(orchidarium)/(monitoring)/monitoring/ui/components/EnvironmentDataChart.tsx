@@ -29,6 +29,7 @@ interface EnvironmentDataChartProps {
   onRangeChange: (range: string) => void
   chartType?: 'area' | 'bar'
   allowedRanges?: string[]
+  isLoading?: boolean
 }
 
 interface TooltipItem {
@@ -422,9 +423,31 @@ function CustomTooltip({
             closeDetails = parts.join('  |  ')
           }
         } else if (type === 'SOLAR_RECOVERY') {
-          closeTitle = 'Cese por recuperación solar'
+          closeTitle = '☀️ Recuperación Solar'
           const luxMax = getNumberOrNull(data.closeLuxMax) ?? eLux ?? 0
-          closeDetails = `⛅ Ilum ${formatTooltipValue(luxMax, 'lx')} lx`
+          closeDetails = `☀️ Ilum promedio ${formatTooltipValue(luxMax, 'lx')} lx — todas las muestras del lote ≥ 26k lux`
+        } else if (type === 'THERMAL_SOLAR_RECOVERY') {
+          closeTitle = '🌤️ Recuperación Progresiva'
+          const luxMax = getNumberOrNull(data.closeLuxMax) ?? eLux ?? 0
+          const tempRecovery = getNumberOrNull(data.closeTempRecovery)
+          const humVar = getNumberOrNull(data.closeHumVar)
+          closeDetails = (
+            <div className="grid grid-cols-[auto_auto_1fr] gap-x-2 leading-relaxed">
+              <span className="text-foreground/85 font-semibold">🌤️ Ilum promedio {formatTooltipValue(luxMax, 'lx')} lx</span>
+              {tempRecovery !== null && (
+                <>
+                  <span className="text-foreground/50 font-semibold">|</span>
+                  <span className="text-foreground/85 font-semibold">🌡️ Recuperación +{tempRecovery.toFixed(1)}°C</span>
+                </>
+              )}
+              {humVar !== null && (
+                <>
+                  <span className="text-foreground/50 font-semibold">|</span>
+                  <span className="text-foreground/85 font-semibold">💧 Caída -{humVar.toFixed(1)}% HR</span>
+                </>
+              )}
+            </div>
+          )
         } else if (type === 'THERMAL_VARIATION') {
           closeTitle = 'Cese por variación térmica'
           const minTemp = getNumberOrNull(data.closeMinTemp) ?? 0
@@ -492,8 +515,10 @@ function CustomTooltip({
         }
       }
       let closeIcon = '☁️'
-      if (closeTitle.includes('recuperación solar')) {
+      if (closeTitle.startsWith('☀️')) {
         closeIcon = '☀️'
+      } else if (closeTitle.startsWith('🌤️')) {
+        closeIcon = '🌤️'
       } else if (closeTitle.includes('recuperación adaptativa')) {
         closeIcon = '⛅'
       }
@@ -957,6 +982,7 @@ export function EnvironmentDataChart({
   onRangeChange,
   chartType = 'area',
   allowedRanges,
+  isLoading,
 }: EnvironmentDataChartProps) {
   const { data: dateRange } = useSWR<{ minDate: string; maxDate: string }>(
     '/api/environment/available-range',
@@ -1636,7 +1662,14 @@ export function EnvironmentDataChart({
       </div>
 
       <div className="w-full">
-        {chartDataFiltered.length === 0 ? (
+        {isLoading ? (
+          <div className="border-input-outline bg-surface/50 flex h-70 w-full animate-pulse flex-col items-center justify-center text-center gap-2 border border-dashed rounded-lg p-6">
+            <div className="flex flex-col items-center gap-4">
+              <div className="bg-primary/10 h-10 w-10 rounded-full animate-bounce" />
+              <div className="bg-primary/10 h-3 w-32 rounded-md" />
+            </div>
+          </div>
+        ) : chartDataFiltered.length === 0 ? (
           <div className="flex h-70 w-full flex-col items-center justify-center text-center gap-2 border border-dashed border-input-outline rounded-lg bg-surface/50 p-6">
             <Calendar className="h-10 w-10 opacity-75" strokeWidth={2.2} style={{ color }} />
             <div className="text-sm font-semibold text-primary leading-relaxed">
