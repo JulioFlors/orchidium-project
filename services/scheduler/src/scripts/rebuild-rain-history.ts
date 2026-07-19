@@ -149,12 +149,16 @@ async function main() {
             const startStr = new Date(fn.startedAt).toLocaleTimeString('es-VE', {
               hour: '2-digit',
               minute: '2-digit',
+              timeZone: 'America/Caracas',
             })
             const endStr = new Date(fn.endedAt).toLocaleTimeString('es-VE', {
               hour: '2-digit',
               minute: '2-digit',
+              timeZone: 'America/Caracas',
             })
-            const dateStr = new Date(fn.startedAt).toLocaleDateString('es-VE')
+            const dateStr = new Date(fn.startedAt).toLocaleDateString('es-VE', {
+              timeZone: 'America/Caracas',
+            })
 
             Logger.warn(
               `    - [${dateStr} ${startStr} - ${endStr}]: ${fn.description}`,
