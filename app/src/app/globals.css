@@ -221,11 +221,40 @@
 
   .group:hover .ambient-glow {
     inset: -8px;
-    opacity: 0.12;
+    opacity: 0.22;
   }
 
   :is(.dark .group:hover .ambient-glow) {
-    opacity: 0.2;
+    opacity: 0.32;
+  }
+
+  /* ---- Adaptación Cromática de Textos en Cards (color-mix con --glow-color) ---- */
+  /* Clases propias para el título y metadatos de las cards de tienda/catálogo.       */
+  /* Usamos clases propias para no pelear contra la especificidad de las utils Tailwind */
+
+  /* Estado base: el color hereda del valor del token */
+  .glow-title {
+    color: var(--color-primary);
+    transition: color 300ms ease-out;
+  }
+
+  .glow-meta {
+    color: var(--color-secondary);
+    transition: color 300ms ease-out;
+  }
+
+  /* En hover sobre la card padre (.group), mezclar sutilmente con el glow-color */
+  .group:hover .glow-title {
+    color: color-mix(in srgb, var(--glow-color) 12%, var(--color-primary));
+  }
+
+  .group:hover .glow-meta {
+    color: color-mix(in srgb, var(--glow-color) 25%, var(--color-secondary));
+  }
+
+  /* Al hacer hover directo sobre el link del título, restaurar el color primario limpio */
+  .group .glow-title:hover {
+    color: var(--color-primary);
   }
 
   .search-results {
@@ -686,13 +715,13 @@
 
   .lineitem__price {
     @apply flex w-full flex-1 flex-col items-end justify-start;
-    @apply tds-sm:pt-6 pt-0 pl-2 min-w-[88px] max-w-[93px];
+    @apply tds-sm:pt-6 pt-0 pl-2 min-w-22 max-w-23.25;
     @apply tds-xs:pl-6;
     @apply tds-sm:w-1/4 tds-sm:flex-none tds-sm:min-w-28;
   }
 
   .order-summary {
-    @apply tds-lg:bg-canvas tds-lg:h-fit tds-lg:max-w-[432px] tds-lg:ml-auto tds-lg:p-8 tds-lg:rounded tds-lg:border-none tds-lg:shadow-tesla tds-lg:mt-0;
+    @apply tds-lg:bg-canvas tds-lg:h-fit tds-lg:max-w-108 tds-lg:ml-auto tds-lg:p-8 tds-lg:rounded tds-lg:border-none tds-lg:shadow-tesla tds-lg:mt-0;
     @apply border-secondary border-t pt-8 mt-8;
   }
 
@@ -737,6 +766,7 @@
 
 /* ---- Estilos para LandingHeader Transparente ---- */
 header.is-transparent {
+
   /* Forzamos que tanto en tema claro como oscuro, los textos y links sean blancos */
   .nav-link,
   .menu-button,
@@ -797,7 +827,9 @@ header.is-transparent {
   --swiper-pagination-bottom: 16px;
 }
 
-@media (min-width: 40.0625rem) { /* tds-sm */
+@media (min-width: 40.0625rem) {
+
+  /* tds-sm */
   .hero-swiper {
     --swiper-pagination-bullet-size: 9px;
     --swiper-pagination-bullet-horizontal-gap: 6px;
@@ -805,10 +837,12 @@ header.is-transparent {
   }
 }
 
-@media (min-width: 60.0625rem) { /* tds-lg */
+@media (min-width: 60.0625rem) {
+
+  /* tds-lg */
   .hero-swiper {
     --swiper-pagination-bullet-size: 10px;
     --swiper-pagination-bullet-horizontal-gap: 6px;
     --swiper-pagination-bottom: 32px;
   }
-}
+}

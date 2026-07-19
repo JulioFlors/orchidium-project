@@ -24,6 +24,13 @@ interface BatchSummary {
   samples: Sample[]
 }
 
+const stats = {
+  totalInferred: 0,
+  triggers: {} as Record<string, number>,
+  closes: {} as Record<string, number>,
+  vetos: 0,
+}
+
 async function main() {
   const now = new Date()
   let startTime: Date
@@ -59,6 +66,23 @@ async function main() {
 
   await prisma.$disconnect()
   await influxClient.close()
+
+  Logger.info('════════════════════════════════════════════════════════')
+  Logger.info('  REPORTE DE EFECTIVIDAD DE REGLAS (INFERENCIA)')
+  Logger.info(`  Total Eventos Inferidos: ${stats.totalInferred}`)
+  Logger.info(`  Total Vetos / Falsos Positivos Evitados: ${stats.vetos}`)
+  Logger.info('  ----------------------------------------------------')
+  Logger.info('  Distribución de Triggers de Inicio:')
+  for (const [type, count] of Object.entries(stats.triggers)) {
+    Logger.info(`    - ${type}: ${count}`)
+  }
+  Logger.info('  ----------------------------------------------------')
+  Logger.info('  Distribución de Reglas de Cese:')
+  for (const [type, count] of Object.entries(stats.closes)) {
+    Logger.info(`    - ${type}: ${count}`)
+  }
+  Logger.info('════════════════════════════════════════════════════════')
+
   Logger.success('🎉 Reconstrucción de historial finalizada con éxito.')
 }
 
@@ -310,6 +334,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             const hasSteepTemp = tSlopes.maxDrop1m <= -0.5
 
             passesGradient = hasSteepHum || hasSteepTemp
+            if (!passesGradient) stats.vetos++
           }
 
           if (passesGradient) {
@@ -392,6 +417,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
               const hasSteepTemp = tSlopes.maxDrop1m <= -0.5
 
               passesGradient = hasSteepHum || hasSteepTemp
+              if (!passesGradient) stats.vetos++
             }
 
             if (passesGradient) {
@@ -421,7 +447,86 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             }
           }
 
+          if (!triggered && tempBatches.length >= 4 && humBatches.length >= 4 && luxBatches.length >= 4) {
+            const baseTemp3 = tempBatches[3].max
+            const baseHum3 = humBatches[3].min
+            const baseLux3 = luxBatches[3].max
+            const dTemp3 = currentMinTemp - baseTemp3
+            const dHum3 = currentMaxHum - baseHum3
 
+            let luxCondition3 = false
+            let tempDropThreshold3 = -3.5
+            let humRobust3 = 16.0
+            let humSensitive3 = 14.0
+            let isSensible = false
+
+            if (baseLux3 <= 15000) {
+              luxCondition3 = true
+              tempDropThreshold3 = -3.5
+              humRobust3 = 16.0
+              humSensitive3 = 14.0
+            } else if (baseLux3 <= 26000) {
+              luxCondition3 = currentMinLux <= baseLux3 * 0.6
+              if (currentMinLux <= 15000) {
+                isSensible = true
+                tempDropThreshold3 = -3.5
+                humRobust3 = 14.0
+                humSensitive3 = 12.0
+              }
+            } else {
+              luxCondition3 = currentMinLux <= baseLux3 * 0.4
+              if (currentMinLux <= 15000) {
+                isSensible = true
+                tempDropThreshold3 = -4.0
+                humRobust3 = 14.0
+                humSensitive3 = 12.0
+              }
+            }
+
+            const humCondition3 =
+              dHum3 >= humSensitive3 || (baseHum3 >= 86.0 && baseHum3 <= 95.0 && currentMaxHum >= 98.0)
+
+            if (dTemp3 <= tempDropThreshold3 && humCondition3 && luxCondition3) {
+              let passesGradient = true
+              const isPreSaturated = baseHum3 >= 86.0 && baseHum3 <= 95.0 && currentMaxHum >= 98.0
+
+              if (dHum3 < humRobust3 && !isPreSaturated) {
+                const hSlopes = getHumGradientMetrics(humBatches[0].samples)
+                const tSlopes = getTempGradientMetrics(tempBatches[0].samples)
+                const hasSteepHum = hSlopes.max1m >= 1.8 || hSlopes.max2m >= 2.5
+                const hasSteepTemp = tSlopes.maxDrop1m <= -0.5
+
+                passesGradient = hasSteepHum || hasSteepTemp
+                if (!passesGradient) stats.vetos++
+              }
+
+              if (passesGradient) {
+                triggered = true
+                triggerReason = `Inferencia de Día (30M): Incremento de +${dHum3.toFixed(1)}% HR y caída térmica de ${Math.abs(dTemp3).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
+                calculatedBaselineTemp = baseTemp3
+                calculatedBaselineHum = baseHum3
+                calculatedBaselineLux = baseLux3
+                calculatedBaselineAgeMinutes = 30
+                tempDeltaTemp = dTemp3
+                tempDeltaHum = dHum3
+                dropPct = baseLux3 > 0 ? ((baseLux3 - currentMinLux) / baseLux3) * 100 : 0
+
+                if (baseLux3 <= 10000) {
+                  triggerType = 'DAY_RAMA_A_OSCURO_30M'
+                } else if (baseLux3 <= 15000) {
+                  triggerType = 'DAY_RAMA_A_NUBLADO_30M'
+                } else if (baseLux3 <= 26000) {
+                  triggerType = isSensible
+                    ? 'DAY_RAMA_C_INTERMEDIO_SENSIBLE_30M'
+                    : 'DAY_RAMA_C_INTERMEDIO_ROBUSTO_30M'
+                } else {
+                  triggerType = isSensible
+                    ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_30M'
+                    : 'DAY_RAMA_B_SOLEADO_ROBUSTO_30M'
+                }
+              }
+            }
+          }
         }
       } else {
         // --- REGLAS NOCTURNAS (Fórmula B Calibrada + Filtro de Rocío) ---
@@ -466,11 +571,11 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           calculatedBaselineTemp = tempBatches[1].max
           calculatedBaselineHum = humBatches[1].min
           calculatedBaselineLux = 0
-          calculatedBaselineAgeMinutes = 20
+          calculatedBaselineAgeMinutes = 10
           tempDeltaTemp = currentMinTemp - tempBatches[1].max
           tempDeltaHum = currentMaxHum - humBatches[1].min
           dropPct = 0
-          triggerType = 'NIGHT_20M'
+          triggerType = 'NIGHT_10M'
 
           triggerReason = `Inferencia de Noche: Incremento de +${tempDeltaHum.toFixed(1)}% HR y caída térmica de ${Math.abs(tempDeltaTemp).toFixed(1)}°C (Temp: ${currentMinTemp.toFixed(1)}°C, Hum: ${currentMaxHum.toFixed(1)}%)`
         }
@@ -544,60 +649,63 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
         let closedByRecovery = false
 
         if (isDay) {
-          // 2. Recuperación Adaptativa (Día)
+          // 2. Recuperación Progresiva (Día)
           if (
-            baselineTemp !== null &&
-            baselineHum !== null &&
+            baselineLux !== null &&
+            minLuxInRain !== null &&
             minTempInRain !== null &&
             maxHumInRain !== null
           ) {
+            const preLux = baselineLux
+            const minLux = minLuxInRain
+            const relativeDrop = Math.min(1.0, (preLux - minLux) / preLux)
+            const alpha = 1.0 - 0.65 * relativeDrop
+            const luxRecoveryThreshold = minLux + alpha * (preLux - minLux)
+
+            const currentAverageLux = luxBatches[0].max
             const currentTemp = tempBatches[0].min
             const currentHum = humBatches[0].max
-            const tempDrop = baselineTemp - minTempInRain
-            const humRise = maxHumInRain - baselineHum
 
-            const tempThreshold = minTempInRain + Math.max(0.6, tempDrop * 0.35)
-            const humThreshold = maxHumInRain - Math.max(2.0, humRise * 0.15)
+            const isLuxRecovered =
+              currentAverageLux >= luxRecoveryThreshold && currentAverageLux >= 15000
+            const isTempRecovered = currentTemp >= minTempInRain + 2.0
+            const isHumRecovered = currentHum <= maxHumInRain - 3.0
 
-            if (currentTemp >= tempThreshold && currentHum <= humThreshold) {
+            if (isLuxRecovered && isTempRecovered && isHumRecovered) {
               closedByRecovery = true
-              let preciseEndMs = timestampMs
-              const matchingEndSample = tempBatches[0].samples.find((s) => s.value >= tempThreshold)
 
-              if (matchingEndSample) {
-                preciseEndMs = matchingEndSample.timestamp
-              } else {
-                const lastSample = tempBatches[0].samples[tempBatches[0].samples.length - 1]
+              const firstSample = luxBatches[0].samples[0]
+              let preciseEndMs = firstSample ? firstSample.timestamp : timestampMs
 
-                if (lastSample) preciseEndMs = lastSample.timestamp
-              }
+              if (preciseEndMs < rainStartedAt) preciseEndMs = rainStartedAt
 
               const endSampleT =
                 tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-                tempBatches[0].samples[tempBatches[0].samples.length - 1]
+                tempBatches[0].samples[0]
               const endSampleH =
                 humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-                humBatches[0].samples[humBatches[0].samples.length - 1]
-              const endSampleL =
-                luxBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-                luxBatches[0].samples[luxBatches[0].samples.length - 1]
+                humBatches[0].samples[0]
+
+              const tempRecovery = currentTemp - minTempInRain
+              const humDrop = maxHumInRain - currentHum
 
               isTelemetryRainActive = false
               lastRainClosedAt = preciseEndMs
+
               await closeVirtualEvent(
                 new Date(preciseEndMs),
-                'BASELINE_RECOVERY',
-                `Cese de lluvia (térmico/hídrico): temperatura subió a ${currentTemp.toFixed(1)}°C (umbral: ${tempThreshold.toFixed(1)}°C) y humedad bajó a ${currentHum.toFixed(1)}% (umbral: ${humThreshold.toFixed(1)}% HR) (Temp: ${currentTemp.toFixed(1)}°C, Hum: ${currentHum.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`,
+                'PROGRESSIVE_RECOVERY',
+                `Recuperación Progresiva — Despeje solar con validación cruzada: iluminancia promedio ${currentAverageLux.toFixed(0)} lx (umbral elástico: ${Math.round(luxRecoveryThreshold).toLocaleString()} lx) + recuperación térmica +${tempRecovery.toFixed(1)}°C (umbral >= 2.0°C) + caída de humedad -${humDrop.toFixed(1)}% HR (umbral >= 3.0% HR).`,
                 {
                   temp: endSampleT ? endSampleT.value : currentTemp,
                   hum: endSampleH ? endSampleH.value : currentHum,
-                  lux: endSampleL ? endSampleL.value : currentMinLux,
+                  lux: firstSample ? firstSample.value : currentMinLux,
                 },
                 {
-                  type: 'BASELINE_RECOVERY',
-                  minTemp: minTempInRain,
-                  tempRecovery: (endSampleT ? endSampleT.value : currentTemp) - minTempInRain,
-                  humVar: maxHumInRain - (endSampleH ? endSampleH.value : currentHum),
+                  type: 'PROGRESSIVE_RECOVERY',
+                  luxMax: currentAverageLux,
+                  tempRecovery,
+                  humVar: humDrop,
                 },
               )
               maxHumInRain = null
@@ -605,73 +713,42 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             }
           }
 
-          // 3. Recuperación Solar adaptativa (Día)
-          if (!closedByRecovery && baselineLux !== null && minLuxInRain !== null) {
-            const preLux = baselineLux
-            const minLux = minLuxInRain
-            const relativeDrop = Math.min(1.0, (preLux - minLux) / preLux)
-            const alpha = 1.0 - 0.65 * relativeDrop
-            const luxRecoveryThreshold = minLux + alpha * (preLux - minLux)
+          // 3. Recuperación Solar incondicional (Día)
+          if (!closedByRecovery && minLuxInRain !== null) {
+            const allSamplesAbove26k =
+              luxBatches[0].samples.length > 0 && luxBatches[0].samples.every((s) => s.value >= 26000)
 
-            const currentMaxLux = luxBatches[0].max
-            const lastTempDrop = tempBatches[1].max - tempBatches[0].max
-            const isTempStableOrRising = lastTempDrop <= 0.2
-
-            const isUnconditionalSolar = currentMaxLux >= 26000
-            const isConditionalSolar =
-              currentMaxLux >= luxRecoveryThreshold &&
-              isTempStableOrRising &&
-              currentMaxLux >= 15000
-
-            if (isUnconditionalSolar || isConditionalSolar) {
+            if (allSamplesAbove26k) {
               closedByRecovery = true
-              let preciseEndMs = timestampMs
-              const targetThreshold = isUnconditionalSolar ? 26000 : luxRecoveryThreshold
-              const matchingEndSample = luxBatches[0].samples.find(
-                (s) => s.value >= targetThreshold,
-              )
+              const firstSample = luxBatches[0].samples[0]
+              let preciseEndMs = firstSample ? firstSample.timestamp : timestampMs
 
-              if (matchingEndSample) {
-                preciseEndMs = matchingEndSample.timestamp
-              } else {
-                const lastSample = luxBatches[0].samples[luxBatches[0].samples.length - 1]
-
-                if (lastSample) preciseEndMs = lastSample.timestamp
-              }
-
-              if (preciseEndMs < rainStartedAt) {
-                preciseEndMs = rainStartedAt
-              }
+              if (preciseEndMs < rainStartedAt) preciseEndMs = rainStartedAt
 
               const endSampleT =
                 tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-                tempBatches[0].samples[tempBatches[0].samples.length - 1]
+                tempBatches[0].samples[0]
               const endSampleH =
                 humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-                humBatches[0].samples[humBatches[0].samples.length - 1]
-              const endSampleL =
-                luxBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-                luxBatches[0].samples[luxBatches[0].samples.length - 1]
+                humBatches[0].samples[0]
+
+              const currentAverageLux = luxBatches[0].max
 
               isTelemetryRainActive = false
               lastRainClosedAt = preciseEndMs
 
-              const closeReasonText = isUnconditionalSolar
-                ? `SOLAR_RECOVERY (Sol radiante pleno >= 26k lx, Lux max: ${currentMaxLux.toFixed(0)} lx)`
-                : `Despeje solar verificado: iluminancia subió a ${Math.round(currentMaxLux).toLocaleString()} lx (umbral elástico: ${Math.round(luxRecoveryThreshold).toLocaleString()} lx) acoplado a estabilidad térmica en el lote actual (Lux max: ${currentMaxLux.toFixed(0)} lx >= ${luxRecoveryThreshold.toFixed(0)} lx, Temp: ${tempBatches[0].min.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}%, Lux: ${currentMinLux.toFixed(0)} lx)`
-
               await closeVirtualEvent(
                 new Date(preciseEndMs),
                 'SOLAR_RECOVERY',
-                closeReasonText,
+                `Recuperación Solar — Sol radiante pleno y constante: las muestras superan las 26k lux.`,
                 {
                   temp: endSampleT ? endSampleT.value : tempBatches[0].min,
                   hum: endSampleH ? endSampleH.value : humBatches[0].max,
-                  lux: endSampleL ? endSampleL.value : currentMinLux,
+                  lux: firstSample ? firstSample.value : currentMinLux,
                 },
                 {
                   type: 'SOLAR_RECOVERY',
-                  luxMax: currentMaxLux,
+                  luxMax: currentAverageLux,
                 },
               )
               maxHumInRain = null
@@ -743,73 +820,33 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
         // 5. Cese por Estancamiento de Variables (15 min de duración mínima) (Fallback de Última Instancia)
         if (durationMin >= 15) {
-          const diffHum = humBatches[0].max - humBatches[0].min
-          const diffTemp = tempBatches[0].max - tempBatches[0].min
+          const tSamples = tempBatches[0].samples
+          const hSamples = humBatches[0].samples
+
+          const firstTemp = tSamples[0]?.value ?? tempBatches[0].min
+          const lastTemp = tSamples[tSamples.length - 1]?.value ?? tempBatches[0].min
+          const netTempDrop = firstTemp - lastTemp
+          const diffTemp = netTempDrop
+
+          const firstHum = hSamples[0]?.value ?? humBatches[0].min
+          const lastHum = hSamples[hSamples.length - 1]?.value ?? humBatches[0].max
+          const netHumRise = lastHum - firstHum
+          const diffHum = netHumRise
+
           const tempCeseThreshold = 0.4
-          const humCeseThreshold = 1.0
+          const humCeseThreshold = 1.0 // Unificado a 1.0% HR
 
           const isSaturated = humBatches[0].max >= 100.0
-          const isHumStagnant = isSaturated ? true : diffHum <= humCeseThreshold
+          const isHumStagnant = isSaturated ? true : netHumRise <= humCeseThreshold
+          const isTempStagnant = netTempDrop <= tempCeseThreshold
 
-          if (isHumStagnant && diffTemp <= tempCeseThreshold) {
-            let allowStagnantClose = true
+          if (isHumStagnant && isTempStagnant) {
+            // 🛡️ Protección Térmica (Siempre 20 minutos)
+            if (tempBatches.length >= 2) {
+              const maxTemp20 = Math.max(tempBatches[0].max, tempBatches[1].max)
+              const caidaNeta20 = maxTemp20 - tempBatches[0].min
 
-            // Guardia Térmica Unificada (B0 a B4 si saturado, B0 a B2 de lo contrario)
-            if (isDay) {
-              if (isSaturated) {
-                if (tempBatches.length >= 5) {
-                  const maxTemp50 = Math.max(
-                    tempBatches[0].max,
-                    tempBatches[1].max,
-                    tempBatches[2].max,
-                    tempBatches[3].max,
-                    tempBatches[4].max,
-                  )
-                  const caidaNeta50 = maxTemp50 - tempBatches[0].min
-
-                  allowStagnantClose = caidaNeta50 <= 0.4
-                } else if (tempBatches.length >= 4) {
-                  const maxTemp40 = Math.max(
-                    tempBatches[0].max,
-                    tempBatches[1].max,
-                    tempBatches[2].max,
-                    tempBatches[3].max,
-                  )
-                  const caidaNeta40 = maxTemp40 - tempBatches[0].min
-
-                  allowStagnantClose = caidaNeta40 <= 0.4
-                } else if (tempBatches.length >= 3) {
-                  const maxTemp30 = Math.max(
-                    tempBatches[0].max,
-                    tempBatches[1].max,
-                    tempBatches[2].max,
-                  )
-                  const caidaNeta30 = maxTemp30 - tempBatches[0].min
-
-                  allowStagnantClose = caidaNeta30 <= 0.4
-                } else if (tempBatches.length >= 2) {
-                  const maxTemp20 = Math.max(tempBatches[0].max, tempBatches[1].max)
-                  const caidaNeta20 = maxTemp20 - tempBatches[0].min
-
-                  allowStagnantClose = caidaNeta20 <= 0.4
-                }
-              } else {
-                if (tempBatches.length >= 3) {
-                  const maxTemp30 = Math.max(
-                    tempBatches[0].max,
-                    tempBatches[1].max,
-                    tempBatches[2].max,
-                  )
-                  const caidaNeta30 = maxTemp30 - tempBatches[0].min
-
-                  allowStagnantClose = caidaNeta30 <= 0.4
-                } else if (tempBatches.length >= 2) {
-                  const maxTemp20 = Math.max(tempBatches[0].max, tempBatches[1].max)
-                  const caidaNeta20 = maxTemp20 - tempBatches[0].min
-
-                  allowStagnantClose = caidaNeta20 <= 0.4
-                }
-              }
+              allowStagnantClose = caidaNeta20 <= 0.4
             }
 
             if (allowStagnantClose) {
@@ -1145,6 +1182,11 @@ async function openVirtualEvent(
     triggerHumRise: triggerData?.humRise ?? null,
     triggerLuxDropPct: triggerData?.luxDropPct ?? null,
   }
+
+  if (triggerData?.type) {
+    stats.totalInferred++
+    stats.triggers[triggerData.type] = (stats.triggers[triggerData.type] || 0) + 1
+  }
 }
 
 async function saveOpenVirtualEvent() {
@@ -1214,6 +1256,10 @@ async function closeVirtualEvent(
   },
 ) {
   if (!activeVirtualEvent) return null
+
+  if (closeType) {
+    stats.closes[closeType] = (stats.closes[closeType] || 0) + 1
+  }
 
   let cleanEnd = endedAt
 

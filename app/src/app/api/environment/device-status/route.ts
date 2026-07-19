@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(null)
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: 'Error fetching device status from database' },
       { status: 500 },

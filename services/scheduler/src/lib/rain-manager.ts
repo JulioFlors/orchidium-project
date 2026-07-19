@@ -712,7 +712,7 @@ export async function evaluateClimateInference(): Promise<void> {
 
         if (isTempDropAbrupt && (isHumRiseAbrupt || (isPreSaturated && !isLuxRising))) {
           triggered = true
-          tempBaselineAgeMinutes = 20
+          tempBaselineAgeMinutes = 10
           tempDeltaTemp = currentMinTemp - tempBatches[1].max
           tempDeltaHum = currentMaxHum - humBatches[1].min
           isStagnantTriggered = true
@@ -722,7 +722,7 @@ export async function evaluateClimateInference(): Promise<void> {
           calculatedBaselineTemp = tempBatches[1].max
           calculatedBaselineHum = humBatches[1].min
           calculatedBaselineLux = 0
-          triggerType = 'NIGHT_20M'
+          triggerType = 'NIGHT_10M'
         }
       }
     }
@@ -805,6 +805,95 @@ export async function evaluateClimateInference(): Promise<void> {
             triggerType = isSensible
               ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_20M'
               : 'DAY_RAMA_B_SOLEADO_ROBUSTO_20M'
+          }
+        }
+      }
+    }
+
+    // Paso 3 — Diurno: 30 min previos a B0 (Solo día, saltado en noche)
+    if (
+      !triggered &&
+      isDay &&
+      tempBatches.length >= 4 &&
+      humBatches.length >= 4 &&
+      luxBatches.length >= 4
+    ) {
+      const baseTemp3 = tempBatches[3].max
+      const baseHum3 = humBatches[3].min
+      const baseLux3 = luxBatches[3].max
+      const dTemp3 = currentMinTemp - baseTemp3
+      const dHum3 = currentMaxHum - baseHum3
+
+      let luxCondition = false
+      let tempDropThreshold = -3.5
+      let humRobust = 16.0
+      let humSensitive = 14.0
+      let isSensible = false
+
+      if (baseLux3 <= 15000) {
+        // Rama A (Cielo muy nublado: <= 15 klx)
+        luxCondition = true
+        tempDropThreshold = -3.5
+        humRobust = 16.0
+        humSensitive = 14.0
+      } else if (baseLux3 <= 26000) {
+        // Rama C (Cielo intermedio: 15 klx < Lux <= 26 klx)
+        luxCondition = currentMinLux <= baseLux3 * 0.6
+        if (currentMinLux <= 15000) {
+          isSensible = true
+          tempDropThreshold = -3.5
+          humRobust = 14.0
+          humSensitive = 12.0
+        }
+      } else {
+        // Rama B (Cielo soleado: > 26 klx)
+        luxCondition = currentMinLux <= baseLux3 * 0.4
+        if (currentMinLux <= 15000) {
+          isSensible = true
+          tempDropThreshold = -4.0
+          humRobust = 14.0
+          humSensitive = 12.0
+        }
+      }
+
+      const humCondition =
+        dHum3 >= humSensitive || (baseHum3 >= 86.0 && baseHum3 <= 95.0 && currentMaxHum >= 98.0)
+
+      if (dTemp3 <= tempDropThreshold && humCondition && luxCondition) {
+        let passesGradient = true
+        const isPreSaturated = baseHum3 >= 86.0 && baseHum3 <= 95.0 && currentMaxHum >= 98.0
+
+        if (dHum3 < humRobust && !isPreSaturated) {
+          const hSlopes = getHumGradientMetrics(humBatches[0].samples)
+          const tSlopes = getTempGradientMetrics(tempBatches[0].samples)
+          const hasSteepHum = hSlopes.max1m >= 1.8 || hSlopes.max2m >= 2.5
+          const hasSteepTemp = tSlopes.maxDrop1m <= -0.5
+
+          passesGradient = hasSteepHum || hasSteepTemp
+        }
+
+        if (passesGradient) {
+          triggered = true
+          tempBaselineAgeMinutes = 30
+          tempDeltaTemp = dTemp3
+          tempDeltaHum = dHum3
+          dropPct = baseLux3 > 0 ? ((baseLux3 - currentMinLux) / baseLux3) * 100 : 0
+          calculatedBaselineTemp = baseTemp3
+          calculatedBaselineHum = baseHum3
+          calculatedBaselineLux = baseLux3
+
+          if (baseLux3 <= 10000) {
+            triggerType = 'DAY_RAMA_A_OSCURO_30M'
+          } else if (baseLux3 <= 15000) {
+            triggerType = 'DAY_RAMA_A_NUBLADO_30M'
+          } else if (baseLux3 <= 26000) {
+            triggerType = isSensible
+              ? 'DAY_RAMA_C_INTERMEDIO_SENSIBLE_30M'
+              : 'DAY_RAMA_C_INTERMEDIO_ROBUSTO_30M'
+          } else {
+            triggerType = isSensible
+              ? 'DAY_RAMA_B_SOLEADO_SENSIBLE_30M'
+              : 'DAY_RAMA_B_SOLEADO_ROBUSTO_30M'
           }
         }
       }
@@ -954,7 +1043,7 @@ export async function evaluateClimateInference(): Promise<void> {
             await closeRainEvent(
               'SOLAR_RECOVERY',
               new Date(preciseEndMs),
-              `☀ Recuperación Solar — Sol radiante pleno y constante: las ${luxBatches[0].samples.length} muestras del lote de 10 min superan las 26k lux (mín: ${minSampleLux.toFixed(0)} lx, promedio: ${currentAverageLux.toFixed(0)} lx). Cese al inicio del lote solar.`,
+              `Recuperación Solar — Sol radiante pleno y constante: las ${luxBatches[0].samples.length} muestras del lote de 10 min superan las 26k lux (mín: ${minSampleLux.toFixed(0)} lx, promedio: ${currentAverageLux.toFixed(0)} lx). Cese al inicio del lote solar.`,
               {
                 temp: endSampleT ? endSampleT.value : tempBatches[0].min,
                 hum: endSampleH ? endSampleH.value : humBatches[0].max,
@@ -1016,7 +1105,7 @@ export async function evaluateClimateInference(): Promise<void> {
             inferedBaselineVarHum = null
 
             await closeRainEvent(
-              'THERMAL_SOLAR_RECOVERY',
+              'PROGRESSIVE_RECOVERY',
               new Date(preciseEndMs),
               `🌤️ Recuperación Progresiva — Despeje solar con validación cruzada: iluminancia promedio ${currentAverageLux.toFixed(0)} lx (umbral elástico: ${Math.round(luxRecoveryThreshold).toLocaleString()} lx) + recuperación térmica +${tempRecovery.toFixed(1)}°C desde ${minTempInRain!.toFixed(1)}°C (umbral >= 2.0°C) + caída de humedad -${humDrop.toFixed(1)}% HR desde ${maxHumInRain!.toFixed(1)}% HR (umbral >= 3.0% HR). Cese al inicio del lote de recuperación.`,
               {
@@ -1025,7 +1114,7 @@ export async function evaluateClimateInference(): Promise<void> {
                 lux: firstSample ? firstSample.value : currentMinLux,
               },
               {
-                type: 'THERMAL_SOLAR_RECOVERY',
+                type: 'PROGRESSIVE_RECOVERY',
                 luxMax: currentAverageLux,
                 tempRecovery,
                 humVar: humDrop,
@@ -1104,8 +1193,18 @@ export async function evaluateClimateInference(): Promise<void> {
       // No requiere umbral de duración: el gate natural es que exista al menos 1 batch (≈10 min).
       // La 🛡️ Protección Térmica bloquea el cierre si hay enfriamiento activo en los 30 min previos.
       if (tempBatches.length >= 1 && humBatches.length >= 1) {
-        const diffHum = humBatches[0].max - humBatches[0].min
-        const diffTemp = tempBatches[0].max - tempBatches[0].min
+        const tSamples = tempBatches[0].samples
+        const hSamples = humBatches[0].samples
+
+        const firstTemp = tSamples[0]?.value ?? tempBatches[0].min
+        const lastTemp = tSamples[tSamples.length - 1]?.value ?? tempBatches[0].min
+        const netTempDrop = firstTemp - lastTemp
+        const diffTemp = netTempDrop
+
+        const firstHum = hSamples[0]?.value ?? humBatches[0].min
+        const lastHum = hSamples[hSamples.length - 1]?.value ?? humBatches[0].max
+        const netHumRise = lastHum - firstHum
+        const diffHum = netHumRise
 
         const tempCeseThreshold =
           inferedBaselineVarTemp !== null ? Math.max(0.4, 1.2 * inferedBaselineVarTemp) : 0.4
@@ -1113,67 +1212,18 @@ export async function evaluateClimateInference(): Promise<void> {
           inferedBaselineVarHum !== null ? Math.max(1.0, 1.2 * inferedBaselineVarHum) : 1.0
 
         const isSaturated = humBatches[0].max >= 100.0
-        const isHumStagnant = isSaturated ? true : diffHum <= humCeseThreshold
+        const isHumStagnant = isSaturated ? true : netHumRise <= humCeseThreshold
+        const isTempStagnant = netTempDrop <= tempCeseThreshold
 
-        if (isHumStagnant && diffTemp <= tempCeseThreshold) {
+        if (isHumStagnant && isTempStagnant) {
           let allowStagnantClose = true
 
-          // 🛡️ Protección Térmica
-          if (isDay) {
-            if (isSaturated) {
-              if (tempBatches.length >= 5) {
-                const maxTemp50 = Math.max(
-                  tempBatches[0].max,
-                  tempBatches[1].max,
-                  tempBatches[2].max,
-                  tempBatches[3].max,
-                  tempBatches[4].max,
-                )
-                const caidaNeta50 = maxTemp50 - tempBatches[0].min
+          // 🛡️ Protección Térmica (Siempre 20 minutos)
+          if (tempBatches.length >= 2) {
+            const maxTemp20 = Math.max(tempBatches[0].max, tempBatches[1].max)
+            const caidaNeta20 = maxTemp20 - tempBatches[0].min
 
-                allowStagnantClose = caidaNeta50 <= 0.4
-              } else if (tempBatches.length >= 4) {
-                const maxTemp40 = Math.max(
-                  tempBatches[0].max,
-                  tempBatches[1].max,
-                  tempBatches[2].max,
-                  tempBatches[3].max,
-                )
-                const caidaNeta40 = maxTemp40 - tempBatches[0].min
-
-                allowStagnantClose = caidaNeta40 <= 0.4
-              } else if (tempBatches.length >= 3) {
-                const maxTemp30 = Math.max(
-                  tempBatches[0].max,
-                  tempBatches[1].max,
-                  tempBatches[2].max,
-                )
-                const caidaNeta30 = maxTemp30 - tempBatches[0].min
-
-                allowStagnantClose = caidaNeta30 <= 0.4
-              } else if (tempBatches.length >= 2) {
-                const maxTemp20 = Math.max(tempBatches[0].max, tempBatches[1].max)
-                const caidaNeta20 = maxTemp20 - tempBatches[0].min
-
-                allowStagnantClose = caidaNeta20 <= 0.4
-              }
-            } else {
-              if (tempBatches.length >= 3) {
-                const maxTemp30 = Math.max(
-                  tempBatches[0].max,
-                  tempBatches[1].max,
-                  tempBatches[2].max,
-                )
-                const caidaNeta30 = maxTemp30 - tempBatches[0].min
-
-                allowStagnantClose = caidaNeta30 <= 0.4
-              } else if (tempBatches.length >= 2) {
-                const maxTemp20 = Math.max(tempBatches[0].max, tempBatches[1].max)
-                const caidaNeta20 = maxTemp20 - tempBatches[0].min
-
-                allowStagnantClose = caidaNeta20 <= 0.4
-              }
-            }
+            allowStagnantClose = caidaNeta20 <= 0.4
           }
 
           if (allowStagnantClose) {

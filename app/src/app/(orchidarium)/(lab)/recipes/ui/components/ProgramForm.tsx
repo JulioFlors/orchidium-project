@@ -3,7 +3,7 @@
 import { type Agrochemical } from '@package/database'
 import { zodResolver } from '@hookform/resolvers/zod'
 import React, { useTransition } from 'react'
-import { useForm, useFieldArray, Controller } from 'react-hook-form'
+import { useForm, useFieldArray, Controller, useWatch } from 'react-hook-form'
 import { IoAddOutline, IoTrashOutline, IoArrowUpOutline, IoArrowDownOutline } from 'react-icons/io5'
 import * as z from 'zod'
 
@@ -63,7 +63,6 @@ export function ProgramForm({
     handleSubmit,
     control,
     reset,
-    watch,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(programSchema),
@@ -119,7 +118,7 @@ export function ProgramForm({
   }, [isOpen, initialData, reset, draftKey, type])
 
   // Persistir cambios en tiempo real
-  const watchedValues = watch()
+  const watchedValues = useWatch({ control })
   const watchedString = JSON.stringify(watchedValues)
 
   React.useEffect(() => {

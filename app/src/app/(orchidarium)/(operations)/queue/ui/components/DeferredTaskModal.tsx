@@ -1,7 +1,7 @@
 'use client'
 
 import * as z from 'zod'
-import { useForm } from 'react-hook-form'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useRef } from 'react'
 import clsx from 'clsx'
@@ -63,7 +63,6 @@ export function DeferredTaskModal({ isOpen, onClose, onSubmitSuccess }: Props) {
     register,
     handleSubmit,
     reset,
-    watch,
     formState: { errors, isSubmitting },
   } = useForm<z.input<typeof plannerSchema>>({
     resolver: zodResolver(plannerSchema),
@@ -87,7 +86,7 @@ export function DeferredTaskModal({ isOpen, onClose, onSubmitSuccess }: Props) {
   }, [isOpen, reset])
 
   // Persistir cambios en el store (lectura imperativa para comparar, sin dep. reactiva)
-  const watchedValues = watch()
+  const watchedValues = useWatch({ control })
   const watchedString = JSON.stringify(watchedValues)
 
   useEffect(() => {

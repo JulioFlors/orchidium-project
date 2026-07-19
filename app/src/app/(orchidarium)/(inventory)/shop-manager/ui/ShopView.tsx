@@ -107,11 +107,15 @@ function SpeciesSelectorCascade({
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       {!fixedType && (
         <div className="flex flex-col gap-1.5">
-          <label className="text-secondary text-xs font-semibold uppercase opacity-60">
+          <label
+            className="text-secondary text-xs font-semibold uppercase opacity-60"
+            htmlFor="plant-type-select"
+          >
             Tipo de Planta
           </label>
           <select
             className="input-base"
+            id="plant-type-select"
             value={localType}
             onChange={(e) => handleTypeChange(e.target.value)}
           >
@@ -126,10 +130,16 @@ function SpeciesSelectorCascade({
       )}
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-secondary text-xs font-semibold uppercase opacity-60">Género</label>
+        <label
+          className="text-secondary text-xs font-semibold uppercase opacity-60"
+          htmlFor="genus-select"
+        >
+          Género
+        </label>
         <select
           className="input-base"
           disabled={!activeType}
+          id="genus-select"
           value={genusName}
           onChange={(e) => handleGenusChange(e.target.value)}
         >
@@ -143,10 +153,16 @@ function SpeciesSelectorCascade({
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-secondary text-xs font-semibold uppercase opacity-60">Especie</label>
+        <label
+          className="text-secondary text-xs font-semibold uppercase opacity-60"
+          htmlFor="species-select"
+        >
+          Especie
+        </label>
         <select
           className="input-base"
           disabled={!genusName}
+          id="species-select"
           value={selectedSpeciesId}
           onChange={(e) => handleSpeciesChange(e.target.value)}
         >
@@ -305,7 +321,10 @@ export function ShopView({ initialData, initialLayoutConfig }: ShopViewProps) {
               const typeLabel = fixedType ? PLANT_TYPE_LABELS[fixedType] : `Slide ${index + 1}`
 
               return (
-                <Card key={index} className="bg-canvas border-input-outline overflow-hidden">
+                <Card
+                  key={fixedType || index}
+                  className="bg-canvas border-input-outline overflow-hidden"
+                >
                   <CardHeader className="bg-surface/50 border-input-outline border-b px-6 py-4">
                     <CardTitle className="flex items-center gap-2 text-base font-bold">
                       Slide {index + 1}: {typeLabel}
@@ -335,11 +354,15 @@ export function ShopView({ initialData, initialLayoutConfig }: ShopViewProps) {
 
                     {/* Título Personalizado */}
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-secondary text-xs font-semibold uppercase opacity-60">
+                      <label
+                        className="text-secondary text-xs font-semibold uppercase opacity-60"
+                        htmlFor={`hero-title-${index}`}
+                      >
                         Título en el Hero
                       </label>
                       <input
                         className="input-base"
+                        id={`hero-title-${index}`}
                         placeholder="Ej: Cattleya Maxima"
                         type="text"
                         value={slide.title}
@@ -492,11 +515,15 @@ export function ShopView({ initialData, initialLayoutConfig }: ShopViewProps) {
 
               {/* Título en megamenú */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-secondary text-xs font-semibold uppercase opacity-60">
+                <label
+                  className="text-secondary text-xs font-semibold uppercase opacity-60"
+                  htmlFor="megamenu-title-input"
+                >
                   Título del Megamenú
                 </label>
                 <input
                   className="input-base"
+                  id="megamenu-title-input"
                   placeholder="Ej: Dendrobium Striata"
                   type="text"
                   value={config.megamenu.featuredItem.title}

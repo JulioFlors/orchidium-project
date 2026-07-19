@@ -50,13 +50,16 @@ export function SpeciesInventoryCard({ species, index }: SpeciesInventoryCardPro
       data-species-index={index}
       href={`/species/${species.id}`}
       id={`species-card--${species.slug}`}
+      style={{
+        '--glow-color': glowColor,
+      } as React.CSSProperties}
     >
       {/* Ambient Glow de fondo */}
       <div
         aria-hidden="true"
         className="ambient-glow pointer-events-none absolute"
         style={{
-          background: glowColor,
+          background: 'var(--glow-color)',
           zIndex: 0,
         }}
       />

@@ -44,6 +44,7 @@ export function TeslaContactSection() {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch (err) {
+      // eslint-disable-next-line no-console
       console.error('Error al copiar correo:', err)
     }
   }

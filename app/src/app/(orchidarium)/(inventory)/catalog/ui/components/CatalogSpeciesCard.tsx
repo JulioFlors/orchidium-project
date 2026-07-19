@@ -51,13 +51,16 @@ export function CatalogSpeciesCard({ species, index }: CatalogSpeciesCardProps) 
       className="fade-in group relative mb-4 flex flex-col px-1 pt-1"
       data-species-index={index}
       id={`catalog-species--${species.slug}`}
+      style={{
+        '--glow-color': glowColor,
+      } as React.CSSProperties}
     >
       {/* === AMBIENT GLOW === Identico a la tienda publica */}
       <div
         aria-hidden="true"
         className="ambient-glow pointer-events-none absolute"
         style={{
-          background: glowColor,
+          background: 'var(--glow-color)',
           zIndex: 0,
         }}
       />
@@ -95,16 +98,16 @@ export function CatalogSpeciesCard({ species, index }: CatalogSpeciesCardProps) 
       >
         <div className="flex flex-col font-bold antialiased" id={`${species.slug}__main-details`}>
           <Link
-            className="text-primary tracking-tight text-balance transition-colors hover:text-emerald-500"
+            className="glow-title tracking-tight text-balance"
             href={`/catalog/${species.id}`}
             id={`${species.slug}__link`}
             tabIndex={-1}
           >
             {species.name}
           </Link>
-          <div className="mt-1 flex items-center gap-1 opacity-55">
-            <PiImagesFill className="text-secondary" size={10} />
-            <span className="text-secondary text-[10px] font-semibold">
+          <div className="flex items-center gap-1">
+            <PiImagesFill className="text-secondary" size={12} />
+            <span className="glow-meta font-semibold tracking-wide">
               {species.images.length} {species.images.length === 1 ? 'Foto' : 'Fotos'}
             </span>
           </div>

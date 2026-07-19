@@ -211,9 +211,9 @@ export default async function HomePage() {
       )}
 
       {/* Secciones Hero individuales por Categoría al final de la página */}
-      {categoriesData.map((cat, index) => (
+      {categoriesData.map((cat) => (
         <TeslaSection
-          key={index}
+          key={cat.title}
           image={cat.image}
           primaryButtonHref={cat.href}
           primaryButtonText="Explorar catálogo"

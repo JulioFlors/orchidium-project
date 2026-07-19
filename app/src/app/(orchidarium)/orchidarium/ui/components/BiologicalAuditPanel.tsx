@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useTransition } from 'react'
+import { useState, useEffect, useTransition, useCallback } from 'react'
 import {
   PiFlowerFill,
   PiBugFill,
@@ -64,22 +64,29 @@ export function BiologicalAuditPanel() {
   const { addToast } = useToastStore()
   const [isPending, startTransition] = useTransition()
 
-  const loadData = async () => {
-    setIsLoading(true)
-    const res = await getActiveBiologicalEvents()
+  const loadData = useCallback(
+    async (showLoading = true) => {
+      if (showLoading) {
+        setIsLoading(true)
+      }
+      const res = await getActiveBiologicalEvents()
 
-    if (res.success && res.data) {
-      setFloweringEvents(res.data.floweringEvents as unknown as FloweringEvent[])
-      setPestSightings(res.data.pestSightings as unknown as PestSighting[])
-    } else {
-      addToast(res.error || 'Error al cargar datos biológicos.', 'error')
-    }
-    setIsLoading(false)
-  }
+      if (res.success && res.data) {
+        setFloweringEvents(res.data.floweringEvents as unknown as FloweringEvent[])
+        setPestSightings(res.data.pestSightings as unknown as PestSighting[])
+      } else {
+        addToast(res.error || 'Error al cargar datos biológicos.', 'error')
+      }
+      setIsLoading(false)
+    },
+    [addToast],
+  )
 
   useEffect(() => {
-    loadData()
-  }, [])
+    Promise.resolve().then(() => {
+      loadData(false)
+    })
+  }, [loadData])
 
   const handleEndFlowering = (eventId: string) => {
     if (!confirm('¿Confirmas que deseas dar por terminada la floración de esta planta hoy?')) return
@@ -138,7 +145,7 @@ export function BiologicalAuditPanel() {
           </button>
         </div>
 
-        <Button disabled={isLoading} size="sm" variant="secondary" onClick={loadData}>
+        <Button disabled={isLoading} size="sm" variant="secondary" onClick={() => loadData()}>
           <PiArrowClockwiseBold className={`mr-1.5 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           Actualizar Panel
         </Button>
@@ -232,7 +239,7 @@ export function BiologicalAuditPanel() {
 
                         {event.notes && (
                           <p className="text-secondary border-input-outline mt-3 rounded border bg-zinc-50 p-2 font-mono text-xs italic dark:bg-zinc-900">
-                            "{event.notes}"
+                            &ldquo;{event.notes}&rdquo;
                           </p>
                         )}
                       </div>
@@ -306,7 +313,7 @@ export function BiologicalAuditPanel() {
                         </p>
                         {sighting.notes && (
                           <p className="text-secondary/70 bg-surface/20 mt-1 rounded p-2 font-sans text-xs italic">
-                            "{sighting.notes}"
+                            &ldquo;{sighting.notes}&rdquo;
                           </p>
                         )}
                       </div>

@@ -263,7 +263,7 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
   }
 
   return (
-    <div className="tds-sm:px-0 mx-auto mt-9 flex w-full max-w-7xl flex-col gap-8 px-4 pb-12">
+    <div className="mt-9 flex w-full flex-col gap-8 pb-12">
       {/* Cabecera */}
       <Heading
         description="Consolidación de la taxonomía del catálogo (tipos de plantas, géneros y especies)"
@@ -312,7 +312,7 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
           </span>
         </div>
       ) : (
-        <div className="mt-4 flex flex-col gap-12">
+        <div className="mt-4 flex flex-col">
           {sortedTypes.map((type) => {
             const generaInType = speciesByType[type]
             const sortedGeneraIds = Object.keys(generaInType).sort((a, b) => {
@@ -325,8 +325,8 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
             return (
               <div key={type} className="flex flex-col pb-8 last:pb-0">
                 {/* Título del Tipo de Planta con ActionMenu */}
-                <div className="group relative z-8 mt-9 flex items-center gap-2">
-                  <h2 className="text-primary text-2xl leading-none font-bold tracking-tighter antialiased">
+                <div className="group relative z-8 mt-9 ml-1 flex items-center gap-2">
+                  <h2 className="text-primary text-2xl leading-10.5 font-bold tracking-tighter antialiased">
                     {PLANT_TYPE_LABELS[type]}
                   </h2>
                   <ActionMenu
@@ -353,8 +353,8 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
 
                     return (
                       <div key={genusId} className="flex flex-col">
-                        <div className="group tds-xs:sticky tds-xs:backdrop-blur-lg bg-canvas/30 dark:bg-canvas/60 top-14 z-7 mt-8 ml-1 flex w-[calc(100%-8px)]! items-center gap-2 px-0">
-                          <h3 className="text-primary py-4 text-xl leading-none font-medium tracking-wider antialiased">
+                        <div className="group tds-xs:sticky tds-xs:backdrop-blur-lg bg-canvas/30 dark:bg-canvas/60 top-14 z-9 mt-10 ml-1 flex w-[calc(100%-8px)]! items-center gap-2 px-0">
+                          <h3 className="text-primary text-xl leading-10.5 font-medium tracking-wider antialiased">
                             {genusName}
                           </h3>
                           {genusObj && (
@@ -380,7 +380,7 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
                         </div>
 
                         {/* Listado de Especies */}
-                        <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                        <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-3 tds-2xl:grid-cols-4 mt-9 grid grid-cols-1 gap-x-4 gap-y-2">
                           {speciesInGenus.map((species, speciesIndex) => (
                             <CatalogSpeciesCard
                               key={species.id}

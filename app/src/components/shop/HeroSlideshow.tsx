@@ -51,12 +51,12 @@ export function HeroSlideshow({ slides }: Props) {
           delay: 10000,
           disableOnInteraction: false,
         }}
+        // Habilitar loop para que el retorno del último al primer slide sea continuo y fluido
+        className="hero-swiper h-full w-full"
         keyboard={{
           enabled: true,
           onlyInViewport: true,
         }}
-        // Habilitar loop para que el retorno del último al primer slide sea continuo y fluido
-        className="hero-swiper h-full w-full"
         modules={[Autoplay, Keyboard, Pagination]}
         pagination={{
           clickable: true,
@@ -66,7 +66,7 @@ export function HeroSlideshow({ slides }: Props) {
         }}
       >
         {slides.map((slide, index) => (
-          <SwiperSlide key={index} className="relative h-full w-full">
+          <SwiperSlide key={slide.href} className="relative h-full w-full">
             {/* Imagen de fondo a pantalla completa */}
             <div className="absolute inset-0 -z-10 h-full w-full">
               {slide.mobileImage ? (

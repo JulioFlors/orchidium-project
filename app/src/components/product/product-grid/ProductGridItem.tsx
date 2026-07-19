@@ -55,6 +55,9 @@ export function ProductGridItem({ product, index, showGlow = true }: Props) {
       className="fade-in group relative mb-4 flex flex-col px-1 pt-1"
       data-product-index={index}
       id={`product--${product.slug}`}
+      style={{
+        '--glow-color': glowColor,
+      } as React.CSSProperties}
     >
       {/* === AMBIENT GLOW === Fondo sólido de color que cubre TODA la card */}
       {showGlow && (
@@ -62,7 +65,7 @@ export function ProductGridItem({ product, index, showGlow = true }: Props) {
           aria-hidden="true"
           className="ambient-glow pointer-events-none absolute"
           style={{
-            background: glowColor,
+            background: 'var(--glow-color)',
             zIndex: 0,
           }}
         />
@@ -104,7 +107,7 @@ export function ProductGridItem({ product, index, showGlow = true }: Props) {
       >
         <div className="flex flex-col font-bold antialiased" id={`${product.slug}__main-details`}>
           <Link
-            className="text-primary tracking-tight text-balance"
+            className="glow-title tracking-tight text-balance"
             href={`/product/${product.slug}`}
             id={`${product.slug}__link`}
             tabIndex={-1}
@@ -113,7 +116,7 @@ export function ProductGridItem({ product, index, showGlow = true }: Props) {
           </Link>
 
           {/* Mostramos el precio o el rango calculado */}
-          <span className="text-secondary font-semibold tracking-wide">{priceLabel}</span>
+          <span className="glow-meta font-semibold tracking-wide">{priceLabel}</span>
         </div>
         <div />
       </div>

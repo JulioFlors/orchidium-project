@@ -19,6 +19,7 @@ export function ExchangeRateProvider({ children }: Props) {
 
         setRate(rate)
       } catch (error) {
+        // eslint-disable-next-line no-console
         console.error('Error cargando tasa en ExchangeRateProvider:', error)
         setRate(null) // Forzar fallback a USD
       }

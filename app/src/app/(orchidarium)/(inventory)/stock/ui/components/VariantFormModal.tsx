@@ -63,21 +63,25 @@ export function VariantFormModal({
   useEffect(() => {
     if (isOpen) {
       if (editingVariant) {
-        setForm({
-          size: editingVariant.size,
-          price: editingVariant.price,
-          quantity: editingVariant.quantity,
-          available: editingVariant.available,
+        Promise.resolve().then(() => {
+          setForm({
+            size: editingVariant.size,
+            price: editingVariant.price,
+            quantity: editingVariant.quantity,
+            available: editingVariant.available,
+          })
         })
       } else {
         const nextAvailableSize =
           potSizes.find((s) => !targetSpecies?.variants.some((v) => v.size === s)) || potSizes[0]
 
-        setForm({
-          size: nextAvailableSize,
-          price: 0,
-          quantity: 0,
-          available: true,
+        Promise.resolve().then(() => {
+          setForm({
+            size: nextAvailableSize,
+            price: 0,
+            quantity: 0,
+            available: true,
+          })
         })
       }
     }

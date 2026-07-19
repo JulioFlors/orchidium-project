@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
         'Cache-Control': 'public, max-age=31536000, immutable',
       },
     })
-  } catch (err) {
+  } catch {
     return new NextResponse('Internal Server Error', { status: 500 })
   }
 }

@@ -9,7 +9,7 @@ export function InferredRainGuide() {
   return (
     <div className="border-input-outline bg-surface/30 focus-within:ring-accessibility focus-within:ring-offset-canvas mt-6 rounded-xl border backdrop-blur-sm transition-all duration-200 focus-within:ring-2 focus-within:ring-offset-2">
       <button
-        className="flex w-full cursor-pointer items-center justify-between gap-3 p-4 text-left font-semibold text-slate-200 focus:outline-none"
+        className="text-secondary flex w-full cursor-pointer items-center justify-between gap-3 p-4 text-left font-semibold focus:outline-none"
         type="button"
         onClick={() => setIsInfoOpen(!isInfoOpen)}
       >
@@ -46,10 +46,12 @@ export function InferredRainGuide() {
                   El sistema recibe telemetría en lotes de 10 muestras cada 10 minutos (B0
                   representa el lote actual de los últimos 10 min). Para detectar el choque térmico,
                   hídrico y lumínico de una tormenta, el motor compara B0 contra lotes anteriores
-                  mediante dos pasos deslizantes:
+                  mediante tres pasos deslizantes:
                   <br />
                   • Paso 1: Compara B0 contra B1 (el lote de 10 a 20 min atrás).
-                  <br />• Paso 2: Compara B0 contra B2 (el lote de 20 a 30 min atrás).
+                  <br />
+                  • Paso 2: Compara B0 contra B2 (el lote de 20 a 30 min atrás).
+                  <br />• Paso 3: Compara B0 contra B3 (el lote de 30 a 40 min atrás).
                 </p>
                 <p className="mt-2 leading-relaxed">
                   Cada paso evalúa las condiciones climáticas bajo tres ramas de luminosidad (según
@@ -72,6 +74,10 @@ export function InferredRainGuide() {
                         Paso 2 (20 min previos): Caída Temp ≤-2.5°C | Humedad Robusta ≥14.0% HR (o
                         Sensible ≥12.0% HR con Gradiente).
                       </li>
+                      <li>
+                        Paso 3 (30 min previos): Caída Temp ≤-3.5°C | Humedad Robusta ≥16.0% HR (o
+                        Sensible ≥14.0% HR con Gradiente).
+                      </li>
                     </ul>
                   </li>
                   <li>
@@ -88,6 +94,10 @@ export function InferredRainGuide() {
                       <li>
                         Paso 2 (20 min previos): Caída Temp ≤-3.0°C | Humedad Robusta ≥12.0% HR (o
                         Sensible ≥10.0% HR con Gradiente).
+                      </li>
+                      <li>
+                        Paso 3 (30 min previos): Caída Temp ≤-4.0°C | Humedad Robusta ≥14.0% HR (o
+                        Sensible ≥12.0% HR con Gradiente).
                       </li>
                     </ul>
                   </li>
@@ -106,13 +116,17 @@ export function InferredRainGuide() {
                         Paso 2 (20 min previos): Caída Temp ≤-2.5°C | Humedad Robusta ≥12.0% HR (o
                         Sensible ≥10.0% HR con Gradiente).
                       </li>
+                      <li>
+                        Paso 3 (30 min previos): Caída Temp ≤-3.5°C | Humedad Robusta ≥14.0% HR (o
+                        Sensible ≥12.0% HR con Gradiente).
+                      </li>
                     </ul>
                   </li>
                   <li>
                     <span className="text-primary font-semibold">💧 Puerta de Pre-Saturación:</span>{' '}
                     Si el aire ya está muy saturado antes de la lluvia, se aprueba la condición de
                     humedad incondicionalmente si la humedad actual alcanza ≥98% HR habiendo partido
-                    de bases de 90% a 95% (Paso 1) u 88% a 95% (Paso 2).
+                    de bases de 90% a 95% (Paso 1), 88% a 95% (Paso 2) u 86% a 95% (Paso 3).
                   </li>
                   <li>
                     <span className="text-primary font-semibold">🛡️ Protección por Gradiente:</span>{' '}
@@ -126,7 +140,7 @@ export function InferredRainGuide() {
 
               <div className="border-t border-slate-800/40 pt-3">
                 <h4 className="text-primary font-bold">
-                  🌙 Inferencia Nocturna [6:00 pm - 7:00 am]:
+                  🌙 Inferencia Nocturna [6:00 pm - 7:00 am] (10 min previos / NIGHT_10M):
                 </h4>
                 <p className="mt-1 leading-relaxed">
                   Caída térmica abrupta (≥ 1.6x de variabilidad previa de 30 min) con incremento
@@ -172,17 +186,12 @@ export function InferredRainGuide() {
                 solares.
               </li>
               <li>
-                <span className="text-primary font-semibold">☁️ Cese por Estancamiento:</span> Sin
-                variación de temperatura (<span className="text-primary">&le; 0.4°C</span>) ni de
-                humedad (<span className="text-primary">&le; 1.0% HR</span>) en el lote de 10 min.
-                Disponible desde el primer batch acumulado del evento.
+                <span className="text-primary font-semibold">☁️ Cese por Estancamiento:</span>{' '}
+                Cierra el evento cuando las variables climáticas se estabilizan dentro del lote actual (últimos 10 min). Se evalúa que la temperatura presente una variación neta ≤ 0.4°C y que la humedad tenga una variación neta ≤ 1.0% HR. Si el ambiente está saturado 100% HR el requisito de humedad se omite.
               </li>
               <li>
-                <span className="text-primary font-semibold">🛡️ Protección Térmica:</span> Bloquea
-                el Cese por Estancamiento mientras se detecte enfriamiento activo (caída neta{' '}
-                <span className="text-primary">&gt; 0.4°C</span>) evaluando los últimos{' '}
-                <span className="text-primary">30 min</span> previos (
-                <span className="text-primary">50 min</span> si el aire está saturado al 100% HR).
+                <span className="text-primary font-semibold">🛡️ Protección Térmica:</span>{' '}
+                Bloquea el Cese por Estancamiento mientras se detecte un enfriamiento activo (variación neta &gt; 0.4°C). Para evitar falsos cierres, se contrasta la temperatura mínima del lote actual con la temperatura máxima alcanzada entre el lote actual y el anterior (una ventana combinada de 20 minutos).
               </li>
             </ul>
           </div>
