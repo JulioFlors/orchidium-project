@@ -841,6 +841,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           const isTempStagnant = netTempDrop <= tempCeseThreshold
 
           if (isHumStagnant && isTempStagnant) {
+            let allowStagnantClose = true
             // 🛡️ Protección Térmica (Siempre 20 minutos)
             if (tempBatches.length >= 2) {
               const maxTemp20 = Math.max(tempBatches[0].max, tempBatches[1].max)
