@@ -437,29 +437,16 @@ function CustomTooltip({
           const tempRecovery = getNumberOrNull(data.closeTempRecovery)
           const humVar = getNumberOrNull(data.closeHumVar)
 
-          closeDetails = (
-            <div className="grid grid-cols-[auto_auto_1fr] gap-x-2 leading-relaxed">
-              <span className="text-foreground/85 font-semibold">
-                Ilum promedio {formatTooltipValue(luxMax, 'lx')} lx
-              </span>
-              {tempRecovery !== null && (
-                <>
-                  <span className="text-foreground/50 font-semibold">|</span>
-                  <span className="text-foreground/85 font-semibold">
-                    🌡️ Recuperación +{tempRecovery.toFixed(1)}°C
-                  </span>
-                </>
-              )}
-              {humVar !== null && (
-                <>
-                  <span className="text-foreground/50 font-semibold">|</span>
-                  <span className="text-foreground/85 font-semibold">
-                    💧 Caída -{humVar.toFixed(1)}% HR
-                  </span>
-                </>
-              )}
-            </div>
-          )
+          const closeParts: string[] = []
+          closeParts.push(`☀️ Ilum ~${formatTooltipValue(luxMax, 'lx')} lx`)
+          if (tempRecovery !== null) {
+            closeParts.push(`🌡️ Temp +${tempRecovery.toFixed(1)}°C`)
+          }
+          if (humVar !== null) {
+            closeParts.push(`💧 HR -${humVar.toFixed(1)}%`)
+          }
+
+          closeDetails = closeParts.join('  |  ')
         } else if (type === 'SOLAR_RECOVERY') {
           closeTitle = 'Recuperación Solar'
           const luxMax = getNumberOrNull(data.closeLuxMax) ?? eLux ?? 0

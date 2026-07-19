@@ -1,3 +1,5 @@
+import * as fs from 'fs'
+import * as path from 'path'
 import { prisma, ZoneType } from '@package/database'
 
 import { influxClient } from '../lib/influx'
@@ -30,6 +32,8 @@ const stats = {
   closes: {} as Record<string, number>,
   vetos: 0,
 }
+
+const inferredEventsForComparison: { startedAt: Date; endedAt: Date }[] = []
 
 async function main() {
   const now = new Date()
@@ -82,6 +86,89 @@ async function main() {
     Logger.info(`    - ${type}: ${count}`)
   }
   Logger.info('════════════════════════════════════════════════════════')
+
+  // 3. Contrastar con la bitácora manual de lluvias reales observadas
+  try {
+    const resourcesDir = path.join(__dirname, 'resources')
+    const logPath = path.join(resourcesDir, 'historical-observed-rain.json')
+
+    if (fs.existsSync(logPath)) {
+      const rawData = fs.readFileSync(logPath, 'utf8')
+      const realEvents = JSON.parse(rawData) as Array<{
+        id: string
+        startedAt: string
+        endedAt: string
+        description: string
+      }>
+
+      // Filtrar eventos reales que se solapen con el período bajo análisis
+      const relevantRealEvents = realEvents.filter((re) => {
+        const reStart = new Date(re.startedAt).getTime()
+        return reStart >= startTime.getTime() && reStart <= endTime.getTime()
+      })
+
+      if (relevantRealEvents.length > 0) {
+        let truePositives = 0
+        const falseNegatives: typeof relevantRealEvents = []
+
+        for (const realEvent of relevantRealEvents) {
+          const reStart = new Date(realEvent.startedAt).getTime()
+          const reEnd = new Date(realEvent.endedAt).getTime()
+
+          // Buscar si existe un evento inferido que se solape
+          const isDetected = inferredEventsForComparison.some((inf) => {
+            const infStart = inf.startedAt.getTime()
+            const infEnd = inf.endedAt.getTime()
+
+            // Lógica de solapamiento temporal
+            return infStart <= reEnd && infEnd >= reStart
+          })
+
+          if (isDetected) {
+            truePositives++
+          } else {
+            falseNegatives.push(realEvent)
+          }
+        }
+
+        const totalReal = relevantRealEvents.length
+        const recallPct = ((truePositives / totalReal) * 100).toFixed(1)
+
+        Logger.info('════════════════════════════════════════════════════════')
+        Logger.info('  VALIDACIÓN COMPARATIVA: BITÁCORA MANUAL DE LLUVIA')
+        Logger.info('════════════════════════════════════════════════════════')
+        Logger.info(`  Total de lluvias reales registradas en período: ${totalReal}`)
+        Logger.info(`  Verdaderos Positivos (Detectadas): ${truePositives}`)
+        Logger.info(`  Falsos Negativos (Omitidas): ${falseNegatives.length}`)
+        Logger.info(`  Sensibilidad (Recall / Tasa de Acierto): ${recallPct}%`)
+        Logger.info('  ----------------------------------------------------')
+
+        if (falseNegatives.length > 0) {
+          Logger.warn('  ⚠️  Lluvias reales omitidas (Falsos Negativos):')
+          for (const fn of falseNegatives) {
+            const startStr = new Date(fn.startedAt).toLocaleTimeString('es-VE', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+            const endStr = new Date(fn.endedAt).toLocaleTimeString('es-VE', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+            const dateStr = new Date(fn.startedAt).toLocaleDateString('es-VE')
+
+            Logger.warn(
+              `    - [${dateStr} ${startStr} - ${endStr}]: ${fn.description}`,
+            )
+          }
+        } else {
+          Logger.success('  🎉 ¡Perfecto! El motor inferencial detectó todas las lluvias observadas.')
+        }
+        Logger.info('════════════════════════════════════════════════════════')
+      }
+    }
+  } catch (err) {
+    Logger.error('Error al contrastar con la bitácora manual de lluvia:', err)
+  }
 
   Logger.success('🎉 Reconstrucción de historial finalizada con éxito.')
 }
@@ -1272,6 +1359,12 @@ async function closeVirtualEvent(
   const durationSeconds = Math.round(
     (cleanEnd.getTime() - activeVirtualEvent.startedAt.getTime()) / 1000,
   )
+
+  // Guardar en memoria para contraste comparativo
+  inferredEventsForComparison.push({
+    startedAt: activeVirtualEvent.startedAt,
+    endedAt: cleanEnd,
+  })
 
   if (DRY_RUN) {
     activeVirtualEvent = null
