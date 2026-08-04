@@ -2,7 +2,7 @@
 
 import type { PlantType } from '@package/database'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { MdEdit, MdDelete, MdInfo, MdFolder, MdCategory, MdSpa } from 'react-icons/md'
 
@@ -84,6 +84,39 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
   const [speciesList, setSpeciesList] = useState<Species[]>(initialSpecies)
   const [generaList, setGeneraList] = useState<Genus[]>(initialGenera)
 
+  // Scroll automático y enfoque a la especie modificada
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const hash = window.location.hash
+
+    if (!hash) return
+
+    const targetId = hash.replace('#', '')
+    const element = document.getElementById(targetId)
+
+    if (element) {
+      const timer = setTimeout(() => {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        element.classList.add(
+          'ring-2',
+          'ring-emerald-500/80',
+          'ring-offset-4',
+          'rounded-2xl',
+          'transition-all',
+          'duration-500',
+        )
+
+        const clearTimer = setTimeout(() => {
+          element.classList.remove('ring-2', 'ring-emerald-500/80', 'ring-offset-4')
+        }, 3000)
+
+        return () => clearTimeout(clearTimer)
+      }, 200)
+
+      return () => clearTimeout(timer)
+    }
+  }, [])
+
   // Modales
   const [isTypeModalOpen, setIsTypeModalOpen] = useState(false)
   const [isGenusModalOpen, setIsGenusModalOpen] = useState(false)
@@ -117,7 +150,7 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
   )
 
   const sortedTypes = (Object.keys(speciesByType) as PlantType[]).sort((a, b) =>
-    PLANT_TYPE_LABELS[a].localeCompare(PLANT_TYPE_LABELS[b]),
+    PLANT_TYPE_LABELS[a].localeCompare(PLANT_TYPE_LABELS[b], 'es'),
   )
 
   // Handlers para Géneros
@@ -255,7 +288,7 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
         }
         useFormDraftStore.getState().clearDraft('catalog-species-form')
         setIsSpeciesCreateModalOpen(false)
-        router.push(`/catalog/${result.species.id}`)
+        router.push(`/catalog/${result.species.slug || result.species.id}`)
       } else {
         addToast(result.message || 'Error al crear la especie.', 'error')
       }
@@ -319,7 +352,7 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
               const nameA = generaInType[a][0]?.genus.name ?? ''
               const nameB = generaInType[b][0]?.genus.name ?? ''
 
-              return nameA.localeCompare(nameB)
+              return nameA.localeCompare(nameB, 'es')
             })
 
             return (
@@ -347,6 +380,9 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
                 <div className="flex flex-col gap-6">
                   {sortedGeneraIds.map((genusId) => {
                     const speciesInGenus = generaInType[genusId]
+                    const sortedSpeciesInGenus = [...speciesInGenus].sort((a, b) =>
+                      a.name.localeCompare(b.name, 'es'),
+                    )
                     const firstSpecies = speciesInGenus[0]
                     const genusName = firstSpecies?.genus.name ?? 'Sin Género'
                     const genusObj = firstSpecies ? firstSpecies.genus : null
@@ -381,7 +417,7 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
 
                         {/* Listado de Especies */}
                         <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-3 tds-2xl:grid-cols-4 mt-9 grid grid-cols-1 gap-x-4 gap-y-2">
-                          {speciesInGenus.map((species, speciesIndex) => (
+                          {sortedSpeciesInGenus.map((species, speciesIndex) => (
                             <CatalogSpeciesCard
                               key={species.id}
                               index={speciesIndex}

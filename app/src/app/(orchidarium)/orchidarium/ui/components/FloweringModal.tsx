@@ -8,6 +8,7 @@ import { Flower2 } from 'lucide-react'
 import { Modal, SelectDropdown, Button } from '@/components/ui'
 import { registerFlowering, getPlantsByZone } from '@/actions'
 import { useToastStore } from '@/store/toast/toast.store'
+import { useFormDraftStore } from '@/store/ui/form-draft.store'
 import { ZoneType, ZoneTypeLabels } from '@/config/mappings'
 
 interface Plant {
@@ -27,6 +28,8 @@ const ZONE_OPTIONS: SelectOption[] = Object.values(ZoneType).map((z) => ({
   value: z,
 }))
 
+const FORM_DRAFT_KEY = 'orchidarium-flowering-modal'
+
 export function FloweringModal({ isOpen, onClose }: FloweringModalProps) {
   const [zone, setZone] = useState<string>(ZoneType.ZONA_A)
   const [plants, setPlants] = useState<Plant[]>([])
@@ -34,16 +37,52 @@ export function FloweringModal({ isOpen, onClose }: FloweringModalProps) {
   const [selectedPlantId, setSelectedPlantId] = useState<string | undefined>()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isLoadingPlants, setIsLoadingPlants] = useState(false)
+
   const { addToast } = useToastStore()
+  const { getDraft, setDraft, clearDraft } = useFormDraftStore()
+
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen)
+
+  // Cargar borrador de Zustand al abrir el modal
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen)
+
+    if (isOpen) {
+      const draft = getDraft(FORM_DRAFT_KEY) as
+        | {
+            zone?: string
+            searchTerm?: string
+            selectedPlantId?: string
+          }
+        | undefined
+
+      if (draft) {
+        if (draft.zone) setZone(draft.zone)
+        if (draft.searchTerm) setSearchTerm(draft.searchTerm)
+        if (draft.selectedPlantId) setSelectedPlantId(draft.selectedPlantId)
+      }
+    }
+  }
+
+  // Guardar borrador en Zustand al cambiar campos
+  useEffect(() => {
+    if (isOpen) {
+      setDraft(FORM_DRAFT_KEY, {
+        zone,
+        searchTerm,
+        selectedPlantId,
+      })
+    }
+  }, [isOpen, zone, searchTerm, selectedPlantId, setDraft])
 
   useEffect(() => {
     if (isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsLoadingPlants(true)
       getPlantsByZone(zone as ZoneType)
         .then((res) => {
           if (res.success && res.data) {
             setPlants(res.data)
-            setSelectedPlantId(undefined)
           }
         })
         .finally(() => setIsLoadingPlants(false))
@@ -72,6 +111,9 @@ export function FloweringModal({ isOpen, onClose }: FloweringModalProps) {
 
       if (res.success) {
         addToast('Evento de floración registrado exitosamente.', 'success')
+        clearDraft(FORM_DRAFT_KEY)
+        setSelectedPlantId(undefined)
+        setSearchTerm('')
         onClose()
       } else {
         addToast(res.error || 'Error al registrar floración', 'error')
@@ -90,6 +132,7 @@ export function FloweringModal({ isOpen, onClose }: FloweringModalProps) {
 
   return (
     <Modal
+      icon={<Flower2 className="h-5 w-5 text-pink-400" />}
       isOpen={isOpen}
       size="md"
       subtitle="Marca el inicio del ciclo de floración para el seguimiento botánico."

@@ -2,30 +2,45 @@ import { IoAddSharp, IoRemoveSharp } from 'react-icons/io5'
 
 interface Props {
   quantity: number
+  maxQuantity?: number
+  disabled?: boolean
+  onClickDisabled?: () => void
 
   // Función para notificar el cambio al padre
   onQuantityChanged: (value: number) => void
 }
 
 const MIN_QUANTITY = 1
-const MAX_QUANTITY = 5
 
-export function QuantitySelector({ quantity, onQuantityChanged }: Props) {
+export function QuantitySelector({
+  quantity,
+  maxQuantity = 5,
+  disabled = false,
+  onClickDisabled,
+  onQuantityChanged,
+}: Props) {
+  const maxLimit = Math.max(MIN_QUANTITY, maxQuantity)
+
   // ---- Se Sujeta/Limita/Acota la cantidad inicial a un rango predefinido ----
   const ClampQuantity = (initialQuantity: number) => {
-    return Math.max(MIN_QUANTITY, Math.min(initialQuantity, MAX_QUANTITY))
+    return Math.max(MIN_QUANTITY, Math.min(initialQuantity, maxLimit))
   }
 
   const displayQuantity = ClampQuantity(quantity)
 
-  const canDecrement = displayQuantity > MIN_QUANTITY
-  const canIncrement = displayQuantity < MAX_QUANTITY
+  const canDecrement = !disabled && displayQuantity > MIN_QUANTITY
+  const canIncrement = !disabled && displayQuantity < maxLimit
 
   const onValueChanged = (value: number) => {
+    if (disabled) {
+      onClickDisabled?.()
+
+      return
+    }
     const newCount = displayQuantity + value
 
     // Validar que quantity no exceda los límites
-    if (newCount < MIN_QUANTITY || newCount > MAX_QUANTITY) {
+    if (newCount < MIN_QUANTITY || newCount > maxLimit) {
       return
     }
 
@@ -38,7 +53,12 @@ export function QuantitySelector({ quantity, onQuantityChanged }: Props) {
       <h3 className="text-primary mb-2 font-semibold tracking-wide">Cantidad</h3>
 
       {/* alineamos los botones respecto al input */}
-      <div className="flex items-center">
+      <div
+        className="flex items-center"
+        onClick={() => {
+          if (disabled) onClickDisabled?.()
+        }}
+      >
         <button
           aria-label="Disminuir cantidad"
           className="focus-dashed cursor-pointer p-0.5 disabled:cursor-not-allowed disabled:opacity-40"
@@ -49,7 +69,7 @@ export function QuantitySelector({ quantity, onQuantityChanged }: Props) {
           <IoRemoveSharp className="text-primary font-bold" size={16} />
         </button>
 
-        <span className="bg-input mx-4 flex h-10 w-20 items-center justify-center rounded px-4 font-bold select-none">
+        <span className="bg-input mx-4 flex h-10 w-20 items-center justify-center rounded px-4 font-bold opacity-80 select-none">
           {displayQuantity}
         </span>
 

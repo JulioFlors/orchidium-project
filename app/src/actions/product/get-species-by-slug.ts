@@ -12,6 +12,9 @@ export const getSpeciesBySlug = async (slug: string) => {
           select: {
             url: true,
           },
+          orderBy: {
+            position: 'asc',
+          },
         },
         variants: true,
         genus: true,

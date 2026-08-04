@@ -24,19 +24,6 @@ const stats = {
   vetos: 0,
 }
 
-const isWithinSolarTimeRange = (timeVal: number): boolean => {
-  try {
-    const d = new Date(timeVal)
-    const localHour = (d.getUTCHours() - 4 + 24) % 24
-    const localMin = d.getUTCMinutes()
-    const totalMinutes = localHour * 60 + localMin
-
-    return totalMinutes > 300 && totalMinutes < 1140
-  } catch {
-    return false
-  }
-}
-
 // Buffers deslizantes globales
 const tempBatches: BatchSummary[] = []
 const humBatches: BatchSummary[] = []
@@ -49,8 +36,6 @@ let minTempInRain: number | null = null
 let maxHumInRain: number | null = null
 let baselineLux: number | null = null
 let baselineTemp: number | null = null
-let baselineHum: number | null = null
-let baselineAgeMinutes: number | null = null
 let rainStartedAt: number | null = null
 let lastRainClosedAt: number | null = null
 
@@ -91,9 +76,6 @@ async function evaluateAtTimestamp(timestampMs: number) {
     let calculatedBaselineHum: number | null = null
     let calculatedBaselineLux: number | null = null
     let calculatedBaselineAgeMinutes = 10
-    let tempDeltaTemp = 0
-    let tempDeltaHum = 0
-    let dropPct = 0
 
     if (isDay) {
       // Paso 1 - Diurno
@@ -150,9 +132,6 @@ async function evaluateAtTimestamp(timestampMs: number) {
           calculatedBaselineHum = baseHum1
           calculatedBaselineLux = baseLux1
           calculatedBaselineAgeMinutes = 10
-          tempDeltaTemp = dTemp1
-          tempDeltaHum = dHum1
-          dropPct = baseLux1 > 0 ? ((baseLux1 - currentMinLux) / baseLux1) * 100 : 0
 
           if (baseLux1 <= 10000) {
             triggerType = 'DAY_RAMA_A_OSCURO_10M'
@@ -231,9 +210,6 @@ async function evaluateAtTimestamp(timestampMs: number) {
             calculatedBaselineHum = baseHum2
             calculatedBaselineLux = baseLux2
             calculatedBaselineAgeMinutes = 20
-            tempDeltaTemp = dTemp2
-            tempDeltaHum = dHum2
-            dropPct = baseLux2 > 0 ? ((baseLux2 - currentMinLux) / baseLux2) * 100 : 0
 
             if (baseLux2 <= 10000) {
               triggerType = 'DAY_RAMA_A_OSCURO_20M'
@@ -313,9 +289,7 @@ async function evaluateAtTimestamp(timestampMs: number) {
             calculatedBaselineHum = baseHum3
             calculatedBaselineLux = baseLux3
             calculatedBaselineAgeMinutes = 30
-            tempDeltaTemp = dTemp3
-            tempDeltaHum = dHum3
-            dropPct = baseLux3 > 0 ? ((baseLux3 - currentMinLux) / baseLux3) * 100 : 0
+            calculatedBaselineAgeMinutes = 30
 
             if (baseLux3 <= 10000) {
               triggerType = 'DAY_RAMA_A_OSCURO_30M'
@@ -351,10 +325,8 @@ async function evaluateAtTimestamp(timestampMs: number) {
       if (matchingSample) {
         preciseStartMs = matchingSample.timestamp
       } else {
-        const minSample = samplesT.reduce(
-          (min, s) => (s.value < min.value ? s : min),
-          samplesT[0],
-        )
+        const minSample = samplesT.reduce((min, s) => (s.value < min.value ? s : min), samplesT[0])
+
         if (minSample) preciseStartMs = minSample.timestamp
       }
 
@@ -366,7 +338,9 @@ async function evaluateAtTimestamp(timestampMs: number) {
       stats.totalInferred++
       stats.triggers[triggerType] = (stats.triggers[triggerType] || 0) + 1
 
-      Logger.info(`[ EVENTO ABIERTO ] ${new Date(preciseStartMs).toLocaleTimeString('es-VE')} - Tipo: ${triggerType} | Razón: ${triggerReason}`)
+      Logger.info(
+        `[ EVENTO ABIERTO ] ${new Date(preciseStartMs).toLocaleTimeString('es-VE')} - Tipo: ${triggerType} | Razón: ${triggerReason}`,
+      )
     }
   } else {
     // Evaluar Cese
@@ -406,23 +380,16 @@ async function evaluateAtTimestamp(timestampMs: number) {
             closedByRecovery = true
             const firstSample = luxBatches[0].samples[0]
             let preciseEndMs = firstSample ? firstSample.timestamp : timestampMs
+
             if (preciseEndMs < rainStartedAt) preciseEndMs = rainStartedAt
-
-            const endSampleT =
-              tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-              tempBatches[0].samples[0]
-            const endSampleH =
-              humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-              humBatches[0].samples[0]
-
-            const tempRecovery = currentTemp - minTempInRain
-            const humDrop = maxHumInRain - currentHum
 
             isTelemetryRainActive = false
             lastRainClosedAt = preciseEndMs
             stats.closes['PROGRESSIVE_RECOVERY'] = (stats.closes['PROGRESSIVE_RECOVERY'] || 0) + 1
 
-            Logger.info(`[ EVENTO CERRADO — PROGRESSIVE_RECOVERY ] ${new Date(preciseEndMs).toLocaleTimeString('es-VE')} (Duración: ${durationMin.toFixed(1)} min)`)
+            Logger.info(
+              `[ EVENTO CERRADO — PROGRESSIVE_RECOVERY ] ${new Date(preciseEndMs).toLocaleTimeString('es-VE')} (Duración: ${durationMin.toFixed(1)} min)`,
+            )
             maxHumInRain = null
             createdCount++
           }
@@ -437,20 +404,16 @@ async function evaluateAtTimestamp(timestampMs: number) {
             closedByRecovery = true
             const firstSample = luxBatches[0].samples[0]
             let preciseEndMs = firstSample ? firstSample.timestamp : timestampMs
-            if (preciseEndMs < rainStartedAt) preciseEndMs = rainStartedAt
 
-            const endSampleT =
-              tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-              tempBatches[0].samples[0]
-            const endSampleH =
-              humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-              humBatches[0].samples[0]
+            if (preciseEndMs < rainStartedAt) preciseEndMs = rainStartedAt
 
             isTelemetryRainActive = false
             lastRainClosedAt = preciseEndMs
             stats.closes['SOLAR_RECOVERY'] = (stats.closes['SOLAR_RECOVERY'] || 0) + 1
 
-            Logger.info(`[ EVENTO CERRADO — SOLAR_RECOVERY ] ${new Date(preciseEndMs).toLocaleTimeString('es-VE')} (Duración: ${durationMin.toFixed(1)} min)`)
+            Logger.info(
+              `[ EVENTO CERRADO — SOLAR_RECOVERY ] ${new Date(preciseEndMs).toLocaleTimeString('es-VE')} (Duración: ${durationMin.toFixed(1)} min)`,
+            )
             maxHumInRain = null
             createdCount++
           }
@@ -468,26 +431,23 @@ async function evaluateAtTimestamp(timestampMs: number) {
           const matchingEndSample = tempBatches[0].samples.find(
             (s) => s.value >= minTempInRain! + 0.6,
           )
+
           if (matchingEndSample) {
             preciseEndMs = matchingEndSample.timestamp
           } else {
             const lastSample = tempBatches[0].samples[tempBatches[0].samples.length - 1]
+
             if (lastSample) preciseEndMs = lastSample.timestamp
           }
           if (preciseEndMs < rainStartedAt) preciseEndMs = rainStartedAt
-
-          const endSampleT =
-            tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-            tempBatches[0].samples[tempBatches[0].samples.length - 1]
-          const endSampleH =
-            humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-            humBatches[0].samples[humBatches[0].samples.length - 1]
 
           isTelemetryRainActive = false
           lastRainClosedAt = preciseEndMs
           stats.closes['THERMAL_VARIATION'] = (stats.closes['THERMAL_VARIATION'] || 0) + 1
 
-          Logger.info(`[ EVENTO CERRADO — THERMAL_VARIATION ] ${new Date(preciseEndMs).toLocaleTimeString('es-VE')} (Duración: ${durationMin.toFixed(1)} min)`)
+          Logger.info(
+            `[ EVENTO CERRADO — THERMAL_VARIATION ] ${new Date(preciseEndMs).toLocaleTimeString('es-VE')} (Duración: ${durationMin.toFixed(1)} min)`,
+          )
           maxHumInRain = null
           createdCount++
         }
@@ -522,13 +482,19 @@ async function evaluateAtTimestamp(timestampMs: number) {
           if (isDay) {
             if (isSaturated) {
               if (tempBatches.length >= 3) {
-                const maxTemp30 = Math.max(tempBatches[0].max, tempBatches[1].max, tempBatches[2].max)
-                allowStagnantClose = (maxTemp30 - tempBatches[0].min) <= 0.4
+                const maxTemp30 = Math.max(
+                  tempBatches[0].max,
+                  tempBatches[1].max,
+                  tempBatches[2].max,
+                )
+
+                allowStagnantClose = maxTemp30 - tempBatches[0].min <= 0.4
               }
             } else {
               if (tempBatches.length >= 2) {
                 const maxTemp20 = Math.max(tempBatches[0].max, tempBatches[1].max)
-                allowStagnantClose = (maxTemp20 - tempBatches[0].min) <= 0.4
+
+                allowStagnantClose = maxTemp20 - tempBatches[0].min <= 0.4
               }
             }
           }
@@ -536,13 +502,16 @@ async function evaluateAtTimestamp(timestampMs: number) {
           if (allowStagnantClose) {
             const firstSample = tempBatches[0].samples[0]
             let preciseEndMs = firstSample ? firstSample.timestamp : timestampMs
+
             if (preciseEndMs < rainStartedAt) preciseEndMs = rainStartedAt
 
             isTelemetryRainActive = false
             lastRainClosedAt = preciseEndMs
             stats.closes['STAGNANT'] = (stats.closes['STAGNANT'] || 0) + 1
 
-            Logger.info(`[ EVENTO CERRADO — STAGNANT ] ${new Date(preciseEndMs).toLocaleTimeString('es-VE')} (Duración: ${durationMin.toFixed(1)} min)`)
+            Logger.info(
+              `[ EVENTO CERRADO — STAGNANT ] ${new Date(preciseEndMs).toLocaleTimeString('es-VE')} (Duración: ${durationMin.toFixed(1)} min)`,
+            )
             maxHumInRain = null
             createdCount++
           }
@@ -573,8 +542,10 @@ async function main() {
   }
 
   let rowCount = 0
+
   try {
     const stream = influxClient.query(query)
+
     for await (const row of stream) {
       rowCount++
       const tDate = rowTimeToDate(row.time)
@@ -582,14 +553,17 @@ async function main() {
 
       if (row.temperature != null) {
         const tVal = Number(row.temperature)
+
         if (tVal > 5.0 && tVal < 55.0) allSamples.temp.push({ value: tVal, timestamp: tMs })
       }
       if (row.humidity != null) {
         const hVal = Number(row.humidity)
+
         if (hVal > 10.0 && hVal <= 100.0) allSamples.hum.push({ value: hVal, timestamp: tMs })
       }
       if (row.illuminance != null) {
         const lVal = Number(row.illuminance)
+
         if (lVal >= 0) allSamples.lux.push({ value: lVal, timestamp: tMs })
       }
     }
@@ -602,14 +576,19 @@ async function main() {
         ...allSamples.temp.map((s) => s.timestamp),
         ...allSamples.hum.map((s) => s.timestamp),
         ...allSamples.lux.map((s) => s.timestamp),
-      ])
+      ]),
     ).sort((a, b) => a - b)
 
     // Evaluar minuto a minuto usando ventanas deslizantes de los últimos 75 min
     for (const tMs of timestamps) {
-      const buildBatch = (samples: Sample[], startOffsetMin: number, endOffsetMin: number): Sample[] => {
+      const buildBatch = (
+        samples: Sample[],
+        startOffsetMin: number,
+        endOffsetMin: number,
+      ): Sample[] => {
         const start = tMs - startOffsetMin * 60 * 1000
         const end = tMs - endOffsetMin * 60 * 1000
+
         return samples.filter((s) => s.timestamp >= start && s.timestamp < end)
       }
 
@@ -627,6 +606,7 @@ async function main() {
       ]
 
       let hasEnoughData = true
+
       for (const step of steps) {
         const tS = buildBatch(allSamples.temp, step.start, step.end)
         const hS = buildBatch(allSamples.hum, step.start, step.end)
@@ -639,6 +619,7 @@ async function main() {
 
         const tempVals = tS.map((s) => s.value)
         const humVals = hS.map((s) => s.value)
+
         tempBatchesLocal.push({
           min: Math.min(...tempVals),
           max: Math.max(...tempVals),
@@ -691,7 +672,6 @@ async function main() {
     Logger.info('  RESULTADO DE LA SIMULACIÓN')
     Logger.info(`  Total Eventos Creados: ${createdCount}`)
     Logger.info('════════════════════════════════════════════════════════')
-
   } catch (err) {
     Logger.error('Error durante la simulación:', err)
   }

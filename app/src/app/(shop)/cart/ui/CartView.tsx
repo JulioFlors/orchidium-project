@@ -31,7 +31,7 @@ export function CartView() {
   // ---- Renderizado del carrito con items ---- //
   return (
     <div className="tds-sm:-mx-9 tds-xl:-mx-12 -mx-6">
-      <div className="tds-lg:max-w-[1200px] tds-sm:px-9 tds-xl:px-12 mx-auto flex w-full max-w-[600px] px-6">
+      <div className="tds-lg:max-w-300 tds-sm:px-9 tds-xl:px-12 mx-auto flex w-full max-w-150 px-6">
         <div className="flex w-full flex-col">
           {/* ---- Titulo de la pagina ---- */}
           <h2
@@ -96,19 +96,19 @@ export function CartView() {
                 {/* ---- lineitems__container ---- */}
                 {productsInCart.map((product) => (
                   // ---- lineitem__container-wrapper ---- //
-                  <div key={product.slug} className="tds-sm:mt-0 tds-lg:max-w-[546px] mt-6">
+                  <div key={product.slug} className="tds-sm:mt-0 tds-lg:max-w-136.5 mt-6">
                     {/* ---- lineitem__container tds-flex tds-flex-gutters ---- // */}
                     <div className="tds-lg:mt-6 relative mt-0 flex flex-1">
                       {/* ---- lineitem__main-info ---- // */}
                       <div className="flex w-full flex-row flex-nowrap">
-                        <div className="tds-sm:pt-6 max-h-[114px] max-w-[90px] shrink-0 pt-0">
+                        <div className="tds-sm:pt-6 max-h-28.5 max-w-22.5 shrink-0 pt-0">
                           <Link
                             aria-label={`Ver detalles de ${product.name}`}
                             href={`/product/${product.slug}`}
                           >
                             <Image
                               alt={product.name}
-                              className="tds-lg:h-[90px] tds-lg:w-[90px] tds-lg:min-w-[90px] tds-lg:mb-0 mb-[5px] aspect-square h-20 w-20 min-w-20 rounded object-cover"
+                              className="tds-lg:h-22.5 tds-lg:w-22.5 tds-lg:min-w-22.5 tds-lg:mb-0 mb-1.25 aspect-square h-20 w-20 min-w-20 rounded object-cover"
                               height={80}
                               src={getImageUrl(product.images[0])}
                               width={80}
@@ -128,9 +128,9 @@ export function CartView() {
                             </p>
                           </Link>
 
-                          <p className="max-w-[75ch] pt-[3px]">Maceta, P10</p>
+                          <p className="max-w-[75ch] pt-0.75">Maceta, P10</p>
 
-                          <div className="flex pt-[3px]">
+                          <div className="flex pt-0.75">
                             {/* ---- Selector de Cantidad ---- */}
                             <QuantityDropdown quantity={quantity} onQuantityChanged={setQuantity} />
                             <button className="underline-secondary cursor-pointer" type="button">

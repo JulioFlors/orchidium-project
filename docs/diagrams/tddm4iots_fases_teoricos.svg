@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 780" width="100%" height="100%">
+  <rect width="100%" height="100%" fill="#181818" />
+
+  <!-- CONTENEDOR PRINCIPAL EXTERIOR -->
+  <rect x="20" y="20" width="1160" height="740" fill="#1e1e1e" stroke="#555555" stroke-width="1" />
+
+  <!-- ENCABEZADO SUPERIOR -->
+  <rect x="35" y="35" width="1130" height="35" fill="#252525" stroke="#444444" stroke-width="1" />
+  <text x="50" y="58" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="13" font-weight="bold" fill="#e0e0e0" letter-spacing="0.5">FASES METODOLÓGICAS FORMALES EN TDDM4IoTS (METODOLOGÍA TEÓRICA ORIGINAL)</text>
+
+  <!-- BLOQUE 1: INICIACIÓN Y REQUISITOS -->
+  <g transform="translate(35, 85)">
+    <rect width="1130" height="135" fill="#202020" stroke="#444444" stroke-width="1" />
+    <rect width="1130" height="24" fill="#2a2a2a" stroke="#444444" stroke-width="1" />
+    <text x="15" y="16" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="11" font-weight="bold" fill="#66c2ff">BLOQUE 1: INICIACIÓN Y REQUISITOS (FASE GLOBAL DE PREPARACIÓN)</text>
+
+    <!-- FASE 1 -->
+    <g transform="translate(15, 33)">
+      <rect width="355" height="90" fill="#262626" stroke="#555555" stroke-width="1" />
+      <text x="12" y="20" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="11" font-weight="bold" fill="#ffffff">Fase 1: Recopilación de Requisitos</text>
+      <line x1="12" y1="26" x2="343" y2="26" stroke="#3c3c3c" stroke-width="1" />
+      <text x="12" y="44" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Entrevistas cliente-facilitador sobre necesidades.</text>
+      <text x="12" y="60" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Definición de objetivos globales del sistema IoTS.</text>
+      <text x="12" y="76" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Levantamiento del entorno operativo y restricciones.</text>
+    </g>
+
+    <!-- FASE 2 -->
+    <g transform="translate(387, 33)">
+      <rect width="355" height="90" fill="#262626" stroke="#555555" stroke-width="1" />
+      <text x="12" y="20" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="11" font-weight="bold" fill="#ffffff">Fase 2: Formulación de Requisitos de Alto Nivel</text>
+      <line x1="12" y1="26" x2="343" y2="26" stroke="#3c3c3c" stroke-width="1" />
+      <text x="12" y="44" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Redacción de historias de usuario y casos de uso.</text>
+      <text x="12" y="60" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Priorización del backlog inicial de requerimientos.</text>
+      <text x="12" y="76" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Identificación de componentes HW, SW y conectividad.</text>
+    </g>
+
+    <!-- FASE 3 -->
+    <g transform="translate(760, 33)">
+      <rect width="355" height="90" fill="#262626" stroke="#555555" stroke-width="1" />
+      <text x="12" y="20" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="11" font-weight="bold" fill="#ffffff">Fase 3: Lista Inicial de Casos de Prueba</text>
+      <line x1="12" y1="26" x2="343" y2="26" stroke="#3c3c3c" stroke-width="1" />
+      <text x="12" y="44" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Definición del conjunto inicial de pruebas de aceptación.</text>
+      <text x="12" y="60" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Establecimiento de criterios de éxito esperados.</text>
+      <text x="12" y="76" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Acuerdos iniciales cliente-equipo sobre calidad.</text>
+    </g>
+  </g>
+
+  <!-- BLOQUE 2: DISEÑO Y PRUEBAS EN SISTEMAS IoT -->
+  <g transform="translate(35, 235)">
+    <rect width="1130" height="135" fill="#202020" stroke="#444444" stroke-width="1" />
+    <rect width="1130" height="24" fill="#2a2a2a" stroke="#444444" stroke-width="1" />
+    <text x="15" y="16" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="11" font-weight="bold" fill="#b388ff">BLOQUE 2: DISEÑO Y PRUEBAS EN SISTEMAS IoT (IoTS)</text>
+
+    <!-- FASE 4 -->
+    <g transform="translate(15, 33)">
+      <rect width="355" height="90" fill="#262626" stroke="#555555" stroke-width="1" />
+      <text x="12" y="20" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="11" font-weight="bold" fill="#ffffff">Fase 4: Arquitectura del Sistema IoTS</text>
+      <line x1="12" y1="26" x2="343" y2="26" stroke="#3c3c3c" stroke-width="1" />
+      <text x="12" y="44" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Modelado formal de componentes HW, FW y SW.</text>
+      <text x="12" y="60" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Selección de protocolos (MQTT, HTTP) y topología.</text>
+      <text x="12" y="76" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Diseño del pipeline telemétrico y persistencia.</text>
+    </g>
+
+    <!-- FASE 5 -->
+    <g transform="translate(387, 33)">
+      <rect width="355" height="90" fill="#262626" stroke="#555555" stroke-width="1" />
+      <text x="12" y="20" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="11" font-weight="bold" fill="#ffffff">Fase 5: Especificación de Casos de Prueba IoTS</text>
+      <line x1="12" y1="26" x2="343" y2="26" stroke="#3c3c3c" stroke-width="1" />
+      <text x="12" y="44" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Diseño detallado de escenarios de prueba HW y SW.</text>
+      <text x="12" y="60" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Pruebas de sensores, actuadores y transmisión red.</text>
+      <text x="12" y="76" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Casos de fallo de conectividad y reconexión.</text>
+    </g>
+
+    <!-- FASE 6 -->
+    <g transform="translate(760, 33)">
+      <rect width="355" height="90" fill="#262626" stroke="#555555" stroke-width="1" />
+      <text x="12" y="20" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="11" font-weight="bold" fill="#ffffff">Fase 6: Criterios de Aceptación de Pruebas</text>
+      <line x1="12" y1="26" x2="343" y2="26" stroke="#3c3c3c" stroke-width="1" />
+      <text x="12" y="44" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Umbrales de rendimiento, estabilidad y latencia.</text>
+      <text x="12" y="60" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Criterios de tolerancia a fallos en hardware.</text>
+      <text x="12" y="76" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Aprobación cliente-equipo de los límites de éxito.</text>
+    </g>
+  </g>
+
+  <!-- BLOQUE 3: CONSTRUCCIÓN GUIADA POR PRUEBAS -->
+  <g transform="translate(35, 385)">
+    <rect width="1130" height="175" fill="#202020" stroke="#444444" stroke-width="1" />
+    <rect width="1130" height="24" fill="#2a2a2a" stroke="#444444" stroke-width="1" />
+    <text x="15" y="16" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="11" font-weight="bold" fill="#4ade80">BLOQUE 3: CONSTRUCCIÓN GUIADA POR PRUEBAS (CICLO ITERATIVO TDD POR ENTREGABLE)</text>
+
+    <!-- FASE 7 -->
+    <g transform="translate(15, 33)">
+      <rect width="262" height="130" fill="#262626" stroke="#555555" stroke-width="1" />
+      <text x="12" y="20" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="11" font-weight="bold" fill="#ffffff">Fase 7: Creación del Entregable</text>
+      <line x1="12" y1="26" x2="250" y2="26" stroke="#3c3c3c" stroke-width="1" />
+      <text x="12" y="44" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Planificación en sprints cortas.</text>
+      <text x="12" y="60" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Subdivisión de entregables en HW y SW.</text>
+      <text x="12" y="76" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Selección de características por ciclo.</text>
+    </g>
+
+    <!-- FASE 8 -->
+    <g transform="translate(292, 33)">
+      <rect width="262" height="130" fill="#262626" stroke="#555555" stroke-width="1" />
+      <text x="12" y="20" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="11" font-weight="bold" fill="#ffffff">Fase 8: Pruebas (TDD Red)</text>
+      <line x1="12" y1="26" x2="250" y2="26" stroke="#3c3c3c" stroke-width="1" />
+      <text x="12" y="44" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Escritura de pruebas unitarias/integración.</text>
+      <text x="12" y="60" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Pruebas escritas ANTES de codificar.</text>
+      <text x="12" y="76" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Verificación del fallo inicial (Red).</text>
+    </g>
+
+    <!-- FASE 9 -->
+    <g transform="translate(569, 33)">
+      <rect width="262" height="130" fill="#262626" stroke="#555555" stroke-width="1" />
+      <text x="12" y="20" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="11" font-weight="bold" fill="#ffffff">Fase 9: Desarrollo (TDD Green)</text>
+      <line x1="12" y1="26" x2="250" y2="26" stroke="#3c3c3c" stroke-width="1" />
+      <text x="12" y="44" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Implementación de código mínimo útil.</text>
+      <text x="12" y="60" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Desarrollo de firmware y microservicios.</text>
+      <text x="12" y="76" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Verificación de pruebas superadas (Green).</text>
+    </g>
+
+    <!-- FASE 10 -->
+    <g transform="translate(846, 33)">
+      <rect width="269" height="130" fill="#262626" stroke="#555555" stroke-width="1" />
+      <text x="12" y="20" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="11" font-weight="bold" fill="#ffffff">Fase 10: Refactorización (TDD Refactor)</text>
+      <line x1="12" y1="26" x2="257" y2="26" stroke="#3c3c3c" stroke-width="1" />
+      <text x="12" y="44" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Optimización de firmware y limpio de código.</text>
+      <text x="12" y="60" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Refactorización manteniendo tests verdes.</text>
+      <text x="12" y="76" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Mejora continua de la arquitectura.</text>
+    </g>
+  </g>
+
+  <!-- BLOQUE 4: EVALUACIÓN Y ENTREGA FINAL -->
+  <g transform="translate(35, 575)">
+    <rect width="1130" height="145" fill="#202020" stroke="#444444" stroke-width="1" />
+    <rect width="1130" height="24" fill="#2a2a2a" stroke="#444444" stroke-width="1" />
+    <text x="15" y="16" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="11" font-weight="bold" fill="#ffb74d">BLOQUE 4: EVALUACIÓN Y ENTREGA FINAL</text>
+
+    <!-- FASE 11 -->
+    <g transform="translate(15, 33)">
+      <rect width="1100" height="98" fill="#262626" stroke="#555555" stroke-width="1" />
+      <text x="15" y="22" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="12" font-weight="bold" fill="#ffffff">Fase 11: Prueba de Aceptación Final, Despliegue Operativo, Mantenimiento y Evolución</text>
+      <line x1="15" y1="30" x2="1085" y2="30" stroke="#3c3c3c" stroke-width="1" />
+      <text x="15" y="50" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Validación formal del sistema con el cliente/usuario final en entorno de operación real.</text>
+      <text x="15" y="68" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Despliegue continuo en producción, monitoreo de métricas 24/7 y resolución de incidentes en campo.</text>
+      <text x="15" y="86" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Mantenimiento evolutivo, retroalimentación del cliente e incorporación de nuevos requisitos al ciclo iterativo.</text>
+    </g>
+  </g>
+</svg>

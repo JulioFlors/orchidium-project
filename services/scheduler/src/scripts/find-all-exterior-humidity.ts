@@ -15,7 +15,7 @@ async function main() {
 
   console.log(`📡 Consultando toda la telemetría de humedad en InfluxDB de hoy...`)
   const stream = influxClient.query(query)
-  const rows: any[] = []
+  const rows: Record<string, unknown>[] = []
 
   for await (const row of stream) {
     rows.push(row)

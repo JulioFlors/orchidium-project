@@ -27,7 +27,7 @@ async function main() {
       LIMIT 5
     `
     const streamSrc = influxClient.query(qSrc)
-    const samples: any[] = []
+    const samples: Record<string, unknown>[] = []
 
     for await (const row of streamSrc) {
       samples.push(row)

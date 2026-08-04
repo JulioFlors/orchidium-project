@@ -51,6 +51,7 @@ export const getSearchSpeciesByTerm = async (
         images: {
           take: 2,
           select: { url: true },
+          orderBy: { position: 'asc' },
         },
         genus: {
           select: { name: true, type: true },

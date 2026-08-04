@@ -15,13 +15,18 @@ export async function getStoreData() {
   try {
     const species = await prisma.species.findMany({
       orderBy: { name: 'asc' },
-      include: {
-        genus: { select: { name: true, type: true } },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        glowColor: true,
+        genus: { select: { id: true, name: true, type: true } },
         variants: {
-          orderBy: { size: 'asc' },
+          select: { id: true },
         },
         images: {
-          select: { url: true },
+          select: { id: true, url: true },
+          orderBy: { position: 'asc' },
         },
         _count: {
           select: { plants: true },

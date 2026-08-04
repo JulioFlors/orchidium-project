@@ -1,3 +1,5 @@
+import { useCallback } from 'react'
+
 import { useCurrencyStore } from '@/store'
 
 /**
@@ -20,8 +22,9 @@ export function formatCurrency(
   }
 
   const hasDecimals = finalValue % 1 !== 0
+  const locale = finalCurrency === 'VES' ? 'es-VE' : 'en-US'
 
-  const formatted = new Intl.NumberFormat('es-VE', {
+  const formatted = new Intl.NumberFormat(locale, {
     style: 'decimal',
     minimumFractionDigits: hasDecimals ? 2 : 0,
     maximumFractionDigits: 2,
@@ -37,15 +40,21 @@ export function useFormatPrice() {
   const currency = useCurrencyStore((state) => state.currency)
   const rate = useCurrencyStore((state) => state.rate)
 
-  const format = (value: number) => {
-    return formatCurrency(value, currency, rate)
-  }
+  const format = useCallback(
+    (value: number) => {
+      return formatCurrency(value, currency, rate)
+    },
+    [currency, rate],
+  )
 
-  const formatRange = (min: number, max: number) => {
-    if (min === max) return format(min)
+  const formatRange = useCallback(
+    (min: number, max: number) => {
+      if (min === max) return format(min)
 
-    return `${format(min)} - ${format(max)}`
-  }
+      return `${format(min)} - ${format(max)}`
+    },
+    [format],
+  )
 
   return { format, formatRange, currency, rate }
 }

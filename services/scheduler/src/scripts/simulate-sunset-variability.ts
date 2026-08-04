@@ -56,7 +56,7 @@ async function main() {
     ORDER BY time ASC
   `
 
-  const rows: any[] = []
+  const rows: Record<string, unknown>[] = []
   const stream = influxClient.query(query)
 
   for await (const row of stream) {
@@ -72,7 +72,7 @@ async function main() {
       AND time < '2026-07-09T22:00:00Z'
     ORDER BY time ASC
   `
-  const preRows: any[] = []
+  const preRows: Record<string, unknown>[] = []
   const preStream = influxClient.query(preQuery)
 
   for await (const row of preStream) {

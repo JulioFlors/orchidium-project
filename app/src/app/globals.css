@@ -211,21 +211,26 @@
   }
 
   /* ---- Ambient Glow (estilo YouTube Home) ---- */
-  /* Fondo sólido de color que crece desde dentro de la card hacia afuera */
+  /* Fondo de color que aparece ÚNICAMENTE en el hover de la card */
   .ambient-glow {
     inset: 8px;
     opacity: 0;
     border-radius: 1rem;
+    background: var(--glow-light, var(--glow-color));
     transition: inset 300ms ease-out, opacity 300ms ease-out;
   }
 
   .group:hover .ambient-glow {
     inset: -8px;
-    opacity: 0.22;
+    opacity: 0.50;
+  }
+
+  :is(.dark .ambient-glow) {
+    background: var(--glow-dark, var(--glow-color));
   }
 
   :is(.dark .group:hover .ambient-glow) {
-    opacity: 0.32;
+    opacity: 0.50;
   }
 
   /* ---- Adaptación Cromática de Textos en Cards (color-mix con --glow-color) ---- */

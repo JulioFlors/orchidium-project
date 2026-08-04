@@ -1,9 +1,9 @@
 'use client'
 
 import Link from 'next/link'
-import { PiLeafFill, PiImagesFill } from 'react-icons/pi'
+import { PiLeafFill } from 'react-icons/pi'
 
-import { useImageColor } from '@/hooks/useImageColor'
+import { useImageColor, getPresetForColorString } from '@/hooks/useImageColor'
 import { getImageUrl } from '@/lib'
 
 interface SpeciesImage {
@@ -36,34 +36,57 @@ export function CatalogSpeciesCard({ species, index }: CatalogSpeciesCardProps) 
   const rawImageUrl = species.images[0]?.url
   const formattedImageUrl = getImageUrl(rawImageUrl)
 
-  // Obtenemos el color dinámico por si no hay color guardado estáticamente
-  const { color } = useImageColor(rawImageUrl ? formattedImageUrl : '')
+  // Obtenemos el color dinámico recomendado o de contraste
+  const mode = species.glowColor === 'contrast' ? 'contrast' : 'recommended'
+  const { lightRgbString, darkRgbString, isLoaded } = useImageColor(
+    rawImageUrl ? formattedImageUrl : species.name,
+    mode,
+  )
 
-  // Determinamos el color de hover (dando prioridad al color guardado en base de datos si existe)
-  const glowColor = species.glowColor
-    ? species.glowColor
-    : color
-      ? `rgb(${color.r}, ${color.g}, ${color.b})`
-      : 'rgb(128, 128, 128)'
+  const isCustom = Boolean(
+    species.glowColor && !['dynamic', 'recommended', 'contrast'].includes(species.glowColor),
+  )
+
+  const presetMatch = isCustom ? getPresetForColorString(species.glowColor!) : null
+
+  const glowLight = isCustom
+    ? presetMatch
+      ? presetMatch.lightRgbString
+      : species.glowColor!
+    : lightRgbString
+
+  const glowDark = isCustom
+    ? presetMatch
+      ? presetMatch.darkRgbString
+      : species.glowColor!
+    : darkRgbString
+
+  const canShowGlow = isCustom || isLoaded
 
   return (
     <div
       className="fade-in group relative mb-4 flex flex-col px-1 pt-1"
       data-species-index={index}
       id={`catalog-species--${species.slug}`}
-      style={{
-        '--glow-color': glowColor,
-      } as React.CSSProperties}
+      style={
+        {
+          '--glow-color': glowLight,
+          '--glow-light': glowLight,
+          '--glow-dark': glowDark,
+        } as React.CSSProperties
+      }
     >
       {/* === AMBIENT GLOW === Identico a la tienda publica */}
-      <div
-        aria-hidden="true"
-        className="ambient-glow pointer-events-none absolute"
-        style={{
-          background: 'var(--glow-color)',
-          zIndex: 0,
-        }}
-      />
+      {canShowGlow && (
+        <div
+          aria-hidden="true"
+          className="ambient-glow pointer-events-none absolute"
+          style={{
+            background: 'var(--glow-color)',
+            zIndex: 0,
+          }}
+        />
+      )}
 
       {/* Contenedor de la Imagen (aspect-square exacto a la tienda) */}
       <div className="focus-product-card relative z-5" id={`${species.slug}__container-image`}>
@@ -74,7 +97,7 @@ export function CatalogSpeciesCard({ species, index }: CatalogSpeciesCardProps) 
           <Link
             aria-label={`Editar taxonomía de ${species.name}`}
             className="relative block h-full w-full outline-none"
-            href={`/catalog/${species.id}`}
+            href={`/catalog/${species.slug || species.id}`}
           >
             {rawImageUrl ? (
               <img
@@ -99,14 +122,13 @@ export function CatalogSpeciesCard({ species, index }: CatalogSpeciesCardProps) 
         <div className="flex flex-col font-bold antialiased" id={`${species.slug}__main-details`}>
           <Link
             className="glow-title tracking-tight text-balance"
-            href={`/catalog/${species.id}`}
+            href={`/catalog/${species.slug || species.id}`}
             id={`${species.slug}__link`}
             tabIndex={-1}
           >
             {species.name}
           </Link>
           <div className="flex items-center gap-1">
-            <PiImagesFill className="text-secondary" size={12} />
             <span className="glow-meta font-semibold tracking-wide">
               {species.images.length} {species.images.length === 1 ? 'Foto' : 'Fotos'}
             </span>

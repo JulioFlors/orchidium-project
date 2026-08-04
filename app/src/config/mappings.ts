@@ -47,26 +47,40 @@ export const PlantTypeLabels: Record<PlantType, string> = {
 }
 
 export const PotSizeLabels: Record<PotSize, string> = {
+  [PotSize.NRO_3]: 'P3',
   [PotSize.NRO_5]: 'P5',
   [PotSize.NRO_7]: 'P7',
+  [PotSize.NRO_8]: 'P8',
   [PotSize.NRO_10]: 'P10',
-  /* [PotSize.NRO_12]: 'P12', */
+  [PotSize.NRO_12]: 'P12',
   [PotSize.NRO_14]: 'P14',
+  [PotSize.NRO_15]: 'P15',
+  [PotSize.CT1]: 'CT1',
+  [PotSize.CT2]: 'CT2',
+  [PotSize.CT3]: 'CT3',
+  [PotSize.CT4]: 'CT4',
 }
 
 export const PotSizeDimensions: Record<PotSize, string> = {
+  [PotSize.NRO_3]: '3cm',
   [PotSize.NRO_5]: '5cm',
   [PotSize.NRO_7]: '7cm',
+  [PotSize.NRO_8]: '8cm',
   [PotSize.NRO_10]: '10cm',
-  /* [PotSize.NRO_12]: '12cm', */
+  [PotSize.NRO_12]: '12cm',
   [PotSize.NRO_14]: '14cm',
+  [PotSize.NRO_15]: '15cm',
+  [PotSize.CT1]: '13.9cm',
+  [PotSize.CT2]: '16.7cm',
+  [PotSize.CT3]: '19.7cm',
+  [PotSize.CT4]: '22.4cm',
 }
 
 export const ZoneTypeLabels: Record<ZoneType, string> = {
   [ZoneType.ZONA_A]: 'Orquideario',
-  [ZoneType.ZONA_B]: 'Zona B',
-  [ZoneType.ZONA_C]: 'Zona C',
-  [ZoneType.ZONA_D]: 'Zona D',
+  [ZoneType.ZONA_B]: 'Jardín',
+  [ZoneType.ZONA_C]: 'Terraza',
+  [ZoneType.ZONA_D]: 'Ventanas',
   [ZoneType.EXTERIOR]: 'Exterior',
 }
 

@@ -74,7 +74,6 @@ function evaluateClimateInference(nowMs: number): boolean {
     return false
   }
 
-  const currentMinTemp = tempBatches[0].min
   const currentMaxHum = humBatches[0].max
   const currentMinLux = luxBatches[0].min
 
@@ -95,11 +94,6 @@ function evaluateClimateInference(nowMs: number): boolean {
     if (currentMinLux >= 26000) {
       return false
     }
-
-    const baseTemp1 = tempBatches[1].max
-    const baseHum1 = humBatches[1].min
-    const dTemp1 = currentMinTemp - baseTemp1
-    const dHum1 = currentMaxHum - baseHum1
 
     if (isDay) {
       // Reglas de día...
@@ -159,7 +153,7 @@ async function main() {
     ORDER BY time ASC
   `
 
-  const rows: any[] = []
+  const rows: Record<string, unknown>[] = []
   const stream = influxClient.query(query)
 
   for await (const row of stream) {
@@ -175,7 +169,7 @@ async function main() {
       AND time < '2026-07-10T22:30:00Z'
     ORDER BY time ASC
   `
-  const preRows: any[] = []
+  const preRows: Record<string, unknown>[] = []
   const preStream = influxClient.query(preQuery)
 
   for await (const row of preStream) {

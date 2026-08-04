@@ -21,7 +21,7 @@ async function main() {
     ORDER BY time ASC
   `
 
-  const rows: any[] = []
+  const rows: Record<string, unknown>[] = []
   const stream = influxClient.query(query)
 
   for await (const row of stream) {

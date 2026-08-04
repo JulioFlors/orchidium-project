@@ -4,28 +4,35 @@ import type { PlantType } from '@package/database'
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { PiLeafFill, PiImagesFill, PiArrowLeftBold } from 'react-icons/pi'
-import { MdSave, MdClose, MdDelete } from 'react-icons/md'
+import { PiWarningFill, PiTrashFill } from 'react-icons/pi'
+import { MdSave, MdClose } from 'react-icons/md'
 
-import { Button, ImageUploader, FormField, Input, SelectDropdown, Textarea } from '@/components'
+import {
+  Heading,
+  Button,
+  ImageUploader,
+  FormField,
+  Input,
+  SelectDropdown,
+  Textarea,
+  Modal,
+} from '@/components'
 import {
   createSpecies,
   updateSpecies,
   deleteSpecies,
   addSpeciesImage,
   deleteSpeciesImage,
+  reorderSpeciesImages,
 } from '@/actions'
 import { useToastStore } from '@/store/toast/toast.store'
 import { getImageUrl } from '@/lib'
-import { getDominantVibrantColor } from '@/hooks/useImageColor'
-
-// ─────────────────────────────────────────────────────────────
-// Tipos
-// ─────────────────────────────────────────────────────────────
+import { getDominantVibrantColor, useImageColor, PRESET_COLORS } from '@/hooks/useImageColor'
 
 interface SpeciesImage {
   id: string
   url: string
+  position?: number
 }
 
 interface Genus {
@@ -70,12 +77,88 @@ const PLANT_TYPE_FOLDERS: Record<PlantType, string> = {
   SUCCULENT: 'succulents',
 }
 
+interface SpeciesImageCardProps {
+  img: SpeciesImage
+  index: number
+  isDragging: boolean
+  onDragStart: () => void
+  onDragOver: (e: React.DragEvent) => void
+  onDragEnd: () => void
+  onDrop: () => void
+  onMakePrimary: () => void
+  onMarkToDelete: () => void
+}
+
+function SpeciesImageCard({
+  img,
+  index,
+  isDragging,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+  onDrop,
+  onMakePrimary,
+  onMarkToDelete,
+}: SpeciesImageCardProps) {
+  const imageUrl = getImageUrl(img.url)
+
+  return (
+    <div
+      className={`bg-surface border-input-outline group relative aspect-square cursor-grab overflow-hidden rounded-xl border transition-all active:cursor-grabbing ${
+        isDragging
+          ? 'scale-95 border-dashed border-emerald-500 opacity-30'
+          : 'hover:scale-[1.02] hover:border-zinc-300 dark:hover:border-zinc-700'
+      }`}
+      draggable="true"
+      onDragEnd={onDragEnd}
+      onDragOver={onDragOver}
+      onDragStart={onDragStart}
+      onDrop={onDrop}
+    >
+      <img
+        alt="Especie"
+        className="pointer-events-none h-full w-full object-cover select-none"
+        src={imageUrl}
+      />
+
+      {/* Footer no interactivo para la foto Principal */}
+      {index === 0 && (
+        <div className="bg-canvas/90 text-primary border-input-outline absolute bottom-0 left-0 z-10 w-full border-t py-1.5 text-center text-xs font-semibold backdrop-blur-xs">
+          Principal
+        </div>
+      )}
+
+      {/* Footer interactivo para Destacar una foto */}
+      {index !== 0 && (
+        <button
+          className="bg-canvas/90 hover:bg-canvas text-primary border-input-outline absolute bottom-0 left-0 z-10 w-full cursor-pointer border-t py-1.5 text-center text-xs font-semibold opacity-0 backdrop-blur-xs transition-all group-hover:opacity-100 focus:outline-none"
+          title="Establecer como imagen de portada"
+          type="button"
+          onClick={onMakePrimary}
+        >
+          Destacar
+        </button>
+      )}
+
+      {/* Botón de Eliminar */}
+      <button
+        className="bg-canvas/90 hover:bg-canvas text-primary absolute top-2 right-2 z-15 cursor-pointer rounded-full p-1.5 opacity-0 shadow-md backdrop-blur-xs transition-all group-hover:opacity-100 focus:outline-none"
+        title="Eliminar imagen"
+        type="button"
+        onClick={onMarkToDelete}
+      >
+        <MdClose className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
+
 export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewProps) {
   const router = useRouter()
   const { addToast } = useToastStore()
   const [isPending, startTransition] = useTransition()
 
-  // Carpeta estructurada en R2 para subidas de esta especie: plants/<tipo>/<genero>/<especie>
+  // Carpeta estructurada en R2 para subidas
   const plantTypeFolder = initialSpecies
     ? PLANT_TYPE_FOLDERS[initialSpecies.genus.type] || 'others'
     : 'others'
@@ -94,14 +177,14 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
     return genera[0]?.type ?? 'ORCHID'
   })
 
-  // Estado del formulario inicializado con props
+  // Estado del formulario
   const [form, setForm] = useState(() => {
     if (initialSpecies) {
       return {
         name: initialSpecies.name,
         genusId: initialSpecies.genusId,
         description: initialSpecies.description ?? '',
-        glowColor: initialSpecies.glowColor ?? 'rgb(16, 185, 129)',
+        glowColor: initialSpecies.glowColor ?? 'dynamic',
       }
     }
 
@@ -109,16 +192,22 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
       name: '',
       genusId: genera[0]?.id ?? '',
       description: '',
-      glowColor: 'rgb(16, 185, 129)',
+      glowColor: 'dynamic',
     }
   })
 
+  // Estado local de imágenes y pendientes de eliminación
   const [images, setImages] = useState<SpeciesImage[]>(() => initialSpecies?.images ?? [])
+  const [imagesToDelete, setImagesToDelete] = useState<string[]>([])
+  const [isOrderDirty, setIsOrderDirty] = useState(false)
 
-  // Filtrar los géneros por el tipo de planta seleccionado
+  // Estados de Modales
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [isExitModalOpen, setIsExitModalOpen] = useState(false)
+
+  // Filtrar los géneros por tipo de planta
   const filteredGenera = genera.filter((g) => g.type === selectedPlantType)
 
-  // Cambiar el tipo de planta y actualizar automáticamente el género
   function handlePlantTypeChange(type: PlantType) {
     setSelectedPlantType(type)
     const firstGenusOfType = genera.find((g) => g.type === type)
@@ -127,28 +216,40 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
   }
 
   // Detección de cambios (isDirty)
-  const isDirty = initialSpecies
+  const isFormDirty = initialSpecies
     ? form.name !== initialSpecies.name ||
       form.genusId !== initialSpecies.genusId ||
       form.description !== (initialSpecies.description ?? '') ||
-      form.glowColor !== (initialSpecies.glowColor ?? 'rgb(16, 185, 129)')
+      form.glowColor !== (initialSpecies.glowColor ?? 'dynamic')
     : form.name !== '' ||
       form.genusId !== (genera[0]?.id ?? '') ||
       form.description !== '' ||
-      form.glowColor !== 'rgb(16, 185, 129)'
+      form.glowColor !== 'dynamic'
 
-  // Manejar Salir / Cancelar
-  function handleBack() {
+  const isDirty = isFormDirty || isOrderDirty || imagesToDelete.length > 0
+
+  // Salir / Cancelar
+  function handleBackClick() {
     if (isDirty) {
-      if (!confirm('Tienes cambios sin guardar. ¿Seguro que deseas salir?')) {
-        return
-      }
+      setIsExitModalOpen(true)
+    } else {
+      const targetHash = initialSpecies?.slug ? `#catalog-species--${initialSpecies.slug}` : ''
+
+      router.push(`/catalog${targetHash}`)
+      router.refresh()
     }
-    router.push('/catalog')
+  }
+
+  function handleConfirmExit() {
+    setIsExitModalOpen(false)
+
+    const targetHash = initialSpecies?.slug ? `#catalog-species--${initialSpecies.slug}` : ''
+
+    router.push(`/catalog${targetHash}`)
     router.refresh()
   }
 
-  // Guardar Cambios / Crear
+  // Guardar Cambios / Crear Especie
   function handleSave() {
     if (!form.name.trim()) {
       addToast('El nombre es obligatorio.', 'warning')
@@ -162,6 +263,23 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
     }
 
     startTransition(async () => {
+      // 1. Procesar eliminaciones pendientes de imágenes
+      if (imagesToDelete.length > 0) {
+        for (const imgId of imagesToDelete) {
+          await deleteSpeciesImage(imgId)
+        }
+        setImagesToDelete([])
+      }
+
+      // 2. Procesar reordenamiento de imágenes si cambió
+      if (isOrderDirty && initialSpecies) {
+        const orderedIds = images.map((img) => img.id)
+
+        await reorderSpeciesImages(initialSpecies.id, orderedIds)
+        setIsOrderDirty(false)
+      }
+
+      // 3. Guardar datos de la especie
       const result = initialSpecies
         ? await updateSpecies(initialSpecies.id, form)
         : await createSpecies(form)
@@ -174,23 +292,25 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
 
       addToast(
         initialSpecies
-          ? 'Especie actualizada correctamente.'
+          ? 'Especie y galería actualizadas correctamente.'
           : 'Especie creada correctamente. Ahora puedes añadir imágenes.',
         'success',
       )
 
       if (!initialSpecies && result.species) {
-        // Redirigir a la edición de la especie recién creada para poder subir imágenes
-        router.push(`/catalog/${result.species.id}`)
+        router.push(`/catalog/${result.species.slug || result.species.id}`)
       } else {
-        router.push('/catalog')
+        const targetSlug = result.species?.slug || initialSpecies?.slug
+        const targetHash = targetSlug ? `#catalog-species--${targetSlug}` : ''
+
+        router.push(`/catalog${targetHash}`)
         router.refresh()
       }
     })
   }
 
   // Eliminar Especie
-  function handleDelete() {
+  function handleConfirmDeleteSpecies() {
     if (!initialSpecies) return
 
     if (initialSpecies._count.plants > 0) {
@@ -198,11 +318,8 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
         `No se puede eliminar: tiene ${initialSpecies._count.plants} activos biológicos asociados.`,
         'warning',
       )
+      setIsDeleteModalOpen(false)
 
-      return
-    }
-
-    if (!confirm(`¿Eliminar definitivamente "${initialSpecies.name}" y todas sus imágenes?`)) {
       return
     }
 
@@ -216,12 +333,13 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
       }
 
       addToast('Especie eliminada correctamente.', 'success')
+      setIsDeleteModalOpen(false)
       router.push('/catalog')
       router.refresh()
     })
   }
 
-  // Gestión de Imágenes
+  // Subida de imagen
   async function onImageUploaded(image: { url: string; key: string }) {
     if (!initialSpecies) return
 
@@ -233,7 +351,7 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
       setImages((prev) => [...prev, newImg])
       addToast('Imagen vinculada exitosamente.', 'success')
 
-      // Sugerir color de hover si es la primera imagen subida
+      // Sugerir color si es la primera
       if (images.length === 0) {
         const img = new Image()
 
@@ -246,7 +364,6 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
             const suggestedColor = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`
 
             setForm((p) => ({ ...p, glowColor: suggestedColor }))
-            addToast(`Sugerencia de color de hover: ${suggestedColor}`, 'info')
           }
         }
       }
@@ -257,72 +374,181 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
     }
   }
 
-  async function handleRemoveImage(imageId: string) {
-    if (!confirm('¿Seguro que deseas eliminar esta imagen?')) return
-
-    const result = await deleteSpeciesImage(imageId)
-
-    if (result.ok) {
-      setImages((prev) => prev.filter((img) => img.id !== imageId))
-      addToast('Imagen eliminada correctamente.', 'info')
-      router.refresh()
-    } else {
-      addToast(result.message ?? 'Error al eliminar imagen.', 'error')
-    }
+  // Marcar imagen para eliminar (sin borrar de BD hasta Guardar Cambios)
+  function handleMarkImageToDelete(imageId: string) {
+    setImages((prev) => prev.filter((img) => img.id !== imageId))
+    setImagesToDelete((prev) => [...prev, imageId])
   }
+
+  // Drag & Drop
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
+
+  function handleDragStart(index: number) {
+    setDraggedIndex(index)
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault()
+  }
+
+  function handleDragEnd() {
+    setDraggedIndex(null)
+  }
+
+  function handleDrop(index: number) {
+    if (draggedIndex === null || draggedIndex === index) {
+      setDraggedIndex(null)
+
+      return
+    }
+
+    const updatedImages = [...images]
+    const [movedImage] = updatedImages.splice(draggedIndex, 1)
+
+    updatedImages.splice(index, 0, movedImage)
+
+    setImages(updatedImages)
+    setDraggedIndex(null)
+    setIsOrderDirty(true)
+  }
+
+  function handleMakePrimary(index: number) {
+    if (index === 0) return
+
+    const updatedImages = [...images]
+    const [movedImage] = updatedImages.splice(index, 1)
+
+    updatedImages.unshift(movedImage)
+
+    setImages(updatedImages)
+    setIsOrderDirty(true)
+  }
+
+  // Extraer el color recomendado y de contraste de la primera foto de la lista local
+  const primaryImageUrl = images[0] ? getImageUrl(images[0].url) : ''
+  const recommendedResult = useImageColor(primaryImageUrl, 'recommended')
+  const contrastResult = useImageColor(primaryImageUrl, 'contrast')
+
+  // Mapeo retrocompatible para 'dynamic'
+  const selectedGlowValue = form.glowColor === 'dynamic' ? 'recommended' : form.glowColor
+
+  const activePreviewColor =
+    selectedGlowValue === 'recommended'
+      ? recommendedResult.lightColor
+        ? `rgb(${recommendedResult.lightColor.r}, ${recommendedResult.lightColor.g}, ${recommendedResult.lightColor.b})`
+        : 'rgb(5, 150, 105)'
+      : selectedGlowValue === 'contrast'
+        ? contrastResult.lightColor
+          ? `rgb(${contrastResult.lightColor.r}, ${contrastResult.lightColor.g}, ${contrastResult.lightColor.b})`
+          : 'rgb(192, 38, 211)'
+        : form.glowColor
+
+  const glowColorOptions = [
+    {
+      value: 'recommended',
+      label: `Recomendado: ${recommendedResult.presetName || 'Cargando...'}`,
+      color: recommendedResult.lightColor
+        ? `rgb(${recommendedResult.lightColor.r}, ${recommendedResult.lightColor.g}, ${recommendedResult.lightColor.b})`
+        : 'rgb(5, 150, 105)',
+    },
+    {
+      value: 'contrast',
+      label: `Contraste: ${contrastResult.presetName || 'Cargando...'}`,
+      color: contrastResult.lightColor
+        ? `rgb(${contrastResult.lightColor.r}, ${contrastResult.lightColor.g}, ${contrastResult.lightColor.b})`
+        : 'rgb(192, 38, 211)',
+    },
+    ...PRESET_COLORS.map((preset) => ({
+      value: preset.lightRgbString,
+      label: preset.name,
+      color: preset.lightRgbString,
+    })),
+    ...(form.glowColor &&
+    !['dynamic', 'recommended', 'contrast'].includes(form.glowColor) &&
+    !PRESET_COLORS.some((p) => p.lightRgbString === form.glowColor)
+      ? [
+          {
+            value: form.glowColor,
+            label: `Personalizado: ${form.glowColor}`,
+            color: form.glowColor,
+          },
+        ]
+      : []),
+  ]
 
   return (
     <div className="flex flex-col gap-8">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <button
-            className="border-input-outline bg-canvas text-primary hover:bg-hover-overlay rounded-xl border p-2.5 transition-colors"
-            title="Volver"
-            type="button"
-            onClick={handleBack}
-          >
-            <PiArrowLeftBold className="h-5 w-5" />
-          </button>
-          <div className="flex flex-col">
-            <span className="text-secondary text-xs font-semibold tracking-wider uppercase opacity-60">
-              {initialSpecies ? 'Editar Especie' : 'Nueva Especie'}
-            </span>
-            <h1 className="text-primary text-2xl font-black tracking-tight sm:text-3xl">
-              {initialSpecies ? initialSpecies.name : 'Crear Nueva Especie'}
-            </h1>
-          </div>
-        </div>
-
-        {/* Acciones principales */}
-        <div className="flex items-center gap-3">
-          {initialSpecies && (
-            <Button disabled={isPending} size="sm" variant="destructive" onClick={handleDelete}>
-              <MdDelete className="mr-1.5 h-4 w-4" />
-              Eliminar
+      {/* Header estandarizado */}
+      <Heading
+        action={
+          initialSpecies ? (
+            <Button
+              disabled={isPending}
+              size="sm"
+              variant="destructive"
+              onClick={() => setIsDeleteModalOpen(true)}
+            >
+              <PiTrashFill className="mr-1.5 h-4 w-4" />
+              Eliminar Especie
             </Button>
-          )}
-          <Button size="sm" variant="secondary" onClick={handleBack}>
-            {isDirty ? 'Cancelar' : 'Salir'}
-          </Button>
-          <Button
-            isLoading={isPending}
-            size="sm"
-            variant={isDirty ? 'primary' : 'secondary'}
-            onClick={handleSave}
-          >
-            <MdSave className="mr-1.5 h-4 w-4" />
-            {initialSpecies ? 'Guardar Cambios' : 'Crear Especie'}
-          </Button>
-        </div>
-      </div>
+          ) : null
+        }
+        description={
+          initialSpecies
+            ? 'Gestión taxonómica y jerarquía de imágenes'
+            : 'Ficha taxonómica para catálogo'
+        }
+        title={initialSpecies ? initialSpecies.name : 'Crear Nueva Especie'}
+      />
 
-      {/* Grid del Formulario */}
+      {/* Grid del Formulario (Galería a la izquierda, Formulario a la derecha) */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-        {/* Formulario de Información */}
+        {/* Galería de Fotos (Columna Izquierda) */}
+        <div className="bg-canvas border-input-outline flex flex-col gap-6 rounded-2xl border p-6 lg:col-span-1">
+          <div className="flex items-center gap-2 border-b border-zinc-100 pb-4 dark:border-zinc-800/50">
+            <h2 className="text-primary text-lg font-bold">Galería de Fotos</h2>
+          </div>
+
+          {!initialSpecies ? (
+            <div className="bg-surface border-input-outline flex flex-col items-center justify-center rounded-xl border border-dashed py-12 text-center">
+              <span className="mb-2 text-3xl">📸</span>
+              <p className="text-secondary px-4 text-xs">
+                Primero debes registrar la especie para habilitar la subida de imágenes a R2.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-6">
+              <ImageUploader folder={uploaderFolder} onUploaded={onImageUploaded} />
+
+              {images.length === 0 ? (
+                <p className="text-secondary text-center text-xs italic opacity-60">
+                  No hay imágenes registradas para esta especie.
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  {images.map((img, index) => (
+                    <SpeciesImageCard
+                      key={img.id}
+                      img={img}
+                      index={index}
+                      isDragging={draggedIndex === index}
+                      onDragEnd={handleDragEnd}
+                      onDragOver={handleDragOver}
+                      onDragStart={() => handleDragStart(index)}
+                      onDrop={() => handleDrop(index)}
+                      onMakePrimary={() => handleMakePrimary(index)}
+                      onMarkToDelete={() => handleMarkImageToDelete(img.id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Formulario de Información (Columna Derecha) */}
         <div className="bg-canvas border-input-outline flex flex-col gap-6 rounded-2xl border p-6 lg:col-span-2">
           <div className="flex items-center gap-2 border-b border-zinc-100 pb-4 dark:border-zinc-800/50">
-            <PiLeafFill className="text-xl text-emerald-500" />
             <h2 className="text-primary text-lg font-bold">Información Taxonómica</h2>
           </div>
 
@@ -370,44 +596,20 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
             </div>
 
             <div className="sm:col-span-2">
-              <FormField htmlFor="species-glow" label="Color de Hover (Ambient Glow)">
+              <FormField htmlFor="species-glow" label="Color de fondo">
                 <div className="flex items-center gap-3">
                   <div className="flex-1">
                     <SelectDropdown
                       id="species-glow"
-                      options={[
-                        { value: 'rgb(16, 185, 129)', label: 'Verde Esmeralda' },
-                        { value: 'rgb(236, 72, 153)', label: 'Magenta Vibrante' },
-                        { value: 'rgb(249, 115, 22)', label: 'Naranja Sol' },
-                        { value: 'rgb(168, 85, 247)', label: 'Púrpura Orquídea' },
-                        { value: 'rgb(234, 179, 8)', label: 'Amarillo Cactus' },
-                        { value: 'rgb(6, 182, 212)', label: 'Azul / Cian' },
-                        { value: 'rgb(239, 68, 68)', label: 'Rojo Flor' },
-                        ...(form.glowColor &&
-                        ![
-                          'rgb(16, 185, 129)',
-                          'rgb(236, 72, 153)',
-                          'rgb(249, 115, 22)',
-                          'rgb(168, 85, 247)',
-                          'rgb(234, 179, 8)',
-                          'rgb(6, 182, 212)',
-                          'rgb(239, 68, 68)',
-                        ].includes(form.glowColor)
-                          ? [
-                              {
-                                value: form.glowColor,
-                                label: `Personalizado/Sugerido: ${form.glowColor}`,
-                              },
-                            ]
-                          : []),
-                      ]}
-                      value={form.glowColor}
+                      options={glowColorOptions}
+                      value={selectedGlowValue}
                       onChange={(val) => setForm((p) => ({ ...p, glowColor: val as string }))}
                     />
                   </div>
                   <div
-                    className="border-input-outline h-9 w-9 rounded-lg border shadow-inner transition-colors duration-300"
-                    style={{ backgroundColor: form.glowColor }}
+                    className="border-input-outline flex h-9 w-9 items-center justify-center rounded-lg border shadow-inner transition-colors duration-300"
+                    style={{ backgroundColor: activePreviewColor }}
+                    title={`Color activo: ${activePreviewColor}`}
                   />
                 </div>
               </FormField>
@@ -416,7 +618,7 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
 
           <FormField htmlFor="species-desc" label="Descripción">
             <Textarea
-              className="min-h-[140px] resize-none"
+              className="min-h-35 resize-none"
               id="species-desc"
               placeholder="Detalles sobre cuidados, origen, hábitat..."
               value={form.description}
@@ -424,57 +626,76 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
             />
           </FormField>
         </div>
-
-        {/* Galería de Fotos */}
-        <div className="bg-canvas border-input-outline flex flex-col gap-6 rounded-2xl border p-6">
-          <div className="flex items-center gap-2 border-b border-zinc-100 pb-4 dark:border-zinc-800/50">
-            <PiImagesFill className="text-xl text-emerald-500" />
-            <h2 className="text-primary text-lg font-bold">Galería de Fotos</h2>
-          </div>
-
-          {!initialSpecies ? (
-            <div className="bg-surface border-input-outline flex flex-col items-center justify-center rounded-xl border border-dashed py-12 text-center">
-              <span className="mb-2 text-3xl">📸</span>
-              <p className="text-secondary px-4 text-xs">
-                Primero debes registrar la especie para habilitar la subida de imágenes a R2.
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-6">
-              <ImageUploader folder={uploaderFolder} onUploaded={onImageUploaded} />
-
-              {images.length === 0 ? (
-                <p className="text-secondary text-center text-xs italic opacity-60">
-                  No hay imágenes registradas para esta especie.
-                </p>
-              ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  {images.map((img) => (
-                    <div
-                      key={img.id}
-                      className="bg-surface border-input-outline group relative aspect-square overflow-hidden rounded-xl border"
-                    >
-                      <img
-                        alt="Especie"
-                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        src={getImageUrl(img.url)}
-                      />
-                      <button
-                        className="absolute top-2 right-2 rounded-full bg-red-500 p-1.5 text-white shadow-md transition-opacity duration-200 hover:bg-red-600 focus:outline-none"
-                        title="Eliminar imagen"
-                        type="button"
-                        onClick={() => handleRemoveImage(img.id)}
-                      >
-                        <MdClose className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
       </div>
+
+      {/* Botones de acción modulares al final */}
+      <div className="flex w-full items-center justify-end gap-3 border-t border-zinc-100 pt-6 dark:border-zinc-800/50">
+        <Button size="default" variant="secondary" onClick={handleBackClick}>
+          {isDirty ? 'Cancelar' : 'Salir'}
+        </Button>
+        <Button
+          disabled={!isDirty || isPending}
+          isLoading={isPending}
+          size="default"
+          variant="primary"
+          onClick={handleSave}
+        >
+          <MdSave className="mr-1.5 h-4 w-4" />
+          {initialSpecies ? 'Guardar Cambios' : 'Crear Especie'}
+        </Button>
+      </div>
+
+      {/* Modal de Confirmación de Eliminación de Especie */}
+      <Modal
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setIsDeleteModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              isLoading={isPending}
+              variant="destructive"
+              onClick={handleConfirmDeleteSpecies}
+            >
+              Eliminar Definitivamente
+            </Button>
+          </>
+        }
+        icon={<PiWarningFill className="text-2xl text-red-500" />}
+        isOpen={isDeleteModalOpen}
+        size="md"
+        title="¿Eliminar Especie?"
+        onClose={() => setIsDeleteModalOpen(false)}
+      >
+        <p className="text-secondary text-sm">
+          Esta acción eliminará permanentemente la especie <strong>{initialSpecies?.name}</strong> y
+          todas sus imágenes asociadas de la base de datos y de R2.
+        </p>
+      </Modal>
+
+      {/* Modal de Confirmación de Salida con Cambios sin Guardar */}
+      <Modal
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setIsExitModalOpen(false)}>
+              Continuar Editando
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmExit}>
+              Descartar y Salir
+            </Button>
+          </>
+        }
+        icon={<PiWarningFill className="text-2xl text-amber-500" />}
+        isOpen={isExitModalOpen}
+        size="md"
+        title="¿Descartar Cambios?"
+        onClose={() => setIsExitModalOpen(false)}
+      >
+        <p className="text-secondary text-sm">
+          Tienes modificaciones sin guardar en la especie o el orden de la galería. Si sales ahora,
+          se perderán estos cambios.
+        </p>
+      </Modal>
     </div>
   )
 }

@@ -48,11 +48,13 @@ export function SpeciesInventoryCard({ species, index }: SpeciesInventoryCardPro
     <Link
       className="fade-in group relative flex flex-col px-1 pt-1 pb-1 outline-none"
       data-species-index={index}
-      href={`/species/${species.id}`}
+      href={`/species/${species.slug || species.id}`}
       id={`species-card--${species.slug}`}
-      style={{
-        '--glow-color': glowColor,
-      } as React.CSSProperties}
+      style={
+        {
+          '--glow-color': glowColor,
+        } as React.CSSProperties
+      }
     >
       {/* Ambient Glow de fondo */}
       <div

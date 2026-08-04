@@ -21,7 +21,7 @@ interface BatchSummary {
   samples: Sample[]
 }
 
-function pushBatchMetrics(queue: BatchSummary[], sample: Sample, isLux = false) {
+function pushBatchMetrics(queue: BatchSummary[], sample: Sample, _isLux = false) {
   const now = sample.timestamp
 
   if (queue.length === 0 || now - queue[0].timestamp >= 10 * 60 * 1000) {
@@ -48,7 +48,7 @@ async function simulateForFloor(tempFloor: number) {
     ORDER BY time ASC
   `
 
-  const rows: any[] = []
+  const rows: Record<string, unknown>[] = []
   const stream = influxClient.query(query)
 
   for await (const row of stream) {
@@ -70,7 +70,6 @@ async function simulateForFloor(tempFloor: number) {
 
     if (tempBatches.length < 4 || humBatches.length < 4) continue
 
-    const currentMinTemp = tempBatches[0].samples[tempBatches[0].samples.length - 1].value
     const currentMaxHum = humBatches[0].samples[humBatches[0].samples.length - 1].value
 
     const maxTempPre = Math.max(tempBatches[1].max, tempBatches[2].max, tempBatches[3].max)

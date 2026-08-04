@@ -11,14 +11,7 @@ function cn(...inputs: ClassValue[]) {
 // --- Tipos ---
 
 export type GlowVariant =
-  | 'yellow'
-  | 'blue'
-  | 'violet'
-  | 'pink'
-  | 'red'
-  | 'green'
-  | 'cyan'
-  | 'orange'
+  'yellow' | 'blue' | 'violet' | 'pink' | 'red' | 'green' | 'cyan' | 'orange'
 
 interface GlowColors {
   borderHover: string

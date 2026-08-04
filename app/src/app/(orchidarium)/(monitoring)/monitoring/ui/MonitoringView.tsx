@@ -15,12 +15,7 @@ import { useMqttStore } from '@/store/mqtt/mqtt.store'
 import { formatTime12h, formatDateLong, getHourInCaracas } from '@/utils/timeFormat'
 
 type MetricType =
-  | 'temperature'
-  | 'humidity'
-  | 'illuminance'
-  | 'rain_intensity'
-  | 'rain_events'
-  | 'rain_inferred'
+  'temperature' | 'humidity' | 'illuminance' | 'rain_intensity' | 'rain_events' | 'rain_inferred'
 
 interface SensorData {
   [key: string]: string | number | boolean | undefined

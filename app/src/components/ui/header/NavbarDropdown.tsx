@@ -120,7 +120,7 @@ export function NavbarDropdown({ activeItem, onClose, plantsNavData }: Props) {
                     src={item.image}
                   />
                 ) : (
-                  <div className="text-secondary/30 flex h-full w-full items-center justify-center text-4xl">
+                  <div className="text-primary/60 group-hover:text-primary bg-canvas/40 flex h-full w-full items-center justify-center text-4xl transition-colors duration-300">
                     {item.icon}
                   </div>
                 )}

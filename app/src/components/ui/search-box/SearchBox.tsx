@@ -349,7 +349,7 @@ export function SearchBox({ isHeader = false, suggestions = [] }: SearchBoxProps
               <Link
                 key={`${result.slug}`}
                 className={clsx('search-results focus-bg-canvas block')}
-                href={`/product/${result.slug}`}
+                href={`/plant/${result.slug}`}
                 onClick={() => {
                   setSearchTerm('') //          Limpiar el término de búsqueda al seleccionar un resultado
                   setIsResultsVisible(false) // Ocultar los resultados al seleccionar un resultado

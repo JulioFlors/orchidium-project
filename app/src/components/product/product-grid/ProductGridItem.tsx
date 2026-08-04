@@ -5,7 +5,7 @@ import Link from 'next/link'
 
 import { ProductVariant, Species } from '@/interfaces/'
 import { StockLabel, FloweringLabel } from '@/components'
-import { useImageColor } from '@/hooks/useImageColor'
+import { useImageColor, getPresetForColorString } from '@/hooks/useImageColor'
 import { getImageUrl, useFormatPrice } from '@/lib'
 
 interface Props {
@@ -40,27 +40,47 @@ export function ProductGridItem({ product, index, showGlow = true }: Props) {
   const { formatRange } = useFormatPrice()
   const priceLabel = formatRange(minPrice, maxPrice)
 
-  // Obtenemos dinámicamente el color dominante vibrante de la primera imagen si no hay color guardado
-  const { color } = useImageColor(product.glowColor ? '' : getImageUrl(product.images[0]))
+  // Obtenemos dinámicamente el color dominante o de contraste de la primera imagen
+  const isCustomColor = Boolean(
+    product.glowColor && !['dynamic', 'recommended', 'contrast'].includes(product.glowColor),
+  )
+  const mode = product.glowColor === 'contrast' ? 'contrast' : 'recommended'
+  const { lightRgbString, darkRgbString, isLoaded } = useImageColor(
+    isCustomColor ? '' : getImageUrl(product.images[0]) || product.name,
+    mode,
+  )
 
-  // Color RGB para el background del glow
-  const glowColor = product.glowColor
-    ? product.glowColor
-    : color
-      ? `rgb(${color.r}, ${color.g}, ${color.b})`
-      : 'rgb(128, 128, 128)'
+  const presetMatch = isCustomColor ? getPresetForColorString(product.glowColor!) : null
+
+  const glowLight = isCustomColor
+    ? presetMatch
+      ? presetMatch.lightRgbString
+      : product.glowColor!
+    : lightRgbString || 'rgb(5, 150, 105)'
+
+  const glowDark = isCustomColor
+    ? presetMatch
+      ? presetMatch.darkRgbString
+      : product.glowColor!
+    : darkRgbString || 'rgb(52, 211, 153)'
+
+  const canShowGlow = showGlow && (isCustomColor || isLoaded)
 
   return (
     <div
       className="fade-in group relative mb-4 flex flex-col px-1 pt-1"
       data-product-index={index}
       id={`product--${product.slug}`}
-      style={{
-        '--glow-color': glowColor,
-      } as React.CSSProperties}
+      style={
+        {
+          '--glow-color': glowLight,
+          '--glow-light': glowLight,
+          '--glow-dark': glowDark,
+        } as React.CSSProperties
+      }
     >
       {/* === AMBIENT GLOW === Fondo sólido de color que cubre TODA la card */}
-      {showGlow && (
+      {canShowGlow && (
         <div
           aria-hidden="true"
           className="ambient-glow pointer-events-none absolute"
@@ -80,7 +100,7 @@ export function ProductGridItem({ product, index, showGlow = true }: Props) {
           <Link
             aria-label={`Ver detalles de ${product.name}`}
             className="relative block h-full w-full outline-none"
-            href={`/product/${product.slug}`}
+            href={`/plant/${product.slug}`}
           >
             <Image
               fill
@@ -108,7 +128,7 @@ export function ProductGridItem({ product, index, showGlow = true }: Props) {
         <div className="flex flex-col font-bold antialiased" id={`${product.slug}__main-details`}>
           <Link
             className="glow-title tracking-tight text-balance"
-            href={`/product/${product.slug}`}
+            href={`/plant/${product.slug}`}
             id={`${product.slug}__link`}
             tabIndex={-1}
           >

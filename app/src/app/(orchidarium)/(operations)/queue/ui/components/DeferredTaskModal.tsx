@@ -73,8 +73,7 @@ export function DeferredTaskModal({ isOpen, onClose, onSubmitSuccess }: Props) {
   useEffect(() => {
     if (isOpen) {
       const savedDraft = useFormDraftStore.getState().getDraft(draftKey) as
-        | z.input<typeof plannerSchema>
-        | undefined
+        z.input<typeof plannerSchema> | undefined
 
       isRestoringRef.current = true
       reset(savedDraft ?? DEFAULT_VALUES)
@@ -93,8 +92,7 @@ export function DeferredTaskModal({ isOpen, onClose, onSubmitSuccess }: Props) {
     if (!isOpen || isRestoringRef.current) return
 
     const currentDraft = useFormDraftStore.getState().getDraft(draftKey) as
-      | z.input<typeof plannerSchema>
-      | undefined
+      z.input<typeof plannerSchema> | undefined
 
     if (JSON.stringify(currentDraft) !== watchedString) {
       setDraft(draftKey, JSON.parse(watchedString) as PlannerFormInputs)

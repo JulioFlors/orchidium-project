@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 370" width="100%" height="100%">
+  <rect width="100%" height="100%" fill="#181818" />
+
+  <!-- CONTENEDOR PRINCIPAL EXTERIOR -->
+  <rect x="20" y="20" width="1160" height="330" fill="#1e1e1e" stroke="#555555" stroke-width="1" />
+
+  <!-- ENCABEZADO SUPERIOR DEL DIAGRAMA -->
+  <rect x="30" y="30" width="1140" height="30" fill="#252525" stroke="#444444" stroke-width="1" />
+  <text x="40" y="50" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="13" font-weight="bold" fill="#e0e0e0" letter-spacing="0.5">Estructura Organizacional Adaptada en Pristinoplant (Desarrollo Unipersonal + Cultivador Real)</text>
+
+  <!-- SECCIÓN IZQUIERDA: DESARROLLADOR UNIPERSONAL (TESISTA) -->
+  <g transform="translate(30, 70)">
+    <rect width="735" height="265" fill="#202020" stroke="#444444" stroke-width="1" />
+    <rect width="735" height="25" fill="#2a2a2a" stroke="#444444" stroke-width="1" />
+    <text x="367.5" y="17" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="12" font-weight="bold" fill="#66c2ff" text-anchor="middle">ACTOR REAL 1: DESARROLLADOR UNIPERSONAL (TESISTA — JULIO FLORES)</text>
+
+    <!-- Sub-rol 1: Facilitador -->
+    <g transform="translate(15, 38)">
+      <rect width="225" height="212" fill="#262626" stroke="#555555" stroke-width="1" />
+      <text x="112.5" y="24" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">Facilitador del Proyecto</text>
+      <text x="112.5" y="40" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" font-style="italic" fill="#aaaaaa" text-anchor="middle">Gestión y Operaciones Cloud</text>
+      <line x1="10" y1="48" x2="215" y2="48" stroke="#3c3c3c" stroke-width="1" />
+
+      <text x="10" y="68" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Planificación de iteraciones I1-I5.</text>
+      <text x="10" y="86" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Gestión de entregables y roadmap.</text>
+      <text x="10" y="104" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Despliegue VPS propio (Docker).</text>
+      <text x="10" y="122" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Config. Postgres, InfluxDB, MQTT.</text>
+      <text x="10" y="140" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Monitoreo de cuotas telemétricas.</text>
+      <text x="10" y="170" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="9.5" font-style="italic" fill="#888888">Asume control de infraestructura.</text>
+    </g>
+
+    <!-- Sub-rol 2: Consejero -->
+    <g transform="translate(255, 38)">
+      <rect width="225" height="212" fill="#262626" stroke="#555555" stroke-width="1" />
+      <text x="112.5" y="24" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">Consejero (Counselor)</text>
+      <text x="112.5" y="40" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" font-style="italic" fill="#aaaaaa" text-anchor="middle">Arquitectura HW e IoT</text>
+      <line x1="10" y1="48" x2="215" y2="48" stroke="#3c3c3c" stroke-width="1" />
+
+      <text x="10" y="68" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Circuito relés + contactor 11A.</text>
+      <text x="10" y="86" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Supresión EMI/Diafonía UTP Cat6.</text>
+      <text x="10" y="104" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Reset de sensores por Power Cycle.</text>
+      <text x="10" y="122" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Parche SSL/MQTT (simple2.py).</text>
+      <text x="10" y="140" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Selección microcontrolador ESP32.</text>
+      <text x="10" y="170" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="9.5" font-style="italic" fill="#888888">Garantiza estabilidad en campo.</text>
+    </g>
+
+    <!-- Sub-rol 3: Equipo de Dev -->
+    <g transform="translate(495, 38)">
+      <rect width="225" height="212" fill="#262626" stroke="#555555" stroke-width="1" />
+      <text x="112.5" y="24" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">Equipo de Desarrollo</text>
+      <text x="112.5" y="40" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" font-style="italic" fill="#aaaaaa" text-anchor="middle">Fullstack &amp; Firmware</text>
+      <line x1="10" y1="48" x2="215" y2="48" stroke="#3c3c3c" stroke-width="1" />
+
+      <text x="10" y="68" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Frontend Next.js (/monitoring).</text>
+      <text x="10" y="86" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• APIs Backend en TypeScript.</text>
+      <text x="10" y="104" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Firmware MicroPython (.mpy).</text>
+      <text x="10" y="122" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Inferencia de riego/lluvia deltas.</text>
+      <text x="10" y="140" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Pruebas rebuild-rain-history.ts.</text>
+      <text x="10" y="170" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="9.5" font-style="italic" fill="#888888">Implementa software y hardware.</text>
+    </g>
+  </g>
+
+  <!-- SECCIÓN DERECHA: AGRÓNOMO / CULTIVADOR REAL -->
+  <g transform="translate(780, 70)">
+    <rect width="390" height="265" fill="#202020" stroke="#444444" stroke-width="1" />
+    <rect width="390" height="25" fill="#2a2a2a" stroke="#444444" stroke-width="1" />
+    <text x="195" y="17" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="12" font-weight="bold" fill="#4ade80" text-anchor="middle">ACTOR REAL 2: AGRÓNOMO / CULTIVADOR REAL</text>
+
+    <!-- Sub-rol 4: Cliente / Usuario Final -->
+    <g transform="translate(15, 38)">
+      <rect width="360" height="212" fill="#262626" stroke="#555555" stroke-width="1" />
+      <text x="180" y="24" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="12" font-weight="bold" fill="#ffffff" text-anchor="middle">Cliente / Usuario Final (Customer / End User)</text>
+      <text x="180" y="40" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" font-style="italic" fill="#aaaaaa" text-anchor="middle">Experto Botánico — Invernadero de Orquídeas Real</text>
+      <line x1="15" y1="48" x2="345" y2="48" stroke="#3c3c3c" stroke-width="1" />
+
+      <text x="15" y="68" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Definición de pautas de riego interdiario para orquídeas.</text>
+      <text x="15" y="86" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Establecimiento de umbrales críticos T / HR en orquideario.</text>
+      <text x="15" y="104" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Co-diseño de reglas para cancelación de riego ante lluvias.</text>
+      <text x="15" y="122" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Rutina de mantenimiento de filtro (2x por semana).</text>
+      <text x="15" y="140" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Inspección in-situ del tablero, electroválvulas y panel web.</text>
+      <text x="15" y="158" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10" fill="#cccccc">• Feedback continuo sobre fallas climáticas en campo.</text>
+      <text x="15" y="186" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="9.5" font-style="italic" fill="#888888">Valida el valor práctico y la factibilidad agronómica del sistema.</text>
+    </g>
+  </g>
+</svg>

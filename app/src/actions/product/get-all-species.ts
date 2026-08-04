@@ -13,6 +13,9 @@ export const getAllSpeciesWithImages = async () => {
           select: {
             url: true,
           },
+          orderBy: {
+            position: 'asc',
+          },
         },
         genus: {
           select: {

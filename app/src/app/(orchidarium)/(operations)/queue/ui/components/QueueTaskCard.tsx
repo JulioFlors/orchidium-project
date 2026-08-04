@@ -162,12 +162,7 @@ export function QueueTaskCard({ task, onCancel, icon, colorClassName }: QueueTas
                   hasDbId={hasDbId}
                   status={
                     task.status as
-                      | 'PENDING'
-                      | 'IN_PROGRESS'
-                      | 'COMPLETED'
-                      | 'CANCELED'
-                      | 'FAILED'
-                      | 'EXPIRED'
+                      'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELED' | 'FAILED' | 'EXPIRED'
                   }
                 />
               </div>

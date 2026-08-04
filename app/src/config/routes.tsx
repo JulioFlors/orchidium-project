@@ -23,7 +23,7 @@ export const shopRoutes: ShopRoute[] = [
     featuredItem: {
       name: 'Dendrobium Striata',
       image: 'plants/orchids/orchids.webp',
-      url: '/product/dendrobium-striata',
+      url: '/plant/dendrobium-striata',
     },
     categories: [
       {
@@ -105,21 +105,18 @@ export const adminRoutes: AdminRoute[] = [
         name: 'Catálogo',
         url: '/catalog',
         icon: <IoLeafOutline />,
-        image: '/imgs/psyduck_0054.webp',
         description: 'Gestión de catálogo botánico',
       },
       {
-        name: 'Gestión Stock',
+        name: 'Stock',
         url: '/stock',
         icon: <IoListOutline />,
-        image: '/imgs/psyduck_0054.webp',
         description: 'Movimientos y lotes',
       },
       {
         name: 'Tienda',
         url: '/shop-manager',
         icon: <IoImagesOutline />,
-        image: '/imgs/psyduck_0054.webp',
         description: 'Fotos y precios públicos',
       },
     ],

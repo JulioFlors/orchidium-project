@@ -84,20 +84,31 @@ export async function recordTaskEvent(
         return null
       }
 
-      const terminalStatuses: TaskStatus[] = [
-        TaskStatus.COMPLETED,
-        TaskStatus.CANCELLED,
-        TaskStatus.EXPIRED,
-        TaskStatus.FAILED,
-      ]
-
-      const isCurrentTerminal = terminalStatuses.includes(currentTask.status)
-      const isNewTerminal = terminalStatuses.includes(status)
-      const isStatusChange = currentTask.status !== status
-
-      if (isCurrentTerminal) {
+      // Estados verdaderamente terminales e inmutables
+      if (
+        currentTask.status === TaskStatus.COMPLETED ||
+        currentTask.status === TaskStatus.CANCELLED
+      ) {
         return null
       }
+
+      // Si la tarea expiró, no se permite cambiar de estado excepto para actualizar notas
+      if (currentTask.status === TaskStatus.EXPIRED && status !== TaskStatus.EXPIRED) {
+        return null
+      }
+
+      // Si la tarea falló/fue interrumpida por el nodo offline:
+      // Se permite reanudarla (DISPATCHED) o expirarla (EXPIRED) al vencer la ventana de oportunidad.
+      if (
+        currentTask.status === TaskStatus.FAILED &&
+        status !== TaskStatus.DISPATCHED &&
+        status !== TaskStatus.EXPIRED &&
+        status !== TaskStatus.FAILED
+      ) {
+        return null
+      }
+
+      const isStatusChange = currentTask.status !== status
 
       let resultRecord: TaskLog | null = currentTask as unknown as TaskLog
 
@@ -106,31 +117,18 @@ export async function recordTaskEvent(
         const alreadyLogged =
           status === TaskStatus.DISPATCHED ? false : currentAttemptStatuses.includes(status)
 
-        let shouldUpdateStatus = true
-
-        if (isCurrentTerminal && currentTask.status !== status) {
-          shouldUpdateStatus = false
-        }
-
-        if (shouldUpdateStatus) {
-          resultRecord = await tx.taskLog.update({
-            where: { id: taskId },
-            data: {
-              status,
-              notes,
-              executedAt:
-                status === TaskStatus.IN_PROGRESS && !currentTask.actualStartAt
-                  ? new Date()
-                  : undefined,
-              ...extraData,
-            },
-          })
-        } else {
-          resultRecord = await tx.taskLog.update({
-            where: { id: taskId },
-            data: { notes, ...extraData },
-          })
-        }
+        resultRecord = await tx.taskLog.update({
+          where: { id: taskId },
+          data: {
+            status,
+            notes,
+            executedAt:
+              status === TaskStatus.IN_PROGRESS && !currentTask.actualStartAt
+                ? new Date()
+                : undefined,
+            ...extraData,
+          },
+        })
 
         // Registrar en TaskEventLog únicamente si no se había registrado previamente
         if (!alreadyLogged) {

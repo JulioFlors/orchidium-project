@@ -2,13 +2,13 @@ import type { Metadata } from 'next'
 
 import { SWRConfig } from 'swr'
 
-export const dynamic = 'force-dynamic'
-
 import { MonitoringView } from './ui'
 
 import { getSensorData, getRainData } from '@/actions'
 import { getLastHeartbeat } from '@/lib/server/environment'
 import { ZoneType } from '@/config/mappings'
+
+export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
   title: 'Monitor Ambiental',

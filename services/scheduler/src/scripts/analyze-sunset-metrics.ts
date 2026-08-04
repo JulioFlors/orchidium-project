@@ -49,7 +49,7 @@ async function main() {
     ORDER BY time ASC
   `
 
-  const rows: any[] = []
+  const rows: Record<string, unknown>[] = []
   const stream = influxClient.query(query)
 
   for await (const row of stream) {
@@ -83,7 +83,6 @@ async function main() {
 
     if (tempBatches.length < 4 || humBatches.length < 4) continue
 
-    const currentMinTemp = tempBatches[0].samples[tempBatches[0].samples.length - 1].value
     const currentMaxHum = humBatches[0].samples[humBatches[0].samples.length - 1].value
 
     // Pre-calm (Batches 1, 2, 3)

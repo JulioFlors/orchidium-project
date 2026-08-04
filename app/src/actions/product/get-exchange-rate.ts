@@ -46,6 +46,7 @@ export async function getLatestExchangeRate(): Promise<number | null> {
 
     return latest ? latest.rate : null
   } catch (error) {
+    // eslint-disable-next-line no-console
     console.error('Error al consultar getLatestExchangeRate en base de datos:', error)
 
     return null

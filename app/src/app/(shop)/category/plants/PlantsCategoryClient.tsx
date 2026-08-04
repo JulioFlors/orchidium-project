@@ -21,6 +21,7 @@ export default function PlantsCategoryClient({ initialCategoriesData }: Props) {
     return initialCategoriesData
       .flatMap((data) => Object.values(data.speciesByGenus).flat())
       .filter((species) => species.isFlowering)
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'))
   }, [initialCategoriesData])
 
   return (
@@ -39,23 +40,36 @@ export default function PlantsCategoryClient({ initialCategoriesData }: Props) {
         </div>
       )}
 
-      {initialCategoriesData.map((data, catIndex) => (
-        <div
-          key={data.category.slug}
-          className="scroll-mt-30"
-          id={catIndex === 0 ? 'main-content' : undefined}
-        >
-          <Title className={`ml-1 ${catIndex > 0 ? 'mt-0!' : ''}`} title={data.category.name} />
+      {initialCategoriesData.map((data, catIndex) => {
+        const sortedGenera = Object.entries(data.speciesByGenus).sort(([genusA], [genusB]) =>
+          genusA.localeCompare(genusB, 'es'),
+        )
 
-          {Object.entries(data.speciesByGenus).map(([genus, species], groupIndex) => (
-            <div key={genus} className="scroll-mt-15" id={genus.toLowerCase()}>
-              <Subtitle className="ml-1 w-[calc(100%-8px)]! px-0" subtitle={genus} />
+        return (
+          <div
+            key={data.category.slug}
+            className="scroll-mt-30"
+            id={catIndex === 0 ? 'main-content' : undefined}
+          >
+            <Title className={`ml-1 ${catIndex > 0 ? 'mt-0!' : ''}`} title={data.category.name} />
 
-              <ProductGrid index={catIndex === 0 && groupIndex === 0 ? 0 : -1} products={species} />
-            </div>
-          ))}
-        </div>
-      ))}
+            {sortedGenera.map(([genus, species], groupIndex) => {
+              const sortedSpecies = [...species].sort((a, b) => a.name.localeCompare(b.name, 'es'))
+
+              return (
+                <div key={genus} className="scroll-mt-15" id={genus.toLowerCase()}>
+                  <Subtitle className="ml-1 w-[calc(100%-8px)]! px-0" subtitle={genus} />
+
+                  <ProductGrid
+                    index={catIndex === 0 && groupIndex === 0 ? 0 : -1}
+                    products={sortedSpecies}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        )
+      })}
 
       <div className="py-10 text-center">
         <span className="text-secondary text-[10px] font-bold tracking-widest uppercase opacity-30">

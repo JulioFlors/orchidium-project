@@ -14,6 +14,8 @@ export * from './inventory/genus-actions'
 
 export * from './inventory/species-actions'
 
+export * from './inventory/plant-actions'
+
 export * from './inventory/store-actions'
 
 export * from './lab/agrochemicals'
@@ -45,5 +47,11 @@ export * from './product/get-species-by-type'
 export * from './product/get-stock-by-slug'
 
 export * from './product/get-exchange-rate'
+
+export * from './checkout/address-actions'
+
+export * from './checkout/order-actions'
+
+export * from './sales/sales-actions'
 
 export * from './storage/upload-actions'

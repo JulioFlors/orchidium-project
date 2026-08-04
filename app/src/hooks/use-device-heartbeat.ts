@@ -54,8 +54,7 @@ export const useDeviceHeartbeat = (
   })
 
   const statusData = messages[topic] as
-    | { payload: unknown; receivedAt: number; isRetained: boolean }
-    | undefined
+    { payload: unknown; receivedAt: number; isRetained: boolean } | undefined
 
   const isRetained = statusData?.isRetained ?? false
 

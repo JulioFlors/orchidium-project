@@ -165,10 +165,11 @@ export function InferredRainGuide() {
 
             <ul className="mt-1 flex flex-col gap-2 leading-relaxed">
               <li>
-                <span className="text-primary font-semibold">☀️ Recuperación Solar:</span> Cada
-                muestra del lote (o las que existan) debe ser{' '}
-                <span className="text-primary">&ge; 26k lux</span> sin excepción. Garantiza sol
-                pleno y constante, descartando picos momentáneos entre nubes.
+                <span className="text-primary font-semibold">☀️ Recuperación Solar:</span> Evalúa de
+                forma deslizante las muestras de luz de los últimos 20 min para identificar la
+                primera sub-ventana continua de 10 min donde cada lectura sea{' '}
+                <span className="text-primary">&ge; 26k lux</span>. Garantiza sol pleno sostenido y
+                marca el timestamp de cese al inicio exacto de dicha ráfaga solar.
               </li>
               <li>
                 <span className="text-primary font-semibold">🌤️ Recuperación Progresiva:</span>{' '}
@@ -187,11 +188,19 @@ export function InferredRainGuide() {
               </li>
               <li>
                 <span className="text-primary font-semibold">☁️ Cese por Estancamiento:</span>{' '}
-                Cierra el evento cuando las variables climáticas se estabilizan dentro del lote actual (últimos 10 min). Se evalúa que la temperatura presente una variación neta ≤ 0.4°C y que la humedad tenga una variación neta ≤ 1.0% HR. Si el ambiente está saturado 100% HR el requisito de humedad se omite.
+                Cierra el evento cuando las variables climáticas se estabilizan al evaluar
+                sub-ventanas deslizantes de 10 min dentro de las muestras de los últimos 20 min. Se
+                exige que la variación neta de temperatura sea ≤ 0.4°C y que la humedad presente una
+                variación neta ≤ 1.0% HR (omitido si el ambiente alcanza 100% HR). El timestamp de
+                fin se ajusta con precisión al término de la sub-ventana estabilizada.
               </li>
               <li>
-                <span className="text-primary font-semibold">🛡️ Protección Térmica:</span>{' '}
-                Bloquea el Cese por Estancamiento mientras se detecte un enfriamiento activo (variación neta &gt; 0.4°C). Para evitar falsos cierres, se contrasta la temperatura mínima del lote actual con la temperatura máxima alcanzada entre el lote actual y el anterior (una ventana combinada de 20 minutos).
+                <span className="text-primary font-semibold">
+                  🛡️ Inspección Multiamplia (20 min):
+                </span>{' '}
+                Evita la rigidez de lotes fijos analizando continuamente las muestras de los últimos
+                20 minutos de forma deslizante. Permite detectar el primer tramo estabilizado y
+                desbloquear el cese sin arrastrar caídas térmicas antiguas.
               </li>
             </ul>
           </div>

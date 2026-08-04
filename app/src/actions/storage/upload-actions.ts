@@ -26,7 +26,7 @@ export async function generateUploadPresignedUrl(key: string, contentType: strin
       ContentType: contentType,
     })
 
-    const presignedUrl = await getSignedUrl(r2, command, { expiresIn: 900 })
+    const presignedUrl = await getSignedUrl(r2 as never, command as never, { expiresIn: 900 })
     const publicUrl = `${R2_PUBLIC_URL}/${key}`
 
     return { ok: true, presignedUrl, publicUrl }

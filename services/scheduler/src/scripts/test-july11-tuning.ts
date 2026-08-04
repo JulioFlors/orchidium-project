@@ -534,7 +534,6 @@ function runSimulation(
     } else {
       // CIERRE
       const currentTemp = tempBatches[0].min
-      const currentHum = humBatches[0].max
 
       minTempInRain = Math.min(minTempInRain, currentMinTemp)
       maxHumInRain = Math.max(maxHumInRain, currentMaxHum)

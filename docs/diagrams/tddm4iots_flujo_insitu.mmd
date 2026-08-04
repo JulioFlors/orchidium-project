@@ -1,0 +1,7 @@
+graph LR
+    subgraph FLUJO_IN_SITU["CICLO ITERATIVO IN-SITU (TDDM4IoTS + DEVOPS)"]
+        A["1. Entrada / Diagnóstico<br>Requisitos y Observaciones In-Situ"] --> B["2. Diseño y Construcción<br>Prototipado Rápido HW/SW"]
+        B --> C["3. Despliegue en Caliente<br>Monitoreo Real en Invernadero"]
+        C --> D["4. Estabilización Operativa<br>Módulo Robusto y Consolidado"]
+        C -.->|"Detector de Bugs / Fallos Climáticos"| B
+    end

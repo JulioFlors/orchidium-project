@@ -37,6 +37,61 @@ export async function registerPestSighting(data: {
   plantId?: string
 }) {
   try {
+    const now = new Date()
+    const dateLimit = new Date(now)
+
+    dateLimit.setDate(dateLimit.getDate() - 30)
+
+    const stats = await prisma.dailyEnvironmentStat.findMany({
+      where: {
+        zone: data.zone,
+        date: {
+          gte: dateLimit,
+          lte: now,
+        },
+      },
+    })
+
+    let avgTemp30d: number | null = null
+    let avgHum30d: number | null = null
+    let avgDli30d: number | null = null
+    let highHumHours30d: number | null = null
+
+    if (stats.length > 0) {
+      let tempSum = 0,
+        tempCount = 0
+      let humSum = 0,
+        humCount = 0
+      let dliSum = 0,
+        dliCount = 0
+      let highHumSum = 0,
+        highHumCount = 0
+
+      for (const stat of stats) {
+        if (stat.avgTemperature !== null && stat.avgTemperature !== undefined) {
+          tempSum += stat.avgTemperature
+          tempCount++
+        }
+        if (stat.avgHumidity !== null && stat.avgHumidity !== undefined) {
+          humSum += stat.avgHumidity
+          humCount++
+        }
+        if (stat.dli !== null && stat.dli !== undefined) {
+          dliSum += stat.dli
+          dliCount++
+        }
+        if (stat.highHumidityHours !== null && stat.highHumidityHours !== undefined) {
+          highHumSum += stat.highHumidityHours
+          highHumCount++
+        }
+      }
+
+      if (tempCount > 0) avgTemp30d = tempSum / tempCount
+      if (humCount > 0) avgHum30d = humSum / humCount
+      if (dliCount > 0) avgDli30d = dliSum / dliCount
+      if (highHumCount > 0) highHumHours30d = highHumSum / highHumCount
+    }
+
     const sighting = await prisma.pestSighting.create({
       data: {
         pestId: data.pestId,
@@ -45,7 +100,11 @@ export async function registerPestSighting(data: {
         severity: data.severity,
         notes: data.notes,
         plantId: data.plantId,
-        capturedAt: new Date(),
+        capturedAt: now,
+        avgTemp30d,
+        avgHum30d,
+        avgDli30d,
+        highHumHours30d,
       },
       include: {
         pest: true,
@@ -99,10 +158,10 @@ export async function registerFlowering(data: {
       ? plant.location?.zone || ('ZONA_A' as ZoneType)
       : ('EXTERIOR' as ZoneType)
 
-    // 3. Consultar las métricas de DailyEnvironmentStat de los últimos 7 días
+    // 3. Consultar las métricas de DailyEnvironmentStat de los últimos 30 días
     const dateLimit = new Date(data.startDate)
 
-    dateLimit.setDate(dateLimit.getDate() - 7)
+    dateLimit.setDate(dateLimit.getDate() - 30)
 
     const stats = await prisma.dailyEnvironmentStat.findMany({
       where: {
@@ -115,12 +174,13 @@ export async function registerFlowering(data: {
     })
 
     // 4. Calcular los promedios de las métricas
-    let dliAtInduction = null
-    let difAtInduction = null
-    let tempDayAverage = null
-    let tempNightAverage = null
-    let humDayAverage = null
-    let humNightAverage = null
+    let dliAtInduction: number | null = null
+    let difAtInduction: number | null = null
+    let tempDayAverage: number | null = null
+    let tempNightAverage: number | null = null
+    let humDayAverage: number | null = null
+    let humNightAverage: number | null = null
+    let vpdAverageAtInduction: number | null = null
 
     if (stats.length > 0) {
       let dliSum = 0,
@@ -135,6 +195,8 @@ export async function registerFlowering(data: {
         humDayCount = 0
       let humNightSum = 0,
         humNightCount = 0
+      let vpdSum = 0,
+        vpdCount = 0
 
       for (const stat of stats) {
         if (stat.dli !== null && stat.dli !== undefined) {
@@ -161,6 +223,10 @@ export async function registerFlowering(data: {
           humNightSum += stat.avgHumNight
           humNightCount++
         }
+        if (stat.vpdAvg !== null && stat.vpdAvg !== undefined) {
+          vpdSum += stat.vpdAvg
+          vpdCount++
+        }
       }
 
       if (dliCount > 0) dliAtInduction = dliSum / dliCount
@@ -169,9 +235,10 @@ export async function registerFlowering(data: {
       if (tempNightCount > 0) tempNightAverage = tempNightSum / tempNightCount
       if (humDayCount > 0) humDayAverage = humDaySum / humDayCount
       if (humNightCount > 0) humNightAverage = humNightSum / humNightCount
+      if (vpdCount > 0) vpdAverageAtInduction = vpdSum / vpdCount
     }
 
-    // 5. Crear el FloweringEvent con la climatología de inducción asociada
+    // 5. Crear el FloweringEvent con la climatología de inducción asociada (30 días)
     const event = await prisma.floweringEvent.create({
       data: {
         plantId: data.plantId,
@@ -182,6 +249,8 @@ export async function registerFlowering(data: {
         tempNightAverage,
         humDayAverage,
         humNightAverage,
+        vpdAverageAtInduction,
+        inductionWindowDays: 30,
         notes: data.notes || null,
       },
     })
@@ -300,6 +369,206 @@ export async function getActiveBiologicalEvents() {
     return {
       success: false,
       error: 'No se pudieron cargar los eventos biológicos activos.',
+    }
+  }
+}
+
+/**
+ * Obtiene métricas analíticas agregadas de floración (estacionalidad, duración, frecuencia) y plagas (correlaciones 30d).
+ */
+export async function getBiologicalAnalytics() {
+  try {
+    const oneYearAgo = new Date()
+
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+
+    // 1. Todos los eventos de floración históricos
+    const floweringEvents = await prisma.floweringEvent.findMany({
+      include: {
+        plant: {
+          include: {
+            species: {
+              include: {
+                genus: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { startDate: 'desc' },
+    })
+
+    // 2. Calcular distribución por mes (estacionalidad), duración promedio y conteo anual
+    const monthlyFloweringDistribution: Record<number, number> = {}
+
+    for (let i = 1; i <= 12; i++) monthlyFloweringDistribution[i] = 0
+
+    let totalDurationDays = 0
+    let closedFloweringCount = 0
+    let lastYearFloweringCount = 0
+
+    for (const fe of floweringEvents) {
+      const month = new Date(fe.startDate).getMonth() + 1
+
+      monthlyFloweringDistribution[month] = (monthlyFloweringDistribution[month] || 0) + 1
+
+      if (new Date(fe.startDate) >= oneYearAgo) {
+        lastYearFloweringCount++
+      }
+
+      if (fe.endDate) {
+        const durationMs = new Date(fe.endDate).getTime() - new Date(fe.startDate).getTime()
+        const durationDays = Math.max(1, Math.round(durationMs / (1000 * 60 * 60 * 24)))
+
+        totalDurationDays += durationDays
+        closedFloweringCount++
+      }
+    }
+
+    const avgFloweringDurationDays =
+      closedFloweringCount > 0
+        ? Math.round((totalDurationDays / closedFloweringCount) * 10) / 10
+        : 0
+
+    // 3. Avistamientos de plagas con su correlación de 30 días
+    const pestSightings = await prisma.pestSighting.findMany({
+      include: {
+        pest: true,
+      },
+      orderBy: { capturedAt: 'desc' },
+    })
+
+    const pestFrequency: Record<
+      string,
+      { name: string; count: number; avgTemp30d: number | null; avgHum30d: number | null }
+    > = {}
+    const monthlyPestDistribution: Record<number, number> = {}
+
+    for (let i = 1; i <= 12; i++) monthlyPestDistribution[i] = 0
+
+    for (const ps of pestSightings) {
+      const pName = ps.pestName || ps.pest?.name || 'Desconocida'
+      const month = new Date(ps.capturedAt).getMonth() + 1
+
+      monthlyPestDistribution[month] = (monthlyPestDistribution[month] || 0) + 1
+
+      if (!pestFrequency[pName]) {
+        pestFrequency[pName] = {
+          name: pName,
+          count: 0,
+          avgTemp30d: ps.avgTemp30d,
+          avgHum30d: ps.avgHum30d,
+        }
+      }
+      pestFrequency[pName].count++
+    }
+
+    return {
+      success: true,
+      data: {
+        totalFloweringEvents: floweringEvents.length,
+        lastYearFloweringCount,
+        avgFloweringDurationDays,
+        monthlyFloweringDistribution,
+        totalPestSightings: pestSightings.length,
+        monthlyPestDistribution,
+        pestFrequencyList: Object.values(pestFrequency),
+      },
+    }
+  } catch (error) {
+    Logger.error('Error al obtener analítica biológica:', error)
+
+    return {
+      success: false,
+      error: 'Error al calcular analíticas biológicas.',
+    }
+  }
+}
+
+/**
+ * Obtiene analítica de floración específica para una especie (por su slug o speciesId).
+ */
+export async function getSpeciesFloweringAnalytics(speciesSlug: string) {
+  try {
+    const species = await prisma.species.findUnique({
+      where: { slug: speciesSlug },
+      select: { id: true, name: true },
+    })
+
+    if (!species) {
+      return { success: false, error: 'Especie no encontrada.' }
+    }
+
+    const oneYearAgo = new Date()
+
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+
+    const floweringEvents = await prisma.floweringEvent.findMany({
+      where: {
+        plant: {
+          speciesId: species.id,
+        },
+      },
+      include: {
+        plant: {
+          select: {
+            id: true,
+            currentSize: true,
+            location: true,
+          },
+        },
+      },
+      orderBy: { startDate: 'desc' },
+    })
+
+    const monthlyFloweringDistribution: Record<number, number> = {}
+
+    for (let i = 1; i <= 12; i++) monthlyFloweringDistribution[i] = 0
+
+    let totalDurationDays = 0
+    let closedFloweringCount = 0
+    let lastYearFloweringCount = 0
+
+    for (const fe of floweringEvents) {
+      const month = new Date(fe.startDate).getMonth() + 1
+
+      monthlyFloweringDistribution[month] = (monthlyFloweringDistribution[month] || 0) + 1
+
+      if (new Date(fe.startDate) >= oneYearAgo) {
+        lastYearFloweringCount++
+      }
+
+      if (fe.endDate) {
+        const durationMs = new Date(fe.endDate).getTime() - new Date(fe.startDate).getTime()
+        const durationDays = Math.max(1, Math.round(durationMs / (1000 * 60 * 60 * 24)))
+
+        totalDurationDays += durationDays
+        closedFloweringCount++
+      }
+    }
+
+    const avgFloweringDurationDays =
+      closedFloweringCount > 0
+        ? Math.round((totalDurationDays / closedFloweringCount) * 10) / 10
+        : 0
+
+    return {
+      success: true,
+      data: {
+        speciesName: species.name,
+        totalFloweringEvents: floweringEvents.length,
+        lastYearFloweringCount,
+        avgFloweringDurationDays,
+        monthlyFloweringDistribution,
+        events: floweringEvents,
+      },
+    }
+  } catch (error) {
+    Logger.error('Error al obtener analítica de floración por especie:', error)
+
+    return {
+      success: false,
+      error: 'Error al obtener la analítica de floración de la especie.',
     }
   }
 }

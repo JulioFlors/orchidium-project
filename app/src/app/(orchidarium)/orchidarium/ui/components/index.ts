@@ -9,3 +9,5 @@ export * from './QuickActionCard'
 export * from './QuickActionsGrid'
 
 export * from './BiologicalAuditPanel'
+
+export * from './BiologicalAnalyticsGrid'

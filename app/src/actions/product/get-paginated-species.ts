@@ -42,6 +42,9 @@ export const getPaginatedSpeciesWithImages = async ({
           select: {
             url: true,
           },
+          orderBy: {
+            position: 'asc',
+          },
         },
         // Incluimos el género para poder mostrar su nombre
         genus: {

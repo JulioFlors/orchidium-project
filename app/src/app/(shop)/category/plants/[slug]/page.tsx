@@ -70,21 +70,29 @@ export default async function CategoryPage({ params }: Props) {
     {} as Record<string, SpeciesWithGenus[]>,
   )
 
+  const sortedGeneraEntries = Object.entries(speciesByGenus).sort(([genusA], [genusB]) =>
+    genusA.localeCompare(genusB, 'es'),
+  )
+
   return (
     <div key={category.slug} className="scroll-mt-30" id="#main-content">
       {/* Mostrar título de la CATEGORÍA */}
       <Title className="ml-1" title={category.name} />
 
-      {/* Iteramos sobre los géneros agrupados */}
-      {Object.entries(speciesByGenus).map(([genus, species], index) => (
-        <div key={genus} className="scroll-mt-15" id={genus.toLowerCase()}>
-          {/* Mostrar título del GENERO */}
-          <Subtitle className="ml-1 w-[calc(100%-8px)]! px-0" subtitle={genus} />
+      {/* Iteramos sobre los géneros agrupados ordenados alfabéticamente */}
+      {sortedGeneraEntries.map(([genus, speciesList], index) => {
+        const sortedSpecies = [...speciesList].sort((a, b) => a.name.localeCompare(b.name, 'es'))
 
-          {/* Mostrar grid de productos para este GENERO */}
-          <ProductGrid index={index === 0 ? 0 : -1} products={species} />
-        </div>
-      ))}
+        return (
+          <div key={genus} className="scroll-mt-15" id={genus.toLowerCase()}>
+            {/* Mostrar título del GENERO */}
+            <Subtitle className="ml-1 w-[calc(100%-8px)]! px-0" subtitle={genus} />
+
+            {/* Mostrar grid de productos para este GENERO */}
+            <ProductGrid index={index === 0 ? 0 : -1} products={sortedSpecies} />
+          </div>
+        )
+      })}
     </div>
   )
 }

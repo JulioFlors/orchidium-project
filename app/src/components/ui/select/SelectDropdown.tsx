@@ -9,6 +9,7 @@ export interface SelectOption {
   label: string
   value: string | number
   disabled?: boolean
+  color?: string
 }
 
 interface SelectDropdownProps {
@@ -214,8 +215,19 @@ export function SelectDropdown({
         type="button"
         onClick={handleToggle}
       >
-        <span className={clsx('truncate', !selectedOption && 'text-secondary/70')}>
-          {selectedOption ? selectedOption.label : placeholder}
+        <span
+          className={clsx(
+            'flex items-center gap-2 truncate',
+            !selectedOption && 'text-secondary/70',
+          )}
+        >
+          {selectedOption?.color && (
+            <span
+              className="h-3 w-3 shrink-0 rounded-full border border-black/15 shadow-xs transition-transform dark:border-white/20"
+              style={{ backgroundColor: selectedOption.color }}
+            />
+          )}
+          <span className="truncate">{selectedOption ? selectedOption.label : placeholder}</span>
         </span>
         <IoChevronDown
           className={clsx('text-secondary h-4 w-4 transition-transform', isOpen && 'rotate-180')}
@@ -247,7 +259,7 @@ export function SelectDropdown({
                   aria-disabled={option.disabled}
                   aria-selected={value === option.value}
                   className={clsx(
-                    'my-0.5 block cursor-pointer rounded-sm px-3 py-1.5 text-left text-sm whitespace-nowrap transition-all',
+                    'my-0.5 flex cursor-pointer items-center gap-2.5 rounded-sm px-3 py-1.5 text-left text-sm whitespace-nowrap transition-all',
                     option.disabled && 'cursor-not-allowed opacity-50',
                     focusedIndex === index && !option.disabled && 'bg-hover-overlay',
                     value === option.value &&
@@ -261,7 +273,13 @@ export function SelectDropdown({
                     if (!option.disabled) setFocusedIndex(index)
                   }}
                 >
-                  {option.label}
+                  {option.color && (
+                    <span
+                      className="h-3 w-3 shrink-0 rounded-full border border-black/15 shadow-xs transition-transform dark:border-white/20"
+                      style={{ backgroundColor: option.color }}
+                    />
+                  )}
+                  <span className="truncate">{option.label}</span>
                 </li>
               ))
             )}

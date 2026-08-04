@@ -31,7 +31,10 @@ export async function getSpecies() {
       orderBy: { name: 'asc' },
       include: {
         genus: { select: { id: true, name: true, type: true } },
-        images: { select: { id: true, url: true } },
+        images: {
+          select: { id: true, url: true },
+          orderBy: { position: 'asc' },
+        },
         _count: { select: { variants: true, plants: true } },
       },
     })
@@ -44,20 +47,43 @@ export async function getSpecies() {
   }
 }
 
-export async function getSpeciesById(id: string) {
+export async function getSpeciesById(identifier: string) {
   try {
-    const species = await prisma.species.findUnique({
-      where: { id },
+    const species = await prisma.species.findFirst({
+      where: {
+        OR: [{ id: identifier }, { slug: identifier }],
+      },
       include: {
         genus: { select: { id: true, name: true, type: true } },
-        images: { select: { id: true, url: true } },
+        images: {
+          select: { id: true, url: true, position: true },
+          orderBy: { position: 'asc' },
+        },
+        variants: {
+          select: { id: true, size: true, price: true, quantity: true, available: true },
+          orderBy: { size: 'asc' },
+        },
+        plants: {
+          select: {
+            id: true,
+            currentSize: true,
+            pottingDate: true,
+            status: true,
+            location: { select: { id: true, zone: true, table: true } },
+            FloweringEvent: {
+              select: { id: true, startDate: true, endDate: true },
+              orderBy: { startDate: 'desc' },
+            },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
         _count: { select: { variants: true, plants: true } },
       },
     })
 
     return { ok: true, species }
   } catch (err) {
-    Logger.error('[Species] Error al obtener especie por ID:', err)
+    Logger.error('[Species] Error al obtener especie por ID o Slug:', err)
 
     return { ok: false, message: 'No se pudo cargar la especie.' }
   }
@@ -207,6 +233,30 @@ export async function deleteSpeciesImage(imageId: string) {
   }
 }
 
+/** Reordena la posición de las imágenes de una especie */
+export async function reorderSpeciesImages(speciesId: string, orderedImageIds: string[]) {
+  try {
+    await prisma.$transaction(
+      orderedImageIds.map((id, index) =>
+        prisma.speciesImage.update({
+          where: { id },
+          data: { position: index },
+        }),
+      ),
+    )
+
+    revalidatePath('/catalog')
+    revalidatePath(`/catalog/${speciesId}`)
+    revalidatePath(`/stock/${speciesId}`)
+
+    return { ok: true }
+  } catch (err) {
+    Logger.error('[Species] Error al reordenar imágenes:', err)
+
+    return { ok: false, message: 'Error al actualizar el orden de las imágenes.' }
+  }
+}
+
 // ─────────────────────────────────────────────────────────────
 // FEATURED & LANDING
 // ─────────────────────────────────────────────────────────────
@@ -296,7 +346,10 @@ export async function getLandingSpecies() {
       },
       include: {
         genus: { select: { id: true, name: true, type: true } },
-        images: { select: { id: true, url: true } },
+        images: {
+          select: { id: true, url: true },
+          orderBy: { position: 'asc' },
+        },
         variants: true,
       },
       take: 9,

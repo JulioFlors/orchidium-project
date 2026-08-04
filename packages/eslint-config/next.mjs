@@ -38,13 +38,6 @@ export const nextConfig = [
       },
     },
     rules: {
-      'prettier/prettier': [
-        'warn',
-        {
-          ...prettierOptions,
-          plugins: ['prettier-plugin-tailwindcss'],
-        },
-      ],
       ...eslintPluginReact.configs.recommended.rules,
       ...eslintPluginJsxA11y.configs.recommended.rules,
       ...eslintPluginReactHooks.configs.recommended.rules,

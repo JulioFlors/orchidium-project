@@ -17,7 +17,7 @@ async function main() {
     `📡 Consultando telemetría de ${startTime.toISOString()} a ${endTime.toISOString()}...`,
   )
   const stream = influxClient.query(query)
-  const rows: any[] = []
+  const rows: Record<string, unknown>[] = []
 
   for await (const row of stream) {
     rows.push(row)

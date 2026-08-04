@@ -1,5 +1,4 @@
 import * as fs from 'fs'
-import * as path from 'path'
 
 import { prisma } from '@package/database'
 
@@ -14,7 +13,9 @@ async function main() {
     process.exit(1)
   }
 
-  const beforeEvents: any[] = JSON.parse(fs.readFileSync(beforeJsonPath, 'utf8'))
+  const beforeEvents: Record<string, unknown>[] = JSON.parse(
+    fs.readFileSync(beforeJsonPath, 'utf8'),
+  )
   const afterEvents = await prisma.rainEvent.findMany({
     where: { isInfered: true },
     orderBy: { startedAt: 'asc' },

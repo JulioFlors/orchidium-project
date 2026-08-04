@@ -140,7 +140,7 @@ export default async function HomePage() {
       title: slide?.title || species?.name || def.defaultTitle,
       subtitle: slide?.speciesId ? '' : def.defaultSubtitle, // Sin descripción si hay especie seleccionada
       image: slide?.imageUrl || def.defaultImage,
-      href: species ? `/product/${species.slug}` : def.defaultHref,
+      href: species ? `/plant/${species.slug}` : def.defaultHref,
     }
   })
 

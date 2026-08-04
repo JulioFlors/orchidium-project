@@ -1,13 +1,31 @@
 packages:
-  - app
-  - packages/*
-  - services/*
+  - 'app'
+  - 'apps/*'
+  - 'packages/*'
+  - 'services/*'
 
-onlyBuiltDependencies:
-  - '@prisma/client'
-  - '@prisma/engines'
-  - '@tailwindcss/oxide'
-  - esbuild
-  - prisma
-  - sharp
-  - unrs-resolver
+allowBuilds:
+  '@prisma/client': true
+  '@prisma/engines': true
+  '@tailwindcss/oxide': true
+  'esbuild': true
+  'prisma': true
+  'protobufjs': true
+  'sharp': true
+  'unrs-resolver': true
+
+minimumReleaseAgeExclude:
+  - tsx@4.23.5
+  - '@next/eslint-plugin-next@16.3.0'
+  - '@typescript-eslint/eslint-plugin@8.66.0'
+  - '@typescript-eslint/parser@8.66.0'
+  - '@typescript-eslint/project-service@8.66.0'
+  - '@typescript-eslint/scope-manager@8.66.0'
+  - '@typescript-eslint/tsconfig-utils@8.66.0'
+  - '@typescript-eslint/type-utils@8.66.0'
+  - '@typescript-eslint/types@8.66.0'
+  - '@typescript-eslint/typescript-estree@8.66.0'
+  - '@typescript-eslint/utils@8.66.0'
+  - '@typescript-eslint/visitor-keys@8.66.0'
+  - eslint-config-next@16.3.0
+  - typescript-eslint@8.66.0

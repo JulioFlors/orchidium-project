@@ -80,7 +80,7 @@ export function SpeciesView({ initialSpecies }: SpeciesViewProps) {
 
   // Ordenamos los tipos de plantas
   const sortedTypes = (Object.keys(speciesByType) as PlantType[]).sort((a, b) =>
-    PLANT_TYPE_LABELS[a].localeCompare(PLANT_TYPE_LABELS[b]),
+    PLANT_TYPE_LABELS[a].localeCompare(PLANT_TYPE_LABELS[b], 'es'),
   )
 
   return (
@@ -109,7 +109,7 @@ export function SpeciesView({ initialSpecies }: SpeciesViewProps) {
               const nameA = generaInType[a][0]?.genus.name ?? ''
               const nameB = generaInType[b][0]?.genus.name ?? ''
 
-              return nameA.localeCompare(nameB)
+              return nameA.localeCompare(nameB, 'es')
             })
 
             return (
@@ -124,6 +124,9 @@ export function SpeciesView({ initialSpecies }: SpeciesViewProps) {
                 <div className="flex flex-col">
                   {sortedGeneraIds.map((genusId) => {
                     const speciesInGenus = generaInType[genusId]
+                    const sortedSpeciesInGenus = [...speciesInGenus].sort((a, b) =>
+                      a.name.localeCompare(b.name, 'es'),
+                    )
                     const genusName = speciesInGenus[0]?.genus.name ?? 'Sin Género'
 
                     return (
@@ -132,7 +135,7 @@ export function SpeciesView({ initialSpecies }: SpeciesViewProps) {
 
                         {/* Grid de Cards */}
                         <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-3 tds-2xl:grid-cols-4 mt-9 grid gap-x-4 gap-y-2">
-                          {speciesInGenus.map((species, i) => (
+                          {sortedSpeciesInGenus.map((species, i) => (
                             <SpeciesInventoryCard key={species.id} index={i} species={species} />
                           ))}
                         </div>

@@ -163,9 +163,12 @@ export function getDominantVibrantColor(imgElement: HTMLImageElement): RGB | nul
     const avgS = winner.totalS / winner.count
     const avgL = winner.totalL / winner.count
 
-    // Boost final: forzar saturación alta (mín 0.75) y luminosidad viva (0.45-0.55)
-    const boostedS = Math.max(avgS, 0.75)
-    const boostedL = Math.min(Math.max(avgL, 0.45), 0.55)
+    // Boost de Vivacidad y Saturación:
+    // 1. Amplificamos la saturación para hacer los colores notablemente más vívidos (mínimo 0.85, máximo 0.98)
+    const boostedS = Math.min(Math.max(avgS * 1.35, 0.85), 0.98)
+
+    // 2. Ajustamos la luminosidad en la ventana dulce (0.48 - 0.55) para que el color brille con máxima pureza cromática
+    const boostedL = Math.min(Math.max(avgL, 0.48), 0.55)
 
     return hslToRgb(avgH, boostedS, boostedL)
   } catch {
@@ -173,25 +176,301 @@ export function getDominantVibrantColor(imgElement: HTMLImageElement): RGB | nul
   }
 }
 
+export interface PresetColor {
+  name: string
+  lightRgb: RGB
+  darkRgb: RGB
+  lightRgbString: string
+  darkRgbString: string
+  hue: number // 0..1
+}
+
+export const PRESET_COLORS: PresetColor[] = [
+  {
+    name: 'Esmeralda',
+    lightRgb: { r: 5, g: 150, b: 105 },
+    darkRgb: { r: 52, g: 211, b: 153 },
+    lightRgbString: 'rgb(5, 150, 105)',
+    darkRgbString: 'rgb(52, 211, 153)',
+    hue: 0.44,
+  },
+  {
+    name: 'Verde',
+    lightRgb: { r: 22, g: 163, b: 74 },
+    darkRgb: { r: 74, g: 222, b: 128 },
+    lightRgbString: 'rgb(22, 163, 74)',
+    darkRgbString: 'rgb(74, 222, 128)',
+    hue: 0.39,
+  },
+  {
+    name: 'Lima',
+    lightRgb: { r: 101, g: 163, b: 13 },
+    darkRgb: { r: 163, g: 230, b: 53 },
+    lightRgbString: 'rgb(101, 163, 13)',
+    darkRgbString: 'rgb(163, 230, 53)',
+    hue: 0.23,
+  },
+  {
+    name: 'Fucsia',
+    lightRgb: { r: 192, g: 38, b: 211 },
+    darkRgb: { r: 232, g: 121, b: 249 },
+    lightRgbString: 'rgb(192, 38, 211)',
+    darkRgbString: 'rgb(232, 121, 249)',
+    hue: 0.81,
+  },
+  {
+    name: 'Rosa',
+    lightRgb: { r: 219, g: 39, b: 119 },
+    darkRgb: { r: 244, g: 114, b: 182 },
+    lightRgbString: 'rgb(219, 39, 119)',
+    darkRgbString: 'rgb(244, 114, 182)',
+    hue: 0.91,
+  },
+  {
+    name: 'Carmín',
+    lightRgb: { r: 225, g: 29, b: 72 },
+    darkRgb: { r: 251, g: 113, b: 133 },
+    lightRgbString: 'rgb(225, 29, 72)',
+    darkRgbString: 'rgb(251, 113, 133)',
+    hue: 0.96,
+  },
+  {
+    name: 'Púrpura',
+    lightRgb: { r: 147, g: 51, b: 234 },
+    darkRgb: { r: 192, g: 132, b: 252 },
+    lightRgbString: 'rgb(147, 51, 234)',
+    darkRgbString: 'rgb(192, 132, 252)',
+    hue: 0.75,
+  },
+  {
+    name: 'Violeta',
+    lightRgb: { r: 124, g: 58, b: 237 },
+    darkRgb: { r: 167, g: 139, b: 250 },
+    lightRgbString: 'rgb(124, 58, 237)',
+    darkRgbString: 'rgb(167, 139, 250)',
+    hue: 0.72,
+  },
+  {
+    name: 'Rojo',
+    lightRgb: { r: 220, g: 38, b: 38 },
+    darkRgb: { r: 248, g: 113, b: 113 },
+    lightRgbString: 'rgb(220, 38, 38)',
+    darkRgbString: 'rgb(248, 113, 113)',
+    hue: 0.0,
+  },
+  {
+    name: 'Naranja',
+    lightRgb: { r: 234, g: 88, b: 12 },
+    darkRgb: { r: 251, g: 146, b: 60 },
+    lightRgbString: 'rgb(234, 88, 12)',
+    darkRgbString: 'rgb(251, 146, 60)',
+    hue: 0.07,
+  },
+  {
+    name: 'Ámbar',
+    lightRgb: { r: 217, g: 119, b: 6 },
+    darkRgb: { r: 251, g: 191, b: 36 },
+    lightRgbString: 'rgb(217, 119, 6)',
+    darkRgbString: 'rgb(251, 191, 36)',
+    hue: 0.09,
+  },
+  {
+    name: 'Amarillo',
+    lightRgb: { r: 202, g: 138, b: 4 },
+    darkRgb: { r: 250, g: 204, b: 21 },
+    lightRgbString: 'rgb(202, 138, 4)',
+    darkRgbString: 'rgb(250, 204, 21)',
+    hue: 0.13,
+  },
+  {
+    name: 'Turquesa',
+    lightRgb: { r: 13, g: 148, b: 136 },
+    darkRgb: { r: 45, g: 212, b: 191 },
+    lightRgbString: 'rgb(13, 148, 136)',
+    darkRgbString: 'rgb(45, 212, 191)',
+    hue: 0.48,
+  },
+  {
+    name: 'Cian',
+    lightRgb: { r: 8, g: 145, b: 178 },
+    darkRgb: { r: 34, g: 211, b: 238 },
+    lightRgbString: 'rgb(8, 145, 178)',
+    darkRgbString: 'rgb(34, 211, 238)',
+    hue: 0.52,
+  },
+  {
+    name: 'Azul Cielo',
+    lightRgb: { r: 2, g: 132, b: 199 },
+    darkRgb: { r: 56, g: 189, b: 248 },
+    lightRgbString: 'rgb(2, 132, 199)',
+    darkRgbString: 'rgb(56, 189, 248)',
+    hue: 0.55,
+  },
+  {
+    name: 'Azul',
+    lightRgb: { r: 37, g: 99, b: 235 },
+    darkRgb: { r: 96, g: 165, b: 250 },
+    lightRgbString: 'rgb(37, 99, 235)',
+    darkRgbString: 'rgb(96, 165, 250)',
+    hue: 0.61,
+  },
+  {
+    name: 'Índigo',
+    lightRgb: { r: 79, g: 70, b: 229 },
+    darkRgb: { r: 129, g: 140, b: 248 },
+    lightRgbString: 'rgb(79, 70, 229)',
+    darkRgbString: 'rgb(129, 140, 248)',
+    hue: 0.66,
+  },
+]
+
+/**
+ * Retorna el preset del catálogo que mejor armoniza con el RGB dominante analizado.
+ */
+export function getDominantPresetColor(dominantRgb: RGB): PresetColor {
+  const { h } = rgbToHsl(dominantRgb.r, dominantRgb.g, dominantRgb.b)
+
+  let bestMatch = PRESET_COLORS[0]
+  let minDiff = 1.0
+
+  for (const preset of PRESET_COLORS) {
+    let diff = Math.abs(preset.hue - h)
+
+    if (diff > 0.5) diff = 1.0 - diff
+
+    if (diff < minDiff) {
+      minDiff = diff
+      bestMatch = preset
+    }
+  }
+
+  return bestMatch
+}
+
+/**
+ * Retorna el preset del catálogo que mayor contraste complementario (+180°) genera.
+ */
+export function getContrastPresetColor(dominantRgb: RGB): PresetColor {
+  const { h } = rgbToHsl(dominantRgb.r, dominantRgb.g, dominantRgb.b)
+  const complementaryH = (h + 0.5) % 1.0
+
+  let bestMatch = PRESET_COLORS[0]
+  let minDiff = 1.0
+
+  for (const preset of PRESET_COLORS) {
+    let diff = Math.abs(preset.hue - complementaryH)
+
+    if (diff > 0.5) diff = 1.0 - diff
+
+    if (diff < minDiff) {
+      minDiff = diff
+      bestMatch = preset
+    }
+  }
+
+  return bestMatch
+}
+
+/**
+ * Encuentra el preset Tailwind más cercano para cualquier string RGB guardado.
+ */
+export function getPresetForColorString(colorStr?: string | null): PresetColor | null {
+  if (!colorStr) return null
+
+  const exact = PRESET_COLORS.find(
+    (p) => p.lightRgbString === colorStr || p.darkRgbString === colorStr,
+  )
+
+  if (exact) return exact
+
+  const match = colorStr.match(/\d+/g)
+
+  if (!match || match.length < 3) return null
+
+  const r = parseInt(match[0], 10)
+  const g = parseInt(match[1], 10)
+  const b = parseInt(match[2], 10)
+  const { h } = rgbToHsl(r, g, b)
+
+  let best = PRESET_COLORS[0]
+  let minDiff = 1.0
+
+  for (const preset of PRESET_COLORS) {
+    let diff = Math.abs(preset.hue - h)
+
+    if (diff > 0.5) diff = 1.0 - diff
+
+    if (diff < minDiff) {
+      minDiff = diff
+      best = preset
+    }
+  }
+
+  return best
+}
+
+/**
+ * Retorna un preset determinista a partir de un string (ej. slug o url) para asegurar recomendación garantizada.
+ */
+export function getFallbackPresetForString(str?: string | null): PresetColor {
+  if (!str) return PRESET_COLORS[0]
+
+  let hash = 0
+
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i)
+    hash |= 0
+  }
+
+  const index = Math.abs(hash) % PRESET_COLORS.length
+
+  return PRESET_COLORS[index]
+}
+
+export type ColorRecommendationMode = 'recommended' | 'contrast' | 'exact'
+
 /**
  * Hook para inferir un Ambient Glow a partir de una Url de imagen dada.
- * Crea un <img> fantasma asíncrono, extrae su color y expone los r,g,b.
+ * Garantiza SIEMPRE un par cromático válido para Light Mode (600) y Dark Mode (400).
  */
-export function useImageColor(imageUrl?: string | null) {
-  const [color, setColor] = useState<RGB | null>(null)
+export function useImageColor(
+  imageUrl?: string | null,
+  mode: ColorRecommendationMode = 'recommended',
+) {
+  const fallbackPreset = getFallbackPresetForString(imageUrl)
+
+  const [colorResult, setColorResult] = useState<{
+    lightColor: RGB
+    darkColor: RGB
+    presetName: string
+    isLoaded: boolean
+  }>({
+    lightColor: fallbackPreset.lightRgb,
+    darkColor: fallbackPreset.darkRgb,
+    presetName: fallbackPreset.name,
+    isLoaded: false,
+  })
 
   useEffect(() => {
     if (!imageUrl) {
-      const t = setTimeout(() => setColor(null), 0)
+      const fb = getFallbackPresetForString(imageUrl)
+      const t = setTimeout(
+        () =>
+          setColorResult({
+            lightColor: fb.lightRgb,
+            darkColor: fb.darkRgb,
+            presetName: fb.name,
+            isLoaded: true,
+          }),
+        0,
+      )
 
       return () => clearTimeout(t)
     }
 
     const img = new Image()
 
-    img.crossOrigin = 'anonymous' // Crucial para S3 y proveedores externos
-
-    // Pasar imágenes externas por el proxy CORS del backend para evitar restricciones de Canvas
+    img.crossOrigin = 'anonymous'
     img.src = imageUrl.startsWith('http')
       ? `/api/image-proxy?url=${encodeURIComponent(imageUrl)}`
       : `${window.location.origin}${imageUrl}`
@@ -199,7 +478,35 @@ export function useImageColor(imageUrl?: string | null) {
     const onLoad = () => {
       const rgb = getDominantVibrantColor(img)
 
-      setColor(rgb)
+      if (rgb) {
+        if (mode === 'recommended') {
+          const preset = getDominantPresetColor(rgb)
+
+          setColorResult({
+            lightColor: preset.lightRgb,
+            darkColor: preset.darkRgb,
+            presetName: preset.name,
+            isLoaded: true,
+          })
+        } else if (mode === 'contrast') {
+          const preset = getContrastPresetColor(rgb)
+
+          setColorResult({
+            lightColor: preset.lightRgb,
+            darkColor: preset.darkRgb,
+            presetName: preset.name,
+            isLoaded: true,
+          })
+        } else {
+          const { h, s } = rgbToHsl(rgb.r, rgb.g, rgb.b)
+          const lightColor = hslToRgb(h, Math.min(s * 1.3, 0.98), 0.48)
+          const darkColor = hslToRgb(h, Math.min(s * 1.4, 0.98), 0.72)
+
+          setColorResult({ lightColor, darkColor, presetName: '', isLoaded: true })
+        }
+      } else {
+        setColorResult((prev) => ({ ...prev, isLoaded: true }))
+      }
     }
 
     img.addEventListener('load', onLoad)
@@ -207,10 +514,19 @@ export function useImageColor(imageUrl?: string | null) {
     return () => {
       img.removeEventListener('load', onLoad)
     }
-  }, [imageUrl])
+  }, [imageUrl, mode])
 
-  // Renderizar la variable "134 23 45" lista para usarse como `--hover-glow: rgb(var(--glow))` o similar
-  const rgbString = color ? `${color.r} ${color.g} ${color.b}` : ''
+  const lightRgbString = `${colorResult.lightColor.r} ${colorResult.lightColor.g} ${colorResult.lightColor.b}`
+  const darkRgbString = `${colorResult.darkColor.r} ${colorResult.darkColor.g} ${colorResult.darkColor.b}`
 
-  return { color, rgbString }
+  return {
+    color: colorResult.lightColor,
+    lightColor: colorResult.lightColor,
+    darkColor: colorResult.darkColor,
+    lightRgbString: `rgb(${lightRgbString})`,
+    darkRgbString: `rgb(${darkRgbString})`,
+    rgbString: `rgb(${lightRgbString})`,
+    presetName: colorResult.presetName,
+    isLoaded: colorResult.isLoaded,
+  }
 }

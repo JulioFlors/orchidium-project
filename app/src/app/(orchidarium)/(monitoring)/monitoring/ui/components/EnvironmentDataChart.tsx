@@ -56,12 +56,12 @@ interface CustomTooltipProps {
   active?: boolean
   payload?: TooltipItem[]
   label?: string | number
-  formatTime: (date: string | number | Date) => string
   color: string
   dataKey: string
-  title: string
   unit: string
   range?: string
+  title?: string
+  formatTime?: (dateVal: string | number | Date) => string
 }
 
 function getCaracasYMD(date: Date): string {
@@ -438,6 +438,7 @@ function CustomTooltip({
           const humVar = getNumberOrNull(data.closeHumVar)
 
           const closeParts: string[] = []
+
           closeParts.push(`☀️ Ilum ~${formatTooltipValue(luxMax, 'lx')} lx`)
           if (tempRecovery !== null) {
             closeParts.push(`🌡️ Temp +${tempRecovery.toFixed(1)}°C`)

@@ -70,7 +70,7 @@ export function Header({ suggestions = [], plantsNavData = [], layoutConfig = nu
           ? {
               name: featured.title || 'Destacado',
               image: featured.imageUrl,
-              url: `/product/${featured.slug || featured.speciesId}`,
+              url: `/plant/${featured.slug || featured.speciesId}`,
             }
           : route.featuredItem
 

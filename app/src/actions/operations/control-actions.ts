@@ -237,14 +237,40 @@ export async function cancelManualTask(taskId: string, notes?: string) {
   }
 }
 
+const STATUS_LIFECYCLE_ORDER: Record<string, number> = {
+  PENDING: 1,
+  WAITING_CONFIRMATION: 2,
+  AUTHORIZED: 3,
+  DISPATCHED: 4,
+  ACKNOWLEDGED: 5,
+  CONFIRMED: 5,
+  IN_PROGRESS: 6,
+  COMPLETED: 7,
+  CANCELLED: 8,
+  FAILED: 8,
+  EXPIRED: 8,
+}
+
 /**
  * Obtiene la línea de tiempo de eventos para una tarea específica.
  */
 export async function getTaskEvents(taskId: string) {
   try {
-    const events = await prisma.taskEventLog.findMany({
+    const rawEvents = await prisma.taskEventLog.findMany({
       where: { taskId },
       orderBy: { timestamp: 'asc' },
+    })
+
+    // Desempate por orden jerárquico de estado cuando la marca de tiempo es idéntica
+    const events = [...rawEvents].sort((a, b) => {
+      const timeDiff = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+
+      if (timeDiff !== 0) return timeDiff
+
+      const orderA = STATUS_LIFECYCLE_ORDER[a.status] || 99
+      const orderB = STATUS_LIFECYCLE_ORDER[b.status] || 99
+
+      return orderA - orderB
     })
 
     return { success: true, data: events }

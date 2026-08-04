@@ -15,6 +15,9 @@ export const getSpeciesByType = async (plantType: PlantType) => {
           select: {
             url: true,
           },
+          orderBy: {
+            position: 'asc',
+          },
         },
         genus: {
           select: {

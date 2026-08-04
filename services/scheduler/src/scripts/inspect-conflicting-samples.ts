@@ -15,7 +15,7 @@ async function main() {
 
   console.log(`📡 Consultando InfluxDB para inspeccionar muestras conflictivas en EXTERIOR...`)
   const stream = influxClient.query(query)
-  const rows: any[] = []
+  const rows: Record<string, unknown>[] = []
 
   for await (const row of stream) {
     rows.push(row)

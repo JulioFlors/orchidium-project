@@ -1,0 +1,18 @@
+graph TD
+    subgraph FASE_GLOBAL["FASE GLOBAL DE PREPARACIÓN"]
+        F1["1. Análisis Preliminar Global<br>(Factibilidad Técnica, Operacional, Financiera y Entorno)"] --> F2["2. Diseño de la Capa Tecnológica<br>(Arquitectura Global, Bloques y Topología)"]
+    end
+
+    subgraph CICLO_ITERATIVO["CICLO ITERATIVO POR ENTREGABLE (HW + SW)"]
+        F3["3. Requisitos Detallados<br>(Casos de Uso UML y Criterios)"] --> F4["4. Generación de Modelos<br>(Modelado MDE, BDD y Diagramas)"]
+        F4 --> F5["5. Generación de Pruebas TDD<br>(Tests HW/SW e In-Situ)"]
+        F5 --> F6["6. Diseño Nodos / Circuitos<br>(Pinout, Relés y Sensores)"]
+        F6 --> F7["7. Generación de Código<br>(Firmware C++/MicroPython y Backend)"]
+        F7 --> F8["8. Integración HW / SW<br>(Power Cycle, Autorreparación)"]
+        F8 --> F9["9. Despliegue In-Situ<br>(Instalación Física en Invernadero)"]
+        F9 --> F10["10. Pruebas del Cliente<br>(Aceptación por el Cultivador)"]
+        F10 --> F11["11. Mantenimiento y Evolución<br>(Ajustes In-Situ y Estabilización)"]
+        F11 -.->|"Siguiente Iteración / Entregable"| F3
+    end
+
+    F2 --> F3

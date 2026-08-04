@@ -62,6 +62,11 @@ export default async function PlantsCategoryPage() {
         return acc
       }, {})
 
+      // Ordenar las especies alfabéticamente dentro de cada género
+      Object.keys(speciesByGenus).forEach((genus) => {
+        speciesByGenus[genus].sort((a, b) => a.name.localeCompare(b.name, 'es'))
+      })
+
       return {
         category,
         speciesByGenus,
@@ -69,7 +74,9 @@ export default async function PlantsCategoryPage() {
     }),
   )
 
-  const initialCategoriesData = initialData.filter((item): item is CategorySection => item !== null)
+  const initialCategoriesData = initialData
+    .filter((item): item is CategorySection => item !== null)
+    .sort((a, b) => a.category.name.localeCompare(b.category.name, 'es'))
 
   return <PlantsCategoryClient initialCategoriesData={initialCategoriesData} route={route} />
 }

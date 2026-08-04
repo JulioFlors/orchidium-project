@@ -49,12 +49,7 @@ function isWithinBotanicalHours(date: Date): boolean {
  * Día nublado confirmado: promedio < 26k lux.
  */
 export type DayType =
-  | 'EXTREMADAMENTE_SOLEADO'
-  | 'SOLEADO'
-  | 'TEMPLADO'
-  | 'NUBLADO'
-  | 'LLUVIOSO'
-  | 'DESCONOCIDO'
+  'EXTREMADAMENTE_SOLEADO' | 'SOLEADO' | 'TEMPLADO' | 'NUBLADO' | 'LLUVIOSO' | 'DESCONOCIDO'
 
 export interface DayClassification {
   type: DayType

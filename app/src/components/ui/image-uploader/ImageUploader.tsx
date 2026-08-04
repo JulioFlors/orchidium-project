@@ -132,16 +132,13 @@ export function ImageUploader({ folder, onUploaded, disabled }: ImageUploaderPro
         onDrop={handleDrop}
         onKeyDown={(e) => e.key === 'Enter' && !uploading && !disabled && inputRef.current?.click()}
       >
-        <span className="text-2xl">🌿</span>
         {uploading ? (
           <span className="text-secondary animate-pulse">{progress}</span>
         ) : (
           <span className="text-secondary text-center">
             Arrastra o haz clic para subir
             <br />
-            <span className="text-xs opacity-60">
-              JPG · PNG · WebP — máx. 10MB (comprime a WebP)
-            </span>
+            <span className="text-xs opacity-60">JPG · PNG · WebP — máx. 10MB</span>
           </span>
         )}
       </div>

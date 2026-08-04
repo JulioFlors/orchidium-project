@@ -6,7 +6,7 @@
 	"author": "Julio Flores",
 	"e-mail": "noesjulio@gmail.com",
 	"license": "MIT",
-	"packageManager": "pnpm@10.28.2",
+	"packageManager": "pnpm@11.17.0+sha512.cca3cea332ad254bb84145f966d19f4879615210346fc92c79a047f23a0d7b3cca3c3792f0076ba1f1831d277efbcf0a9119b31a9a60eca7fb3d6231f331ef72",
 	"scripts": {
 		"// ---- APLICACIÓN WEB ----": "",
 		"dev": "pnpm --filter app dev",
@@ -40,25 +40,13 @@
 	},
 	"devDependencies": {
 		"@package/eslint-config": "workspace:*",
-		"@types/node": "26.0.0",
+		"@types/node": "26.1.2",
 		"dotenv-cli": "11.0.0",
 		"esbuild": "0.28.1",
 		"eslint": "9.39.2",
-		"tsx": "4.22.4",
-		"turbo": "2.9.18",
-		"typescript": "6.0.3"
-	},
-	"pnpm": {
-		"onlyBuiltDependencies": [
-			"@prisma/client",
-			"@prisma/engines",
-			"@tailwindcss/oxide",
-			"esbuild",
-			"prisma",
-			"protobufjs",
-			"sharp",
-			"unrs-resolver"
-		]
+		"tsx": "4.23.5",
+		"turbo": "2.10.8",
+		"typescript": "5.9.3"
 	},
 	"engines": {
 		"node": ">=22"

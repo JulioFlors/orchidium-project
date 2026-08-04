@@ -66,7 +66,7 @@ async function main() {
     ORDER BY time ASC
   `
 
-  const rows: any[] = []
+  const rows: Record<string, unknown>[] = []
   const stream = influxClient.query(query)
 
   for await (const row of stream) {
@@ -82,7 +82,7 @@ async function main() {
       AND time < '2026-07-10T03:00:00Z'
     ORDER BY time ASC
   `
-  const preRows: any[] = []
+  const preRows: Record<string, unknown>[] = []
   const preStream = influxClient.query(preQuery)
 
   for await (const row of preStream) {
@@ -127,7 +127,7 @@ function evaluate(
   timestampMs: number,
   tempBatches: BatchSummary[],
   humBatches: BatchSummary[],
-  luxBatches: BatchSummary[],
+  _luxBatches: BatchSummary[],
 ) {
   if (tempBatches.length < 4 || humBatches.length < 4) return
 

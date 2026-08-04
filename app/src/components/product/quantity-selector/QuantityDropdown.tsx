@@ -7,20 +7,21 @@ import { AnimatePresence, motion, Variants } from 'motion/react' // Quitamos Tra
 
 interface Props {
   quantity: number
+  maxQuantity?: number
 
   // Función para notificar el cambio al padre
   onQuantityChanged: (newQuantity: number) => void
 }
 
 const LABEL = 'Cantidad:'
-const MAX_QUANTITY = 5
 
-export function QuantityDropdown({ quantity, onQuantityChanged }: Props) {
+export function QuantityDropdown({ quantity, maxQuantity = 5, onQuantityChanged }: Props) {
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  // Generar opciones
-  const options = Array.from({ length: MAX_QUANTITY }, (_, i) => i + 1)
+  // Generar opciones basadas en el stock real (mínimo 1, máximo maxQuantity)
+  const limit = Math.max(1, maxQuantity)
+  const options = Array.from({ length: limit }, (_, i) => i + 1)
 
   // Cerrar dropdown si se hace clic fuera
   useEffect(() => {

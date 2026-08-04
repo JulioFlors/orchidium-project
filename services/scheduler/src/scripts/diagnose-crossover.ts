@@ -15,7 +15,7 @@ async function main() {
 
   console.log(`📡 Consultando InfluxDB para diagnosticar cruce de datos...`)
   const stream = influxClient.query(query)
-  const rows: any[] = []
+  const rows: Record<string, unknown>[] = []
 
   for await (const row of stream) {
     rows.push(row)
@@ -35,7 +35,7 @@ async function main() {
 
   // Analizar la frecuencia de muestreo de EXTERIOR
   // Si reporta cada minuto, o si hay múltiples lecturas en el mismo minuto con valores muy distintos
-  const samplesByMinute: { [key: string]: any[] } = {}
+  const samplesByMinute: { [key: string]: Record<string, unknown>[] } = {}
 
   for (const r of extRows) {
     if (r.temperature === null) continue

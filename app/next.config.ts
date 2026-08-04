@@ -8,6 +8,9 @@ import { config } from 'dotenv'
 config({ path: '../.env' })
 
 const nextConfig: NextConfig = {
+  experimental: {
+    useTypeScriptCli: true,
+  },
   logging: {
     fetches: {
       fullUrl: true,

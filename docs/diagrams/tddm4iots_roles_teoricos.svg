@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" width="100%" height="100%">
+  <rect width="100%" height="100%" fill="#181818" />
+
+  <!-- CONTENEDOR PRINCIPAL EXTERIOR -->
+  <rect x="20" y="20" width="1160" height="280" fill="#1e1e1e" stroke="#555555" stroke-width="1" />
+
+  <!-- ENCABEZADO SUPERIOR DEL DIAGRAMA -->
+  <rect x="30" y="30" width="1140" height="30" fill="#252525" stroke="#444444" stroke-width="1" />
+  <text x="40" y="50" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="13" font-weight="bold" fill="#e0e0e0" letter-spacing="0.5">Estructura Organizacional — Roles Teóricos Formales (Metodología TDDM4IoTS)</text>
+
+  <!-- BLOQUE DE 4 COLUMNAS DE ROLES -->
+  <g transform="translate(30, 70)">
+
+    <!-- ROL 1: Facilitador del Proyecto -->
+    <g transform="translate(0, 0)">
+      <rect width="275" height="215" fill="#222222" stroke="#555555" stroke-width="1" />
+      <text x="137.5" y="28" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="13" font-weight="bold" fill="#ffffff" text-anchor="middle">Facilitador del Proyecto</text>
+      <text x="137.5" y="46" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="11" font-style="italic" fill="#aaaaaa" text-anchor="middle">Rol Teórico: Líder Ágil y Mediador</text>
+      <line x1="15" y1="58" x2="260" y2="58" stroke="#3c3c3c" stroke-width="1" />
+      
+      <text x="15" y="78" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Apoyar al equipo en el cumplimiento de metas.</text>
+      <text x="15" y="98" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Aportar experiencia técnica en entregables.</text>
+      <text x="15" y="118" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Negociar orden, tiempos y recursos con cliente.</text>
+      <text x="15" y="138" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Facilitar la autoorganización del equipo.</text>
+      <text x="15" y="158" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Mediador y resolutor de conflictos en células.</text>
+    </g>
+
+    <!-- ROL 2: Consejero -->
+    <g transform="translate(288, 0)">
+      <rect width="275" height="215" fill="#222222" stroke="#555555" stroke-width="1" />
+      <text x="137.5" y="28" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="13" font-weight="bold" fill="#ffffff" text-anchor="middle">Consejero (Counselor)</text>
+      <text x="137.5" y="46" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="11" font-style="italic" fill="#aaaaaa" text-anchor="middle">Rol Teórico: Líder Técnico Informal</text>
+      <line x1="15" y1="58" x2="260" y2="58" stroke="#3c3c3c" stroke-width="1" />
+
+      <text x="15" y="78" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Instruir a miembros en temas de especialidad.</text>
+      <text x="15" y="98" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Guiar decisiones de diseño e implementación.</text>
+      <text x="15" y="118" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Orientar la resolución de problemas complejos.</text>
+      <text x="15" y="138" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Mantener la calidad del dominio técnico.</text>
+      <text x="15" y="158" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Asesorar arquitecturas HW, SW y conectividad.</text>
+    </g>
+
+    <!-- ROL 3: Cliente / Usuario Final -->
+    <g transform="translate(576, 0)">
+      <rect width="275" height="215" fill="#222222" stroke="#555555" stroke-width="1" />
+      <text x="137.5" y="28" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="13" font-weight="bold" fill="#ffffff" text-anchor="middle">Cliente / Usuario Final</text>
+      <text x="137.5" y="46" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="11" font-style="italic" fill="#aaaaaa" text-anchor="middle">Rol Teórico: Cliente y Experto de Negocio</text>
+      <line x1="15" y1="58" x2="260" y2="58" stroke="#3c3c3c" stroke-width="1" />
+
+      <text x="15" y="78" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Aportar y detallar los requisitos del sistema.</text>
+      <text x="15" y="98" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Documentar y co-diseñar pruebas de aceptación.</text>
+      <text x="15" y="118" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Validar la funcionalidad de los entregables.</text>
+      <text x="15" y="138" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Aprobar el sistema final para su operación.</text>
+      <text x="15" y="158" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Definir valor agronómico y operativo deseado.</text>
+    </g>
+
+    <!-- ROL 4: Equipo de Desarrollo -->
+    <g transform="translate(864, 0)">
+      <rect width="276" height="215" fill="#222222" stroke="#555555" stroke-width="1" />
+      <text x="138" y="28" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="13" font-weight="bold" fill="#ffffff" text-anchor="middle">Equipo de Desarrollo</text>
+      <text x="138" y="46" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="11" font-style="italic" fill="#aaaaaa" text-anchor="middle">Rol Teórico: Célula Técnica Multidisciplinaria</text>
+      <line x1="15" y1="58" x2="261" y2="58" stroke="#3c3c3c" stroke-width="1" />
+
+      <text x="15" y="78" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Negociar aspectos técnicos con el cliente.</text>
+      <text x="15" y="98" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Construir entregables cumpliendo requisitos.</text>
+      <text x="15" y="118" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Escribir pruebas unitarias e integración TDD.</text>
+      <text x="15" y="138" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Integrar sensores, nodos, firmware y cloud.</text>
+      <text x="15" y="158" font-family="'Segoe UI', system-ui, Arial, sans-serif" font-size="10.5" fill="#cccccc">• Ejecutar refactorización continua de software.</text>
+    </g>
+
+  </g>
+</svg>

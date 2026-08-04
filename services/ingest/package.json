@@ -13,11 +13,11 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@influxdata/influxdb3-client": "1.4.0",
+    "@influxdata/influxdb3-client": "2.3.0",
     "@package/database": "workspace:*",
     "@prisma/client": "7.0.1",
-    "mqtt": "5.14.1",
-    "pg": "8.16.3"
+    "mqtt": "5.15.1",
+    "pg": "8.22.0"
   },
   "devDependencies": {
     "@package/eslint-config": "workspace:*",

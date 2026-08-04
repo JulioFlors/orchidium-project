@@ -1,0 +1,9 @@
+-- AlterTable
+ALTER TABLE "FloweringEvent" ADD COLUMN     "inductionWindowDays" INTEGER NOT NULL DEFAULT 30,
+ADD COLUMN     "vpdAverageAtInduction" DOUBLE PRECISION;
+
+-- AlterTable
+ALTER TABLE "PestSighting" ADD COLUMN     "avgDli30d" DOUBLE PRECISION,
+ADD COLUMN     "avgHum30d" DOUBLE PRECISION,
+ADD COLUMN     "avgTemp30d" DOUBLE PRECISION,
+ADD COLUMN     "highHumHours30d" DOUBLE PRECISION;

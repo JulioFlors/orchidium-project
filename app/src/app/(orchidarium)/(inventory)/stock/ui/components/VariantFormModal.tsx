@@ -3,7 +3,6 @@
 import type { PotSize } from '@package/database/enums'
 
 import { useState, useEffect } from 'react'
-import { PiStorefrontFill } from 'react-icons/pi'
 
 import { Modal, Button, FormField, Input, SelectDropdown } from '@/components'
 
@@ -15,22 +14,11 @@ interface Variant {
   available: boolean
 }
 
-interface SpeciesWithStoreData {
-  id: string
-  name: string
-  genus: { name: string }
-  variants: Variant[]
-  isFeatured?: boolean
-  _count: {
-    plants: number
-  }
-}
-
 interface VariantFormModalProps {
   isOpen: boolean
   onClose: () => void
   editingVariant: Variant | null
-  targetSpecies: SpeciesWithStoreData | null
+  targetSpecies: { id: string; name: string; variants?: Array<{ size: PotSize }> } | null
   isPending: boolean
   onSave: (formValues: {
     size: PotSize
@@ -52,126 +40,100 @@ export function VariantFormModal({
   potSizes,
   potSizeLabels,
 }: VariantFormModalProps) {
-  const [form, setForm] = useState({
-    size: potSizes[0],
-    price: 0,
-    quantity: 0,
-    available: true,
-  })
+  const [size, setSize] = useState<PotSize>(potSizes[0])
+  const [priceInput, setPriceInput] = useState<string>('')
 
   // Sincronizar estado al abrir o cambiar de variante
   useEffect(() => {
     if (isOpen) {
       if (editingVariant) {
         Promise.resolve().then(() => {
-          setForm({
-            size: editingVariant.size,
-            price: editingVariant.price,
-            quantity: editingVariant.quantity,
-            available: editingVariant.available,
-          })
+          setSize(editingVariant.size)
+          setPriceInput(editingVariant.price ? editingVariant.price.toString() : '')
         })
       } else {
         const nextAvailableSize =
-          potSizes.find((s) => !targetSpecies?.variants.some((v) => v.size === s)) || potSizes[0]
+          potSizes.find((s) => !targetSpecies?.variants?.some((v) => v.size === s)) || potSizes[0]
 
         Promise.resolve().then(() => {
-          setForm({
-            size: nextAvailableSize,
-            price: 0,
-            quantity: 0,
-            available: true,
-          })
+          setSize(nextAvailableSize)
+          setPriceInput('')
         })
       }
     }
   }, [isOpen, editingVariant, targetSpecies, potSizes])
 
+  function handlePriceChange(e: React.ChangeEvent<HTMLInputElement>) {
+    let raw = e.target.value
+
+    // Permitir únicamente dígitos y punto decimal .
+    raw = raw.replace(/[^0-9.]/g, '')
+    // Preservar solo el primer punto decimal
+    const parts = raw.split('.')
+
+    if (parts.length > 2) {
+      raw = `${parts[0]}.${parts.slice(1).join('')}`
+    }
+    setPriceInput(raw)
+  }
+
   const handleSubmit = () => {
-    onSave(form)
+    const parsed = parseFloat(priceInput)
+    const validPrice = isNaN(parsed) || parsed < 0 ? 0 : parsed
+
+    onSave({
+      size,
+      price: validPrice,
+      quantity: 0,
+      available: true,
+    })
   }
 
   return (
     <Modal
       footer={
         <>
-          <Button disabled={isPending} variant="secondary" onClick={onClose}>
+          <Button disabled={isPending} variant="ghost" onClick={onClose}>
             Cancelar
           </Button>
           <Button isLoading={isPending} onClick={handleSubmit}>
-            {editingVariant ? 'Guardar Cambios' : 'Crear Variante'}
+            {editingVariant ? 'Guardar Cambios' : 'Crear Tamaño'}
           </Button>
         </>
       }
-      icon={<PiStorefrontFill />}
       isOpen={isOpen}
-      title={
-        editingVariant
-          ? `Editar Variante: ${targetSpecies?.name}`
-          : `Nueva Variante: ${targetSpecies?.name}`
-      }
+      title={targetSpecies?.name ?? 'Especie'}
       onClose={onClose}
     >
-      <div className="grid grid-cols-1 gap-6">
-        <div className="grid grid-cols-2 gap-4">
-          <FormField htmlFor="v-size" label="Tamaño Maceta">
-            <SelectDropdown
-              disabled={!!editingVariant}
-              id="v-size"
-              options={potSizes.map((s) => ({
-                value: s,
-                label: potSizeLabels[s],
-              }))}
-              value={form.size}
-              onChange={(val) => setForm((p) => ({ ...p, size: val as PotSize }))}
-            />
-          </FormField>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <FormField htmlFor="v-size" label="Tamaño">
+          <SelectDropdown
+            disabled={!!editingVariant}
+            id="v-size"
+            options={potSizes.map((s) => ({
+              value: s,
+              label: potSizeLabels[s],
+            }))}
+            value={size}
+            onChange={(val) => setSize(val as PotSize)}
+          />
+        </FormField>
 
-          <FormField htmlFor="v-price" label="Precio (Centavos USD)">
+        <FormField htmlFor="v-price" label="Precio">
+          <div className="relative flex items-center">
+            <span className="text-secondary pointer-events-none absolute left-3 text-sm font-bold opacity-60">
+              $
+            </span>
             <Input
+              className="pl-7 font-mono font-bold"
               id="v-price"
-              placeholder="Ej: 2500 (= $25.00)"
-              type="number"
-              value={form.price}
-              onChange={(e) => setForm((p) => ({ ...p, price: parseInt(e.target.value) || 0 }))}
+              placeholder="0.00"
+              type="text"
+              value={priceInput}
+              onChange={handlePriceChange}
             />
-          </FormField>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <FormField htmlFor="v-qty" label="Stock Disponible">
-            <Input
-              id="v-qty"
-              type="number"
-              value={form.quantity}
-              onChange={(e) => setForm((p) => ({ ...p, quantity: parseInt(e.target.value) || 0 }))}
-            />
-          </FormField>
-
-          <div className="flex flex-col justify-end">
-            <div
-              className="input-base text-primary bg-surface dark:bg-canvas border-input-outline flex cursor-pointer items-center justify-between rounded-md border p-2"
-              role="button"
-              tabIndex={0}
-              onClick={() => setForm((p) => ({ ...p, available: !p.available }))}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  setForm((p) => ({ ...p, available: !p.available }))
-                }
-              }}
-            >
-              <span className="text-sm font-medium">Publicar en tienda</span>
-              <div
-                className={`h-4 w-8 rounded-full transition-colors ${form.available ? 'bg-emerald-500' : 'bg-red-400'} relative`}
-              >
-                <div
-                  className={`absolute top-1 h-2 w-2 rounded-full bg-white transition-all ${form.available ? 'right-1' : 'left-1'}`}
-                />
-              </div>
-            </div>
           </div>
-        </div>
+        </FormField>
       </div>
     </Modal>
   )

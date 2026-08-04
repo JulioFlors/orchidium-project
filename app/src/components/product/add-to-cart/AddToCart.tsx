@@ -12,7 +12,8 @@ import {
   StockLabel,
   Button,
 } from '@/components'
-import { Logger, useFormatPrice } from '@/lib'
+import { useCartStore } from '@/store'
+import { getImageUrl, Logger, useFormatPrice } from '@/lib'
 
 interface Props {
   product: Species
@@ -26,6 +27,7 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
   const [quantity, setQuantity] = useState<number>(1)
   const [posted, setPosted] = useState(false)
   const { format, formatRange } = useFormatPrice()
+  const addProductToCart = useCartStore((state) => state.addProductToCart)
 
   // 1. ¿Existe algo que vender en general?
   const hasGlobalStock = product.variants.some((v) => v.available && v.quantity > 0)
@@ -54,11 +56,25 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
 
     if (!selectedVariant) return
 
-    // TODO: Conectar con Zustand (Cart Store) aquí
+    const rawImage = product.images?.[0]
+    const imageUrl = rawImage ? getImageUrl(rawImage) : '/images/placeholder.jpg'
 
-    Logger.info('Agregando al carrito:', {
-      variant: selectedVariant,
+    addProductToCart({
+      id: product.id,
+      variantId: selectedVariant.id,
+      slug: product.slug,
+      name: product.name,
+      price: selectedVariant.price,
+      size: selectedVariant.size,
+      image: imageUrl,
       quantity: quantity,
+      maxStock: selectedVariant.quantity,
+    })
+
+    Logger.info('Agregado al carrito:', {
+      product: product.name,
+      variant: selectedVariant.size,
+      quantity,
     })
 
     // Reset visual post-agregado
@@ -87,7 +103,7 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
           onVariantChanged={(variant) => {
             onVariantSelected(variant) // Notificamos al padre
             setQuantity(1) // Reset cantidad al cambiar tamaño
-            setPosted(false) // Limpiamos errores previos
+            setPosted(false) // Limpiamos aviso previo
           }}
         />
       )}
@@ -95,19 +111,25 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
       {/* --- CONTROLES DE COMPRA --- */}
       {hasGlobalStock ? (
         <>
-          {/* Selector de Cantidad: Solo si hay stock en la selección actual */}
+          {/* Selector de Cantidad: Deshabilitado si no hay maceta seleccionada */}
           {isSelectedVariantAvailable && (
-            <QuantitySelector quantity={quantity} onQuantityChanged={setQuantity} />
+            <QuantitySelector
+              disabled={!selectedVariant}
+              maxQuantity={selectedVariant?.quantity}
+              quantity={quantity}
+              onClickDisabled={() => setPosted(true)}
+              onQuantityChanged={setQuantity}
+            />
           )}
 
           <div className="mt-5.5">
-            {/* Mensaje de Error: Intento sin seleccionar */}
+            {/* Mensaje de Advertencia: Se muestra SOLO tras un intento de acción sin maceta */}
             <AnimatePresence mode="wait">
               {!selectedVariant && posted && (
                 <motion.p
                   animate={{ height: 'auto', marginBottom: 8, opacity: 1, y: 0 }}
                   className="overflow-hidden text-xs font-medium tracking-wide text-red-800/75 dark:text-red-400/75"
-                  exit={{ height: 0, marginBottom: 0, opacity: 1, y: 0 }}
+                  exit={{ height: 0, marginBottom: 0, opacity: 0, y: -10 }}
                   initial={{ height: 0, marginBottom: 0, opacity: 0, y: -10 }}
                   transition={{ duration: 0.25, ease: 'easeInOut' }}
                 >

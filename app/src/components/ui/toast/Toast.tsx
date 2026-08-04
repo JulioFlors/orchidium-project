@@ -131,7 +131,7 @@ export function Toast({ id, message, type }: ToastProps) {
           variant="glow"
         />
 
-        <p className="text-primary relative z-10 flex-1 text-sm leading-tight font-medium">
+        <p className="text-primary relative z-10 flex-1 text-sm leading-tight font-medium whitespace-pre-line">
           {message}
         </p>
 

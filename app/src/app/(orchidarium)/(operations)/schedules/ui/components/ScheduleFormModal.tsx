@@ -162,8 +162,7 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
         })
       } else {
         const savedDraft = useFormDraftStore.getState().getDraft(draftKey) as
-          | z.input<typeof programSchema>
-          | undefined
+          z.input<typeof programSchema> | undefined
 
         isRestoringRef.current = true
         reset(
@@ -194,8 +193,7 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
     if (!isOpen || isRestoringRef.current || !!initialData) return
 
     const currentDraft = useFormDraftStore.getState().getDraft(draftKey) as
-      | z.input<typeof programSchema>
-      | undefined
+      z.input<typeof programSchema> | undefined
 
     if (JSON.stringify(currentDraft) !== watchedString) {
       useFormDraftStore

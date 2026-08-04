@@ -24,6 +24,9 @@ model User {
   sessions      Session[]
   taskEvents    TaskEventLog[]
   notifications Notification[]
+  addresses     UserAddress[]
+  orders        Order[]
+  salesCreated  SaleRecord[]
 }
 
 model Session {
@@ -110,6 +113,7 @@ model ProductVariant {
 model SpeciesImage {
   id        String  @id @default(uuid())
   url       String  @unique
+  position  Int     @default(0)
   speciesId String
   species   Species @relation(fields: [speciesId], references: [id], onDelete: Cascade)
 
@@ -134,14 +138,16 @@ model FloweringEvent {
   updatedAt DateTime  @updatedAt
   plant     Plant     @relation(fields: [plantId], references: [id], onDelete: Cascade)
 
-  // Métricas de Correlación al Momento de la Inducción
-  dliAtInduction   Float?
-  difAtInduction   Float?
-  tempDayAverage   Float?
-  tempNightAverage Float?
-  humDayAverage    Float?
-  humNightAverage  Float?
-  notes            String?
+  // Métricas de Correlación al Momento de la Inducción (Ventana 30 días)
+  dliAtInduction        Float?
+  difAtInduction        Float?
+  tempDayAverage        Float?
+  tempNightAverage      Float?
+  humDayAverage         Float?
+  humNightAverage       Float?
+  vpdAverageAtInduction Float?
+  inductionWindowDays   Int     @default(30)
+  notes                 String?
 
   @@index([plantId])
 }
@@ -157,6 +163,7 @@ model Plant {
   updatedAt      DateTime         @updatedAt
   FloweringEvent FloweringEvent[]
   pestSightings  PestSighting[]
+  orderItems     OrderItem[]
   location       Location?        @relation(fields: [locationId], references: [id], onDelete: Cascade)
   species        Species          @relation(fields: [speciesId], references: [id], onDelete: Cascade)
 
@@ -496,8 +503,15 @@ model PestSighting {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
   plantId    String?
-  pest       Pest?    @relation(fields: [pestId], references: [id])
-  plant      Plant?   @relation(fields: [plantId], references: [id])
+
+  // Correlación ambiental previa al avistamiento (Ventana 30 días)
+  avgTemp30d      Float?
+  avgHum30d       Float?
+  avgDli30d       Float?
+  highHumHours30d Float?
+
+  pest  Pest?  @relation(fields: [pestId], references: [id])
+  plant Plant? @relation(fields: [plantId], references: [id])
 
   @@index([zone])
   @@index([pestId])
@@ -542,15 +556,45 @@ enum PlantType {
 }
 
 enum PotSize {
+  NRO_3
   NRO_5
   NRO_7
+  NRO_8
   NRO_10
+  NRO_12
   NRO_14
+  NRO_15
+  CT1
+  CT2
+  CT3
+  CT4
 }
 
 enum PlantStatus {
   AVAILABLE
   MOTHER
+  RESERVED
+  SOLD
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAYMENT_VERIFYING
+  PAID
+  DISPATCHED
+  CANCELLED
+  EXPIRED
+}
+
+enum PaymentMethod {
+  PAGO_MOVIL
+  TRANSFERENCIA_VES
+  EFECTIVO_DIVISAS
+}
+
+enum SaleType {
+  ONLINE_ORDER
+  DIRECT_MANUAL
 }
 
 enum TaskStatus {
@@ -682,6 +726,83 @@ model SystemSetting {
   key       String   @id
   value     Json
   updatedAt DateTime @updatedAt
+}
+
+model UserAddress {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  idNumber  String
+  address   String
+  city      String
+  state     String
+  zipCode   String?
+  phone     String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Order {
+  id              String        @id @default(uuid())
+  orderNumber     String        @unique
+  userId          String
+  status          OrderStatus   @default(PENDING_PAYMENT)
+  paymentMethod   PaymentMethod
+  subtotal        Float
+  tax             Float         @default(0)
+  totalUsd        Float
+  totalVes        Float
+  exchangeRate    Float
+  shippingAddress Json
+  billingInfo     Json
+  expiresAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items           OrderItem[]
+  saleRecord      SaleRecord?
+
+  @@index([userId])
+  @@index([status])
+  @@index([orderNumber])
+}
+
+model OrderItem {
+  id          String   @id @default(uuid())
+  orderId     String
+  variantId   String?
+  plantId     String?
+  speciesName String
+  size        PotSize
+  unitPrice   Float
+  quantity    Int      @default(1)
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  plant       Plant?   @relation(fields: [plantId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([variantId])
+  @@index([plantId])
+}
+
+model SaleRecord {
+  id          String   @id @default(uuid())
+  type        SaleType @default(ONLINE_ORDER)
+  orderId     String?  @unique
+  totalUsd    Float
+  totalVes    Float
+  exchangeRate Float
+  notes       String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  order       Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([type])
 }
 
 
