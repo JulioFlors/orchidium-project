@@ -317,7 +317,8 @@
     transition: outline-color 300ms ease;
   }
 
-  .focus-product-card:has(:focus-visible) {
+  .focus-product-card:has(:focus-visible),
+  .focus-product-card.is-focused {
     outline-color: var(--color-accessibility);
   }
 

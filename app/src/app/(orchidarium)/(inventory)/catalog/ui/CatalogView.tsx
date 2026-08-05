@@ -95,19 +95,26 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
     const element = document.getElementById(targetId)
 
     if (element) {
+      const imageTarget = element.querySelector('.focus-product-card') as HTMLElement | null
+      const linkElement = element.querySelector('a') as HTMLElement | null
+
       const timer = setTimeout(() => {
         element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-        element.classList.add(
-          'ring-2',
-          'ring-emerald-500/80',
-          'ring-offset-4',
-          'rounded-2xl',
-          'transition-all',
-          'duration-500',
-        )
+
+        if (imageTarget) {
+          imageTarget.classList.add('is-focused')
+        }
+        if (linkElement) {
+          linkElement.focus({ preventScroll: true })
+        }
 
         const clearTimer = setTimeout(() => {
-          element.classList.remove('ring-2', 'ring-emerald-500/80', 'ring-offset-4')
+          if (imageTarget) {
+            imageTarget.classList.remove('is-focused')
+          }
+          if (linkElement && document.activeElement === linkElement) {
+            linkElement.blur()
+          }
         }, 3000)
 
         return () => clearTimeout(clearTimer)

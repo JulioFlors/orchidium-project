@@ -1028,6 +1028,8 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             }
             const diffTemp = stagnantDiffTemp
             const diffHum = stagnantDiffHum
+            const tempCeseThreshold = 0.4
+            const humCeseThreshold = 1.0
 
             const endSampleT =
               tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||

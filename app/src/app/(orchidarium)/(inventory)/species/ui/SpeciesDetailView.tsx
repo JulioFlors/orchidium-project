@@ -4,7 +4,7 @@ import type { PlantType } from '@package/database'
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { PiWarningFill, PiTrashFill } from 'react-icons/pi'
+import { PiTrashFill } from 'react-icons/pi'
 import { MdSave, MdClose } from 'react-icons/md'
 
 import {
@@ -104,7 +104,7 @@ function SpeciesImageCard({
 
   return (
     <div
-      className={`bg-surface border-input-outline group relative aspect-square cursor-grab overflow-hidden rounded-xl border transition-all active:cursor-grabbing ${
+      className={`isolate bg-surface border-input-outline group relative aspect-square cursor-grab overflow-hidden rounded-xl border transition-all active:cursor-grabbing ${
         isDragging
           ? 'scale-95 border-dashed border-emerald-500 opacity-30'
           : 'hover:scale-[1.02] hover:border-zinc-300 dark:hover:border-zinc-700'
@@ -123,7 +123,7 @@ function SpeciesImageCard({
 
       {/* Footer no interactivo para la foto Principal */}
       {index === 0 && (
-        <div className="bg-canvas/90 text-primary border-input-outline absolute bottom-0 left-0 z-10 w-full border-t py-1.5 text-center text-xs font-semibold backdrop-blur-xs">
+        <div className="bg-canvas/95 text-primary border-input-outline absolute bottom-0 left-0 z-2 w-full truncate border-t px-1 py-1 text-center text-[10px] font-semibold tds-xs:text-xs">
           Principal
         </div>
       )}
@@ -131,7 +131,7 @@ function SpeciesImageCard({
       {/* Footer interactivo para Destacar una foto */}
       {index !== 0 && (
         <button
-          className="bg-canvas/90 hover:bg-canvas text-primary border-input-outline absolute bottom-0 left-0 z-10 w-full cursor-pointer border-t py-1.5 text-center text-xs font-semibold opacity-0 backdrop-blur-xs transition-all group-hover:opacity-100 focus:outline-none"
+          className="bg-canvas/95 hover:bg-canvas text-primary border-input-outline absolute bottom-0 left-0 z-2 w-full cursor-pointer truncate border-t px-1 py-1 text-center text-[10px] font-semibold opacity-100 transition-all focus:outline-none tds-sm:opacity-0 tds-sm:group-hover:opacity-100 tds-xs:text-xs"
           title="Establecer como imagen de portada"
           type="button"
           onClick={onMakePrimary}
@@ -142,12 +142,12 @@ function SpeciesImageCard({
 
       {/* Botón de Eliminar */}
       <button
-        className="bg-canvas/90 hover:bg-canvas text-primary absolute top-2 right-2 z-15 cursor-pointer rounded-full p-1.5 opacity-0 shadow-md backdrop-blur-xs transition-all group-hover:opacity-100 focus:outline-none"
+        className="bg-canvas/95 hover:bg-canvas text-primary absolute top-2 right-2 z-3 cursor-pointer rounded-full p-1 opacity-100 shadow-md transition-all focus:outline-none tds-sm:opacity-0 tds-sm:group-hover:opacity-100 tds-xs:p-1.5"
         title="Eliminar imagen"
         type="button"
         onClick={onMarkToDelete}
       >
-        <MdClose className="h-4 w-4" />
+        <MdClose className="h-3.5 w-3.5 tds-xs:h-4 tds-xs:w-4" />
       </button>
     </div>
   )
@@ -483,6 +483,7 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
         action={
           initialSpecies ? (
             <Button
+              className="tds-sm:w-auto flex w-full items-center justify-center gap-2"
               disabled={isPending}
               size="sm"
               variant="destructive"
@@ -629,18 +630,24 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
       </div>
 
       {/* Botones de acción modulares al final */}
-      <div className="flex w-full items-center justify-end gap-3 border-t border-zinc-100 pt-6 dark:border-zinc-800/50">
-        <Button size="default" variant="secondary" onClick={handleBackClick}>
+      <div className="flex w-full items-center justify-end gap-2 border-t border-zinc-100 pt-6 tds-xs:gap-3 dark:border-zinc-800/50">
+        <Button
+          className="w-auto! shrink-0 text-xs font-semibold whitespace-nowrap tds-xs:text-sm"
+          size="default"
+          variant="ghost"
+          onClick={handleBackClick}
+        >
           {isDirty ? 'Cancelar' : 'Salir'}
         </Button>
         <Button
+          className="w-auto! shrink-0 text-xs font-semibold whitespace-nowrap tds-xs:text-sm"
           disabled={!isDirty || isPending}
           isLoading={isPending}
           size="default"
           variant="primary"
           onClick={handleSave}
         >
-          <MdSave className="mr-1.5 h-4 w-4" />
+          <MdSave className="mr-1.5 hidden h-4 w-4 tds-xs:inline-block" />
           {initialSpecies ? 'Guardar Cambios' : 'Crear Especie'}
         </Button>
       </div>
@@ -649,7 +656,7 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
       <Modal
         footer={
           <>
-            <Button variant="secondary" onClick={() => setIsDeleteModalOpen(false)}>
+            <Button variant="ghost" onClick={() => setIsDeleteModalOpen(false)}>
               Cancelar
             </Button>
             <Button
@@ -657,19 +664,21 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
               variant="destructive"
               onClick={handleConfirmDeleteSpecies}
             >
-              Eliminar Definitivamente
+              Eliminar
             </Button>
           </>
         }
-        icon={<PiWarningFill className="text-2xl text-red-500" />}
         isOpen={isDeleteModalOpen}
         size="md"
-        title="¿Eliminar Especie?"
+        title="Eliminar Especie"
         onClose={() => setIsDeleteModalOpen(false)}
       >
         <p className="text-secondary text-sm">
-          Esta acción eliminará permanentemente la especie <strong>{initialSpecies?.name}</strong> y
-          todas sus imágenes asociadas de la base de datos y de R2.
+          Esta acción eliminará permanentemente la especie
+          <br />
+          <strong>{initialSpecies?.name}</strong>
+          <br />
+          ¿Estás seguro de que deseas continuar?
         </p>
       </Modal>
 
@@ -677,23 +686,23 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
       <Modal
         footer={
           <>
-            <Button variant="secondary" onClick={() => setIsExitModalOpen(false)}>
+            <Button variant="ghost" onClick={() => setIsExitModalOpen(false)}>
               Continuar Editando
             </Button>
             <Button variant="destructive" onClick={handleConfirmExit}>
-              Descartar y Salir
+              Salir
             </Button>
           </>
         }
-        icon={<PiWarningFill className="text-2xl text-amber-500" />}
         isOpen={isExitModalOpen}
         size="md"
-        title="¿Descartar Cambios?"
+        title="Descartar Cambios"
         onClose={() => setIsExitModalOpen(false)}
       >
         <p className="text-secondary text-sm">
-          Tienes modificaciones sin guardar en la especie o el orden de la galería. Si sales ahora,
-          se perderán estos cambios.
+          Tienes modificaciones sin guardar.
+          <br />
+          Si sales ahora, se perderán estos cambios.
         </p>
       </Modal>
     </div>

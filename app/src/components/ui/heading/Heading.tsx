@@ -27,7 +27,7 @@ export function Heading({ title, description, action, className }: HeadingProps)
       )}
     >
       <div className="min-w-0 flex-1">
-        <h1 className="text-primary truncate text-2xl leading-10.5 font-bold tracking-tight antialiased">
+        <h1 className="text-primary text-2xl leading-10.5 font-bold tracking-tight antialiased text-balance break-words">
           {title}
         </h1>
         {description && (
