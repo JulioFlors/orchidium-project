@@ -1,0 +1,110 @@
+{
+  "name": "Fertirriego Interactivo con Confirmación por Telegram",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "callback_query"
+        ]
+      },
+      "id": "2b3c4d5e-0001-4000-8000-000000000001",
+      "name": "Telegram Trigger (Callback Query)",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-pristinoplant",
+          "name": "Telegram PristinoBot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const query = $input.item.json.callback_query || {};\nconst data = query.data || '';\nconst fromUser = query.from?.username || query.from?.first_name || 'Admin';\nconst messageId = query.message?.message_id;\nconst chatId = query.message?.chat?.id;\n\nlet action = '';\nlet taskId = '';\n\nif (data.startsWith('confirm_')) {\n  action = 'CONFIRMED';\n  taskId = data.replace('confirm_', '');\n} else if (data.startsWith('cancel_')) {\n  action = 'CANCELLED';\n  taskId = data.replace('cancel_', '');\n}\n\nreturn [{ json: { action, taskId, fromUser, messageId, chatId } }];"
+      },
+      "id": "2b3c4d5e-0002-4000-8000-000000000002",
+      "name": "Parsear Callback Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=UPDATE \"Task\" SET status = '{{ $json.action }}', \"confirmedBy\" = '{{ $json.fromUser }}', \"updatedAt\" = NOW() WHERE id = '{{ $json.taskId }}';"
+      },
+      "id": "2b3c4d5e-0003-4000-8000-000000000003",
+      "name": "Actualizar Estado en Postgres",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [700, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-pristinoplant",
+          "name": "Postgres PristinoPlant"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $json.chatId }}",
+        "messageId": "={{ $json.messageId }}",
+        "text": "={{ $json.action === 'CONFIRMED' ? '✅ *TAREA CONFIRMADA POR @' + $json.fromUser + '*\\n\\nCircuito hidráulico de fertirriego activado.' : '❌ *TAREA CANCELADA POR @' + $json.fromUser + '*' }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "2b3c4d5e-0004-4000-8000-000000000004",
+      "name": "Actualizar Mensaje Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [920, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-pristinoplant",
+          "name": "Telegram PristinoBot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger (Callback Query)": {
+      "main": [
+        [
+          {
+            "node": "Parsear Callback Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsear Callback Data": {
+      "main": [
+        [
+          {
+            "node": "Actualizar Estado en Postgres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Actualizar Estado en Postgres": {
+      "main": [
+        [
+          {
+            "node": "Actualizar Mensaje Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

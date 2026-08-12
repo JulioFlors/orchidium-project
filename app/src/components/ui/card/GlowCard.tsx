@@ -119,7 +119,7 @@ export function GlowCard({
   return (
     <Card
       className={clsx(
-        'group relative flex aspect-square min-h-[110px] w-full flex-col items-center justify-center gap-4 overflow-hidden p-6 transition-all duration-300 select-none',
+        'group relative flex aspect-square min-h-[110px] w-full flex-col items-center justify-center gap-4 overflow-hidden p-6 transition-all duration-300 select-none isolate',
         // Cursor y pointer-events por estado
         isInteractive ? 'cursor-pointer' : 'pointer-events-none',
         // Fondo activo / inactivo
@@ -190,7 +190,7 @@ export function GlowCard({
       {/* Label */}
       <span
         className={clsx(
-          'z-10 text-center text-[10px] font-black tracking-[0.15em] uppercase transition-colors',
+          'relative z-1 text-center text-[10px] font-black tracking-[0.15em] uppercase transition-colors',
           isVisualActive
             ? 'text-black-and-white'
             : 'text-zinc-500 group-hover:text-zinc-900 dark:text-zinc-500 dark:group-hover:text-zinc-100',

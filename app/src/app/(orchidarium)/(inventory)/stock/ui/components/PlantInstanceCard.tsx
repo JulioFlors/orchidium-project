@@ -1,11 +1,17 @@
+'use client'
+
 import type { PotSize, PlantStatus } from '@package/database/enums'
 
 import { motion } from 'motion/react'
-import { PiMapPinFill, PiCalendarFill } from 'react-icons/pi'
+import {
+  IoCalendarOutline,
+  IoLocationOutline,
+  IoGitBranchOutline,
+  IoFlowerOutline,
+} from 'react-icons/io5'
 import { MdEdit, MdDelete, MdLocalFlorist } from 'react-icons/md'
 
-import { Badge, ActionMenu, StatusCircleIcon } from '@/components'
-import { PotSizeDimensions } from '@/config/mappings'
+import { StatusCircleIcon, ActionMenu, ActionMenuItem } from '@/components'
 
 interface Location {
   id: string
@@ -17,6 +23,7 @@ interface FloweringEvent {
   id: string
   startDate: Date | string
   endDate?: Date | string | null
+  notes?: string | null
 }
 
 export interface PlantInstance {
@@ -25,6 +32,7 @@ export interface PlantInstance {
   pottingDate?: Date | string | null
   status: PlantStatus
   location?: Location | null
+  origin?: string | null
   FloweringEvent?: FloweringEvent[]
 }
 
@@ -37,6 +45,27 @@ interface PlantInstanceCardProps {
   onDelete: (plant: PlantInstance) => void
 }
 
+function formatPottingDate(dateVal?: Date | string | null) {
+  if (!dateVal) return null
+  const str = typeof dateVal === 'string' ? dateVal : dateVal.toISOString()
+  const datePart = str.split('T')[0]
+  const parts = datePart.split('-')
+
+  if (parts.length !== 3) return null
+  const year = parseInt(parts[0], 10)
+  const month = parseInt(parts[1], 10)
+  const day = parseInt(parts[2], 10)
+
+  if (isNaN(year) || isNaN(month) || isNaN(day)) return null
+  const localDate = new Date(year, month - 1, day, 12, 0, 0)
+
+  return localDate.toLocaleDateString('es-VE', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
 export function PlantInstanceCard({
   plant,
   potSizeLabels,
@@ -46,24 +75,18 @@ export function PlantInstanceCard({
   onDelete,
 }: PlantInstanceCardProps) {
   const isMother = plant.status === 'MOTHER'
-  const hasActiveFlowering = plant.FloweringEvent && plant.FloweringEvent.length > 0
+  const activeFlowering = plant.FloweringEvent?.find((e) => !e.endDate)
+  const hasActiveFlowering = !!activeFlowering
   const zoneAlias = plant.location?.zone
     ? zoneLabels[plant.location.zone] || plant.location.zone
     : 'Sin Ubicación'
 
-  const formattedDate = plant.pottingDate
-    ? new Date(plant.pottingDate).toLocaleDateString('es-VE', {
-        day: '2-digit',
-        month: 'short',
-        year: 'numeric',
-      })
-    : 'Sin Fecha'
+  const formattedDate = formatPottingDate(plant.pottingDate)
 
   const potCode = potSizeLabels[plant.currentSize] || plant.currentSize
-  const potDim = PotSizeDimensions[plant.currentSize] || ''
+  const originText = plant.origin || 'Establecida'
 
   // Determinación de glowVariant semántico
-  // Madres -> red (vinotinto), Floración -> pink (magenta), Tienda -> violet (lila)
   const glowVariant = isMother
     ? 'red'
     : hasActiveFlowering
@@ -72,86 +95,94 @@ export function PlantInstanceCard({
         ? 'violet'
         : 'green'
 
+  const menuItems: ActionMenuItem[] = [
+    {
+      label: 'Editar Planta',
+      icon: <MdEdit />,
+      onClick: () => onEdit(plant),
+    },
+    {
+      label: hasActiveFlowering ? 'Finalizar Floración' : 'Registrar Floración',
+      icon: <MdLocalFlorist className="text-pink-500" />,
+      onClick: () => onFlowering(plant),
+    },
+    {
+      label: 'Eliminar Planta',
+      icon: <MdDelete />,
+      onClick: () => onDelete(plant),
+      variant: 'destructive',
+    },
+  ]
+
   return (
     <motion.div
       animate={{ opacity: 1, y: 0 }}
-      className="bg-surface border-input-outline group hover:bg-hover-overlay relative flex flex-col justify-between rounded-xl border p-4 shadow-xs transition-all duration-300"
+      className="bg-surface border-input-outline group relative flex min-w-0 w-full flex-col gap-4 rounded-xl border p-4 shadow-sm transition-all hover:bg-hover-overlay"
       initial={{ opacity: 0, y: 5 }}
     >
-      <div className="flex flex-col gap-3">
-        {/* Cabecera con StatusCircleIcon y ActionMenu */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3 overflow-hidden">
-            <StatusCircleIcon
-              className="shrink-0 font-mono text-xs font-extrabold"
-              glowVariant={glowVariant}
-              icon={<span className="font-mono text-xs font-black">{potCode}</span>}
-              size="md"
-              variant="glow"
-            />
-            <div className="flex min-w-0 flex-col">
-              <span className="text-primary truncate font-mono text-xs font-bold tracking-tight">
-                #{plant.id.slice(-8).toUpperCase()}
-              </span>
-              <span className="text-secondary text-[11px] font-semibold opacity-70">
-                {potCode} {potDim && `• ${potDim}`}
-              </span>
-            </div>
-          </div>
-
-          <ActionMenu
-            items={[
-              {
-                label: 'Editar Planta',
-                icon: <MdEdit />,
-                onClick: () => onEdit(plant),
-              },
-              {
-                label: 'Registrar Floración',
-                icon: <MdLocalFlorist className="text-pink-500" />,
-                onClick: () => onFlowering(plant),
-              },
-              {
-                label: 'Eliminar Planta',
-                icon: <MdDelete />,
-                onClick: () => onDelete(plant),
-                variant: 'destructive',
-              },
-            ]}
+      {/* 1. Cabecera Limpia (StatusCircleIcon + Código ID) */}
+      <div className="flex items-center justify-between min-w-0">
+        <div className="flex items-center gap-3 min-w-0 overflow-hidden">
+          <StatusCircleIcon
+            className="h-8 w-8 text-xs tds-sm:h-10 tds-sm:w-10 tds-sm:text-sm shrink-0 font-mono font-extrabold"
+            glowVariant={glowVariant}
+            icon={
+              <span className="font-mono text-[10px] tds-sm:text-xs font-black">{potCode}</span>
+            }
+            size="md"
+            variant="glow"
           />
+          <div className="flex flex-col min-w-0 overflow-hidden text-left">
+            <h3 className="text-primary truncate font-mono text-xs tds-sm:text-[15px] font-bold leading-tight">
+              #{plant.id.slice(-8).toUpperCase()}
+            </h3>
+          </div>
         </div>
+      </div>
 
-        {/* Badges de Estado Semántico */}
-        <div className="flex flex-wrap items-center gap-1.5 pt-1">
-          {isMother && (
-            <Badge className="border border-rose-500/20 bg-rose-500/10 text-[10px] font-bold text-rose-700 dark:text-rose-400">
-              Madre
-            </Badge>
-          )}
-          {hasActiveFlowering && (
-            <Badge className="border border-fuchsia-500/20 bg-fuchsia-500/10 text-[10px] font-bold text-fuchsia-600 dark:text-fuchsia-400">
-              Floración
-            </Badge>
-          )}
-          {!isMother && plant.status === 'AVAILABLE' && (
-            <Badge className="text-[10px] font-bold" variant="purple">
-              Tienda
-            </Badge>
-          )}
-        </div>
+      {/* 2. Sección Inferior con Línea Punteada (Metadatos + ActionMenu) */}
+      <div className="border-black-and-white/5 mt-1 border-t border-dashed pt-4 min-w-0">
+        <div className="flex items-center justify-between gap-3 min-w-0">
+          <div className="flex flex-row flex-wrap items-center gap-x-4 gap-y-2 text-xs min-w-0 flex-1">
+            {/* Madre (si aplica) */}
+            {isMother && (
+              <div className="text-secondary flex shrink-0 items-center gap-1.5 font-medium">
+                <IoFlowerOutline className="h-4 w-4 text-purple-500 shrink-0" />
+                <span>Madre</span>
+              </div>
+            )}
 
-        {/* Ubicación y Fecha de Siembra */}
-        <div className="border-input-outline flex flex-col gap-1.5 border-t pt-2.5">
-          <div className="flex items-center gap-2">
-            <PiMapPinFill className="h-3.5 w-3.5 shrink-0 text-emerald-500 opacity-80" />
-            <span className="text-primary truncate text-xs font-semibold">{zoneAlias}</span>
+            {/* Floración (si aplica) */}
+            {hasActiveFlowering && (
+              <div className="text-secondary flex shrink-0 items-center gap-1.5 font-medium">
+                <MdLocalFlorist className="h-4 w-4 text-pink-500 shrink-0" />
+                <span>Floración</span>
+              </div>
+            )}
+
+            {/* Ubicación */}
+            <div className="text-secondary flex shrink-0 items-center gap-1.5 font-medium">
+              <IoLocationOutline className="h-4 w-4 text-emerald-500 opacity-90 shrink-0" />
+              <span className="truncate">{zoneAlias}</span>
+            </div>
+
+            {/* Origen */}
+            <div className="text-secondary flex shrink-0 items-center gap-1.5 font-medium">
+              <IoGitBranchOutline className="h-4 w-4 text-blue-500 opacity-80 shrink-0" />
+              <span className="truncate">{originText}</span>
+            </div>
+
+            {/* Fecha (si existe) */}
+            {formattedDate && (
+              <div className="text-secondary flex shrink-0 items-center gap-1.5 font-medium">
+                <IoCalendarOutline className="h-4 w-4 opacity-60 shrink-0" />
+                <span className="truncate">{formattedDate}</span>
+              </div>
+            )}
           </div>
 
-          <div className="flex items-center gap-2">
-            <PiCalendarFill className="text-secondary h-3.5 w-3.5 shrink-0 opacity-50" />
-            <span className="text-secondary text-xs font-medium opacity-70">
-              Siembra: {formattedDate}
-            </span>
+          <div className="flex shrink-0">
+            <ActionMenu hoverOnly={false} items={menuItems} />
           </div>
         </div>
       </div>

@@ -89,7 +89,15 @@ export function QueueView() {
     error: loadError,
     mutate,
   } = useSWR<PendingTask[]>('/api/planner/queue', fetcher, {
-    refreshInterval: 5000,
+    refreshInterval: (latestData: PendingTask[] | undefined): number => {
+      const currentTasks: PendingTask[] = latestData || tasks
+      const hasActive = currentTasks.some((t: PendingTask) =>
+        ['RUNNING', 'PENDING', 'IN_PROGRESS', 'AUTHORIZED', 'DISPATCHED'].includes(t.status),
+      )
+
+      return hasActive ? 5000 : 30000
+    },
+    revalidateOnFocus: true,
   })
 
   // Sincronizar errores de carga con Toasts
@@ -212,11 +220,11 @@ export function QueueView() {
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {tasks.map((task) => (
+              {tasks.map((task: PendingTask) => (
                 <QueueTaskCard
                   key={task.id}
-                  colorClassName={ACTION_MAP[task.purpose].color}
-                  icon={ACTION_MAP[task.purpose].icon}
+                  colorClassName={ACTION_MAP[task.purpose as TaskPurpose]?.color || ''}
+                  icon={ACTION_MAP[task.purpose as TaskPurpose]?.icon || null}
                   task={task}
                   onCancel={setCancelTarget}
                 />

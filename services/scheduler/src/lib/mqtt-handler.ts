@@ -49,6 +49,26 @@ interface PendingCommand {
   onFailure?: (taskId: string, notes?: string) => Promise<void>
 }
 
+function formatTimePayload(payload: string): string {
+  try {
+    const parsed = JSON.parse(payload)
+
+    if (Array.isArray(parsed.time) && parsed.time.length >= 7) {
+      const [, , , , h, m, s] = parsed.time
+      const hour12 = h % 12 === 0 ? 12 : h % 12
+      const ampm = h >= 12 ? 'pm' : 'am'
+      const pad = (n: number) => String(n).padStart(2, '0')
+
+      return `${pad(hour12)}:${pad(m)}:${pad(s)} ${ampm}`
+    }
+  } catch {
+    /* fallback */
+  }
+
+  return payload
+}
+
+// ---- SECUENCIADOR DE COMANDOS (CommandSequencer) ----
 /**
  * SECUENCIADOR DE COMANDOS (CommandSequencer)
  * Gestiona la entrega ordenada y robusta de comandos al Nodo Actuador.
@@ -172,7 +192,16 @@ class CommandSequencer {
       const isIrrigation = topic.includes('irrigation')
 
       if (!isIrrigation) {
-        Logger.mqtt(`Comando: ${colors.magenta}${payload}${colors.reset}`, this.nodeTarget)
+        if (payload.startsWith('{"time"')) {
+          const formattedTime = formatTimePayload(payload)
+
+          Logger.mqtt(
+            `Comando: Sincronización horaria RTC (${colors.magenta}${formattedTime}${colors.reset})`,
+            this.nodeTarget,
+          )
+        } else {
+          Logger.mqtt(`Comando: ${colors.magenta}${payload}${colors.reset}`, this.nodeTarget)
+        }
       }
     }
 
@@ -272,7 +301,13 @@ class CommandSequencer {
 
       const attemptsStr = result.attempts > 1 ? ` (en ${result.attempts} intentos)` : ''
 
-      Logger.ack(`${this.nodeTarget} confirmó ACK${attemptsStr} para el comando: ${taskId}`)
+      if (taskId.startsWith('{"time"')) {
+        Logger.ack(
+          `${this.nodeTarget} confirmó ACK${attemptsStr} para la sincronización horaria (RTC)`,
+        )
+      } else {
+        Logger.ack(`${this.nodeTarget} confirmó ACK${attemptsStr} para el comando: ${taskId}`)
+      }
 
       // Eliminar de la cola
       this.queue.shift()

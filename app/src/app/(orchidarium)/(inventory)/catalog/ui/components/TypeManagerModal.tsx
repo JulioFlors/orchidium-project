@@ -28,8 +28,8 @@ export function TypeManagerModal({
             </div>
           ))}
         </div>
-        <div className="border-input-outline -mx-6 mt-2 flex justify-end border-t px-6 pt-4">
-          <Button size="sm" variant="ghost" onClick={onClose}>
+        <div className="border-input-outline -mx-6 mt-2 flex border-t px-6 pt-4">
+          <Button className="w-full" type="button" variant="ghost" onClick={onClose}>
             Cerrar
           </Button>
         </div>

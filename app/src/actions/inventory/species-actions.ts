@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { prisma } from '@package/database'
 
 import { Logger } from '@/lib'
+import { sortVariantsByPotSizeAsc } from '@/config/mappings'
 import { deleteR2Object } from '@/actions/storage/upload-actions'
 
 // ─────────────────────────────────────────────────────────────
@@ -35,11 +36,36 @@ export async function getSpecies() {
           select: { id: true, url: true },
           orderBy: { position: 'asc' },
         },
+        variants: {
+          select: { id: true, size: true, price: true, quantity: true, available: true },
+          orderBy: { size: 'asc' },
+        },
+        plants: {
+          where: { status: 'AVAILABLE' },
+          select: { currentSize: true },
+        },
         _count: { select: { variants: true, plants: true } },
       },
     })
 
-    return { ok: true, species }
+    const formattedSpecies = species.map((specie) => {
+      const updatedVariants = specie.variants.map((v) => {
+        const qty = specie.plants.filter((p) => p.currentSize === v.size).length
+
+        return {
+          ...v,
+          quantity: qty,
+          available: qty > 0,
+        }
+      })
+
+      return {
+        ...specie,
+        variants: updatedVariants,
+      }
+    })
+
+    return { ok: true, species: formattedSpecies }
   } catch (err) {
     Logger.error('[Species] Error al obtener especies:', err)
 
@@ -81,7 +107,30 @@ export async function getSpeciesById(identifier: string) {
       },
     })
 
-    return { ok: true, species }
+    if (!species) {
+      return { ok: true, species: null }
+    }
+
+    const availablePlants = species.plants.filter((p) => p.status === 'AVAILABLE')
+    const updatedVariants = sortVariantsByPotSizeAsc(
+      species.variants.map((v) => {
+        const qty = availablePlants.filter((p) => p.currentSize === v.size).length
+
+        return {
+          ...v,
+          quantity: qty,
+          available: qty > 0,
+        }
+      }),
+    )
+
+    return {
+      ok: true,
+      species: {
+        ...species,
+        variants: updatedVariants,
+      },
+    }
   } catch (err) {
     Logger.error('[Species] Error al obtener especie por ID o Slug:', err)
 
@@ -194,9 +243,23 @@ export async function deleteSpecies(id: string) {
 /** Registra la URL pública de una imagen R2 en SpeciesImage */
 export async function addSpeciesImage(speciesId: string, url: string) {
   try {
-    const image = await prisma.speciesImage.create({ data: { speciesId, url } })
+    const maxAgg = await prisma.speciesImage.aggregate({
+      where: { speciesId },
+      _max: { position: true },
+    })
+
+    const nextPosition = (maxAgg._max.position ?? -1) + 1
+
+    const image = await prisma.speciesImage.create({
+      data: {
+        speciesId,
+        url,
+        position: nextPosition,
+      },
+    })
 
     revalidatePath('/catalog')
+    revalidatePath(`/catalog/${speciesId}`)
 
     return { ok: true, image }
   } catch (err) {

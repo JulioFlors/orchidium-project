@@ -4,7 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 
 import { ProductVariant, Species } from '@/interfaces/'
-import { StockLabel, FloweringLabel } from '@/components'
+import { StockLabel, isVariantAvailable } from '@/components'
 import { useImageColor, getPresetForColorString } from '@/hooks/useImageColor'
 import { getImageUrl, useFormatPrice } from '@/lib'
 
@@ -16,13 +16,14 @@ interface Props {
 
 // Calculamos si hay stock disponible y extraemos los límites del rango.
 const getProductDisplayInfo = (variants: ProductVariant[]) => {
-  const availableVariants = variants.filter((variant) => variant.available && variant.quantity > 0)
+  const availableVariants = variants.filter((variant) => isVariantAvailable(variant))
   const hasStock = availableVariants.length > 0
-  const targetVariants = hasStock ? availableVariants : variants
+  const validPriceVariants = variants.filter((v) => v.price > 0)
+  const targetVariants = hasStock ? availableVariants : validPriceVariants
   const prices = targetVariants.map((variant) => variant.price)
 
   if (prices.length === 0) {
-    return { minPrice: 0, maxPrice: 0, hasStock: false }
+    return { minPrice: 0, maxPrice: 0, hasStock: false, hasValidPrice: false }
   }
 
   const minPrice = Math.min(...prices)
@@ -32,13 +33,14 @@ const getProductDisplayInfo = (variants: ProductVariant[]) => {
     minPrice,
     maxPrice,
     hasStock,
+    hasValidPrice: true,
   }
 }
 
 export function ProductGridItem({ product, index, showGlow = true }: Props) {
-  const { minPrice, maxPrice, hasStock } = getProductDisplayInfo(product.variants)
+  const { minPrice, maxPrice, hasStock, hasValidPrice } = getProductDisplayInfo(product.variants)
   const { formatRange } = useFormatPrice()
-  const priceLabel = formatRange(minPrice, maxPrice)
+  const priceLabel = hasValidPrice ? formatRange(minPrice, maxPrice) : 'No disponible'
 
   // Obtenemos dinámicamente el color dominante o de contraste de la primera imagen
   const isCustomColor = Boolean(
@@ -114,10 +116,10 @@ export function ProductGridItem({ product, index, showGlow = true }: Props) {
           </Link>
 
           {/* Etiqueta de Agotado: Se muestra si NINGUNA variante tiene stock */}
-          {!hasStock && <StockLabel />}
+          {!hasStock && <StockLabel label="Agotado" />}
 
-          {/* Etiqueta de Floración: Se muestra si hay al menos una planta en floración activa */}
-          {product.isFlowering && <FloweringLabel />}
+          {/* Etiqueta de Floración: Se muestra si hay al menos una planta en floración activa y tiene stock */}
+          {hasStock && product.isFlowering && <StockLabel label="Floración" />}
         </div>
       </div>
 

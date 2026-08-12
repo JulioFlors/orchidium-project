@@ -27,7 +27,7 @@ export const getSearchSpeciesByTerm = async (
           {
             name: {
               contains: SearchTerm,
-              mode: 'insensitive', // Búsqueda insensible a mayúsculas/minúsculas
+              mode: 'insensitive',
             },
           },
           {
@@ -37,7 +37,6 @@ export const getSearchSpeciesByTerm = async (
             },
           },
           {
-            // Búsqueda en el nombre del género relacionado
             genus: {
               name: {
                 contains: SearchTerm,
@@ -57,14 +56,46 @@ export const getSearchSpeciesByTerm = async (
           select: { name: true, type: true },
         },
         variants: true,
+        plants: {
+          where: {
+            status: 'AVAILABLE',
+          },
+          select: {
+            id: true,
+            currentSize: true,
+            FloweringEvent: {
+              where: {
+                endDate: null,
+              },
+              select: {
+                id: true,
+              },
+              take: 1,
+            },
+          },
+        },
       },
     })
 
     // Devolvemos los datos formateados
     return species.map((specie) => {
+      const isFlowering = specie.plants.some((p) => p.FloweringEvent && p.FloweringEvent.length > 0)
+
+      const updatedVariants = specie.variants.map((v) => {
+        const realQty = specie.plants.filter((p) => p.currentSize === v.size).length
+
+        return {
+          ...v,
+          quantity: realQty,
+          available: realQty > 0,
+        }
+      })
+
       return {
         ...specie,
         images: specie.images.map((image) => image.url),
+        variants: updatedVariants,
+        isFlowering,
       }
     })
   } catch (error) {

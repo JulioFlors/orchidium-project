@@ -141,6 +141,11 @@ export function DeferredTaskModal({ isOpen, onClose, onSubmitSuccess }: Props) {
               type="datetime-local"
               {...register('scheduledAt')}
             />
+            {errors.scheduledAt && (
+              <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-500">
+                {errors.scheduledAt.message}
+              </span>
+            )}
           </FormField>
 
           <FormField htmlFor="duration" label="Duración">
@@ -162,7 +167,7 @@ export function DeferredTaskModal({ isOpen, onClose, onSubmitSuccess }: Props) {
                 : 'border-input-outline',
             )}
             id="notes"
-            placeholder="Opcional..."
+            placeholder=""
             rows={2}
             {...register('notes')}
           />
@@ -179,7 +184,7 @@ export function DeferredTaskModal({ isOpen, onClose, onSubmitSuccess }: Props) {
             Cancelar
           </Button>
           <Button isLoading={isSubmitting} type="submit">
-            {isSubmitting ? 'Agendando' : 'Agendar Tarea'}
+            {isSubmitting ? 'Guardando' : 'Guardar'}
           </Button>
         </div>
       </form>

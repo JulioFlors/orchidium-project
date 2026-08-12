@@ -11,6 +11,8 @@ import {
   SizeSelector,
   StockLabel,
   Button,
+  isProductAvailable,
+  isVariantAvailable,
 } from '@/components'
 import { useCartStore } from '@/store'
 import { getImageUrl, Logger, useFormatPrice } from '@/lib'
@@ -30,20 +32,22 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
   const addProductToCart = useCartStore((state) => state.addProductToCart)
 
   // 1. ¿Existe algo que vender en general?
-  const hasGlobalStock = product.variants.some((v) => v.available && v.quantity > 0)
+  const hasGlobalStock = isProductAvailable(product)
 
   // 2. Lógica de Precio Dinámico
   const getPriceLabel = () => {
-    // Caso A: Variante seleccionada -> Precio específico
-    if (selectedVariant) return format(selectedVariant.price)
+    // Caso A: Variante seleccionada -> Precio específico (si es <= 0 mostrar 'No disponible')
+    if (selectedVariant) {
+      return selectedVariant.price > 0 ? format(selectedVariant.price) : 'No disponible'
+    }
 
-    // Caso B: Nada seleccionado -> Rango de Precios
-    const availableVariants = product.variants.filter((v) => v.available && v.quantity > 0)
-    // Si no hay stock, usamos todos los precios como referencia (gris)
-    const targetVariants = availableVariants.length > 0 ? availableVariants : product.variants
+    // Caso B: Nada seleccionado -> Rango de Precios para variantes con precio > 0
+    const availableVariants = product.variants.filter((v) => isVariantAvailable(v))
+    const validPriceVariants = product.variants.filter((v) => v.price > 0)
+    const targetVariants = availableVariants.length > 0 ? availableVariants : validPriceVariants
     const prices = targetVariants.map((v) => v.price)
 
-    if (prices.length === 0) return format(0)
+    if (prices.length === 0) return 'No disponible'
     const min = Math.min(...prices)
     const max = Math.max(...prices)
 
@@ -84,9 +88,7 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
 
   // Helper: ¿La variante seleccionada tiene stock?
   // Si no hay selección, asumimos true para no mostrar errores prematuros
-  const isSelectedVariantAvailable = selectedVariant
-    ? selectedVariant.available && selectedVariant.quantity > 0
-    : true
+  const isSelectedVariantAvailable = selectedVariant ? isVariantAvailable(selectedVariant) : true
 
   return (
     <>
@@ -143,6 +145,9 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
               <div className="fade-in">
                 <StockNotificationWhatsapp
                   productName={`${product.name} (${selectedVariant.size})`}
+                  size={selectedVariant.size}
+                  speciesId={product.id}
+                  variantId={selectedVariant.id}
                 />
               </div>
             ) : (
@@ -164,6 +169,9 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
           <div className="fade-in">
             <StockNotificationWhatsapp
               productName={`${product.name} ${selectedVariant ? `(${selectedVariant.size})` : ''}`}
+              size={selectedVariant?.size}
+              speciesId={product.id}
+              variantId={selectedVariant?.id}
             />
           </div>
         </div>

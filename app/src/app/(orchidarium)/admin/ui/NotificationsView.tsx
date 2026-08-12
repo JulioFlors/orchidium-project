@@ -39,7 +39,8 @@ export function NotificationsView() {
     notifications: Notification[]
     unreadCount: number
   }>('/api/notifications', fetcher, {
-    refreshInterval: 10000,
+    refreshInterval: 60000,
+    dedupingInterval: 10000,
   })
   const { success, error } = useToast()
   const router = useRouter()

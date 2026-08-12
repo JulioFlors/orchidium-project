@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'motion/react'
 import { IoChevronDown } from 'react-icons/io5'
 import clsx from 'clsx'
@@ -42,6 +43,16 @@ const motionProps = {
  * Aporta navegación por teclado (ArrowUp/Down, Enter, Esc), trampa de foco y
  * animaciones motion integradas.
  */
+const emptySubscribe = () => () => {}
+
+export function useIsMounted() {
+  return React.useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  )
+}
+
 export function SelectDropdown({
   id,
   options,
@@ -56,7 +67,14 @@ export function SelectDropdown({
   error,
 }: SelectDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const isMounted = useIsMounted()
   const [focusedIndex, setFocusedIndex] = useState<number>(-1)
+  const [menuStyle, setMenuStyle] = useState<{
+    top: number
+    left: number
+    width: number
+    maxHeight?: number
+  }>({ top: 0, left: 0, width: 0 })
 
   const containerRef = useRef<HTMLDivElement>(null)
   const listboxRef = useRef<HTMLUListElement>(null)
@@ -64,10 +82,60 @@ export function SelectDropdown({
 
   const selectedOption = options.find((o) => o.value === value)
 
+  // ----------- Cálculo de posición para Portal -----------
+  const updatePosition = useCallback(() => {
+    if (!buttonRef.current) return
+    const rect = buttonRef.current.getBoundingClientRect()
+
+    if (rect.width === 0) return
+
+    const spaceBelow = window.innerHeight - rect.bottom
+    const spaceAbove = rect.top
+    const defaultMenuHeight = 240 // 15rem (max-h-60)
+
+    let top = rect.bottom + 4
+    let maxHeight = spaceBelow - 16
+
+    if (spaceBelow < 160 && spaceAbove > spaceBelow) {
+      top = Math.max(8, rect.top - Math.min(defaultMenuHeight, spaceAbove - 16) - 4)
+      maxHeight = spaceAbove - 16
+    }
+
+    setMenuStyle({
+      top,
+      left: rect.left,
+      width: rect.width,
+      maxHeight: Math.min(240, Math.max(120, maxHeight)),
+    })
+  }, [])
+
+  const openDropdown = useCallback(() => {
+    updatePosition()
+    setIsOpen(true)
+  }, [updatePosition])
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    updatePosition()
+
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [isOpen, updatePosition])
+
   // ----------- Handlers principales -----------
   const handleToggle = () => {
     if (disabled) return
-    setIsOpen((prev) => !prev)
+    if (!isOpen) {
+      openDropdown()
+    } else {
+      setIsOpen(false)
+    }
   }
 
   const handleSelect = useCallback(
@@ -93,13 +161,13 @@ export function SelectDropdown({
             handleSelect(options[focusedIndex])
           }
         } else {
-          setIsOpen(true)
+          openDropdown()
         }
         break
       case 'ArrowDown':
         e.preventDefault()
         if (!isOpen) {
-          setIsOpen(true)
+          openDropdown()
           setFocusedIndex(0)
         } else {
           setFocusedIndex((prev) => {
@@ -118,7 +186,7 @@ export function SelectDropdown({
       case 'ArrowUp':
         e.preventDefault()
         if (!isOpen) {
-          setIsOpen(true)
+          openDropdown()
           setFocusedIndex(options.length - 1)
         } else {
           setFocusedIndex((prev) => {
@@ -142,7 +210,6 @@ export function SelectDropdown({
         }
         break
       case 'Tab':
-        // Comportamiento nativo de tab, simplemente cerramos si el menú estaba abierto y pierde foco.
         if (isOpen) {
           setIsOpen(false)
         }
@@ -153,7 +220,14 @@ export function SelectDropdown({
   // ----------- FocusTrap & ClickOutside -----------
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node
+
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(target) &&
+        listboxRef.current &&
+        !listboxRef.current.contains(target)
+      ) {
         setIsOpen(false)
       }
     }
@@ -168,7 +242,6 @@ export function SelectDropdown({
   // Effect to set initial focused index when dropdown opens or closes
   useEffect(() => {
     if (isOpen) {
-      // Ajustar focusedIndex al elemento seleccionado actualmente previniendo cascading renders
       setTimeout(() => {
         const activeIdx = options.findIndex((o) => o.value === value)
 
@@ -183,7 +256,6 @@ export function SelectDropdown({
       const activeItem = listboxRef.current.children[focusedIndex] as HTMLElement
 
       if (activeItem) {
-        // Scroll element into view without moving window
         activeItem.scrollIntoView({ block: 'nearest' })
       }
     }
@@ -234,58 +306,71 @@ export function SelectDropdown({
         />
       </button>
 
-      <AnimatePresence>
-        {isOpen && (
-          <motion.ul
-            ref={listboxRef}
-            aria-activedescendant={focusedIndex >= 0 ? `${id}-option-${focusedIndex}` : undefined}
-            className={clsx(
-              'border-input-outline bg-surface text-black-and-white absolute z-50 mt-1 max-h-60 w-full overflow-x-hidden overflow-y-auto rounded-md border px-1 py-1 shadow-xl',
-              'scrollbar-thumb-divider scrollbar-thin scrollbar-track-transparent outline-none!',
-              menuClassName,
+      {isMounted &&
+        createPortal(
+          <AnimatePresence>
+            {isOpen && (
+              <motion.ul
+                key={`${id || 'dropdown'}-menu`}
+                ref={listboxRef}
+                aria-activedescendant={
+                  focusedIndex >= 0 ? `${id}-option-${focusedIndex}` : undefined
+                }
+                className={clsx(
+                  'border-input-outline bg-surface text-black-and-white fixed z-99 mt-0 overflow-x-hidden overflow-y-auto rounded-md border px-1 py-1 shadow-xl',
+                  'scrollbar-thumb-divider scrollbar-thin scrollbar-track-transparent outline-none!',
+                  menuClassName,
+                )}
+                role="listbox"
+                style={{
+                  top: `${menuStyle.top}px`,
+                  left: `${menuStyle.left}px`,
+                  width: menuStyle.width > 0 ? `${menuStyle.width}px` : undefined,
+                  maxHeight: menuStyle.maxHeight ? `${menuStyle.maxHeight}px` : undefined,
+                }}
+                tabIndex={-1}
+                {...motionProps}
+              >
+                {options.length === 0 ? (
+                  <li className="text-secondary py-3 text-center text-sm font-medium italic opacity-50 select-none">
+                    {emptyMessage}
+                  </li>
+                ) : (
+                  options.map((option, index) => (
+                    <li
+                      key={option.value}
+                      aria-disabled={option.disabled}
+                      aria-selected={value === option.value}
+                      className={clsx(
+                        'my-0.5 flex cursor-pointer items-center gap-2.5 rounded-sm px-3 py-1.5 text-left text-sm whitespace-nowrap transition-all',
+                        option.disabled && 'cursor-not-allowed opacity-50',
+                        focusedIndex === index && !option.disabled && 'bg-hover-overlay',
+                        value === option.value &&
+                          !option.disabled &&
+                          'bg-action/10 text-action font-semibold',
+                      )}
+                      id={`${id}-option-${index}`}
+                      role="option"
+                      onClick={() => handleSelect(option)}
+                      onMouseEnter={() => {
+                        if (!option.disabled) setFocusedIndex(index)
+                      }}
+                    >
+                      {option.color && (
+                        <span
+                          className="h-3 w-3 shrink-0 rounded-full border border-black/15 shadow-xs transition-transform dark:border-white/20"
+                          style={{ backgroundColor: option.color }}
+                        />
+                      )}
+                      <span className="truncate">{option.label}</span>
+                    </li>
+                  ))
+                )}
+              </motion.ul>
             )}
-            role="listbox"
-            tabIndex={-1}
-            {...motionProps}
-          >
-            {options.length === 0 ? (
-              <li className="text-secondary py-3 text-center text-sm font-medium italic opacity-50 select-none">
-                {emptyMessage}
-              </li>
-            ) : (
-              options.map((option, index) => (
-                <li
-                  key={option.value}
-                  aria-disabled={option.disabled}
-                  aria-selected={value === option.value}
-                  className={clsx(
-                    'my-0.5 flex cursor-pointer items-center gap-2.5 rounded-sm px-3 py-1.5 text-left text-sm whitespace-nowrap transition-all',
-                    option.disabled && 'cursor-not-allowed opacity-50',
-                    focusedIndex === index && !option.disabled && 'bg-hover-overlay',
-                    value === option.value &&
-                      !option.disabled &&
-                      'bg-action/10 text-action font-semibold',
-                  )}
-                  id={`${id}-option-${index}`}
-                  role="option"
-                  onClick={() => handleSelect(option)}
-                  onMouseEnter={() => {
-                    if (!option.disabled) setFocusedIndex(index)
-                  }}
-                >
-                  {option.color && (
-                    <span
-                      className="h-3 w-3 shrink-0 rounded-full border border-black/15 shadow-xs transition-transform dark:border-white/20"
-                      style={{ backgroundColor: option.color }}
-                    />
-                  )}
-                  <span className="truncate">{option.label}</span>
-                </li>
-              ))
-            )}
-          </motion.ul>
+          </AnimatePresence>,
+          document.body,
         )}
-      </AnimatePresence>
     </div>
   )
 }

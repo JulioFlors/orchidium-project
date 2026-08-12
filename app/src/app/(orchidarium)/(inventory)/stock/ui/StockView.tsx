@@ -6,7 +6,7 @@ import { useEffect } from 'react'
 
 import { StockSpeciesCard } from './components/StockSpeciesCard'
 
-import { Heading } from '@/components'
+import { Heading, Title, Subtitle } from '@/components'
 
 interface SpeciesImage {
   id: string
@@ -134,11 +134,7 @@ export function StockView({ initialData }: StockViewProps) {
             return (
               <div key={type} className="flex flex-col pb-8 last:pb-0">
                 {/* Encabezado de Tipo de Planta */}
-                <div className="group relative z-8 mt-9 ml-1 flex items-center gap-2">
-                  <h2 className="text-primary text-2xl leading-10.5 font-bold tracking-tighter antialiased">
-                    {PLANT_TYPE_LABELS[type]}
-                  </h2>
-                </div>
+                <Title className="ml-1" title={PLANT_TYPE_LABELS[type]} />
 
                 {/* Sub-agrupación por Géneros */}
                 <div className="flex flex-col gap-6">
@@ -150,11 +146,7 @@ export function StockView({ initialData }: StockViewProps) {
 
                     return (
                       <div key={genusName} className="flex flex-col">
-                        <div className="group tds-xs:sticky tds-xs:backdrop-blur-lg bg-canvas/30 dark:bg-canvas/60 top-14 z-9 mt-10 ml-1 flex w-[calc(100%-8px)]! items-center gap-2 px-0">
-                          <h3 className="text-primary text-xl leading-10.5 font-medium tracking-wider antialiased">
-                            {genusName}
-                          </h3>
-                        </div>
+                        <Subtitle className="ml-1 w-[calc(100%-8px)]! px-0" subtitle={genusName} />
 
                         {/* Listado de Especies */}
                         <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-3 tds-2xl:grid-cols-4 mt-9 grid grid-cols-1 gap-x-4 gap-y-2">

@@ -27,6 +27,7 @@ import {
 import { processDay, getCaracasMidnight } from './lib/telemetry-processor'
 import * as RainManager from './lib/rain-manager'
 import * as DropsSensorManager from './lib/drops-sensor-manager'
+import { scheduleManager } from './lib/schedule-manager'
 
 // ---- Configuración de Reglas ----
 
@@ -46,6 +47,50 @@ let isSystemReady = false // Solo true tras recibir la primera telemetría post-
 let lastRainState = 'Dry' // Declaración global para evitar ReferenceError
 let lastEmaHeartbeat: number = 0
 let lastEmaAuditAckAt: number = 0
+let emaOnlineTimestamp: number = 0
+let hadSolitaryBatteryOffline: boolean = false
+
+function formatDurationDHMS(durationMs: number): string {
+  const totalMinutes = Math.floor(durationMs / 60000)
+  const days = Math.floor(totalMinutes / (24 * 60))
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60)
+  const minutes = totalMinutes % 60
+
+  const parts: string[] = []
+
+  if (days > 0) parts.push(`${days}d`)
+  if (hours > 0 || days > 0) parts.push(`${hours}h`)
+  parts.push(`${minutes}min`)
+
+  return parts.join(' ')
+}
+
+async function sendTelegramAlert(text: string) {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN
+  const chatId = process.env.TELEGRAM_CHAT_ID
+
+  if (!botToken || !chatId) {
+    Logger.debug('Telegram Bot Token o Chat ID no configurados.')
+
+    return
+  }
+
+  try {
+    const url = `https://api.telegram.org/bot${botToken}/sendMessage`
+
+    await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: 'Markdown',
+      }),
+    })
+  } catch (error) {
+    Logger.error('Error al enviar alerta a Telegram:', error)
+  }
+}
 
 const emaAuditState = {
   requested: {
@@ -191,8 +236,18 @@ const EMA_HEARTBEAT_TIMEOUT_MS = 70 * 60 * 1000 // 70 minutos
 let lastFirmwareHeartbeat: number = 0
 let isEmaSleeping = false
 let emaSleepFallbackTimer: NodeJS.Timeout | null = null
+let emaSessionStartAt: number = 0
+let lastEmaTelemetryBatchAt: number = 0
+let emaSessionSupervisionTimer: NodeJS.Timeout | null = null
 let lastSyncTimestamp: number = 0
 let lastTimeSyncSent: number = 0
+
+function clearEmaSupervisionTimer() {
+  if (emaSessionSupervisionTimer) {
+    clearTimeout(emaSessionSupervisionTimer)
+    emaSessionSupervisionTimer = null
+  }
+}
 
 // ---- Sincronización de Clima (DHT22) ----
 let climateSyncTimer: NodeJS.Timeout | null = null
@@ -326,6 +381,7 @@ function flushBootLog(nodeSource: string) {
     // Sincronización para el Actuador Exterior
     resetSamplingState()
     syncNodeSampling(undefined, true, 'actuator')
+    sendCaracasTimeToActuator()
 
     // Al reconectarse o reiniciarse el nodo, asumimos que se inicializa en INTERVAL_NORMAL.
     lastSentRainInterval = 'INTERVAL_NORMAL'
@@ -372,6 +428,7 @@ function setupMqttHandlers() {
         'PristinoPlant/Weather_Station/ZONA_A/cmd/request',
         'PristinoPlant/Weather_Station/ZONA_A/audit/state',
         'PristinoPlant/Weather_Station/ZONA_A/audit/end',
+        'PristinoPlant/System/Scheduler/Sync',
       ],
       { qos: 1 },
     )
@@ -400,6 +457,12 @@ function setupMqttHandlers() {
 
       // Heartbeat: cualquier mensaje del firmware actualiza el timestamp general
       // Se actualizará lastFirmwareHeartbeat al final de este handler.
+
+      if (topic === 'PristinoPlant/System/Scheduler/Sync') {
+        await scheduleManager.syncAutomationSchedules(runTask)
+
+        return
+      }
 
       // 1. Monitoreo de Conexión del Nodo Actuador
       if (topic === 'PristinoPlant/Actuator_Controller/status') {
@@ -503,6 +566,42 @@ function setupMqttHandlers() {
         }
 
         if (message === 'reboot' || message === 'online') {
+          emaSessionStartAt = Date.now()
+          clearEmaSupervisionTimer()
+
+          // Supervisión de ventana de transmisión (90 segundos = 1 min 30 s)
+          emaSessionSupervisionTimer = setTimeout(async () => {
+            emaSessionSupervisionTimer = null
+            if (emaManager.connectionState === 'online' && !isEmaSleeping) {
+              const hasActiveAudits =
+                Object.values(emaAuditState.active).some(Boolean) ||
+                Object.values(emaAuditState.requested).some(Boolean)
+
+              if (!hasActiveAudits) {
+                const hasPublishedBatch = lastEmaTelemetryBatchAt >= emaSessionStartAt
+                if (hasPublishedBatch) {
+                  Logger.node('SLEEP', 'Weather Station Orquideario')
+                  Logger.info('💤 Inferencia (90s): Lotes de telemetría recibidos. Marcando en SLEEP.')
+                  isEmaSleeping = true
+                  emaManager.setOffline()
+                  await saveDeviceLog(
+                    'Weather_Station_ZONA_A',
+                    'SLEEP',
+                    'Suspendido tras verificación de lotes (90s)',
+                  )
+                } else {
+                  Logger.node('OFFLINE', 'Weather Station Orquideario (Sin telemetría en 90s)')
+                  emaManager.setOffline()
+                  await saveDeviceLog(
+                    'Weather_Station_ZONA_A',
+                    'OFFLINE',
+                    'Desconexión sin telemetría validada (90s)',
+                  )
+                }
+              }
+            }
+          }, 90000)
+
           const timeSinceLastHeartbeat = Date.now() - previousEmaHeartbeat
           const isFreshSession =
             previousEmaHeartbeat === 0 || timeSinceLastHeartbeat > 15 * 60 * 1000
@@ -574,6 +673,7 @@ function setupMqttHandlers() {
 
           await handleEmaSync(statusToSave)
         } else if (message === 'sleep') {
+          clearEmaSupervisionTimer()
           // Flush preventivo del boot log si el EMA se va a dormir antes de que expire su timer normal
           if (bootAccumulators.has('Weather Station Orquideario')) {
             flushBootLog('Weather Station Orquideario')
@@ -592,10 +692,32 @@ function setupMqttHandlers() {
           }
           publishEmaAuditState()
         } else if (message === 'lwt_disconnect' || message === 'offline') {
+          clearEmaSupervisionTimer()
           if (isEmaSleeping) {
             // Ignorar señales de desconexión lwt si el nodo se durmió limpiamente
             return
           }
+
+          // Evaluación de resiliencia: Si el nodo publicó lotes en esta sesión y no hay auditorías pendientes
+          const hasPublishedBatchInSession = lastEmaTelemetryBatchAt >= emaSessionStartAt
+          const hasNoAudits =
+            !Object.values(emaAuditState.requested).some((v) => v === true) &&
+            !Object.values(emaAuditState.active).some((v) => v === true)
+
+          if (hasPublishedBatchInSession && hasNoAudits) {
+            Logger.node('SLEEP', 'Weather Station Orquideario')
+            Logger.info('💤 Desconexión de red tras publicación limpia de lotes. Marcando en SLEEP.')
+            isEmaSleeping = true
+            emaManager.setOffline()
+            await saveDeviceLog(
+              'Weather_Station_ZONA_A',
+              'SLEEP',
+              'Suspendido tras publicación exitosa de lotes',
+            )
+
+            return
+          }
+
           const wasOffline = emaManager.connectionState === 'offline'
 
           emaManager.setOffline()
@@ -779,6 +901,7 @@ function setupMqttHandlers() {
 
         if (!isActuator) {
           if (message === 'sleep') {
+            clearEmaSupervisionTimer()
             if (emaSleepFallbackTimer) {
               clearTimeout(emaSleepFallbackTimer)
               emaSleepFallbackTimer = null
@@ -973,8 +1096,22 @@ function setupMqttHandlers() {
               if (lux !== null) lastKnownLux = lux
             }
 
+            // Saneamiento de iluminancia para inferencia diurna (7:00 AM - 6:00 PM VET)
+            const nowForLux = new Date()
+            const caracasHourForLux = parseInt(
+              new Intl.DateTimeFormat('en-US', {
+                timeZone: 'America/Caracas',
+                hour: 'numeric',
+                hour12: false,
+              }).format(nowForLux),
+            )
+            const sanitizedLuxValues =
+              caracasHourForLux < 7 || caracasHourForLux >= 18
+                ? luxValues.map(() => 0)
+                : luxValues
+
             // Encolar los resúmenes de lote correspondientes en RainManager
-            RainManager.pushClimateBatch(tempValues, humValues, luxValues)
+            RainManager.pushClimateBatch(tempValues, humValues, sanitizedLuxValues)
 
             if (hasLux && lux !== null) {
               const now = new Date()
@@ -1140,6 +1277,7 @@ function checkAndSleepEma() {
     executeEmaCommand('sleep', true)
     if (emaSleepFallbackTimer) clearTimeout(emaSleepFallbackTimer)
     emaSleepFallbackTimer = setTimeout(() => {
+      clearEmaSupervisionTimer()
       isEmaSleeping = true
       emaManager.setOffline()
       saveDeviceLog('Weather_Station_ZONA_A', 'SLEEP', 'Suspendido forzado')
@@ -1239,6 +1377,21 @@ async function checkEmaHeartbeat() {
       'OFFLINE',
       'Watchdog: Sin señales de vida durante 70 minutos (Offline)',
     )
+
+    // Evaluar si es una Desconexión Solitaria (Nodo Actuador sigue ONLINE) para notificar batería agotada
+    const isActuatorOnline =
+      systemRetryManager.connectionState === 'online' ||
+      irrigationRetryManager.connectionState === 'online'
+
+    if (isActuatorOnline && !hadSolitaryBatteryOffline) {
+      hadSolitaryBatteryOffline = true
+      const durationMs = emaOnlineTimestamp > 0 ? Date.now() - emaOnlineTimestamp : 0
+      const durationText = durationMs > 0 ? formatDurationDHMS(durationMs) : 'Desconocida'
+
+      await sendTelegramAlert(
+        `⚠️ *Alerta BATERÍA del Nodo EMA Agotada*\n⚡ *Duración*: ${durationText}`,
+      )
+    }
 
     // Publicar estado offline en canal de status
     mqttClient.publish('PristinoPlant/Weather_Station/ZONA_A/status', 'offline', {
@@ -1574,6 +1727,49 @@ function sendCaracasTimeToEma(): void {
   }
 }
 
+function sendCaracasTimeToActuator(): void {
+  if (irrigationRetryManager.connectionState !== 'online') return
+
+  try {
+    const now = new Date()
+    const parts = new Intl.DateTimeFormat('es-VE', {
+      timeZone: 'America/Caracas',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    }).formatToParts(now)
+
+    const getPart = (type: Intl.DateTimeFormatPartTypes): number => {
+      const found = parts.find((p) => p.type === type)
+
+      return found ? parseInt(found.value, 10) : 0
+    }
+
+    const year = getPart('year')
+    const month = getPart('month')
+    const day = getPart('day')
+    const hour = getPart('hour')
+    const minute = getPart('minute')
+    const second = getPart('second')
+
+    const caracasDateStr = now.toLocaleDateString('en-US', { timeZone: 'America/Caracas' })
+    const jsDay = new Date(caracasDateStr).getDay()
+    const weekday = jsDay === 0 ? 6 : jsDay - 1
+
+    const payload = JSON.stringify({
+      time: [year, month, day, weekday, hour, minute, second, 0],
+    })
+
+    executeSystemCommand(payload, false)
+  } catch (error) {
+    Logger.error('Error enviando sincronización horaria al Actuador:', error)
+  }
+}
+
 /**
  * Orquesta la sincronización completa de la Estación EMA tras reconexión o reinicio.
  */
@@ -1587,6 +1783,12 @@ async function handleEmaSync(statusToSave: DeviceStatus) {
   Logger.node(statusToSave, 'Weather Station Orquideario')
 
   await saveDeviceLog('Weather_Station_ZONA_A', statusToSave, notes)
+
+  if (hadSolitaryBatteryOffline) {
+    hadSolitaryBatteryOffline = false
+    await sendTelegramAlert('🔋 *Nodo EMA Operativo*')
+  }
+  emaOnlineTimestamp = Date.now()
 
   if (!hasAccumulator) {
     emaManager.setReady()
@@ -1824,17 +2026,12 @@ async function initScheduler() {
     }
   })
 
-  Logger.cron('Cargando Rutinas desde la base de datos.')
+  // Sincronización e inicialización de rutinas activas en memoria
+  await scheduleManager.syncAutomationSchedules(runTask)
 
-  const schedules = await prisma.automationSchedule.findMany({
-    where: { isEnabled: true },
-  })
-
-  schedules.forEach((schedule) => {
-    Logger.cron(`Programando: "${schedule.name}" ➜ [${schedule.cronTrigger}]`)
-    new Cron(schedule.cronTrigger, { timezone: 'America/Caracas' }, () => {
-      runTask(schedule.id)
-    })
+  // Cron nocturno de auditoría silenciosa (12:10 AM)
+  new Cron('10 0 * * *', { timezone: 'America/Caracas' }, async () => {
+    await scheduleManager.syncAutomationSchedules(runTask, true)
   })
 
   // 1. Cron principal de BCV: cada día a las 8:30 PM (hora de Caracas)

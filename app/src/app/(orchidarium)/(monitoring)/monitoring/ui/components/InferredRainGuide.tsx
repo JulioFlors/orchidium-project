@@ -7,7 +7,7 @@ export function InferredRainGuide() {
   const [isInfoOpen, setIsInfoOpen] = useState(false)
 
   return (
-    <div className="border-input-outline bg-surface/30 focus-within:ring-accessibility focus-within:ring-offset-canvas mt-6 rounded-xl border backdrop-blur-sm transition-all duration-200 focus-within:ring-2 focus-within:ring-offset-2">
+    <div className="border-input-outline bg-surface/30 focus-within:ring-accessibility focus-within:ring-offset-canvas mt-6 rounded-md border backdrop-blur-sm transition-all duration-200 focus-within:ring-2 focus-within:ring-offset-2">
       <button
         className="text-secondary flex w-full cursor-pointer items-center justify-between gap-3 p-4 text-left font-semibold focus:outline-none"
         type="button"
@@ -159,8 +159,10 @@ export function InferredRainGuide() {
               </span>
             </div>
             <p className="leading-relaxed">
-              Las reglas se evalúan en orden de prioridad. Las tres primeras aplican solo durante el
-              día; las dos últimas aplican las 24 h.
+              Las reglas se evalúan en secuencia estricta de prioridad física (1ª ☀️ Recuperación
+              Solar &rarr; 2ª 🌤️ Recuperación Progresiva &rarr; 3ª 🌡️ Variación Térmica &rarr; 4ª
+              ☁️ Cese por Estancamiento). Las tres primeras aplican solo durante el día [7:00 am -
+              6:00 pm]; la última aplica las 24 h.
             </p>
 
             <ul className="mt-1 flex flex-col gap-2 leading-relaxed">
@@ -183,8 +185,10 @@ export function InferredRainGuide() {
               <li>
                 <span className="text-primary font-semibold">☁️ Variación Térmica:</span>{' '}
                 Recuperación de <span className="text-primary">&ge; 0.6°C</span> desde la
-                temperatura mínima del evento. Evaluada al final para dar prioridad a las reglas
-                solares.
+                temperatura mínima del evento si la humedad relativa se encuentra &lt; 96.0% HR. Si
+                el ambiente permanece en nivel de saturación (&ge; 96.0% HR), exige una recuperación
+                de <span className="text-primary">&ge; 1.2°C</span> para prevenir falsos cierres por
+                micro-turbulencias térmicas dentro del núcleo del aguacero.
               </li>
               <li>
                 <span className="text-primary font-semibold">☁️ Cese por Estancamiento:</span>{' '}

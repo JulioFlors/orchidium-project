@@ -8,6 +8,7 @@ import {
   IoImagesOutline,
   IoLeafOutline,
   IoListOutline,
+  IoMailUnreadOutline,
   IoPricetagsOutline,
   IoWaterOutline,
 } from 'react-icons/io5'
@@ -73,7 +74,7 @@ export const adminRoutes: AdminRoute[] = [
     slug: 'monitoring',
     name: 'Monitoreo',
     icon: <IoGridOutline size={20} />,
-    layout: 'informational',
+    layout: 'hybrid',
     items: [
       {
         name: 'Análisis Botánico',
@@ -114,6 +115,12 @@ export const adminRoutes: AdminRoute[] = [
         description: 'Movimientos y lotes',
       },
       {
+        name: 'Solicitudes',
+        url: '/requests',
+        icon: <IoMailUnreadOutline />,
+        description: 'Solicitudes de notificación de stock',
+      },
+      {
         name: 'Tienda',
         url: '/shop-manager',
         icon: <IoImagesOutline />,
@@ -125,19 +132,25 @@ export const adminRoutes: AdminRoute[] = [
     slug: 'lab',
     name: 'Laboratorio',
     icon: <IoFlaskOutline size={20} />,
-    layout: 'informational',
+    layout: 'hybrid',
     items: [
       {
-        name: 'Insumos Químicos',
+        name: 'Insumos Agroquímicos',
         url: '/supplies',
         icon: <IoPricetagsOutline />,
-        description: 'Inventario de Fertilizantes y Fungicidas',
+        description: 'Catálogo de fertilizantes y fungicidas',
       },
       {
-        name: 'Recetas y Mezclas',
+        name: 'Programas de Dosificación',
         url: '/recipes',
         icon: <IoFlaskOutline />,
-        description: 'Preparaciones y fórmulas guardadas',
+        description: 'Ciclos de aplicación de agroquímicos',
+      },
+      {
+        name: 'Dosificación',
+        url: '/dosing',
+        icon: <IoCalendarOutline />,
+        description: 'Cronograma de dosificación',
       },
     ],
   },

@@ -1,6 +1,6 @@
 import { Controller, Control, UseFormRegister, FieldValues, Path, useWatch } from 'react-hook-form'
 import clsx from 'clsx'
-import { TaskPurpose } from '@package/database/enums'
+import { TaskPurpose, ExecutionType, ZoneType } from '@package/database/enums'
 
 import { SelectDropdown, Input } from '@/components'
 import { TaskPurposeLabels, ZoneTypeLabels, ZoneCapabilities } from '@/config/mappings'
@@ -9,9 +9,14 @@ const ACTION_MAP = {
   IRRIGATION: { label: TaskPurposeLabels.IRRIGATION },
   HUMIDIFICATION: { label: TaskPurposeLabels.HUMIDIFICATION },
   SOIL_WETTING: { label: TaskPurposeLabels.SOIL_WETTING },
-  FERTIGATION: { label: TaskPurposeLabels.FERTIGATION },
-  FUMIGATION: { label: TaskPurposeLabels.FUMIGATION },
+  FERTIGATION: { label: 'Fertilización' },
+  FUMIGATION: { label: 'Control Fitosanitario' },
 }
+
+const EXECUTION_TYPE_OPTIONS = [
+  { value: ExecutionType.MANUAL, label: 'Dosificación Manual' },
+  { value: ExecutionType.HARDWARE, label: 'Sistema de Riego' },
+]
 
 interface InputProps<T extends FieldValues> {
   control?: Control<T>
@@ -46,6 +51,7 @@ export function PlannerCircuitSelect<T extends FieldValues>({
                 label: act.label,
               })),
             ]}
+            placeholder="Seleccionar"
             value={value}
             onChange={onChange}
             {...rest}
@@ -62,14 +68,49 @@ export function PlannerCircuitSelect<T extends FieldValues>({
 }
 
 // ----------------------------------------------------------------------
-// COMPONENTE: Selector de Zonas
+// COMPONENTE: Selector de Modo de Ejecución
+// ----------------------------------------------------------------------
+export function PlannerExecutionTypeSelect<T extends FieldValues>({
+  control,
+  name,
+  error,
+}: Omit<InputProps<T>, 'register'>) {
+  if (!control) return null
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <Controller
+        control={control}
+        name={name}
+        render={({ field: { value, onChange, ...rest } }) => (
+          <SelectDropdown
+            error={error}
+            id={name}
+            options={EXECUTION_TYPE_OPTIONS}
+            placeholder="Seleccionar"
+            value={value}
+            onChange={onChange}
+            {...rest}
+          />
+        )}
+      />
+      {error && (
+        <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
+          {error}
+        </span>
+      )}
+    </div>
+  )
+}
+
+// ----------------------------------------------------------------------
+// COMPONENTE: Selector de Zonas (Zona Única / Hardware)
 // ----------------------------------------------------------------------
 export function PlannerZoneSelect<T extends FieldValues>({
   control,
   name,
   error,
 }: Omit<InputProps<T>, 'register'>) {
-  // Observamos el propósito seleccionado para obtener las zonas compatibles
   const currentPurpose = useWatch({
     control,
     name: 'purpose' as Path<T>,
@@ -85,11 +126,11 @@ export function PlannerZoneSelect<T extends FieldValues>({
         control={control}
         name={name}
         render={({ field: { value, onChange, ...rest } }) => {
-          // Si el valor actual no está en la lista de zonas válidas, idealmente podríamos
-          // hacer un reset parcial, pero react-hook-form se maneja a nivel superior.
+          const zoneValue = Array.isArray(value) ? value[0] : value
+
           return (
             <SelectDropdown
-              emptyMessage="Selecciona un Circuito de Riego"
+              emptyMessage="Selecciona una tarea primero"
               error={error}
               id={name}
               options={validZones.map((zone) => ({
@@ -97,10 +138,74 @@ export function PlannerZoneSelect<T extends FieldValues>({
                 value: zone,
               }))}
               placeholder="Seleccionar"
-              value={value}
-              onChange={onChange}
+              value={zoneValue}
+              onChange={(val) => onChange([val])}
               {...rest}
             />
+          )
+        }}
+      />
+      {error && (
+        <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
+          {error}
+        </span>
+      )}
+    </div>
+  )
+}
+
+// ----------------------------------------------------------------------
+// COMPONENTE: Selector de Múltiples Zonas (Dosificación Manual)
+// ----------------------------------------------------------------------
+export function PlannerMultiZoneSelect<T extends FieldValues>({
+  control,
+  name,
+  error,
+}: Omit<InputProps<T>, 'register'>) {
+  if (!control) return null
+
+  const availableZones = Object.values(ZoneType)
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Controller
+        control={control}
+        name={name}
+        render={({ field: { value = [], onChange } }) => {
+          const selectedZones = Array.isArray(value) ? (value as ZoneType[]) : []
+
+          const toggleZone = (zone: ZoneType) => {
+            if (selectedZones.includes(zone)) {
+              if (selectedZones.length > 1) {
+                onChange(selectedZones.filter((z) => z !== zone))
+              }
+            } else {
+              onChange([...selectedZones, zone])
+            }
+          }
+
+          return (
+            <div className="flex flex-wrap gap-2">
+              {availableZones.map((z) => {
+                const isSelected = selectedZones.includes(z)
+
+                return (
+                  <button
+                    key={z}
+                    className={clsx(
+                      'flex h-9 cursor-pointer items-center justify-center rounded-sm border px-3.5 text-xs font-bold transition-all duration-300 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-accessibility focus-visible:ring-offset-1 focus-visible:ring-offset-surface',
+                      isSelected
+                        ? 'bg-action border-action text-white shadow-xs'
+                        : 'bg-surface border-input-outline text-secondary hover:border-primary/30 hover:bg-hover-overlay',
+                    )}
+                    type="button"
+                    onClick={() => toggleZone(z)}
+                  >
+                    {ZoneTypeLabels[z] || z}
+                  </button>
+                )
+              })}
+            </div>
           )
         }}
       />
@@ -122,7 +227,6 @@ export function PlannerDurationInput<T extends FieldValues>({
   name,
   error,
 }: InputProps<T>) {
-  // Observamos el valor reactivamente evadiendo colisiones de re-renders no memoizados.
   const durationValue = useWatch({ control, name })
 
   if (!control || !register) return null
@@ -147,11 +251,8 @@ export function PlannerDurationInput<T extends FieldValues>({
           {...register(name)}
         />
 
-        {/* Etiqueta dinámica "min" adyacente */}
         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center px-3">
-          {/* Espaciador invisible que simula el ancho del texto ingresado */}
           <span className="invisible text-sm">{durationValue}</span>
-          {/* El texto real visible */}
           {durationValue ? (
             <span className="text-secondary ml-1 text-sm font-medium transition-colors select-none">
               min
@@ -206,6 +307,7 @@ export function PlannerProgramSelect<T extends FieldValues>({
     </div>
   )
 }
+
 // ----------------------------------------------------------------------
 // COMPONENTE: Selector de Días de la Semana
 // ----------------------------------------------------------------------

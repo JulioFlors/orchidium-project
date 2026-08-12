@@ -1,7 +1,5 @@
 'use client'
 
-import { useMemo } from 'react'
-
 import { ProductGrid, Title, Subtitle } from '@/components'
 import { Species, ShopRoute, ShopCategory } from '@/interfaces'
 
@@ -16,34 +14,19 @@ interface Props {
 }
 
 export default function PlantsCategoryClient({ initialCategoriesData }: Props) {
-  // Extraemos todas las especies que están en floración de todas las subcategorías
-  const floweringSpecies = useMemo(() => {
-    return initialCategoriesData
-      .flatMap((data) => Object.values(data.speciesByGenus).flat())
-      .filter((species) => species.isFlowering)
-      .sort((a, b) => a.name.localeCompare(b.name, 'es'))
-  }, [initialCategoriesData])
-
   return (
     <>
-      {/* Sección destacada: En Floración (Solo si hay ejemplares) */}
-      {floweringSpecies.length > 0 && (
-        <div className="mb-12 scroll-mt-30">
-          <Title className="ml-1 text-pink-500!" title="En Floración" />
-          <Subtitle
-            className="ml-1 w-[calc(100%-8px)]! px-0"
-            subtitle="Ejemplares listos para disfrutar su belleza máxima"
-          />
-          <ProductGrid index={0} products={floweringSpecies} />
-
-          <div className="mx-1 mt-8 border-b border-white/5" />
-        </div>
-      )}
-
       {initialCategoriesData.map((data, catIndex) => {
         const sortedGenera = Object.entries(data.speciesByGenus).sort(([genusA], [genusB]) =>
           genusA.localeCompare(genusB, 'es'),
         )
+
+        const categoryFloweringSpecies = Object.values(data.speciesByGenus)
+          .flat()
+          .filter((species) => species.isFlowering)
+          .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+
+        const hasFlowering = categoryFloweringSpecies.length > 0
 
         return (
           <div
@@ -53,6 +36,14 @@ export default function PlantsCategoryClient({ initialCategoriesData }: Props) {
           >
             <Title className={`ml-1 ${catIndex > 0 ? 'mt-0!' : ''}`} title={data.category.name} />
 
+            {hasFlowering && (
+              <div className="scroll-mt-15" id={`floracion-${data.category.slug}`}>
+                <Subtitle className="ml-1 w-[calc(100%-8px)]! px-0" subtitle="Floración" />
+
+                <ProductGrid index={catIndex === 0 ? 0 : -1} products={categoryFloweringSpecies} />
+              </div>
+            )}
+
             {sortedGenera.map(([genus, species], groupIndex) => {
               const sortedSpecies = [...species].sort((a, b) => a.name.localeCompare(b.name, 'es'))
 
@@ -61,7 +52,7 @@ export default function PlantsCategoryClient({ initialCategoriesData }: Props) {
                   <Subtitle className="ml-1 w-[calc(100%-8px)]! px-0" subtitle={genus} />
 
                   <ProductGrid
-                    index={catIndex === 0 && groupIndex === 0 ? 0 : -1}
+                    index={catIndex === 0 && !hasFlowering && groupIndex === 0 ? 0 : -1}
                     products={sortedSpecies}
                   />
                 </div>
@@ -70,12 +61,6 @@ export default function PlantsCategoryClient({ initialCategoriesData }: Props) {
           </div>
         )
       })}
-
-      <div className="py-10 text-center">
-        <span className="text-secondary text-[10px] font-bold tracking-widest uppercase opacity-30">
-          Mostrando especies disponibles
-        </span>
-      </div>
     </>
   )
 }

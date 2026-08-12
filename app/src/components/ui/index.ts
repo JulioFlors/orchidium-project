@@ -85,3 +85,5 @@ export * from './currency-toggle/CurrencyToggle'
 export * from './title/Title'
 
 export * from './toast/Toast'
+
+export * from './selector-group/SelectorGroup'

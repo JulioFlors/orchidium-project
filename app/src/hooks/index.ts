@@ -7,3 +7,5 @@ export * from './use-navigation-context'
 export * from './use-scroll-lock'
 
 export * from './use-toast'
+
+export * from './use-event-stream'

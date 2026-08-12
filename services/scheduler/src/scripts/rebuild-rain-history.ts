@@ -6,6 +6,7 @@ import { prisma, ZoneType } from '@package/database'
 import { influxClient } from '../lib/influx'
 import { Logger } from '../lib/logger'
 import { isDaytime, getHumGradientMetrics, getTempGradientMetrics } from '../lib/rain-manager'
+import { classifyCurrentDay, DayClassification } from '../lib/day-classifier'
 
 const ENV_BACKFILL_DAYS = process.env.BACKFILL_DAYS
   ? parseInt(process.env.BACKFILL_DAYS, 10)
@@ -69,8 +70,6 @@ async function main() {
   Logger.info('🔮 2. Reconstruyendo eventos de lluvia inferida (virtual)...')
   await rebuildInferredRain(startTime, endTime)
 
-  await prisma.$disconnect()
-  await influxClient.close()
 
   Logger.info('════════════════════════════════════════════════════════')
   Logger.info('  REPORTE DE EFECTIVIDAD DE REGLAS (INFERENCIA)')
@@ -118,13 +117,17 @@ async function main() {
           const reStart = new Date(realEvent.startedAt).getTime()
           const reEnd = new Date(realEvent.endedAt).getTime()
 
-          // Buscar si existe un evento inferido que se solape
+          // Buscar si existe un evento inferido que se solape (con 30 min de tolerancia por desfase de reloj humano)
+          const TOLERANCE_MS = 30 * 60 * 1000
           const isDetected = inferredEventsForComparison.some((inf) => {
             const infStart = inf.startedAt.getTime()
             const infEnd = inf.endedAt.getTime()
 
-            // Lógica de solapamiento temporal
-            return infStart <= reEnd && infEnd >= reStart
+            const overlap =
+              Math.min(reEnd + TOLERANCE_MS, infEnd + TOLERANCE_MS) -
+              Math.max(reStart - TOLERANCE_MS, infStart - TOLERANCE_MS)
+
+            return overlap > 0
           })
 
           if (isDetected) {
@@ -134,41 +137,206 @@ async function main() {
           }
         }
 
+        // ── Clasificación Avanzada de Falsos Negativos ──────────────────────
+        // Usar day-classifier.ts para evaluar el fotoperíodo botánico de 8h (8AM - 4PM VET).
+        // Umbral: garúas de ≤ 10 min en días soleados (promedio 8am-4pm ≥ 26 klx)
+        // no afectan al plan de riego y no deben restar al Recall del motor.
+        const INSIGNIFICANT_DURATION_MIN = 10
+        const SUNNY_DAY_LUX_THRESHOLD = 26000
+
+        interface ClassifiedFN {
+          event: (typeof falseNegatives)[0]
+          durationMin: number
+          avgDayLux: number | null
+          dayType: string
+          category: 'SIGNIFICANT' | 'INSIGNIFICANT_SUNNY' | 'INSIGNIFICANT_CLOUDY'
+        }
+
+        const classifiedFNs: ClassifiedFN[] = []
+
+        // Cache de clasificación del día (8am-4pm) por día
+        const dayClassCache = new Map<string, DayClassification | null>()
+
+        for (const fn of falseNegatives) {
+          const fnStart = new Date(fn.startedAt)
+          const fnEnd = new Date(fn.endedAt)
+          const durationMin = (fnEnd.getTime() - fnStart.getTime()) / (60 * 1000)
+
+          if (durationMin > INSIGNIFICANT_DURATION_MIN) {
+            // Evento de duración significativa: siempre cuenta como fallo real
+            classifiedFNs.push({
+              event: fn,
+              durationMin,
+              avgDayLux: null,
+              dayType: 'N/A',
+              category: 'SIGNIFICANT',
+            })
+          } else {
+            // Micro-evento (≤ 10 min): evaluar condición solar del día usando day-classifier (8am-4pm)
+            const dayKey = fnStart.toISOString().substring(0, 10) // YYYY-MM-DD
+
+            let dayClass: DayClassification | null = dayClassCache.get(dayKey) ?? null
+
+            if (!dayClassCache.has(dayKey)) {
+              try {
+                dayClass = await classifyCurrentDay(fnStart)
+              } catch {
+                dayClass = null
+              }
+              dayClassCache.set(dayKey, dayClass)
+            }
+
+            const avgLux = dayClass?.avgLuxSince8am ?? null
+            const dayType = dayClass?.type ?? 'DESCONOCIDO'
+
+            if (avgLux !== null && avgLux >= SUNNY_DAY_LUX_THRESHOLD) {
+              classifiedFNs.push({
+                event: fn,
+                durationMin,
+                avgDayLux: avgLux,
+                dayType,
+                category: 'INSIGNIFICANT_SUNNY',
+              })
+            } else {
+              classifiedFNs.push({
+                event: fn,
+                durationMin,
+                avgDayLux: avgLux,
+                dayType,
+                category: 'INSIGNIFICANT_CLOUDY',
+              })
+            }
+          }
+        }
+
+        const significantFNs = classifiedFNs.filter((f) => f.category === 'SIGNIFICANT')
+        const insignificantSunnyFNs = classifiedFNs.filter(
+          (f) => f.category === 'INSIGNIFICANT_SUNNY',
+        )
+        const insignificantCloudyFNs = classifiedFNs.filter(
+          (f) => f.category === 'INSIGNIFICANT_CLOUDY',
+        )
+
+        // Recall Bruto (sin ajustar)
         const totalReal = relevantRealEvents.length
-        const recallPct = ((truePositives / totalReal) * 100).toFixed(1)
+        const recallBrutoPct = ((truePositives / totalReal) * 100).toFixed(1)
+
+        // Recall Ajustado: excluir garúas insignificantes en días soleados
+        const totalAdjusted = totalReal - insignificantSunnyFNs.length
+        const adjustedFN =
+          significantFNs.length + insignificantCloudyFNs.length
+        const adjustedTP = totalAdjusted - adjustedFN
+        const recallAjustadoPct =
+          totalAdjusted > 0 ? ((adjustedTP / totalAdjusted) * 100).toFixed(1) : '0.0'
 
         Logger.info('════════════════════════════════════════════════════════')
         Logger.info('  VALIDACIÓN COMPARATIVA: BITÁCORA MANUAL DE LLUVIA')
         Logger.info('════════════════════════════════════════════════════════')
         Logger.info(`  Total de lluvias reales registradas en período: ${totalReal}`)
         Logger.info(`  Verdaderos Positivos (Detectadas): ${truePositives}`)
-        Logger.info(`  Falsos Negativos (Omitidas): ${falseNegatives.length}`)
-        Logger.info(`  Sensibilidad (Recall / Tasa de Acierto): ${recallPct}%`)
+        Logger.info(
+          `  Falsos Negativos (Omitidas): ${falseNegatives.length}`,
+        )
+        Logger.info(`  Sensibilidad Bruta (Recall): ${recallBrutoPct}%`)
+        Logger.info('  ----------------------------------------------------')
+        Logger.info(
+          `  📊 Desglose de Falsos Negativos:`,
+        )
+        Logger.info(
+          `     🔍 Significativos (> ${INSIGNIFICANT_DURATION_MIN} min): ${significantFNs.length}`,
+        )
+        Logger.info(
+          `     🍃 Micro-eventos en Día Soleado (≤ ${INSIGNIFICANT_DURATION_MIN} min, ≥ ${(SUNNY_DAY_LUX_THRESHOLD / 1000).toFixed(0)}klx): ${insignificantSunnyFNs.length} [Descartables]`,
+        )
+        Logger.info(
+          `     ☁️ Micro-eventos en Día Nublado (≤ ${INSIGNIFICANT_DURATION_MIN} min, < ${(SUNNY_DAY_LUX_THRESHOLD / 1000).toFixed(0)}klx): ${insignificantCloudyFNs.length}`,
+        )
+        Logger.info('  ----------------------------------------------------')
+        Logger.info(
+          `  🎯 Sensibilidad Ajustada (excluyendo ${insignificantSunnyFNs.length} garúa(s) soleada(s)): ${recallAjustadoPct}%`,
+        )
+        Logger.info(
+          `     (Base ajustada: ${totalAdjusted} eventos | Detectados: ${adjustedTP} | Omitidos Reales: ${adjustedFN})`,
+        )
         Logger.info('  ----------------------------------------------------')
 
-        if (falseNegatives.length > 0) {
-          Logger.warn('  ⚠️  Lluvias reales omitidas (Falsos Negativos):')
-          for (const fn of falseNegatives) {
-            const startStr = new Date(fn.startedAt).toLocaleTimeString('es-VE', {
+        if (significantFNs.length > 0) {
+          Logger.warn('  ⚠️  Lluvias SIGNIFICATIVAS omitidas (Candidatas a calibración):')
+          for (const fn of significantFNs) {
+            const startStr = new Date(fn.event.startedAt).toLocaleTimeString('es-VE', {
               hour: '2-digit',
               minute: '2-digit',
               timeZone: 'America/Caracas',
             })
-            const endStr = new Date(fn.endedAt).toLocaleTimeString('es-VE', {
+            const endStr = new Date(fn.event.endedAt).toLocaleTimeString('es-VE', {
               hour: '2-digit',
               minute: '2-digit',
               timeZone: 'America/Caracas',
             })
-            const dateStr = new Date(fn.startedAt).toLocaleDateString('es-VE', {
+            const dateStr = new Date(fn.event.startedAt).toLocaleDateString('es-VE', {
               timeZone: 'America/Caracas',
             })
-            const dayOfWeekLabel = fn.dayOfWeek ? `${fn.dayOfWeek} ` : ''
+            const dayOfWeekLabel = fn.event.dayOfWeek ? `${fn.event.dayOfWeek} ` : ''
 
             Logger.warn(
-              `    - [${dayOfWeekLabel}${dateStr} ${startStr} - ${endStr}]: ${fn.description}`,
+              `    - [${dayOfWeekLabel}${dateStr} ${startStr} - ${endStr}] (${fn.durationMin.toFixed(0)} min): ${fn.event.description}`,
             )
           }
-        } else {
+        }
+
+        if (insignificantCloudyFNs.length > 0) {
+          Logger.warn('  ☁️ Micro-eventos omitidos en Día NUBLADO (cuentan como fallo):')
+          for (const fn of insignificantCloudyFNs) {
+            const startStr = new Date(fn.event.startedAt).toLocaleTimeString('es-VE', {
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZone: 'America/Caracas',
+            })
+            const endStr = new Date(fn.event.endedAt).toLocaleTimeString('es-VE', {
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZone: 'America/Caracas',
+            })
+            const dateStr = new Date(fn.event.startedAt).toLocaleDateString('es-VE', {
+              timeZone: 'America/Caracas',
+            })
+            const dayOfWeekLabel = fn.event.dayOfWeek ? `${fn.event.dayOfWeek} ` : ''
+            const luxLabel =
+              fn.avgDayLux !== null ? `${(fn.avgDayLux / 1000).toFixed(1)}klx prom` : 'N/A'
+
+            Logger.warn(
+              `    - [${dayOfWeekLabel}${dateStr} ${startStr} - ${endStr}] (${fn.durationMin.toFixed(0)} min, ${luxLabel} [${fn.dayType}]): ${fn.event.description}`,
+            )
+          }
+        }
+
+        if (insignificantSunnyFNs.length > 0) {
+          Logger.info('  🍃 Micro-eventos omitidos en Día SOLEADO (sin impacto en riego):')
+          for (const fn of insignificantSunnyFNs) {
+            const startStr = new Date(fn.event.startedAt).toLocaleTimeString('es-VE', {
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZone: 'America/Caracas',
+            })
+            const endStr = new Date(fn.event.endedAt).toLocaleTimeString('es-VE', {
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZone: 'America/Caracas',
+            })
+            const dateStr = new Date(fn.event.startedAt).toLocaleDateString('es-VE', {
+              timeZone: 'America/Caracas',
+            })
+            const dayOfWeekLabel = fn.event.dayOfWeek ? `${fn.event.dayOfWeek} ` : ''
+            const luxLabel =
+              fn.avgDayLux !== null ? `${(fn.avgDayLux / 1000).toFixed(1)}klx prom` : 'N/A'
+
+            Logger.info(
+              `    - [${dayOfWeekLabel}${dateStr} ${startStr} - ${endStr}] (${fn.durationMin.toFixed(0)} min, ${luxLabel} [${fn.dayType}]): ${fn.event.description} ✅ DESCARTADO`,
+            )
+          }
+        }
+
+        if (falseNegatives.length === 0) {
           Logger.success(
             '  🎉 ¡Perfecto! El motor inferencial detectó todas las lluvias observadas.',
           )
@@ -179,6 +347,9 @@ async function main() {
   } catch (err) {
     Logger.error('Error al contrastar con la bitácora manual de lluvia:', err)
   }
+
+  await prisma.$disconnect()
+  await influxClient.close()
 
   Logger.success('🎉 Reconstrucción de historial finalizada con éxito.')
 }
@@ -752,72 +923,8 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
         let closedByRecovery = false
 
         if (isDay) {
-          // 2. Recuperación Progresiva (Día)
-          if (
-            baselineLux !== null &&
-            minLuxInRain !== null &&
-            minTempInRain !== null &&
-            maxHumInRain !== null
-          ) {
-            const preLux = baselineLux
-            const minLux = minLuxInRain
-            const relativeDrop = Math.min(1.0, (preLux - minLux) / preLux)
-            const alpha = 1.0 - 0.65 * relativeDrop
-            const luxRecoveryThreshold = minLux + alpha * (preLux - minLux)
-
-            const currentAverageLux = luxBatches[0].max
-            const currentTemp = tempBatches[0].min
-            const currentHum = humBatches[0].max
-
-            const isLuxRecovered =
-              currentAverageLux >= luxRecoveryThreshold && currentAverageLux >= 15000
-            const isTempRecovered = currentTemp >= minTempInRain + 2.0
-            const isHumRecovered = currentHum <= maxHumInRain - 3.0
-
-            if (isLuxRecovered && isTempRecovered && isHumRecovered) {
-              closedByRecovery = true
-
-              const firstSample = luxBatches[0].samples[0]
-              let preciseEndMs = firstSample ? firstSample.timestamp : timestampMs
-
-              if (preciseEndMs < rainStartedAt) preciseEndMs = rainStartedAt
-
-              const endSampleT =
-                tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-                tempBatches[0].samples[0]
-              const endSampleH =
-                humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-                humBatches[0].samples[0]
-
-              const tempRecovery = currentTemp - minTempInRain
-              const humDrop = maxHumInRain - currentHum
-
-              isTelemetryRainActive = false
-              lastRainClosedAt = preciseEndMs
-
-              await closeVirtualEvent(
-                new Date(preciseEndMs),
-                'PROGRESSIVE_RECOVERY',
-                `Recuperación Progresiva — Despeje solar con validación cruzada: iluminancia promedio ${currentAverageLux.toFixed(0)} lx (umbral elástico: ${Math.round(luxRecoveryThreshold).toLocaleString()} lx) + recuperación térmica +${tempRecovery.toFixed(1)}°C (umbral >= 2.0°C) + caída de humedad -${humDrop.toFixed(1)}% HR (umbral >= 3.0% HR).`,
-                {
-                  temp: endSampleT ? endSampleT.value : currentTemp,
-                  hum: endSampleH ? endSampleH.value : currentHum,
-                  lux: firstSample ? firstSample.value : currentMinLux,
-                },
-                {
-                  type: 'PROGRESSIVE_RECOVERY',
-                  luxMax: currentAverageLux,
-                  tempRecovery,
-                  humVar: humDrop,
-                },
-              )
-              maxHumInRain = null
-              createdCount++
-            }
-          }
-
-          // 3. Recuperación Solar incondicional (Día — Evaluación Deslizante 10m en 20m)
-          if (!closedByRecovery && minLuxInRain !== null) {
+          // 2. ☀️ Recuperación Solar incondicional (Día — Evaluación Deslizante 10m en 20m)
+          if (minLuxInRain !== null) {
             const combinedLuxSamples: Sample[] = []
 
             if (luxBatches.length >= 1) combinedLuxSamples.push(...luxBatches[0].samples)
@@ -869,7 +976,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
                 tempBatches[0].samples[0]
               const endSampleH =
                 humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-                (humBatches.length >= 2 &&
+                (tempBatches.length >= 2 &&
                   humBatches[1].samples.find((s) => s.timestamp === preciseEndMs)) ||
                 humBatches[0].samples[0]
 
@@ -899,9 +1006,12 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
         // 4. Cese por Variación Térmica Diurna (Cese de Lluvia Intermitente)
         if (!closedByRecovery && isDay && minTempInRain !== null) {
           const currentTemp = tempBatches[0].min
+          const currentHum = humBatches[0].max
           const tempRecovery = currentTemp - minTempInRain
+          const isSaturated = currentHum >= 96.0
+          const minRecoveryRequired = isSaturated ? 1.2 : 0.6
 
-          if (tempRecovery >= 0.6) {
+          if (tempRecovery >= minRecoveryRequired) {
             closedByRecovery = true
             let preciseEndMs = timestampMs
             const matchingEndSample = tempBatches[0].samples.find(
@@ -1207,7 +1317,11 @@ function pushBatchMetrics(
     const low5 = sortedAsc.slice(0, Math.min(5, sortedAsc.length))
 
     min = low5.reduce((sum, val) => sum + val, 0) / low5.length
-    max = values.reduce((sum, val) => sum + val, 0) / values.length
+
+    const sortedDesc = [...values].sort((a, b) => b - a)
+    const high5 = sortedDesc.slice(0, Math.min(5, sortedDesc.length))
+
+    max = high5.reduce((sum, val) => sum + val, 0) / high5.length
   }
 
   queue.unshift({ min, max, timestamp, samples })

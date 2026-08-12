@@ -59,7 +59,7 @@ echo -e "${GREEN}✅ Repositorio Sincronizado${RESET}"
 # -------------------------------------------------------------------
 echo ""
 echo -e "${CYAN}🏗️ [2/4] Construyendo imágenes${RESET}"
-docker compose build
+docker compose --profile cloud build
 
 echo ""
 echo -e "${GREEN}✅ Imágenes construidas${RESET}"
@@ -69,9 +69,10 @@ echo -e "${GREEN}✅ Imágenes construidas${RESET}"
 # -------------------------------------------------------------------
 echo ""
 echo -e "${CYAN}🚀 [3/4] Levantando servicios${RESET}"
-docker compose up -d --remove-orphans
+docker compose --profile cloud up -d --remove-orphans
 echo ""
 echo -e "${GREEN}✅ Servicios levantados${RESET}"
+
 
 # -------------------------------------------------------------------
 # PASO 4: Limpieza

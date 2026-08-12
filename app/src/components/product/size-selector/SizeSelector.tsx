@@ -1,7 +1,8 @@
 import clsx from 'clsx'
 
 import { ProductVariant } from '@/interfaces'
-import { PotSizeLabels, PotSizeDimensions } from '@/config/mappings'
+import { PotSizeLabels, PotSizeDimensions, sortVariantsByPotSizeAsc } from '@/config/mappings'
+import { isVariantAvailable } from '@/components/product/stock-label/StockLabel'
 
 interface Props {
   selectedVariant?: ProductVariant
@@ -10,6 +11,8 @@ interface Props {
 }
 
 export function SizeSelector({ selectedVariant, variants, onVariantChanged }: Props) {
+  const sortedVariants = sortVariantsByPotSizeAsc(variants)
+
   return (
     <div className="mb-6 tracking-wide">
       {/* Cambios de Layout:
@@ -27,8 +30,8 @@ export function SizeSelector({ selectedVariant, variants, onVariantChanged }: Pr
       </div>
 
       <div className="flex flex-wrap gap-x-5.5 gap-y-3">
-        {variants.map((variant) => {
-          const hasStock = variant.available && variant.quantity > 0
+        {sortedVariants.map((variant) => {
+          const hasStock = isVariantAvailable(variant)
           const isSelected = selectedVariant?.id === variant.id
 
           return (

@@ -31,9 +31,8 @@ export function SpeciesFormModal({
   onSave,
 }: SpeciesFormModalProps) {
   const [speciesFormName, setSpeciesFormName] = useState('')
-  const [selectedPlantType, setSelectedPlantType] = useState<PlantType>('ORCHID')
+  const [selectedPlantType, setSelectedPlantType] = useState<PlantType | ''>('')
   const [speciesFormGenusId, setSpeciesFormGenusId] = useState('')
-  const [speciesFormGlowColor, setSpeciesFormGlowColor] = useState('rgb(16, 185, 129)')
   const [speciesFormDescription, setSpeciesFormDescription] = useState('')
 
   const { getDraft, setDraft } = useFormDraftStore()
@@ -47,9 +46,8 @@ export function SpeciesFormModal({
       const draft = getDraft('catalog-species-form') as
         | {
             name: string
-            type: PlantType
+            type: PlantType | ''
             genusId: string
-            glowColor: string
             description: string
           }
         | undefined
@@ -58,15 +56,11 @@ export function SpeciesFormModal({
         setSpeciesFormName(draft.name)
         setSelectedPlantType(draft.type)
         setSpeciesFormGenusId(draft.genusId)
-        setSpeciesFormGlowColor(draft.glowColor)
         setSpeciesFormDescription(draft.description)
       } else {
         setSpeciesFormName('')
-        setSelectedPlantType('ORCHID')
-        const firstGenus = generaList.find((g) => g.type === 'ORCHID')
-
-        setSpeciesFormGenusId(firstGenus ? firstGenus.id : '')
-        setSpeciesFormGlowColor('rgb(16, 185, 129)')
+        setSelectedPlantType('')
+        setSpeciesFormGenusId('')
         setSpeciesFormDescription('')
       }
     }
@@ -79,7 +73,6 @@ export function SpeciesFormModal({
         name: speciesFormName,
         type: selectedPlantType,
         genusId: speciesFormGenusId,
-        glowColor: speciesFormGlowColor,
         description: speciesFormDescription,
       })
     }
@@ -87,17 +80,14 @@ export function SpeciesFormModal({
     speciesFormName,
     selectedPlantType,
     speciesFormGenusId,
-    speciesFormGlowColor,
     speciesFormDescription,
     isOpen,
     setDraft,
   ])
 
-  function handlePlantTypeChange(type: PlantType) {
+  function handlePlantTypeChange(type: PlantType | '') {
     setSelectedPlantType(type)
-    const firstGenus = generaList.find((g) => g.type === type)
-
-    setSpeciesFormGenusId(firstGenus ? firstGenus.id : '')
+    setSpeciesFormGenusId('')
   }
 
   function handleSubmit() {
@@ -105,7 +95,7 @@ export function SpeciesFormModal({
       name: speciesFormName,
       genusId: speciesFormGenusId,
       description: speciesFormDescription,
-      glowColor: speciesFormGlowColor,
+      glowColor: 'dynamic',
     })
   }
 
@@ -114,7 +104,7 @@ export function SpeciesFormModal({
       <div className="flex flex-col gap-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <FormField htmlFor="create-species-name" label="Nombre Científico *">
+            <FormField htmlFor="create-species-name" label="Nombre Científico">
               <Input
                 id="create-species-name"
                 placeholder=""
@@ -126,13 +116,14 @@ export function SpeciesFormModal({
           </div>
 
           <div>
-            <FormField htmlFor="create-plant-type" label="Tipo de Planta *">
+            <FormField htmlFor="create-plant-type" label="Tipo de Planta">
               <SelectDropdown
                 id="create-plant-type"
                 options={Object.entries(plantTypeLabels).map(([value, label]) => ({
                   value,
                   label,
                 }))}
+                placeholder="Seleccionar tipo"
                 value={selectedPlantType}
                 onChange={(val) => handlePlantTypeChange(val as PlantType)}
               />
@@ -140,47 +131,24 @@ export function SpeciesFormModal({
           </div>
 
           <div>
-            <FormField htmlFor="create-species-genus" label="Género *">
+            <FormField htmlFor="create-species-genus" label="Género">
               <SelectDropdown
-                emptyMessage="No hay géneros disponibles"
+                emptyMessage={selectedPlantType ? 'No hay géneros disponibles' : 'Tipo de planta'}
                 id="create-species-genus"
-                options={generaList
-                  .filter((g) => g.type === selectedPlantType)
-                  .map((g) => ({
-                    value: g.id,
-                    label: g.name,
-                  }))}
-                placeholder="Selecciona un género..."
+                options={
+                  selectedPlantType
+                    ? generaList
+                        .filter((g) => g.type === selectedPlantType)
+                        .map((g) => ({
+                          value: g.id,
+                          label: g.name,
+                        }))
+                    : []
+                }
+                placeholder="Seleccionar género"
                 value={speciesFormGenusId}
                 onChange={(val) => setSpeciesFormGenusId(val as string)}
               />
-            </FormField>
-          </div>
-
-          <div className="sm:col-span-2">
-            <FormField htmlFor="create-species-glow" label="Color de Hover (Ambient Glow)">
-              <div className="flex items-center gap-3">
-                <div className="flex-1">
-                  <SelectDropdown
-                    id="create-species-glow"
-                    options={[
-                      { value: 'rgb(16, 185, 129)', label: 'Verde Esmeralda' },
-                      { value: 'rgb(236, 72, 153)', label: 'Magenta Vibrante' },
-                      { value: 'rgb(249, 115, 22)', label: 'Naranja Sol' },
-                      { value: 'rgb(168, 85, 247)', label: 'Púrpura Orquídea' },
-                      { value: 'rgb(234, 179, 8)', label: 'Amarillo Cactus' },
-                      { value: 'rgb(6, 182, 212)', label: 'Azul / Cian' },
-                      { value: 'rgb(239, 68, 68)', label: 'Rojo Flor' },
-                    ]}
-                    value={speciesFormGlowColor}
-                    onChange={(val) => setSpeciesFormGlowColor(val as string)}
-                  />
-                </div>
-                <div
-                  className="border-input-outline h-9 w-9 rounded-lg border shadow-inner transition-colors duration-300"
-                  style={{ backgroundColor: speciesFormGlowColor }}
-                />
-              </div>
             </FormField>
           </div>
 
@@ -189,7 +157,7 @@ export function SpeciesFormModal({
               <Textarea
                 className="resize-none"
                 id="create-species-desc"
-                placeholder="Detalles sobre cuidados, origen, hábitat..."
+                placeholder="Detalles sobre la especie."
                 value={speciesFormDescription}
                 onChange={(e) => setSpeciesFormDescription(e.target.value)}
               />

@@ -59,17 +59,50 @@ export async function upsertVariant(data: UpsertVariantData) {
   try {
     const { id, ...rest } = data
 
+    // Validar: Si el precio es <= 0, no se permite si existen plantas físicas registradas como AVAILABLE
+    if (data.price <= 0) {
+      const availablePlantsCount = await prisma.plant.count({
+        where: {
+          speciesId: data.speciesId,
+          currentSize: data.size,
+          status: 'AVAILABLE',
+        },
+      })
+
+      if (availablePlantsCount > 0) {
+        return {
+          ok: false,
+          message: `No se puede asignar un precio de $0.00 a la variante (${data.size}) porque existen ${availablePlantsCount} planta(s) disponible(s) a la venta.`,
+        }
+      }
+    }
+
+    // Calcular la cantidad real disponible basada en el inventario de plantas físicas
+    const availableCount = await prisma.plant.count({
+      where: {
+        speciesId: data.speciesId,
+        currentSize: data.size,
+        status: 'AVAILABLE',
+      },
+    })
+
     const variant = await prisma.productVariant.upsert({
-      where: { id: id || 'new-uuid-placeholder' }, // Si no hay ID, el where fallará y disparará el create
+      where: { id: id || 'new-uuid-placeholder' },
       update: {
         price: rest.price,
-        quantity: rest.quantity,
-        available: rest.available,
+        quantity: availableCount,
+        available: availableCount > 0,
       },
-      create: rest,
+      create: {
+        ...rest,
+        quantity: availableCount,
+        available: availableCount > 0,
+      },
     })
 
     revalidatePath('/shop-manager')
+    revalidatePath('/stock')
+    revalidatePath(`/stock/${data.speciesId}`)
 
     return { ok: true, variant }
   } catch (err) {

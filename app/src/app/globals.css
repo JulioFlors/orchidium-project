@@ -181,17 +181,51 @@
     @apply text-secondary/75 font-semibold;
   }
 
-  /* Ocultar icono nativo de reloj en inputs de tiempo */
-  input[type='time']::-webkit-calendar-picker-indicator {
+  /* Iconos nativos de reloj y calendario en inputs de tiempo y fecha */
+  input[type='time']::-webkit-calendar-picker-indicator,
+  input[type='date']::-webkit-calendar-picker-indicator,
+  input[type='datetime-local']::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    background-color: transparent !important;
+    color: var(--color-primary);
+    border-radius: 0.25rem;
+    padding: 0.25rem;
+    margin-right: -0.25rem;
+    opacity: 0.85;
+    transition: opacity 0.2s ease, background-color 0.2s ease;
+  }
+
+  input[type='time']::-webkit-calendar-picker-indicator:hover,
+  input[type='date']::-webkit-calendar-picker-indicator:hover,
+  input[type='datetime-local']::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+    background-color: var(--color-hover-overlay) !important;
+  }
+
+  /* Ocultar icono nativo de reloj/calendario en inputs de tiempo */
+  input[type='time']::-webkit-calendar-picker-indicator,
+  input[type='date']::-webkit-calendar-picker-indicator,
+  input[type='datetime-local']::-webkit-calendar-picker-indicator {
     display: none;
     -webkit-appearance: none;
   }
+
 }
+
 
 @layer utilities {
 
   .hyphens-auto {
     hyphens: 'auto';
+  }
+
+  /* Ocultar barra de desplazamiento nativa para carruseles y sliders */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 
   .aceleracion-hardware {

@@ -26,6 +26,24 @@ export const getSpeciesByType = async (plantType: PlantType) => {
           },
         },
         variants: true,
+        plants: {
+          where: {
+            status: 'AVAILABLE',
+          },
+          select: {
+            id: true,
+            currentSize: true,
+            FloweringEvent: {
+              where: {
+                endDate: null,
+              },
+              select: {
+                id: true,
+              },
+              take: 1,
+            },
+          },
+        },
       },
 
       where: {
@@ -40,10 +58,24 @@ export const getSpeciesByType = async (plantType: PlantType) => {
     })
 
     return species.map((specie) => {
+      const isFlowering = specie.plants.some((p) => p.FloweringEvent && p.FloweringEvent.length > 0)
+
+      const updatedVariants = specie.variants.map((v) => {
+        const realQty = specie.plants.filter((p) => p.currentSize === v.size).length
+
+        return {
+          ...v,
+          quantity: realQty,
+          available: realQty > 0,
+        }
+      })
+
       return {
         ...specie,
         // Se aplana la estructura de las imágenes.
         images: specie.images.map((image) => image.url),
+        variants: updatedVariants,
+        isFlowering,
       }
     })
   } catch (error) {

@@ -1775,7 +1775,7 @@ async def main_transmission():
 
         if DEBUG:
             print(f"💤 Transmisión terminada. sec_to_next={sec_to_next}s | drift_rate={drift_rate:.6f}")
-            print(f"💤 Entrando en Deep Sleep por {sec_to_sleep} segundos reales de hardware.")
+            print(f"💤 Sleep {sec_to_sleep} segundos.")
 
         await asyncio.sleep_ms(200) # Flush sockets
         import machine
@@ -2114,6 +2114,22 @@ def stopped_program():
 
 # ---- Detención Segura ----
 def shutdown(status=b"offline"):
+    """
+    [Cierre Limpio y Suspensión de Red]:
+    Publica el estado del dispositivo (ej. sleep u offline) de forma retentiva (qos=1, retain=true).
+    
+    INFORMACIÓN DE DISEÑO DE RESILIENCIA (TLS / MQTT LWT):
+    1. Retardo de Flush TLS/TCP (1500ms):
+       En MicroPython sobre ESP32 con TLS activado, la llamada a client.publish() escribe el paquete en los
+       buffers SSL internos. Se otorga una pausa de 1500ms para garantizar que los paquetes TCP sean flacheados
+       físicamente a la red y el broker responda/procese el mensaje antes de invalidar el socket.
+    
+    2. Envío de Paquete MQTT DISCONNECT (Anulación de LWT):
+       force_disconnect_mqtt() invoca client.disconnect() de forma explícita antes de cerrar el socket.
+       Según la especificación del protocolo MQTT (v3.1.1 / v5.0), el despacho del paquete DISCONNECT
+       instruye al Broker a descartar el mensaje Last Will and Testament (LWT_MESSAGE = "lwt_disconnect").
+       Esto evita falsas alarmas de 'Desconexión Inesperada' cuando el nodo entra en Deep Sleep.
+    """
     from utime import sleep_ms
     if client and hasattr(client, 'sock') and client.sock and wlan and wlan.isconnected():
         try:
@@ -2124,13 +2140,14 @@ def shutdown(status=b"offline"):
                 print(f"⚠️  Error en flush_telemetry_batches en shutdown: {e}")
         try:
             client.publish(MQTT_TOPIC_STATUS, status, retain=True, qos=1)
-            sleep_ms(500)
+            # Retardo extendido a 1500ms para asegurar el flush del buffer SSL/TCP sobre el ESP32
+            sleep_ms(1500)
         except Exception as e:
             if DEBUG:
                 print(f"⚠️  Error publicando {status.decode() if hasattr(status, 'decode') else status} en shutdown: {e}")
     force_disconnect_mqtt(silent=False)
-    # Retardo de cortesía (300ms) para vaciado del buffer físico de red/SSL
-    sleep_ms(300)
+    # Retardo de cortesía (500ms) para permitir la entrega del paquete DISCONNECT antes del apague físico del WiFi
+    sleep_ms(500)
     if wlan and wlan.isconnected():
         try:
             wlan.disconnect()

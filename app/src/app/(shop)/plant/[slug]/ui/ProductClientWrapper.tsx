@@ -5,7 +5,13 @@ import { useState } from 'react'
 import { SpeciesFloweringSection } from './SpeciesFloweringSection'
 
 import { Species, ProductVariant } from '@/interfaces'
-import { MobileSlideshow, Slideshow, AddToCart } from '@/components'
+import {
+  MobileSlideshow,
+  Slideshow,
+  AddToCart,
+  isProductAvailable,
+  isVariantAvailable,
+} from '@/components'
 
 interface Props {
   product: Species
@@ -15,12 +21,12 @@ export function ProductClientWrapper({ product }: Props) {
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | undefined>()
 
   // Lógica: ¿Hay stock global?
-  const hasGlobalStock = product.variants.some((v) => v.available && v.quantity > 0)
+  const hasGlobalStock = isProductAvailable(product)
 
   // Lógica: ¿El slideshow debe verse disponible?
   // Si hay variante seleccionada, manda el stock de esa. Si no, manda el global.
   const isSlideshowAvailable = selectedVariant
-    ? selectedVariant.available && selectedVariant.quantity > 0
+    ? isVariantAvailable(selectedVariant)
     : hasGlobalStock
 
   return (
@@ -56,9 +62,9 @@ export function ProductClientWrapper({ product }: Props) {
         </div>
 
         {product.description && (
-          <div className="mt-3 mb-5 max-w-[75ch] py-5">
+          <div className="mt-6 max-w-[75ch]">
             <h3 className="text-primary pb-3 font-bold">Descripción</h3>
-            <p className="text-secondary mb-[1lh] text-pretty">{product.description}</p>
+            <p className="text-secondary text-pretty">{product.description}</p>
           </div>
         )}
 

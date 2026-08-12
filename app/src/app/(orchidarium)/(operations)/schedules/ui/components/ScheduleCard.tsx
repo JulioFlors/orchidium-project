@@ -2,7 +2,7 @@
 
 import React from 'react'
 import { clsx } from 'clsx'
-import { IoTimeOutline, IoSettingsOutline, IoCloseOutline } from 'react-icons/io5'
+import { IoTimeOutline, IoSettingsOutline, IoCloseOutline, IoPersonOutline } from 'react-icons/io5'
 import { RxStopwatch } from 'react-icons/rx'
 import { MdLayers } from 'react-icons/md'
 
@@ -13,6 +13,7 @@ interface AutomationSchedule {
   id: string
   name: string
   purpose: 'IRRIGATION' | 'FERTIGATION' | 'FUMIGATION' | 'HUMIDIFICATION' | 'SOIL_WETTING'
+  executionType?: 'HARDWARE' | 'MANUAL'
   cronTrigger: string
   durationMinutes: number
   isEnabled: boolean
@@ -55,12 +56,12 @@ export function ScheduleCard({
   const menuItems: ActionMenuItem[] = [
     {
       label: 'Editar',
-      icon: <IoSettingsOutline />,
+      icon: <IoSettingsOutline className="h-4 w-4" />,
       onClick: () => onEdit(schedule),
     },
     {
       label: 'Eliminar',
-      icon: <IoCloseOutline />,
+      icon: <IoCloseOutline className="h-4 w-4" />,
       onClick: () => onDelete(schedule.id),
       variant: 'destructive',
     },
@@ -85,7 +86,9 @@ export function ScheduleCard({
               {schedule.name}
             </h3>
             <span className="text-secondary text-[11px] font-medium opacity-60">
-              {TaskPurposeLabels[schedule.purpose] || schedule.purpose}
+              {schedule.executionType === 'MANUAL'
+                ? 'Dosificación Manual'
+                : TaskPurposeLabels[schedule.purpose] || schedule.purpose}
             </span>
           </div>
         </div>
@@ -124,14 +127,25 @@ export function ScheduleCard({
             </div>
 
             {/* Zona */}
-            <div className="flex items-center gap-1.5 overflow-hidden">
+            <div className="flex flex-wrap items-center gap-1.5 overflow-hidden">
               <MdLayers className="text-secondary h-4 w-4 shrink-0 opacity-30" />
-              <span className="text-primary truncate font-mono text-[11px] font-bold tracking-tight uppercase">
-                {schedule.zones
-                  .map((z) => ZoneTypeLabels[z as keyof typeof ZoneTypeLabels] || z)
-                  .join(', ')}
-              </span>
+              {schedule.zones.map((z) => (
+                <span
+                  key={z}
+                  className="text-primary font-mono text-[11px] font-bold tracking-tight uppercase whitespace-nowrap"
+                >
+                  {ZoneTypeLabels[z as keyof typeof ZoneTypeLabels] || z}
+                </span>
+              ))}
             </div>
+
+            {/* Etiqueta Modo Manual */}
+            {schedule.executionType === 'MANUAL' && (
+              <div className="text-action flex shrink-0 items-center gap-1.5 font-mono text-[11px] font-bold tracking-tight uppercase whitespace-nowrap">
+                <IoPersonOutline className="h-4 w-4 opacity-70" />
+                <span>Manual</span>
+              </div>
+            )}
           </div>
 
           <div className="flex shrink-0">

@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 
-import { SpeciesDetailView } from '../../species/ui/SpeciesDetailView'
+import { SpeciesDetailView } from '../ui/SpeciesDetailView'
 
 import { getGenera } from '@/actions'
 

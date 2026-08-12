@@ -97,7 +97,30 @@ Sigue estos pasos para configurar y ejecutar el entorno de desarrollo completo e
 
 * [Docker](https://www.docker.com/products/docker-desktop/)
 * [Node.js](https://nodejs.org/) (versión 22.x o superior)
-* [pnpm](https://pnpm.io/installation)
+* [pnpm](https://pnpm.io/installation) (Instalar obligatoriamente vía **Corepack**):
+  1. Actualiza `corepack` a su última versión para evitar problemas de firmas:
+
+     ```bash
+     npm install --global corepack@latest
+     ```
+
+  2. Habilita `pnpm` en el sistema:
+
+     ```bash
+     corepack enable pnpm
+     ```
+
+  3. Vincula/Fija la versión de `pnpm` en el proyecto (ejecutar obligatoriamente **desde la raíz del proyecto**):
+
+     ```bash
+     corepack use pnpm@latest
+     ```
+
+  4. Para actualizar `pnpm` en el futuro (dentro del proyecto), ejecuta:
+
+     ```bash
+     corepack use pnpm@latest
+     ```
 
 ### 1. Configurar las Variables de Entorno
 
@@ -173,6 +196,26 @@ Instala las dependencias del proyecto utilizando pnpm.
 ```bash
 pnpm install
 ```
+
+> [!TIP]
+> **Solución a errores de Timeout en la instalación:**
+> Si estás experimentando fallos de descarga lenta o cancelaciones con error de timeout (`DOMException` o `error (23)`) al descargar paquetes pesados (como `next` o `@prisma/client`), se debe a que `pnpm` a veces no hereda los parámetros del archivo `.npmrc` local del proyecto.
+>
+> Puedes forzar a `pnpm` a usar límites de tiempo más amplios (10 minutos) y reintentar descargas configurando las variables globales en tu equipo:
+>
+> ```bash
+> pnpm config set fetch-timeout 600000
+> pnpm config set fetch-retries 10
+> pnpm config set fetch-retry-mintimeout 20000
+> pnpm config set fetch-retry-maxtimeout 120000
+> ```
+>
+> Después, limpia descargas corruptas parciales e instala limitando la concurrencia de red:
+>
+> ```bash
+> pnpm store prune
+> pnpm install --network-concurrency 1
+> ```
 
 ### 3. Levantar la Infraestructura (Selecciona tu Perfil)
 

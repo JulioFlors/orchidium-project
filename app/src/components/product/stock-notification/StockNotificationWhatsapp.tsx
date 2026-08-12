@@ -1,19 +1,23 @@
 'use client'
 
+import type { PotSize } from '@/interfaces'
+
 import { useState, FormEvent, MouseEvent } from 'react'
 import { clsx } from 'clsx'
 import Link from 'next/link'
 
 import { Button } from '@/components'
 import { Logger } from '@/lib'
-// todo: Importar tu Server Action cuando esté lista
-// import { requestStockNotificationWhatsapp } from '@/actions/notify-stock';
+import { requestStockNotification } from '@/actions'
 
 interface Props {
   productName: string
+  speciesId?: string
+  variantId?: string
+  size?: PotSize
 }
 
-export function StockNotificationWhatsapp({ productName }: Props) {
+export function StockNotificationWhatsapp({ productName, speciesId, variantId, size }: Props) {
   const [isFormVisible, setIsFormVisible] = useState(false)
   const [userName, setUserName] = useState('')
   const [phoneNumber, setPhoneNumber] = useState('')
@@ -22,14 +26,14 @@ export function StockNotificationWhatsapp({ productName }: Props) {
   const [phoneError, setPhoneError] = useState<string | null>(null)
 
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [submitSuccess, setSubmitSuccess] = useState(false) // Este estado indicará si mostrar el mensaje de éxito
+  const [submitSuccess, setSubmitSuccess] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const handleShowForm = (e: MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault()
     setIsFormVisible(true)
-    setSubmitSuccess(false) // Resetea el mensaje de éxito si el usuario vuelve a abrir el formulario
-    setSubmitError(null) // Resetea cualquier error anterior
+    setSubmitSuccess(false)
+    setSubmitError(null)
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -58,31 +62,38 @@ export function StockNotificationWhatsapp({ productName }: Props) {
 
     setIsSubmitting(true)
 
-    // ---- SIMULACIÓN DE LLAMADA AL BACKEND ----
-    // TODO: realizar la notificacion por whatsApp
-    Logger.info('Enviando datos para notificación por WhatsApp:', {
+    Logger.info('[SNAT] Enviando datos de solicitud de notificación de stock:', {
       userName,
       phoneNumber,
       productName,
+      speciesId,
+      variantId,
+      size,
     })
 
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    const wasSuccessful = Math.random() > 0.3 // Simular éxito
+    if (!speciesId) {
+      // Fallback si no viene speciesId
+      setSubmitError('Ocurrió un inconveniente con la especie seleccionada.')
+      setIsSubmitting(false)
 
-    if (wasSuccessful) {
-      setSubmitSuccess(true) // Indica que el envío fue exitoso
-      setIsFormVisible(false) // Oculta el formulario
-      // Los campos se mantendrán, pero el formulario no será visible.
-      // Si quisieras resetearlos por si el usuario vuelve a interactuar de alguna forma:
-      // setUserName('');
-      // setPhoneNumber('');
-    } else {
-      setSubmitError(
-        'Hubo un problema al registrar tu notificación. Por favor, inténtalo más tarde.',
-      )
-      setSubmitSuccess(false) // Asegúrate de que el éxito esté en false
+      return
     }
-    // --- FIN DE SIMULACIÓN ---
+
+    const res = await requestStockNotification({
+      userName,
+      phoneNumber,
+      speciesId,
+      variantId,
+      size,
+    })
+
+    if (res.ok) {
+      setSubmitSuccess(true)
+      setIsFormVisible(false)
+    } else {
+      setSubmitError(res.error || 'Hubo un problema al registrar tu notificación.')
+      setSubmitSuccess(false)
+    }
 
     setIsSubmitting(false)
   }

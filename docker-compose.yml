@@ -315,9 +315,33 @@ services:
       NODE_ENV: production
       NODE_OPTIONS: "--dns-result-order=ipv4first"
 
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: n8n
+    restart: always
+    profiles: ["cloud"]
+    ports:
+      - "443:5678"
+    environment:
+      - GENERIC_TIMEZONE=America/Caracas
+      - N8N_HOST=${N8N_HOST}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - N8N_SSL_CERT=/ssl/fullchain.pem
+      - N8N_SSL_KEY=/ssl/privkey.pem
+      - WEBHOOK_URL=${N8N_WEBHOOK_URL}
+    volumes:
+      - ./infrastructure/n8n/data:/home/node/.n8n
+      - ./infrastructure/certs/n8n:/ssl:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+
 
   # -------------------------------------------------------------------
   # 🆓 PERFIL SERVERLESS — Capas Gratuitas (Active Profile: serverless)
+
   # -------------------------------------------------------------------
   # Sin contenedores de infraestructura propios. Los servicios se
   # conectan directamente a proveedores externos:

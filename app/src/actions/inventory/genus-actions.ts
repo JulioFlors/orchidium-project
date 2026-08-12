@@ -39,8 +39,7 @@ export async function createGenus(data: { name: string; type: PlantType }) {
       data: { name: data.name.trim(), type: data.type },
     })
 
-    revalidatePath('/genus')
-    revalidatePath('/species')
+    revalidatePath('/catalog')
 
     return { ok: true, genus }
   } catch (err) {
@@ -61,7 +60,7 @@ export async function updateGenus(id: string, data: { name: string; type: PlantT
       data: { name: data.name.trim(), type: data.type },
     })
 
-    revalidatePath('/genus')
+    revalidatePath('/catalog')
 
     return { ok: true, genus }
   } catch (err) {
@@ -91,7 +90,7 @@ export async function deleteGenus(id: string) {
     }
 
     await prisma.genus.delete({ where: { id } })
-    revalidatePath('/genus')
+    revalidatePath('/catalog')
 
     return { ok: true }
   } catch (err) {

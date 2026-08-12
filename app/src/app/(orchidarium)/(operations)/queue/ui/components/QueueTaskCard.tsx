@@ -204,11 +204,16 @@ export function QueueTaskCard({ task, onCancel, icon, colorClassName }: QueueTas
               </div>
 
               {/* Zonas */}
-              <div className="flex shrink-0 items-center gap-1.5 overflow-hidden">
+              <div className="flex flex-wrap items-center gap-1.5 overflow-hidden">
                 <MdLayers className="text-secondary h-4 w-4 shrink-0 opacity-30" />
-                <span className="text-primary truncate font-mono text-[11px] font-bold tracking-tight uppercase">
-                  {task.zones.map((z) => ZoneTypeLabels[z] || z).join(', ')}
-                </span>
+                {task.zones.map((z) => (
+                  <span
+                    key={z}
+                    className="text-primary font-mono text-[11px] font-bold tracking-tight uppercase whitespace-nowrap"
+                  >
+                    {ZoneTypeLabels[z] || z}
+                  </span>
+                ))}
               </div>
             </div>
 

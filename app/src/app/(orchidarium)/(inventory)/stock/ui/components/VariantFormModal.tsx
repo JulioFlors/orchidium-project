@@ -77,7 +77,8 @@ export function VariantFormModal({
     setPriceInput(raw)
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
     const parsed = parseFloat(priceInput)
     const validPrice = isNaN(parsed) || parsed < 0 ? 0 : parsed
 
@@ -90,51 +91,48 @@ export function VariantFormModal({
   }
 
   return (
-    <Modal
-      footer={
-        <>
-          <Button disabled={isPending} variant="ghost" onClick={onClose}>
+    <Modal isOpen={isOpen} size="md" title={targetSpecies?.name ?? 'Especie'} onClose={onClose}>
+      <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FormField htmlFor="v-size" label="Tamaño">
+            <SelectDropdown
+              disabled={!!editingVariant}
+              id="v-size"
+              options={potSizes.map((s) => ({
+                value: s,
+                label: potSizeLabels[s],
+              }))}
+              value={size}
+              onChange={(val) => setSize(val as PotSize)}
+            />
+          </FormField>
+
+          <FormField htmlFor="v-price" label="Precio">
+            <div className="relative flex items-center">
+              <span className="text-secondary pointer-events-none absolute left-3 text-sm font-bold opacity-60">
+                $
+              </span>
+              <Input
+                className="pl-7 font-mono font-bold"
+                id="v-price"
+                placeholder="0.00"
+                type="text"
+                value={priceInput}
+                onChange={handlePriceChange}
+              />
+            </div>
+          </FormField>
+        </div>
+
+        <div className="border-input-outline -mx-6 mt-4 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+          <Button disabled={isPending} type="button" variant="ghost" onClick={onClose}>
             Cancelar
           </Button>
-          <Button isLoading={isPending} onClick={handleSubmit}>
-            {editingVariant ? 'Guardar Cambios' : 'Crear Tamaño'}
+          <Button isLoading={isPending} type="submit" variant="primary">
+            {editingVariant ? 'Guardar' : 'Crear'}
           </Button>
-        </>
-      }
-      isOpen={isOpen}
-      title={targetSpecies?.name ?? 'Especie'}
-      onClose={onClose}
-    >
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <FormField htmlFor="v-size" label="Tamaño">
-          <SelectDropdown
-            disabled={!!editingVariant}
-            id="v-size"
-            options={potSizes.map((s) => ({
-              value: s,
-              label: potSizeLabels[s],
-            }))}
-            value={size}
-            onChange={(val) => setSize(val as PotSize)}
-          />
-        </FormField>
-
-        <FormField htmlFor="v-price" label="Precio">
-          <div className="relative flex items-center">
-            <span className="text-secondary pointer-events-none absolute left-3 text-sm font-bold opacity-60">
-              $
-            </span>
-            <Input
-              className="pl-7 font-mono font-bold"
-              id="v-price"
-              placeholder="0.00"
-              type="text"
-              value={priceInput}
-              onChange={handlePriceChange}
-            />
-          </div>
-        </FormField>
-      </div>
+        </div>
+      </form>
     </Modal>
   )
 }

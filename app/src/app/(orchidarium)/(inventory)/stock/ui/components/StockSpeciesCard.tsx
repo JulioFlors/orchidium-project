@@ -1,10 +1,13 @@
 'use client'
 
+import type { Species as ProductSpecies } from '@/interfaces'
+
 import Link from 'next/link'
 import { PiLeafFill } from 'react-icons/pi'
 
 import { getImageUrl } from '@/lib'
 import { useImageColor, getPresetForColorString } from '@/hooks/useImageColor'
+import { StockLabel, isProductAvailable } from '@/components'
 
 interface SpeciesImage {
   id?: string
@@ -24,7 +27,14 @@ interface Species {
   genus: Genus
   images: SpeciesImage[]
   glowColor?: string | null
-  variants: Array<{ id: string }>
+  variants?: Array<{
+    id?: string
+    size?: string
+    price?: number
+    available?: boolean
+    quantity?: number
+    speciesId?: string
+  }>
   _count: {
     plants: number
   }
@@ -38,6 +48,11 @@ interface StockSpeciesCardProps {
 export function StockSpeciesCard({ species, index }: StockSpeciesCardProps) {
   const rawImageUrl = species.images[0]?.url
   const formattedImageUrl = getImageUrl(rawImageUrl)
+
+  const hasStock = species.variants
+    ? isProductAvailable(species as unknown as ProductSpecies)
+    : true
+
   const mode = species.glowColor === 'contrast' ? 'contrast' : 'recommended'
   const { lightRgbString, darkRgbString, isLoaded } = useImageColor(
     rawImageUrl ? formattedImageUrl : species.name,
@@ -112,6 +127,9 @@ export function StockSpeciesCard({ species, index }: StockSpeciesCardProps) {
               </div>
             )}
           </Link>
+
+          {/* Etiqueta de Agotado si la especie no posee stock comercial disponible */}
+          {!hasStock && <StockLabel label="Agotado" />}
         </div>
       </div>
 

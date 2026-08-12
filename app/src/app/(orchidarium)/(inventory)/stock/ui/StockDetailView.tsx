@@ -3,9 +3,6 @@
 import type { PotSize, PlantStatus, ZoneType } from '@package/database/enums'
 
 import { useState, useTransition } from 'react'
-import { useRouter } from 'next/navigation'
-import { motion } from 'motion/react'
-import { MdEdit, MdDelete } from 'react-icons/md'
 import { IoAddOutline } from 'react-icons/io5'
 
 import {
@@ -13,16 +10,18 @@ import {
   PlantInstance,
   VariantFormModal,
   PlantFormModal,
-  BatchPlantEntryModal,
+  StockPlantModal,
   FloweringEventModal,
+  FloweringFormValues,
+  ProductVariantCard,
 } from './components'
 
 import { SpeciesFloweringSection } from '@/app/(shop)/plant/[slug]/ui/SpeciesFloweringSection'
-import { Heading, Button, Badge, ActionMenu, StatusCircleIcon } from '@/components'
+import { Heading, Button } from '@/components'
 import {
   PotSizeLabels as POT_SIZE_LABELS,
-  PotSizeDimensions,
   ZoneTypeLabels as ZONE_LABELS,
+  sortVariantsByPotSizeAsc,
 } from '@/config/mappings'
 import {
   upsertVariant,
@@ -32,9 +31,9 @@ import {
   deletePlant,
   createBatchPlants,
   createFloweringEvent,
+  closeFloweringEvent,
 } from '@/actions'
 import { useToastStore } from '@/store/toast/toast.store'
-import { useFormatPrice } from '@/lib'
 
 interface Variant {
   id: string
@@ -44,17 +43,14 @@ interface Variant {
   available: boolean
 }
 
-interface Genus {
-  id: string
-  name: string
-  type: string
-}
-
 interface SpeciesDetail {
   id: string
   name: string
   slug: string
-  genus: Genus
+  description: string | null
+  glowColor?: string | null
+  genus: { id: string; name: string; type: string }
+  images: Array<{ id: string; url: string; position: number }>
   variants: Variant[]
   plants: PlantInstance[]
 }
@@ -79,9 +75,7 @@ const POT_SIZES: PotSize[] = [
 ]
 
 export function StockDetailView({ species: initialSpecies }: StockDetailViewProps) {
-  const router = useRouter()
   const { addToast } = useToastStore()
-  const { format: formatPrice } = useFormatPrice()
   const [isPending, startTransition] = useTransition()
 
   const [species, setSpecies] = useState<SpeciesDetail>(initialSpecies)
@@ -90,7 +84,7 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
   const [selectedZoneFilter, setSelectedZoneFilter] = useState<string | null>(null)
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string | null>(null)
 
-  // Modales
+  // Estados de los Modales
   const [isVariantModalOpen, setIsVariantModalOpen] = useState(false)
   const [editingVariant, setEditingVariant] = useState<Variant | null>(null)
 
@@ -145,7 +139,7 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
           newVariants.push(savedVariant)
         }
 
-        return { ...prev, variants: newVariants.sort((a, b) => a.size.localeCompare(b.size)) }
+        return { ...prev, variants: sortVariantsByPotSizeAsc(newVariants) }
       })
 
       addToast(editingVariant ? 'Variante actualizada.' : 'Variante añadida.', 'success')
@@ -185,6 +179,7 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
     size: PotSize
     status: PlantStatus
     zone: ZoneType
+    origin?: string | null
     pottingDate?: string | null
   }) {
     startTransition(async () => {
@@ -202,6 +197,15 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
           return
         }
 
+        const updatedPlant = {
+          ...(res.plant as PlantInstance),
+          origin: values.origin !== undefined ? values.origin : editingPlant.origin,
+        }
+
+        setSpecies((prev) => ({
+          ...prev,
+          plants: prev.plants.map((p) => (p.id === editingPlant.id ? updatedPlant : p)),
+        }))
         addToast('Planta física actualizada.', 'success')
       } else {
         const res = await createPlant({
@@ -218,12 +222,20 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
           return
         }
 
+        const newPlant = {
+          ...(res.plant as PlantInstance),
+          origin: values.origin || 'Establecida',
+        }
+
+        setSpecies((prev) => ({
+          ...prev,
+          plants: [newPlant, ...prev.plants],
+        }))
         addToast('Planta física añadida al inventario.', 'success')
       }
 
       setIsPlantModalOpen(false)
       setEditingPlant(null)
-      router.refresh()
     })
   }
 
@@ -248,9 +260,16 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
         return
       }
 
+      // Reemplazar el array completo de plantas con los datos frescos del servidor
+      if (res.plants) {
+        setSpecies((prev) => ({
+          ...prev,
+          plants: res.plants as PlantInstance[],
+        }))
+      }
+
       addToast(`Lote de ${res.count ?? 'múltiples'} plantas registrado con éxito.`, 'success')
       setIsBatchModalOpen(false)
-      router.refresh()
     })
   }
 
@@ -266,7 +285,10 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
         return
       }
 
-      router.refresh()
+      setSpecies((prev) => ({
+        ...prev,
+        plants: prev.plants.filter((p) => p.id !== plant.id),
+      }))
     })
   }
 
@@ -275,26 +297,82 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
     setIsFloweringModalOpen(true)
   }
 
-  function handleSaveFlowering(values: { startDate: string; notes?: string }) {
+  function handleSaveFlowering(values: FloweringFormValues) {
     if (!floweringTargetPlant) return
 
     startTransition(async () => {
-      const res = await createFloweringEvent({
-        plantId: floweringTargetPlant.id,
-        startDate: values.startDate,
-        notes: values.notes,
-      })
+      if (values.eventId) {
+        // Cierre de Floración Activa
+        const res = await closeFloweringEvent({
+          eventId: values.eventId,
+          endDate: values.endDate!,
+          notes: values.notes,
+        })
 
-      if (!res.ok) {
-        addToast(res.message ?? 'Error al registrar floración.', 'error')
+        if (!res.ok) {
+          addToast(res.message ?? 'Error al finalizar floración.', 'error')
 
-        return
+          return
+        }
+
+        const updatedEvent = res.floweringEvent as {
+          id: string
+          startDate: Date | string
+          endDate?: Date | string | null
+          notes?: string | null
+        }
+
+        setSpecies((prev) => ({
+          ...prev,
+          plants: prev.plants.map((p) =>
+            p.id === floweringTargetPlant.id
+              ? {
+                  ...p,
+                  FloweringEvent: (p.FloweringEvent || []).map((e) =>
+                    e.id === values.eventId ? updatedEvent : e,
+                  ),
+                }
+              : p,
+          ),
+        }))
+
+        addToast('Floración finalizada correctamente.', 'success')
+      } else {
+        // Registro de Nueva Floración (En Curso o Completa)
+        const res = await createFloweringEvent({
+          plantId: floweringTargetPlant.id,
+          startDate: values.startDate,
+          endDate: values.endDate,
+          notes: values.notes,
+        })
+
+        if (!res.ok) {
+          addToast(res.message ?? 'Error al registrar floración.', 'error')
+
+          return
+        }
+
+        const newEvent = res.floweringEvent as {
+          id: string
+          startDate: Date | string
+          endDate?: Date | string | null
+          notes?: string | null
+        }
+
+        setSpecies((prev) => ({
+          ...prev,
+          plants: prev.plants.map((p) =>
+            p.id === floweringTargetPlant.id
+              ? { ...p, FloweringEvent: [newEvent, ...(p.FloweringEvent || [])] }
+              : p,
+          ),
+        }))
+
+        addToast('Evento de floración registrado correctamente.', 'success')
       }
 
-      addToast('Evento de floración registrado correctamente.', 'success')
       setIsFloweringModalOpen(false)
       setFloweringTargetPlant(null)
-      router.refresh()
     })
   }
 
@@ -303,7 +381,7 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
   const motherPlantsCount = species.plants.filter((p) => p.status === 'MOTHER').length
   const availablePlantsCount = species.plants.filter((p) => p.status === 'AVAILABLE').length
   const floweringPlantsCount = species.plants.filter(
-    (p) => p.FloweringEvent && p.FloweringEvent.length > 0,
+    (p) => p.FloweringEvent && p.FloweringEvent.some((e) => !e.endDate),
   ).length
 
   // Conteo por Zonas
@@ -328,7 +406,7 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
     }
     if (
       selectedStatusFilter === 'FLOWERING' &&
-      (!p.FloweringEvent || p.FloweringEvent.length === 0)
+      (!p.FloweringEvent || !p.FloweringEvent.some((e) => !e.endDate))
     ) {
       return false
     }
@@ -483,10 +561,10 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
             action={
               <Button size="sm" variant="ghost" onClick={openCreateVariant}>
                 <IoAddOutline className="mr-1.5 size-5" />
-                Añadir Tamaño
+                Añadir
               </Button>
             }
-            title="Tamaños Disponibles"
+            title="Variantes"
           />
 
           {species.variants.length === 0 ? (
@@ -494,74 +572,15 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
               No hay precios por tamaño configurados para esta especie.
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {species.variants.map((v) => {
-                const physicalStock = species.plants.filter(
-                  (p) => p.currentSize === v.size && p.status === 'AVAILABLE',
-                ).length
-                const potCode = POT_SIZE_LABELS[v.size] || v.size
-                const potDim = PotSizeDimensions[v.size] || ''
-
-                return (
-                  <motion.div
-                    key={v.id}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-surface border-input-outline group hover:bg-hover-overlay relative flex flex-col justify-between rounded-xl border p-4 shadow-xs transition-all duration-300"
-                    initial={{ opacity: 0, y: 5 }}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex flex-1 items-center gap-4 overflow-hidden">
-                        <StatusCircleIcon
-                          className="shrink-0 font-mono text-xs font-black"
-                          glowVariant="violet"
-                          icon={<span className="font-mono text-xs font-black">{potCode}</span>}
-                          size="md"
-                          variant="glow"
-                        />
-                        <div className="flex flex-1 flex-col overflow-hidden text-left">
-                          <div className="flex items-center gap-2">
-                            <h3 className="text-primary font-mono text-base font-bold tracking-tight">
-                              {potCode}
-                            </h3>
-                            {potDim && (
-                              <Badge className="text-[10px] font-semibold" variant="secondary">
-                                {potDim}
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="text-secondary mt-1 flex items-center gap-2 text-xs font-medium opacity-70">
-                            <span>
-                              {physicalStock}{' '}
-                              {physicalStock === 1 ? 'planta registrada' : 'plantas registradas'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex shrink-0 items-center gap-3">
-                        <span className="font-mono text-lg font-black text-emerald-600 dark:text-emerald-400">
-                          {formatPrice(v.price)}
-                        </span>
-                        <ActionMenu
-                          items={[
-                            {
-                              label: 'Editar Precio',
-                              icon: <MdEdit />,
-                              onClick: () => openEditVariant(v),
-                            },
-                            {
-                              label: 'Eliminar Tamaño',
-                              icon: <MdDelete />,
-                              onClick: () => handleDeleteVariant(v),
-                              variant: 'destructive',
-                            },
-                          ]}
-                        />
-                      </div>
-                    </div>
-                  </motion.div>
-                )
-              })}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 tds-xl:grid-cols-3">
+              {sortVariantsByPotSizeAsc(species.variants).map((v) => (
+                <ProductVariantCard
+                  key={v.id}
+                  variant={v}
+                  onDelete={handleDeleteVariant}
+                  onEdit={openEditVariant}
+                />
+              ))}
             </div>
           )}
         </div>
@@ -570,7 +589,7 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
       {/* Sección de Analítica de Floración de la Especie */}
       {species.slug && (
         <div className="w-full">
-          <SpeciesFloweringSection speciesSlug={species.slug} />
+          <SpeciesFloweringSection fullWidth speciesSlug={species.slug} />
         </div>
       )}
 
@@ -588,7 +607,7 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
             </p>
           </div>
         ) : (
-          <div className="tds-xs:grid-cols-2 tds-sm:grid-cols-3 tds-lg:grid-cols-4 grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 tds-sm:grid-cols-3 tds-lg:grid-cols-4 gap-4">
             {filteredPlants.map((plant) => (
               <PlantInstanceCard
                 key={plant.id}
@@ -617,6 +636,7 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
       />
 
       <PlantFormModal
+        availableSizes={species.variants.map((v) => v.size)}
         editingPlant={editingPlant}
         isOpen={isPlantModalOpen}
         isPending={isPending}
@@ -627,7 +647,7 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
         onSave={handleSaveSinglePlant}
       />
 
-      <BatchPlantEntryModal
+      <StockPlantModal
         isOpen={isBatchModalOpen}
         isPending={isPending}
         potSizeLabels={POT_SIZE_LABELS}

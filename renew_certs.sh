@@ -15,11 +15,20 @@ CYAN='\x1b[96m'
 # Asegurar que el script se ejecuta en la raíz del proyecto
 cd "$(dirname "$0")"
 
+# Cargar variables de entorno de .env si existe
+if [ -f .env ]; then
+  export $(grep -v '^#' .env | xargs)
+fi
+MQTT_DOMAIN="${MQTT_HOST:-mqtt.sisparrow.com}"
+VPS_DOMAIN="${VPS_HOST:-vps.sisparrow.com}"
+N8N_DOMAIN="${N8N_HOST:-n8n.sisparrow.com}"
+
 echo -e "${GREEN}🌵 PristinoPlant | Renovación de Certificados SSL${RESET}"
 echo -e "${CYAN}------------------------------------------------------------${RESET}"
 
 # Requisito previo: Validar que Docker esté instalado
 if ! [ -x "$(command -v docker)" ]; then
+
   echo -e "${RED}❌ Error: Docker no está instalado o no se puede ejecutar en este sistema.${RESET}" >&2
   exit 1
 fi
@@ -36,13 +45,17 @@ fi
 # -------------------------------------------------------------------------------------
 echo -e "${CYAN}🧹 Limpiando configuraciones antiguas de Certbot para evitar conflictos y directorios incrementales (-0001)...${RESET}"
 # Eliminar linajes antiguos en live, archive y renewal
-sudo rm -rf infrastructure/certs/live/mqtt.sisparrow.com*
-sudo rm -rf infrastructure/certs/archive/mqtt.sisparrow.com*
-sudo rm -rf infrastructure/certs/renewal/mqtt.sisparrow.com*.conf
+sudo rm -rf infrastructure/certs/live/${MQTT_DOMAIN}*
+sudo rm -rf infrastructure/certs/archive/${MQTT_DOMAIN}*
+sudo rm -rf infrastructure/certs/renewal/${MQTT_DOMAIN}*.conf
 
-sudo rm -rf infrastructure/certs/live/vps.sisparrow.com*
-sudo rm -rf infrastructure/certs/archive/vps.sisparrow.com*
-sudo rm -rf infrastructure/certs/renewal/vps.sisparrow.com*.conf
+sudo rm -rf infrastructure/certs/live/${VPS_DOMAIN}*
+sudo rm -rf infrastructure/certs/archive/${VPS_DOMAIN}*
+sudo rm -rf infrastructure/certs/renewal/${VPS_DOMAIN}*.conf
+
+sudo rm -rf infrastructure/certs/live/${N8N_DOMAIN}*
+sudo rm -rf infrastructure/certs/archive/${N8N_DOMAIN}*
+sudo rm -rf infrastructure/certs/renewal/${N8N_DOMAIN}*.conf
 
 # -------------------------------------------------------------------------------------
 # PASO 1: Generación de Certificados con Certbot Docker
@@ -62,20 +75,27 @@ if [ -n "$UFW_STATUS" ]; then
   PORT80_ADDED=true
 fi
 
-echo -e "\n${CYAN}🔑 [1/5] Ejecutando Certbot para 'mqtt.sisparrow.com'...${RESET}"
+echo -e "\n${CYAN}🔑 [1/6] Ejecutando Certbot para '${MQTT_DOMAIN}'...${RESET}"
 echo -e "${YELLOW}⚠️  Asegúrate de que no haya otros servicios ocupando el puerto 80 del VPS.${RESET}\n"
 
 sudo docker run -it --rm -p 80:80 \
   -v $(pwd)/infrastructure/certs:/etc/letsencrypt \
   certbot/certbot certonly --standalone \
-  -d mqtt.sisparrow.com
+  -d ${MQTT_DOMAIN}
 
-echo -e "\n${CYAN}🔑 [2/5] Ejecutando Certbot para 'vps.sisparrow.com'...${RESET}\n"
+echo -e "\n${CYAN}🔑 [2/6] Ejecutando Certbot para '${VPS_DOMAIN}'...${RESET}\n"
 
 sudo docker run -it --rm -p 80:80 \
   -v $(pwd)/infrastructure/certs:/etc/letsencrypt \
   certbot/certbot certonly --standalone \
-  -d vps.sisparrow.com
+  -d ${VPS_DOMAIN}
+
+echo -e "\n${CYAN}🔑 [3/6] Ejecutando Certbot para '${N8N_DOMAIN}'...${RESET}\n"
+
+sudo docker run -it --rm -p 80:80 \
+  -v $(pwd)/infrastructure/certs:/etc/letsencrypt \
+  certbot/certbot certonly --standalone \
+  -d ${N8N_DOMAIN}
 
 # B. Cerrar el puerto 80 en UFW si fue abierto por este script
 if [ "$PORT80_ADDED" = true ]; then
@@ -86,28 +106,33 @@ fi
 # -------------------------------------------------------------------------------------
 # PASO 2: Limpieza de directorios dedicados previos
 # -------------------------------------------------------------------------------------
-echo -e "\n${CYAN}🗑️  [3/5] Limpiando carpetas de certificados dedicados anteriores...${RESET}"
+echo -e "\n${CYAN}🗑️  [4/6] Limpiando carpetas de certificados dedicados anteriores...${RESET}"
 sudo rm -rf infrastructure/certs/mosquitto/*
 sudo rm -rf infrastructure/certs/postgres/*
 sudo rm -rf infrastructure/certs/influxdb/*
+sudo rm -rf infrastructure/certs/n8n/*
 
 # -------------------------------------------------------------------------------------
 # PASO 3: Copiar nuevos certificados resolviendo los enlaces simbólicos
 # -------------------------------------------------------------------------------------
-echo -e "${CYAN}📂 [4/5] Copiando certificados a directorios aislados...${RESET}"
+echo -e "${CYAN}📂 [5/6] Copiando certificados a directorios aislados...${RESET}"
 mkdir -p infrastructure/certs/mosquitto
 mkdir -p infrastructure/certs/postgres
 mkdir -p infrastructure/certs/influxdb
+mkdir -p infrastructure/certs/n8n
 
 # Copia resolviendo enlaces simbólicos (-L)
-sudo cp -L infrastructure/certs/live/mqtt.sisparrow.com/* infrastructure/certs/mosquitto/
-sudo cp -L infrastructure/certs/live/vps.sisparrow.com/* infrastructure/certs/postgres/
-sudo cp -L infrastructure/certs/live/vps.sisparrow.com/* infrastructure/certs/influxdb/
+sudo cp -L infrastructure/certs/live/${MQTT_DOMAIN}/* infrastructure/certs/mosquitto/
+sudo cp -L infrastructure/certs/live/${VPS_DOMAIN}/* infrastructure/certs/postgres/
+sudo cp -L infrastructure/certs/live/${VPS_DOMAIN}/* infrastructure/certs/influxdb/
+sudo cp -L infrastructure/certs/live/${N8N_DOMAIN}/* infrastructure/certs/n8n/
+
+
 
 # -------------------------------------------------------------------------------------
 # PASO 4: Otorgar propiedad y permisos de lectura estándar
 # -------------------------------------------------------------------------------------
-echo -e "${CYAN}🔒 [5/5] Ajustando propiedad (UID) y permisos de seguridad...${RESET}"
+echo -e "${CYAN}🔒 [6/6] Ajustando propiedad (UID) y permisos de seguridad...${RESET}"
 
 # A. Mosquitto (Usuario interno UID 1883)
 echo -e "   ├─ Configurando permisos para Mosquitto (UID 1883)..."
@@ -122,16 +147,23 @@ sudo chmod 600 infrastructure/certs/postgres/privkey.pem
 sudo chmod 644 infrastructure/certs/postgres/fullchain.pem
 
 # C. InfluxDB (Usuario interno UID 1500)
-echo -e "   └─ Configurando permisos para InfluxDB (UID 1500)..."
+echo -e "   ├─ Configurando permisos para InfluxDB (UID 1500)..."
 sudo chown -R 1500:1500 infrastructure/certs/influxdb/
 sudo chmod 644 infrastructure/certs/influxdb/privkey.pem
 sudo chmod 644 infrastructure/certs/influxdb/fullchain.pem
+
+# D. n8n (Usuario interno node UID 1000)
+echo -e "   └─ Configurando permisos para n8n (UID 1000)..."
+sudo chown -R 1000:1000 infrastructure/certs/n8n/
+sudo chmod 600 infrastructure/certs/n8n/privkey.pem
+sudo chmod 644 infrastructure/certs/n8n/fullchain.pem
 
 # -------------------------------------------------------------------------------------
 # REINICIAR SERVICIOS
 # -------------------------------------------------------------------------------------
 echo -e "\n${CYAN}🔄 Reiniciando contenedores de infraestructura en Docker...${RESET}"
-docker compose --profile cloud restart postgres influxdb mosquitto
+docker compose --profile cloud restart postgres influxdb mosquitto n8n
+
 
 echo -e "\n${GREEN}✅ Certificados renovados y contenedores reiniciados con éxito!${RESET}"
 echo -e "${YELLOW}💡 Te recomendamos verificar el estado de los logs mediante: ${BLUE}docker logs mosquitto | tail -n 20${RESET}\n"

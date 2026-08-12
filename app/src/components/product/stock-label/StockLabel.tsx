@@ -1,12 +1,50 @@
+import type { ProductVariant, Species } from '@/interfaces'
+
 import clsx from 'clsx'
+
+/** Evalúa si una variante individual tiene stock disponible comercialmente para la venta */
+export function isVariantAvailable(variant?: ProductVariant): boolean {
+  if (!variant) return false
+
+  return Boolean(variant.available && variant.quantity > 0 && variant.price > 0)
+}
+
+/** Evalúa si una especie posee al menos una variante comercial con stock disponible para la venta */
+export function isProductAvailable(product?: Species): boolean {
+  if (!product || !product.variants || product.variants.length === 0) return false
+
+  return product.variants.some((v) => isVariantAvailable(v))
+}
 
 interface Props {
   className?: string
   MobileSlideshow?: boolean
   Slideshow?: boolean
+  label?: string
+  product?: Species
+  variant?: ProductVariant
 }
 
-export function StockLabel({ className, MobileSlideshow = false, Slideshow = false }: Props) {
+export function StockLabel({
+  className,
+  MobileSlideshow = false,
+  Slideshow = false,
+  label = 'Agotado',
+  product,
+  variant,
+}: Props) {
+  // Evaluación lógica del contexto de stock comercial disponible para la venta
+  const isAvailable = product
+    ? isProductAvailable(product)
+    : variant
+      ? isVariantAvailable(variant)
+      : null
+
+  // Si se proveyó un producto o variante y cuenta con stock comercial activo, no mostramos la etiqueta de agotado
+  if (isAvailable === true && label === 'Agotado') {
+    return null
+  }
+
   return (
     <span
       aria-hidden="true"
@@ -31,7 +69,7 @@ export function StockLabel({ className, MobileSlideshow = false, Slideshow = fal
         className,
       )}
     >
-      Agotado
+      {label}
     </span>
   )
 }

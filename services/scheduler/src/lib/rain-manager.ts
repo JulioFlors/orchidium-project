@@ -50,10 +50,13 @@ function pushBatchMetrics(queue: BatchSummary[], values: number[], isLux = false
     timestamp: now - (values.length - 1 - idx) * 60000,
   }))
 
-  if (queue.length > 0 && now - queue[0].timestamp < 10 * 60 * 1000) {
-    // Ventana de 10 min
+  if (
+    queue.length > 0 &&
+    now - queue[0].timestamp < 10 * 60 * 1000 &&
+    queue[0].samples.length < 12
+  ) {
+    // Acumular dentro del lote de 10 min actual
     queue[0].samples.push(...samples)
-    // queue[0].timestamp = now // Evita el deslizamiento infinito de la ventana
 
     const allValues = queue[0].samples.map((s) => s.value)
 
@@ -62,12 +65,17 @@ function pushBatchMetrics(queue: BatchSummary[], values: number[], isLux = false
       const low5 = sortedAsc.slice(0, Math.min(5, sortedAsc.length))
 
       queue[0].min = low5.reduce((sum, val) => sum + val, 0) / low5.length
-      queue[0].max = allValues.reduce((sum, val) => sum + val, 0) / allValues.length
+
+      const sortedDesc = [...allValues].sort((a, b) => b - a)
+      const high5 = sortedDesc.slice(0, Math.min(5, sortedDesc.length))
+
+      queue[0].max = high5.reduce((sum, val) => sum + val, 0) / high5.length
     } else {
       queue[0].min = Math.min(...allValues)
       queue[0].max = Math.max(...allValues)
     }
   } else {
+    // Crear un lote nuevo (unshift) al cumplir 10 min o 12 muestras
     let min = Math.min(...values)
     let max = Math.max(...values)
 
@@ -76,7 +84,11 @@ function pushBatchMetrics(queue: BatchSummary[], values: number[], isLux = false
       const low5 = sortedAsc.slice(0, Math.min(5, sortedAsc.length))
 
       min = low5.reduce((sum, val) => sum + val, 0) / low5.length
-      max = values.reduce((sum, val) => sum + val, 0) / values.length
+
+      const sortedDesc = [...values].sort((a, b) => b - a)
+      const high5 = sortedDesc.slice(0, Math.min(5, sortedDesc.length))
+
+      max = high5.reduce((sum, val) => sum + val, 0) / high5.length
     }
 
     queue.unshift({ min, max, timestamp: now, samples })
@@ -536,8 +548,8 @@ export async function evaluateClimateInference(): Promise<void> {
     })
   }
 
-  // 2. Necesitamos al menos 3 batches en temp y hum para poder evaluar derivadas
-  if (tempBatches.length < 3 || humBatches.length < 3) {
+  // 2. Necesitamos al menos 4 batches en temp y hum para poder evaluar derivadas (Paso 3 B3 / Nocturno)
+  if (tempBatches.length < 4 || humBatches.length < 4) {
     return
   }
 
@@ -1136,9 +1148,12 @@ export async function evaluateClimateInference(): Promise<void> {
       // 4. ☁️ Variación Térmica (Diurna, evaluada al final para dar prioridad a las reglas solares)
       if (!closedByRecovery && isDay && minTempInRain !== null) {
         const currentTemp = tempBatches[0].min
+        const currentHum = humBatches[0].max
         const tempRecovery = currentTemp - minTempInRain
+        const isSaturated = currentHum >= 96.0
+        const minRecoveryRequired = isSaturated ? 1.2 : 0.6
 
-        if (tempRecovery >= 0.6) {
+        if (tempRecovery >= minRecoveryRequired) {
           closedByRecovery = true
           let preciseEndMs = nowMs
           const matchingEndSample = tempBatches[0].samples.find(
@@ -1196,8 +1211,11 @@ export async function evaluateClimateInference(): Promise<void> {
 
       if (closedByRecovery) return
 
+      const durationMin =
+        inferedRainStartedAt !== null ? (nowMs - inferedRainStartedAt) / 60000 : 0
+
       // 5. ☁️ Cese por Estancamiento — Día y Noche (Evaluación Deslizante de 10m en muestras de 20m)
-      if (tempBatches.length >= 1 && humBatches.length >= 1) {
+      if (durationMin >= 10 && tempBatches.length >= 1 && humBatches.length >= 1) {
         const combinedTempSamples: Sample[] = []
         const combinedHumSamples: Sample[] = []
 

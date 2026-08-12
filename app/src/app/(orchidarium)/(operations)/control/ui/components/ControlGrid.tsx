@@ -24,7 +24,7 @@ export function ControlGrid({
   onToggle,
 }: ControlGridProps) {
   return (
-    <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-4 grid grid-cols-1 gap-4">
+    <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-4 grid grid-cols-1 gap-4 isolate">
       {/* Riego por Aspersión */}
       <GlowCard
         active={activeCircuits.irrigation}

@@ -13,7 +13,7 @@ import {
   IoCloseOutline,
 } from 'react-icons/io5'
 
-import { Badge, StatusCircleIcon, ActionMenu, ActionMenuItem } from '@/components'
+import { StatusCircleIcon, ActionMenu, ActionMenuItem } from '@/components'
 
 export interface ProgramCycle {
   id: string
@@ -76,16 +76,11 @@ export function ProgramCard({ program, type, onEdit, onDelete }: ProgramCardProp
             <div className="flex flex-1 flex-col gap-y-1 overflow-hidden text-left">
               <div className="tds-xs:flex-row tds-xs:items-center tds-xs:gap-x-2 tds-xs:gap-y-0 tds-xs:flex contents">
                 <h3
-                  className="text-primary tds-xs:truncate tds-xs:whitespace-nowrap order-1 text-[15px] leading-tight font-bold antialiased"
+                  className="text-primary order-1 text-[15px] leading-tight font-bold whitespace-normal break-words antialiased"
                   title={program.name}
                 >
                   {program.name}
                 </h3>
-                <div className="order-3 flex">
-                  <Badge className={colorStyle} size="sm" variant="status">
-                    {isFertilization ? 'Fertirriego' : 'Fitosanitario'}
-                  </Badge>
-                </div>
               </div>
               {/* Métricas del Ciclo */}
               <div className="text-secondary tds-xs:mt-1 order-2 flex items-center gap-2 text-[11px] font-medium opacity-60">

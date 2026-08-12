@@ -14,8 +14,6 @@ export * from './slideshow/Slideshow'
 
 export * from './stock-label/StockLabel'
 
-export * from './flowering-label/FloweringLabel'
-
 export * from './stock-notification/StockNotificationWhatsapp'
 
 export * from './product-grid/ProductGrid'

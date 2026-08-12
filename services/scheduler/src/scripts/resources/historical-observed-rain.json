@@ -257,5 +257,40 @@
     "startedAt": "2026-07-28T12:09:00-04:00",
     "endedAt": "2026-07-28T12:18:00-04:00",
     "description": "Martes 28 de julio: 12:09pm Garua (cielo previo intermedio), 12:18pm CESE por recuperacion solar"
+  },
+  {
+    "id": "07-08-26-Rain-1",
+    "dayOfWeek": "Viernes",
+    "startedAt": "2026-08-07T12:28:00-04:00",
+    "endedAt": "2026-08-07T12:35:00-04:00",
+    "description": "Viernes 7 de agosto: 12:28pm inicio de garúa, 12:35pm estancamiento"
+  },
+  {
+    "id": "07-08-26-Rain-2",
+    "dayOfWeek": "Viernes",
+    "startedAt": "2026-08-07T13:00:00-04:00",
+    "endedAt": "2026-08-07T13:15:00-04:00",
+    "description": "Viernes 7 de agosto: 1:00pm lluvia fuerte, 1:15pm cese"
+  },
+  {
+    "id": "08-08-26-Rain-1",
+    "dayOfWeek": "Sábado",
+    "startedAt": "2026-08-08T11:29:00-04:00",
+    "endedAt": "2026-08-08T13:05:00-04:00",
+    "description": "Sábado 8 de agosto: 11:29am lluvia, 1:05pm cesó"
+  },
+  {
+    "id": "09-08-26-Rain-1",
+    "dayOfWeek": "Domingo",
+    "startedAt": "2026-08-09T14:35:00-04:00",
+    "endedAt": "2026-08-09T14:40:00-04:00",
+    "description": "Domingo 9 de agosto: 2:35pm garua, 2:40pm cese"
+  },
+  {
+    "id": "09-08-26-Rain-2",
+    "dayOfWeek": "Domingo",
+    "startedAt": "2026-08-09T16:00:00-04:00",
+    "endedAt": "2026-08-09T16:10:00-04:00",
+    "description": "Domingo 9 de agosto: 4:00pm Garua, 4:10pm cese"
   }
 ]

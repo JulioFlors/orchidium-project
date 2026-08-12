@@ -1,0 +1,107 @@
+{
+  "name": "Alertas de Nodos Correlacionadas (EMA vs Actuador)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "1a2b3c4d-0001-4000-8000-000000000001",
+      "name": "Schedule Trigger (Cada 1 min)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT name, status, \"updatedAt\" FROM \"Device\" WHERE name IN ('ema', 'actuador');"
+      },
+      "id": "1a2b3c4d-0002-4000-8000-000000000002",
+      "name": "Consultar Estados Nodos",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [480, 300],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-pristinoplant",
+          "name": "Postgres PristinoPlant"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Correlación de estados EMA vs Actuador\nconst items = $input.all();\nconst ema = items.find(i => i.json.name === 'ema')?.json || {};\nconst actuador = items.find(i => i.json.name === 'actuador')?.json || {};\n\nlet alertType = 'NONE';\nlet message = '';\n\nif (ema.status === 'offline' && actuador.status === 'offline') {\n  alertType = 'APAGÓN_GENERAL';\n  message = '⚠️ *ALERTA INFRAESTRUCTURA*\\n\\nCaída masiva de conectividad. Nodos *EMA* y *Actuador* desconectados.\\n\\nPosible corte de energía eléctrica o fallo de internet local.';\n} else if (ema.status === 'offline' && actuador.status === 'online') {\n  alertType = 'BATERÍA_EMA';\n  message = '🪫 *ALERTA HARDWARE*\\n\\nNodo *EMA* OFFLINE (Batería agotada o falla local).\\n\\nEl nodo *Actuador* permanece ONLINE y funcional.';\n} else if (ema.status === 'online') {\n  alertType = 'EMA_RESTABLECIDO';\n  message = '✅ *NODO RESTABLECIDO*\\n\\nNodo *EMA* ONLINE.\\n\\nAlimentación de energía o conectividad restablecida con éxito.';\n}\n\nreturn [{ json: { alertType, message, emaStatus: ema.status, actuadorStatus: actuador.status } }];"
+      },
+      "id": "1a2b3c4d-0003-4000-8000-000000000003",
+      "name": "Evaluar Correlación",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "1a2b3c4d-0004-4000-8000-000000000004",
+      "name": "Enviar Alerta Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [920, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-pristinoplant",
+          "name": "Telegram PristinoBot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (Cada 1 min)": {
+      "main": [
+        [
+          {
+            "node": "Consultar Estados Nodos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Estados Nodos": {
+      "main": [
+        [
+          {
+            "node": "Evaluar Correlación",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluar Correlación": {
+      "main": [
+        [
+          {
+            "node": "Enviar Alerta Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

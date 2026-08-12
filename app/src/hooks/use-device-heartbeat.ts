@@ -46,7 +46,8 @@ export const useDeviceHeartbeat = (
     timestamp: number
     status: string
   } | null>(`/api/environment/device-status?device=${deviceName}`, fetcher, {
-    refreshInterval: 30000,
+    refreshInterval: 60000,
+    dedupingInterval: 10000,
     fallbackData:
       initialHeartbeat && initialStatus !== 'unknown'
         ? { timestamp: initialHeartbeat, status: initialStatus }

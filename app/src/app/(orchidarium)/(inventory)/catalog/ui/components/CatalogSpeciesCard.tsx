@@ -1,10 +1,13 @@
 'use client'
 
+import type { Species as ProductSpecies } from '@/interfaces'
+
 import Link from 'next/link'
 import { PiLeafFill } from 'react-icons/pi'
 
 import { useImageColor, getPresetForColorString } from '@/hooks/useImageColor'
 import { getImageUrl } from '@/lib'
+import { StockLabel, isProductAvailable } from '@/components'
 
 interface SpeciesImage {
   id: string
@@ -24,7 +27,15 @@ interface Species {
   genusId: string
   genus: Genus
   images: SpeciesImage[]
-  glowColor?: string | null // Soporte para color estático guardado en base de datos
+  glowColor?: string | null
+  variants?: Array<{
+    id?: string
+    size?: string
+    price?: number
+    available: boolean
+    quantity: number
+    speciesId?: string
+  }>
 }
 
 interface CatalogSpeciesCardProps {
@@ -35,6 +46,10 @@ interface CatalogSpeciesCardProps {
 export function CatalogSpeciesCard({ species, index }: CatalogSpeciesCardProps) {
   const rawImageUrl = species.images[0]?.url
   const formattedImageUrl = getImageUrl(rawImageUrl)
+
+  const hasStock = species.variants
+    ? isProductAvailable(species as unknown as ProductSpecies)
+    : true
 
   // Obtenemos el color dinámico recomendado o de contraste
   const mode = species.glowColor === 'contrast' ? 'contrast' : 'recommended'
@@ -111,6 +126,9 @@ export function CatalogSpeciesCard({ species, index }: CatalogSpeciesCardProps) 
               </div>
             )}
           </Link>
+
+          {/* Etiqueta de Agotado si la especie no posee stock comercial disponible */}
+          {!hasStock && <StockLabel label="Agotado" />}
         </div>
       </div>
 

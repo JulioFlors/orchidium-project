@@ -6,6 +6,8 @@ export * from './StockSpeciesCard'
 
 export * from './PlantFormModal'
 
-export * from './BatchPlantEntryModal'
+export * from './StockPlantModal'
 
 export * from './FloweringEventModal'
+
+export * from './ProductVariantCard'

@@ -1,12 +1,15 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { Flower2, Calendar, Clock, Sparkles } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import clsx from 'clsx'
 
 import { getSpeciesFloweringAnalytics } from '@/actions'
+import { SelectorGroup, type SelectorGroupItem } from '@/components'
 
 interface Props {
   speciesSlug: string
+  className?: string
+  fullWidth?: boolean
 }
 
 interface AnalyticsData {
@@ -32,7 +35,7 @@ const MONTH_NAMES = [
   'Dic',
 ]
 
-export function SpeciesFloweringSection({ speciesSlug }: Props) {
+export function SpeciesFloweringSection({ speciesSlug, className, fullWidth = false }: Props) {
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -46,102 +49,138 @@ export function SpeciesFloweringSection({ speciesSlug }: Props) {
       .finally(() => setIsLoading(false))
   }, [speciesSlug])
 
+  // Obtener únicamente los meses que presentan actividad registrada (conteo > 0)
+  const activeMonthsData = useMemo(() => {
+    if (!data) return []
+
+    return MONTH_NAMES.map((mName, idx) => {
+      const monthNum = idx + 1
+      const count = data.monthlyFloweringDistribution[monthNum] || 0
+
+      return { monthNum, mName, count }
+    }).filter((item) => item.count > 0)
+  }, [data])
+
+  // Máximo conteo mensual para el porcentaje de relleno
+  const maxMonthCount = useMemo(() => {
+    if (activeMonthsData.length === 0) return 1
+
+    return Math.max(1, ...activeMonthsData.map((d) => d.count))
+  }, [activeMonthsData])
+
+  // Adaptación de los ítems al componente reusable SelectorGroup
+  const selectorItems = useMemo<SelectorGroupItem[]>(() => {
+    return activeMonthsData.map(({ mName, count }) => {
+      const heightPct = Math.max(20, Math.round((count / maxMonthCount) * 100))
+
+      return {
+        id: mName,
+        label: mName,
+        subtitle: fullWidth ? mName : undefined,
+        value: fullWidth ? count : undefined,
+        percentage: heightPct,
+      }
+    })
+  }, [activeMonthsData, maxMonthCount, fullWidth])
+
   if (isLoading || !data || data.totalFloweringEvents === 0) {
     return null
   }
 
-  const maxMonthCount = Math.max(1, ...Object.values(data.monthlyFloweringDistribution))
+  // ─────────────────────────────────────────────────────────────
+  // VISTA 1: TIENDA (/plant/[slug]) — Layout nativo fluido
+  // ─────────────────────────────────────────────────────────────
+  if (!fullWidth) {
+    return (
+      <div className={clsx('mt-6 mb-6 max-w-[75ch] w-full', className)}>
+        {/* Título de sección (Mismo estilo y separación pb-3 que Descripción) */}
+        <h3 className="text-primary pb-3 font-bold">Ciclo de Floración</h3>
 
+        {/* Métricas en líneas horizontales (Layout idéntico a SizeSelector / Maceta 10cm) */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-baseline justify-start">
+            <span className="text-primary font-semibold">Duración</span>
+            <span className="text-secondary fade-in ml-4 font-semibold transition-all">
+              {data.avgFloweringDurationDays > 0
+                ? `${data.avgFloweringDurationDays} días promedio`
+                : '--'}
+            </span>
+          </div>
+
+          <div className="flex items-baseline justify-start">
+            <span className="text-primary font-semibold">Frecuencia</span>
+            <span className="text-secondary fade-in ml-4 font-semibold transition-all">
+              {data.lastYearFloweringCount}{' '}
+              {data.lastYearFloweringCount === 1 ? 'floración / año' : 'floraciones / año'}
+            </span>
+          </div>
+        </div>
+
+        {/* Título Calendario floral */}
+        <h3 className="text-primary pt-5 pb-3 font-bold">Calendario floral</h3>
+
+        {/* Círculos flexibles SelectorGroup de meses únicamente activos */}
+        <SelectorGroup items={selectorItems} mode="info" shape="circle" />
+      </div>
+    )
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // VISTA 2: INVENTARIO (/stock/[slug]) — Contenedor de Administración
+  // ─────────────────────────────────────────────────────────────
   return (
-    <div className="bg-surface border-input-outline mt-4 flex w-full max-w-[75ch] flex-col gap-6 rounded-2xl border p-6 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/5 pb-4">
-        <div className="flex items-center gap-2">
-          <div className="rounded-lg bg-pink-500/10 p-2 text-pink-400">
-            <Flower2 className="h-5 w-5" />
-          </div>
-          <div>
-            <h3 className="text-primary text-base font-bold">
-              🌸 Ciclo de Floración y Estacionalidad
-            </h3>
-            <p className="text-secondary text-xs">
-              Métricas botánicas individuales calculadas para{' '}
-              <span className="text-white italic">{data.speciesName}</span>
-            </p>
-          </div>
-        </div>
-        <span className="rounded-full border border-pink-500/20 bg-pink-500/10 px-3 py-1 text-xs font-semibold text-pink-300">
-          {data.totalFloweringEvents} floración(es) registrada(s)
-        </span>
+    <div
+      className={clsx(
+        'bg-canvas border-input-outline mt-4 flex w-full flex-col gap-6 rounded-xl border p-6',
+        className,
+      )}
+    >
+      {/* Header Contextual Limpio */}
+      <div className="border-b border-white/5 pb-4">
+        <h3 className="text-primary text-base font-bold">Ciclo de Floración</h3>
       </div>
 
-      {/* Indicadores Clave de la Especie */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="bg-surface/60 border-input-outline flex items-center gap-4 rounded-xl border p-4">
-          <div className="rounded-full bg-pink-400/10 p-3 text-pink-400">
-            <Clock className="h-6 w-6" />
-          </div>
-          <div>
-            <span className="text-secondary text-xs font-semibold tracking-wider uppercase">
-              Duración de Flor
+      {/* 3 Tarjetas de Métricas Simplificadas (Exclusivas de Stock) */}
+      <div className="grid grid-cols-1 gap-3.5 tds-xs:grid-cols-2 tds-sm:grid-cols-3">
+        <div className="bg-surface/60 border-input-outline flex flex-col justify-center rounded-xl border p-3.5 sm:p-4">
+          <span className="text-secondary text-xs font-semibold">Duración</span>
+          <div className="mt-1 flex items-baseline gap-1.5">
+            <span className="text-primary text-sm font-bold">
+              {data.avgFloweringDurationDays > 0
+                ? `${data.avgFloweringDurationDays} días prom.`
+                : '--'}
             </span>
-            <div className="mt-0.5 flex items-baseline gap-1.5">
-              <span className="text-2xl font-extrabold text-white">
-                {data.avgFloweringDurationDays > 0 ? data.avgFloweringDurationDays : '--'}
-              </span>
-              <span className="text-secondary text-xs font-medium">días prom.</span>
-            </div>
           </div>
         </div>
 
-        <div className="bg-surface/60 border-input-outline flex items-center gap-4 rounded-xl border p-4">
-          <div className="rounded-full bg-emerald-400/10 p-3 text-emerald-400">
-            <Sparkles className="h-6 w-6" />
-          </div>
-          <div>
-            <span className="text-secondary text-xs font-semibold tracking-wider uppercase">
-              Frecuencia Anual
+        <div className="bg-surface/60 border-input-outline flex flex-col justify-center rounded-xl border p-3.5 sm:p-4">
+          <span className="text-secondary text-xs font-semibold">Frecuencia</span>
+          <div className="mt-1 flex items-baseline gap-1.5">
+            <span className="text-primary text-sm font-bold">
+              {data.lastYearFloweringCount}{' '}
+              {data.lastYearFloweringCount === 1 ? 'floración / año' : 'floraciones / año'}
             </span>
-            <div className="mt-0.5 flex items-baseline gap-1.5">
-              <span className="text-2xl font-extrabold text-white">
-                {data.lastYearFloweringCount}
-              </span>
-              <span className="text-secondary text-xs font-medium">flores / año</span>
-            </div>
+          </div>
+        </div>
+
+        <div className="bg-surface/60 border-input-outline flex flex-col justify-center rounded-xl border p-3.5 sm:p-4">
+          <span className="text-secondary text-xs font-semibold">Registros</span>
+          <div className="mt-1 flex items-baseline gap-1.5">
+            <span className="text-primary text-sm font-bold">
+              {data.totalFloweringEvents}{' '}
+              {data.totalFloweringEvents === 1 ? 'floración' : 'floraciones'}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Gráfico de Estacionalidad de Floración por Mes */}
+      {/* Calendario floral en Stock */}
       <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-pink-400" />
-          <h4 className="text-primary text-xs font-bold tracking-wider uppercase">
-            Épocas del Año en que Florece (Estacionalidad)
-          </h4>
-        </div>
+        <h4 className="text-primary text-xs font-bold tracking-wider uppercase">
+          Calendario floral
+        </h4>
 
-        <div className="grid grid-cols-12 items-end gap-1.5 pt-2">
-          {MONTH_NAMES.map((mName, idx) => {
-            const mNum = idx + 1
-            const count = data.monthlyFloweringDistribution[mNum] || 0
-            const heightPct = Math.round((count / maxMonthCount) * 100)
-
-            return (
-              <div key={mName} className="flex flex-col items-center gap-1.5">
-                <span className="text-secondary text-[10px] font-bold">
-                  {count > 0 ? count : ''}
-                </span>
-                <div className="bg-surface/80 border-input-outline flex h-20 w-full flex-col justify-end rounded-md border p-0.5">
-                  <div
-                    className="w-full rounded bg-gradient-to-t from-pink-600 to-pink-400 transition-all duration-300"
-                    style={{ height: `${count > 0 ? Math.max(15, heightPct) : 4}%` }}
-                  />
-                </div>
-                <span className="text-secondary text-[10px] font-medium">{mName}</span>
-              </div>
-            )
-          })}
-        </div>
+        <SelectorGroup items={selectorItems} mode="info" shape="circle" />
       </div>
     </div>
   )

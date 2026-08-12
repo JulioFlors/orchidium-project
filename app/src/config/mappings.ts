@@ -10,6 +10,7 @@ import {
   TaskStatus,
   TaskPurpose,
   TaskSource,
+  ExecutionType,
 } from '@package/database/enums'
 
 export {
@@ -23,7 +24,13 @@ export {
   Role,
   TaskPurpose,
   TaskSource,
+  ExecutionType,
   Severity,
+}
+
+export const ExecutionTypeLabels: Record<ExecutionType, string> = {
+  [ExecutionType.HARDWARE]: 'Hardware (Automatizado)',
+  [ExecutionType.MANUAL]: 'Manual (Cultivador)',
 }
 
 export const RoleLabels: Record<Role, string> = {
@@ -74,6 +81,69 @@ export const PotSizeDimensions: Record<PotSize, string> = {
   [PotSize.CT2]: '16.7cm',
   [PotSize.CT3]: '19.7cm',
   [PotSize.CT4]: '22.4cm',
+}
+
+export const PotSizeColors: Record<PotSize, { border: string; text: string; bg: string }> = {
+  [PotSize.NRO_3]: {
+    border: 'border-emerald-500/40',
+    text: 'text-emerald-600 dark:text-emerald-400',
+    bg: 'bg-emerald-500/10',
+  },
+  [PotSize.NRO_5]: {
+    border: 'border-teal-500/40',
+    text: 'text-teal-600 dark:text-teal-400',
+    bg: 'bg-teal-500/10',
+  },
+  [PotSize.NRO_7]: {
+    border: 'border-cyan-500/40',
+    text: 'text-cyan-600 dark:text-cyan-400',
+    bg: 'bg-cyan-500/10',
+  },
+  [PotSize.NRO_8]: {
+    border: 'border-sky-500/40',
+    text: 'text-sky-600 dark:text-sky-400',
+    bg: 'bg-sky-500/10',
+  },
+  [PotSize.NRO_10]: {
+    border: 'border-blue-500/40',
+    text: 'text-blue-600 dark:text-blue-400',
+    bg: 'bg-blue-500/10',
+  },
+  [PotSize.NRO_12]: {
+    border: 'border-indigo-500/40',
+    text: 'text-indigo-600 dark:text-indigo-400',
+    bg: 'bg-indigo-500/10',
+  },
+  [PotSize.NRO_14]: {
+    border: 'border-violet-500/40',
+    text: 'text-violet-600 dark:text-violet-400',
+    bg: 'bg-violet-500/10',
+  },
+  [PotSize.NRO_15]: {
+    border: 'border-purple-500/40',
+    text: 'text-purple-600 dark:text-purple-400',
+    bg: 'bg-purple-500/10',
+  },
+  [PotSize.CT1]: {
+    border: 'border-fuchsia-500/40',
+    text: 'text-fuchsia-600 dark:text-fuchsia-400',
+    bg: 'bg-fuchsia-500/10',
+  },
+  [PotSize.CT2]: {
+    border: 'border-pink-500/40',
+    text: 'text-pink-600 dark:text-pink-400',
+    bg: 'bg-pink-500/10',
+  },
+  [PotSize.CT3]: {
+    border: 'border-rose-500/40',
+    text: 'text-rose-600 dark:text-rose-400',
+    bg: 'bg-rose-500/10',
+  },
+  [PotSize.CT4]: {
+    border: 'border-amber-500/40',
+    text: 'text-amber-600 dark:text-amber-400',
+    bg: 'bg-amber-500/10',
+  },
 }
 
 export const ZoneTypeLabels: Record<ZoneType, string> = {
@@ -233,4 +303,30 @@ export const MetricUnits: Record<string, string> = {
   vpd_avg: 'kPa',
   dif: '°C',
   high_humidity_hours: 'horas',
+}
+
+/** Orden jerárquico de tamaños de maceta de MENOR a MAYOR (Macetas P3..P15 ➔ Cestas CT1..CT4) */
+export const POT_SIZE_ORDER_ASC: PotSize[] = [
+  PotSize.NRO_3,
+  PotSize.NRO_5,
+  PotSize.NRO_7,
+  PotSize.NRO_8,
+  PotSize.NRO_10,
+  PotSize.NRO_12,
+  PotSize.NRO_14,
+  PotSize.NRO_15,
+  PotSize.CT1,
+  PotSize.CT2,
+  PotSize.CT3,
+  PotSize.CT4,
+]
+
+export const getPotSizeAscIndex = (size: PotSize | string): number => {
+  const index = POT_SIZE_ORDER_ASC.indexOf(size as PotSize)
+
+  return index !== -1 ? index : 999
+}
+
+export function sortVariantsByPotSizeAsc<T extends { size: PotSize | string }>(variants: T[]): T[] {
+  return [...variants].sort((a, b) => getPotSizeAscIndex(a.size) - getPotSizeAscIndex(b.size))
 }

@@ -3,6 +3,7 @@
 import prisma from '@package/database'
 
 import { Logger } from '@/lib'
+import { sortVariantsByPotSizeAsc } from '@/config/mappings'
 
 export const getSpeciesBySlug = async (slug: string) => {
   try {
@@ -18,6 +19,14 @@ export const getSpeciesBySlug = async (slug: string) => {
         },
         variants: true,
         genus: true,
+        plants: {
+          where: {
+            status: 'AVAILABLE',
+          },
+          select: {
+            currentSize: true,
+          },
+        },
       },
       where: {
         slug: slug,
@@ -26,9 +35,22 @@ export const getSpeciesBySlug = async (slug: string) => {
 
     if (!species) return null
 
+    const updatedVariants = sortVariantsByPotSizeAsc(
+      species.variants.map((v) => {
+        const realQty = species.plants.filter((p) => p.currentSize === v.size).length
+
+        return {
+          ...v,
+          quantity: realQty,
+          available: realQty > 0,
+        }
+      }),
+    )
+
     return {
       ...species,
       images: species.images.map((image) => image.url),
+      variants: updatedVariants,
     }
   } catch (error) {
     Logger.error('Error al obtener el articulo por slug:', error)

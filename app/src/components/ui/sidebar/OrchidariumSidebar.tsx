@@ -14,7 +14,8 @@ export function OrchidariumSidebar() {
   const sidebarRoute = useUIStore((state) => state.sidebarRoute)
 
   const { data } = useSWR('/api/notifications', (url) => fetch(url).then((res) => res.json()), {
-    refreshInterval: 30000,
+    refreshInterval: 60000,
+    dedupingInterval: 10000,
   })
   const unreadCount = data?.unreadCount || 0
 

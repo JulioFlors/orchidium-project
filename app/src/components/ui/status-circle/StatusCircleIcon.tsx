@@ -189,7 +189,7 @@ export function StatusCircleIcon({
     >
       <div
         className={cn(
-          'relative z-9 transition-colors duration-300',
+          'relative z-9 flex size-full items-center justify-center leading-none transition-colors duration-300',
           isGlow && (active || 'group-hover:text-black-and-white'),
           isGlow && !active && 'text-(--_glow-border-hover)',
           isGlow && active && 'text-black-and-white',

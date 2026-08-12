@@ -913,6 +913,20 @@ async def mqtt_processor_task():
                     sleep(3) # Pausa breve para flush de logs
                     safe_reset()
 
+                # 1.5 Sincronización Horaria (Scheduler -> Firmware)
+                elif msg.startswith(b'{"time"'):
+                    try:
+                        import json
+                        from machine import RTC
+                        data = json.loads(msg.decode('utf-8'))
+                        if "time" in data:
+                            t = data["time"]
+                            RTC().datetime(t)
+                            if DEBUG: print(f"    └─ RTC Sincronizado: {t}")
+                    except Exception as e:
+                        if DEBUG: print(f"    └─ ❌ Error sincronizando RTC: {e}")
+
+
                 # 2. Control de Muestreo de Iluminancia (Día/Noche)
                 if m_low.startswith(b"lux_sampling:"):
                     parts = m_low.split(b":")
@@ -2194,8 +2208,13 @@ async def illuminance_monitor_task():
                 await setup_sensors(force_hard_reset=True)
                 lux_read_failures = 0
 
-            # Publicar Batch cada 10 minutos (600 segundos)
-            if current_ts - last_lux_publish >= 600:
+            # Publicar Batch en minutos en punto (00, 10, 20, 30, 40, 50 min) o cada 10 min sin RTC
+            from machine import RTC
+            dt_lux = RTC().datetime()
+            is_clock_synced_lux = (dt_lux[0] >= 2026)
+            is_top_of_10min_lux = is_clock_synced_lux and (dt_lux[5] % 10 == 0)
+            should_publish_lux = (is_top_of_10min_lux and (current_ts - last_lux_publish >= 500)) or (not is_clock_synced_lux and (current_ts - last_lux_publish >= 600))
+            if should_publish_lux:
                 if illuminance_Batch.count > 0:
                     if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
                         try:
@@ -2307,8 +2326,13 @@ async def climate_monitor_task():
                 await setup_sensors(force_hard_reset=True)
                 dht_read_failures = 0
 
-            # Publicar Batches cada 10 minutos (600 segundos)
-            if current_ts - last_dht_publish >= 600:
+            # Publicar Batches en minutos en punto (00, 10, 20, 30, 40, 50 min) o cada 10 min sin RTC
+            from machine import RTC
+            dt_dht = RTC().datetime()
+            is_clock_synced_dht = (dt_dht[0] >= 2026)
+            is_top_of_10min_dht = is_clock_synced_dht and (dt_dht[5] % 10 == 0)
+            should_publish_dht = (is_top_of_10min_dht and (current_ts - last_dht_publish >= 500)) or (not is_clock_synced_dht and (current_ts - last_dht_publish >= 600))
+            if should_publish_dht:
                 has_temp = temperature_Batch.count > 0
                 has_hum  = humidity_Batch.count > 0
 

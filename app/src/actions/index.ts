@@ -18,6 +18,8 @@ export * from './inventory/plant-actions'
 
 export * from './inventory/store-actions'
 
+export * from './inventory/stock-notification-actions'
+
 export * from './lab/agrochemicals'
 
 export * from './lab/programs'

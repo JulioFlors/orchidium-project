@@ -10,7 +10,7 @@ import { EnvironmentCard, EnvironmentDataChart, InferredRainGuide } from './comp
 
 import { ZoneType, ZoneMetrics, MetricLabels, MetricUnits } from '@/config/mappings'
 import { Heading, DeviceStatus } from '@/components'
-import { useDeviceHeartbeat, useToast } from '@/hooks'
+import { useDeviceHeartbeat, useEventStream, useToast } from '@/hooks'
 import { useMqttStore } from '@/store/mqtt/mqtt.store'
 import { formatTime12h, formatDateLong, getHourInCaracas } from '@/utils/timeFormat'
 
@@ -160,17 +160,25 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     }
   }
 
+  // Cadencia de refresco alineada a la frecuencia real de ingesta por hardware:
+  // EMA Exterior envía lotes cada 10 minutos (600,000 ms).
+  // EMA Interior / ZONA_A envía lotes cada 60 minutos (1,800,000 ms).
+  const isExterior = zone === ZoneType.EXTERIOR
+  const baseBatchInterval = isExterior ? 600000 : 1800000
+
   // 1. Consulta para "Current Status" / Tarjetas (Rango optimizado según nodo)
-  const cardRange = zone === ZoneType.EXTERIOR ? '30m' : '90m'
+  const cardRange = isExterior ? '30m' : '90m'
   const {
     data: cardStatusResponse,
     error: cardStatusError,
     isLoading: isCardStatusLoading,
+    mutate: mutateCardStatus,
   } = useSWR<SensorDataResponse>(
     `/api/environment/history?range=${cardRange}&zone=${zone}`,
     fetcher,
     {
-      refreshInterval: 30000,
+      refreshInterval: baseBatchInterval,
+      dedupingInterval: 10000,
       revalidateOnFocus: false,
       errorRetryCount: 3,
       errorRetryInterval: 5000,
@@ -179,18 +187,23 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
 
   const cardStatusData = useMemo(() => cardStatusResponse?.data || [], [cardStatusResponse])
 
-  // 2. Consulta para "Chart Data" (Solo se activa si hay una métrica seleccionada)
+  // 2. Consulta para "Chart Data" (Desactivar revalidación por timer en rangos pasados estáticos)
+  const isStaticHistoricalRange = ['yesterday', '7d', '30d'].includes(currentRange)
+  const chartRefreshInterval = isStaticHistoricalRange ? 0 : baseBatchInterval
+
   const {
     data: chartResponse,
     error: chartError,
     isLoading: isChartLoading,
+    mutate: mutateChart,
   } = useSWR<SensorDataResponse | SensorData[]>(
     selectedMetric && !['rain_events', 'rain_inferred'].includes(selectedMetric)
       ? `/api/environment/history?range=${currentRange}&zone=${zone}&metric=${selectedMetric}`
       : null,
     fetcher,
     {
-      refreshInterval: 30000,
+      refreshInterval: chartRefreshInterval,
+      dedupingInterval: 10000,
       revalidateOnFocus: false,
       errorRetryCount: 3,
       errorRetryInterval: 5000,
@@ -211,17 +224,21 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     return null
   }, [zone, metricRanges])
 
+  const isRainStaticRange = (r: string | null) => !!r && ['yesterday', '7d', '30d'].includes(r)
+
   const {
     data: physicalRainData = null,
     error: physicalRainError,
     isLoading: isPhysicalRainLoading,
+    mutate: mutatePhysicalRain,
   } = useSWR<RainData>(
     zone === ZoneType.EXTERIOR && physicalRainRange
       ? `/api/environment/precipitation?range=${physicalRainRange}&zone=${zone}`
       : null,
     fetcher,
     {
-      refreshInterval: 60000,
+      refreshInterval: isRainStaticRange(physicalRainRange) ? 0 : 600000,
+      dedupingInterval: 10000,
       revalidateOnFocus: false,
       errorRetryCount: 3,
       errorRetryInterval: 5000,
@@ -241,18 +258,34 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     data: inferredRainData = null,
     error: inferredRainError,
     isLoading: isInferredRainLoading,
+    mutate: mutateInferredRain,
   } = useSWR<RainData>(
     zone === ZoneType.EXTERIOR && inferredRainRange
       ? `/api/environment/precipitation?range=${inferredRainRange}&zone=${zone}`
       : null,
     fetcher,
     {
-      refreshInterval: 60000,
+      refreshInterval: isRainStaticRange(inferredRainRange) ? 0 : 600000,
+      dedupingInterval: 10000,
       revalidateOnFocus: false,
       errorRetryCount: 3,
       errorRetryInterval: 5000,
     },
   )
+
+  // Revalidación Reactiva Dirigida por Eventos Batch (SSE / Ingest)
+  useEventStream((event) => {
+    if (event.type === 'BATCH_INGESTED' && (!event.zone || event.zone === zone)) {
+      if (!isStaticHistoricalRange) {
+        mutateCardStatus()
+        mutateChart()
+      }
+      if (!isRainStaticRange(physicalRainRange)) {
+        mutatePhysicalRain()
+        mutateInferredRain()
+      }
+    }
+  })
 
   // ----- Carga de Gráfico Consolidado -----
   const isLoadingMetric = useMemo(() => {

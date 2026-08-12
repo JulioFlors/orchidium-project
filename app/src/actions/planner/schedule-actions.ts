@@ -1,7 +1,28 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import prisma, { type TaskPurpose, type ZoneType, CollisionGuard } from '@package/database'
+import prisma, {
+  type TaskPurpose,
+  type ZoneType,
+  type ExecutionType,
+  CollisionGuard,
+} from '@package/database'
+
+import { sendMqttCommand } from '@/lib/server'
+
+/**
+ * Notifica al Scheduler via MQTT que las rutinas en DB han cambiado.
+ */
+async function notifySchedulerSync() {
+  try {
+    await sendMqttCommand('PristinoPlant/System/Scheduler/Sync', {
+      action: 'SYNC_SCHEDULES',
+      timestamp: Date.now(),
+    })
+  } catch {
+    // Si falla el envio puntual de MQTT, la auditoria nocturna resincronizara
+  }
+}
 
 /**
  * Obtiene todas las rutinas (AutomationSchedule)
@@ -50,6 +71,7 @@ export async function toggleSchedule(id: string, isEnabled: boolean) {
     })
 
     revalidatePath('/schedules')
+    await notifySchedulerSync()
 
     return { success: true, data: updated }
   } catch {
@@ -64,6 +86,7 @@ interface ScheduleInput {
   id?: string
   name: string
   purpose: TaskPurpose
+  executionType?: ExecutionType
   cronTrigger: string // e.g., "0 16 * * *"
   durationMinutes: number
   zones: ZoneType[]
@@ -76,15 +99,20 @@ interface ScheduleInput {
  */
 export async function upsertSchedule(data: ScheduleInput) {
   try {
-    const collisionCheck = await CollisionGuard.validateCronSchedule(
-      data.cronTrigger,
-      data.durationMinutes,
-      7,
-      data.id,
-    )
+    const isManual = data.executionType === 'MANUAL' || data.purpose === 'FUMIGATION'
+    const executionType = isManual ? 'MANUAL' : data.executionType || 'HARDWARE'
 
-    if (collisionCheck.hasCollision) {
-      return { success: false, error: collisionCheck.details || 'Colisión de horario detectada' }
+    if (!isManual) {
+      const collisionCheck = await CollisionGuard.validateCronSchedule(
+        data.cronTrigger,
+        data.durationMinutes,
+        7,
+        data.id,
+      )
+
+      if (collisionCheck.hasCollision) {
+        return { success: false, error: collisionCheck.details || 'Colisión de horario detectada' }
+      }
     }
 
     let result
@@ -95,6 +123,7 @@ export async function upsertSchedule(data: ScheduleInput) {
         data: {
           name: data.name,
           purpose: data.purpose,
+          executionType,
           cronTrigger: data.cronTrigger,
           durationMinutes: data.durationMinutes,
           zones: data.zones,
@@ -111,6 +140,7 @@ export async function upsertSchedule(data: ScheduleInput) {
         data: {
           name: data.name,
           purpose: data.purpose,
+          executionType,
           cronTrigger: data.cronTrigger,
           durationMinutes: data.durationMinutes,
           zones: data.zones,
@@ -125,6 +155,7 @@ export async function upsertSchedule(data: ScheduleInput) {
     }
 
     revalidatePath('/schedules')
+    await notifySchedulerSync()
 
     return { success: true, data: result }
   } catch (error: unknown) {
@@ -155,6 +186,7 @@ export async function deleteSchedule(id: string) {
       where: { id },
     })
     revalidatePath('/schedules')
+    await notifySchedulerSync()
 
     return { success: true }
   } catch {

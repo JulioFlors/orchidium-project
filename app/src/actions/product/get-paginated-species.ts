@@ -27,9 +27,9 @@ export const getPaginatedSpeciesWithImages = async ({
 
   try {
     // 2. Construcción de la Condición de Filtro
-    // Creamos el objeto 'where' dinámicamente. Si 'plantType' no se proporciona,
-    // el filtro de género no se aplicará, devolviendo todas las especies.
-    const whereCondition = plantType ? { genus: { type: plantType } } : {}
+    const whereCondition = {
+      ...(plantType ? { genus: { type: plantType } } : {}),
+    }
 
     // 3. Consulta Principal a la Base de Datos
     const species = await prisma.species.findMany({
@@ -54,19 +54,24 @@ export const getPaginatedSpeciesWithImages = async ({
           },
         },
         variants: true,
-        // Detectar si hay al menos una planta de esta especie con floración activa
+        // Cargar plantas físicas disponibles para la venta con sus eventos de floración activos
         plants: {
           where: {
-            FloweringEvent: {
-              some: {
-                endDate: null,
-              },
-            },
+            status: 'AVAILABLE',
           },
           select: {
             id: true,
+            currentSize: true,
+            FloweringEvent: {
+              where: {
+                endDate: null,
+              },
+              select: {
+                id: true,
+              },
+              take: 1,
+            },
           },
-          take: 1,
         },
       },
       // Aplicamos la condición de filtro
@@ -84,13 +89,27 @@ export const getPaginatedSpeciesWithImages = async ({
     return {
       currentPage: page,
       totalPages: totalPages,
-      // Mapeamos los resultados para aplanar la estructura de las imágenes
+      // Mapeamos los resultados para aplanar la estructura de las imágenes y sincronizar stock real
       species: species.map((specie) => {
+        const isFlowering = specie.plants.some(
+          (p) => p.FloweringEvent && p.FloweringEvent.length > 0,
+        )
+
+        const updatedVariants = specie.variants.map((v) => {
+          const realQty = specie.plants.filter((p) => p.currentSize === v.size).length
+
+          return {
+            ...v,
+            quantity: realQty,
+            available: realQty > 0,
+          }
+        })
+
         return {
           ...specie,
-          // Convertimos el array de objetos {url: string} a un array de strings
           images: specie.images.map((image) => image.url),
-          isFlowering: specie.plants.length > 0,
+          variants: updatedVariants,
+          isFlowering,
         }
       }),
     }

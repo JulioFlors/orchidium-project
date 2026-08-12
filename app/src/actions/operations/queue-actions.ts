@@ -22,11 +22,14 @@ interface CombinedTask {
  */
 export async function getQueueTasks() {
   try {
-    // 1. Obtener tareas manuales pendientes, confirmadas o en progreso
+    // 1. Obtener tareas pendientes del hardware/riego en la zona automatizada (ZONA_A)
     const manualTasks = await prisma.taskLog.findMany({
       where: {
         status: {
           in: [TaskStatus.PENDING, TaskStatus.CONFIRMED, TaskStatus.IN_PROGRESS],
+        },
+        zones: {
+          has: ZoneType.ZONA_A,
         },
       },
       orderBy: {
@@ -42,18 +45,22 @@ export async function getQueueTasks() {
       duration: task.duration,
       scheduledAt: task.scheduledAt.toISOString(),
       status: task.status,
-      isRoutine: false,
+      isRoutine: !!task.scheduleId,
     }))
 
-    // 2. Obtener automatizaciones activas
-    const schedules = await prisma.automationSchedule.findMany({
+    // 2. Obtener rutinas activas de hardware para proyectar la próxima ejecución
+    const routines = await prisma.automationSchedule.findMany({
       where: {
         isEnabled: true,
+        executionType: 'HARDWARE',
+        zones: {
+          has: ZoneType.ZONA_A,
+        },
       },
     })
 
     // 3. Calcular próxima ejecución para cada rutina
-    const routineTasks = schedules
+    const routineTasks = routines
       .map((schedule): CombinedTask | null => {
         try {
           const job = new Cron(schedule.cronTrigger, {

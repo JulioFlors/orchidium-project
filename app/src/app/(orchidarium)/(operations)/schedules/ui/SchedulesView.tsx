@@ -11,7 +11,7 @@ import { ScheduleFormModal, ScheduleCard } from './components'
 import { useToast } from '@/hooks'
 import { getSchedules, toggleSchedule, deleteSchedule } from '@/actions/planner/schedule-actions'
 import { TaskPurposeLabels } from '@/config/mappings'
-import { Button, Heading } from '@/components'
+import { Button, Heading, Modal } from '@/components'
 
 const ACTION_MAP: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
   IRRIGATION: {
@@ -54,12 +54,14 @@ interface AutomationSchedule {
 }
 
 export function SchedulesView() {
-  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false)
   const [editingSchedule, setEditingSchedule] = useState<AutomationSchedule | null>(null)
+  const [scheduleToDelete, setScheduleToDelete] = useState<AutomationSchedule | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set())
   const { success, error } = useToast()
 
-  // SWR para cargar las rutinas vía Server Action envuelta en una Promise simple
+  // SWR para cargar las rutinas vía Server Action
   const fetcher = async () => {
     const res = await getSchedules()
 
@@ -71,7 +73,6 @@ export function SchedulesView() {
   const { data: schedules = [], isLoading, mutate } = useSWR('schedules', fetcher)
 
   const handleToggle = async (id: string, currentStatus: boolean) => {
-    // Bloquear si ya está en proceso
     if (pendingIds.has(id)) return
 
     setPendingIds((prev) => new Set(prev).add(id))
@@ -102,35 +103,38 @@ export function SchedulesView() {
     }
   }
 
-  const handleDelete = async (id: string) => {
-    if (confirm('¿Estás seguro de que deseas eliminar esta rutina diaria?')) {
-      try {
-        const res = await deleteSchedule(id)
+  const handleConfirmDelete = async () => {
+    if (!scheduleToDelete) return
 
-        if (res.success) {
-          success('Rutina eliminada correctamente')
+    setIsDeleting(true)
+    try {
+      const res = await deleteSchedule(scheduleToDelete.id)
 
-          mutate()
-        } else {
-          error(res.error || 'No se pudo eliminar la rutina')
-        }
-      } catch (err) {
-        error(
-          'Error al intentar eliminar la rutina: ' +
-            (err instanceof Error ? err.message : 'Error desconocido'),
-        )
+      if (res.success) {
+        success('Rutina eliminada correctamente')
+        mutate()
+        setScheduleToDelete(null)
+      } else {
+        error(res.error || 'No se pudo eliminar la rutina')
       }
+    } catch (err) {
+      error(
+        'Error al intentar eliminar la rutina: ' +
+          (err instanceof Error ? err.message : 'Error desconocido'),
+      )
+    } finally {
+      setIsDeleting(false)
     }
   }
 
   const openEditModal = (schedule: AutomationSchedule) => {
     setEditingSchedule(schedule)
-    setIsModalOpen(true)
+    setIsFormModalOpen(true)
   }
 
   const openNewModal = () => {
     setEditingSchedule(null)
-    setIsModalOpen(true)
+    setIsFormModalOpen(true)
   }
 
   return (
@@ -176,7 +180,11 @@ export function SchedulesView() {
                   icon={action.icon}
                   isLoading={pendingIds.has(schedule.id)}
                   schedule={schedule}
-                  onDelete={handleDelete}
+                  onDelete={(id) => {
+                    const target = schedules.find((s: AutomationSchedule) => s.id === id)
+
+                    if (target) setScheduleToDelete(target)
+                  }}
                   onEdit={openEditModal}
                   onToggle={handleToggle}
                 />
@@ -185,16 +193,51 @@ export function SchedulesView() {
           </div>
         )}
 
-        {/* Modal Reutilizable */}
+        {/* Modal de Creación / Edición */}
         <ScheduleFormModal
           initialData={editingSchedule}
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
+          isOpen={isFormModalOpen}
+          onClose={() => setIsFormModalOpen(false)}
           onSuccess={() => {
             success(editingSchedule ? 'Rutina actualizada' : 'Rutina creada con éxito')
             mutate()
           }}
         />
+
+        {/* Modal de Confirmación de Eliminación */}
+        <Modal
+          isOpen={!!scheduleToDelete}
+          size="md"
+          title="Eliminar Rutina"
+          onClose={() => setScheduleToDelete(null)}
+        >
+          <div className="flex flex-col gap-5">
+            <p className="text-secondary text-sm">
+              ¿Estás seguro de que deseas eliminar la rutina{' '}
+              <strong className="text-primary">{scheduleToDelete?.name}</strong>?
+            </p>
+
+            <div className="bg-surface/50 border-input-outline rounded-lg border border-dashed p-4">
+              <p className="text-secondary text-xs leading-relaxed">
+                <span className="font-bold text-pink-400 uppercase">Nota:</span> Esta acción no se
+                puede deshacer y eliminará permanentemente la rutina programada.
+              </p>
+            </div>
+
+            <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+              <Button
+                disabled={isDeleting}
+                variant="ghost"
+                onClick={() => setScheduleToDelete(null)}
+              >
+                Cancelar
+              </Button>
+              <Button isLoading={isDeleting} variant="destructive" onClick={handleConfirmDelete}>
+                Eliminar
+              </Button>
+            </div>
+          </div>
+        </Modal>
       </div>
     </div>
   )

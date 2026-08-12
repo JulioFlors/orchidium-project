@@ -1,6 +1,6 @@
 'use server'
 
-import { prisma, TaskStatus } from '@package/database'
+import { prisma, TaskStatus, TaskPurpose } from '@package/database'
 
 import { Logger } from '@/lib'
 
@@ -8,6 +8,9 @@ export async function getHistoryTasks(limit = 20, offset = 0) {
   try {
     const tasks = await prisma.taskLog.findMany({
       where: {
+        purpose: {
+          in: [TaskPurpose.IRRIGATION, TaskPurpose.HUMIDIFICATION, TaskPurpose.SOIL_WETTING],
+        },
         status: {
           in: [
             TaskStatus.PENDING,

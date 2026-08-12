@@ -654,56 +654,57 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
 
       {/* Modal de Confirmación de Eliminación de Especie */}
       <Modal
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setIsDeleteModalOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              isLoading={isPending}
-              variant="destructive"
-              onClick={handleConfirmDeleteSpecies}
-            >
-              Eliminar
-            </Button>
-          </>
-        }
         isOpen={isDeleteModalOpen}
         size="md"
         title="Eliminar Especie"
         onClose={() => setIsDeleteModalOpen(false)}
       >
-        <p className="text-secondary text-sm">
-          Esta acción eliminará permanentemente la especie
-          <br />
-          <strong>{initialSpecies?.name}</strong>
-          <br />
-          ¿Estás seguro de que deseas continuar?
-        </p>
+        <div className="flex flex-col gap-4">
+          <p className="text-secondary text-sm">
+            Esta acción eliminará permanentemente la especie
+            <br />
+            <strong>{initialSpecies?.name}</strong>
+            <br />
+            ¿Estás seguro de que deseas continuar?
+          </p>
+          <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+            <Button type="button" variant="ghost" onClick={() => setIsDeleteModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              isLoading={isPending}
+              type="button"
+              variant="destructive"
+              onClick={handleConfirmDeleteSpecies}
+            >
+              Eliminar
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       {/* Modal de Confirmación de Salida con Cambios sin Guardar */}
       <Modal
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setIsExitModalOpen(false)}>
-              Continuar Editando
-            </Button>
-            <Button variant="destructive" onClick={handleConfirmExit}>
-              Salir
-            </Button>
-          </>
-        }
         isOpen={isExitModalOpen}
         size="md"
         title="Descartar Cambios"
         onClose={() => setIsExitModalOpen(false)}
       >
-        <p className="text-secondary text-sm">
-          Tienes modificaciones sin guardar.
-          <br />
-          Si sales ahora, se perderán estos cambios.
-        </p>
+        <div className="flex flex-col gap-4">
+          <p className="text-secondary text-sm">
+            Tienes modificaciones sin guardar.
+            <br />
+            Si sales ahora, se perderán estos cambios.
+          </p>
+          <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+            <Button type="button" variant="ghost" onClick={() => setIsExitModalOpen(false)}>
+              Continuar Editando
+            </Button>
+            <Button type="button" variant="destructive" onClick={handleConfirmExit}>
+              Salir
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   )

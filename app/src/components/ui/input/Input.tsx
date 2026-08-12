@@ -21,8 +21,8 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           'bg-input w-full rounded px-3 py-2 text-sm leading-6 font-medium transition-all duration-300 ease-in-out',
           // Outline / Border base
           'outline-input-outline outline-1 -outline-offset-1',
-          // Focus state
-          'focus:outline-primary focus:z-10',
+          // Focus state (1px solid con color de accesibilidad)
+          'focus:outline-1 focus:-outline-offset-1 focus:outline-accessibility focus:z-10',
           // Error state (Prioridad sobre los anteriores)
           error && 'outline-1! -outline-offset-1! outline-red-500!',
           // Custom overrides
