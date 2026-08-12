@@ -70,7 +70,6 @@ async function main() {
   Logger.info('🔮 2. Reconstruyendo eventos de lluvia inferida (virtual)...')
   await rebuildInferredRain(startTime, endTime)
 
-
   Logger.info('════════════════════════════════════════════════════════')
   Logger.info('  REPORTE DE EFECTIVIDAD DE REGLAS (INFERENCIA)')
   Logger.info(`  Total Eventos Inferidos: ${stats.totalInferred}`)
@@ -223,8 +222,7 @@ async function main() {
 
         // Recall Ajustado: excluir garúas insignificantes en días soleados
         const totalAdjusted = totalReal - insignificantSunnyFNs.length
-        const adjustedFN =
-          significantFNs.length + insignificantCloudyFNs.length
+        const adjustedFN = significantFNs.length + insignificantCloudyFNs.length
         const adjustedTP = totalAdjusted - adjustedFN
         const recallAjustadoPct =
           totalAdjusted > 0 ? ((adjustedTP / totalAdjusted) * 100).toFixed(1) : '0.0'
@@ -234,14 +232,10 @@ async function main() {
         Logger.info('════════════════════════════════════════════════════════')
         Logger.info(`  Total de lluvias reales registradas en período: ${totalReal}`)
         Logger.info(`  Verdaderos Positivos (Detectadas): ${truePositives}`)
-        Logger.info(
-          `  Falsos Negativos (Omitidas): ${falseNegatives.length}`,
-        )
+        Logger.info(`  Falsos Negativos (Omitidas): ${falseNegatives.length}`)
         Logger.info(`  Sensibilidad Bruta (Recall): ${recallBrutoPct}%`)
         Logger.info('  ----------------------------------------------------')
-        Logger.info(
-          `  📊 Desglose de Falsos Negativos:`,
-        )
+        Logger.info(`  📊 Desglose de Falsos Negativos:`)
         Logger.info(
           `     🔍 Significativos (> ${INSIGNIFICANT_DURATION_MIN} min): ${significantFNs.length}`,
         )

@@ -77,6 +77,7 @@ export async function hydratePhysicalState(): Promise<void> {
     }
   } catch (err) {
     Logger.error('Error hidratando estado de lluvia física:', err)
+    throw err
   }
 }
 

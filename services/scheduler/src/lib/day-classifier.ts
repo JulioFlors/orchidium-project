@@ -142,7 +142,7 @@ export async function classifyCurrentDay(targetDate?: Date): Promise<DayClassifi
       SELECT AVG(illuminance) as avg_lux, COUNT(illuminance) as count_lux
       FROM "environment_metrics"
       WHERE time >= '${startISO}' AND time <= '${endISO}'
-      AND zone = 'EXTERIOR'
+        AND "zone" = 'EXTERIOR'
     `
     const avgStream = influxClient.query(avgQuery)
     let avgLux = 0
@@ -179,7 +179,7 @@ export async function classifyCurrentDay(targetDate?: Date): Promise<DayClassifi
       FROM "environment_metrics"
       WHERE time <= '${endISO}'
         AND time >= '${fifteenMinutesAgo}'
-        AND zone = 'EXTERIOR'
+        AND "zone" = 'EXTERIOR'
         AND illuminance IS NOT NULL
       ORDER BY time DESC
       LIMIT 1
@@ -198,7 +198,7 @@ export async function classifyCurrentDay(targetDate?: Date): Promise<DayClassifi
       SELECT illuminance, time
       FROM "environment_metrics"
       WHERE time >= '${twoHoursAgo}'
-      AND zone = 'EXTERIOR'
+        AND "zone" = 'EXTERIOR'
       ORDER BY time DESC
     `
     const overcastStream = influxClient.query(overcastQuery)

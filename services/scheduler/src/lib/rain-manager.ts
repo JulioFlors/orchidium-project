@@ -1,6 +1,6 @@
 import { prisma } from '@package/database'
 
-import { Logger } from './logger'
+import { Logger, colors } from './logger'
 import { influxClient } from './influx'
 import {
   isPhysicalRainActive,
@@ -333,10 +333,20 @@ export async function hydrateState(): Promise<void> {
       tempBatches.splice(0, tempBatches.length, ...newTempBatches)
       humBatches.splice(0, humBatches.length, ...newHumBatches)
       luxBatches.splice(0, luxBatches.length, ...newLuxBatches)
-      Logger.rain(`Hidratación inicial completa: ${tempBatches.length} lotes climáticos cargados.`)
     }
+
+    Logger.info('Motor de Inferencia Meteorológica: Hidratado.')
   } catch (err) {
-    Logger.error('Error hidratando estado de lluvia:', err)
+    Logger.info(
+      'Motor de Inferencia Meteorológica: Falló la Hidratación Inicial.',
+      '❌',
+      colors.red,
+    )
+    if (err) {
+      Logger.debug(
+        `Detalle de fallo de hidratación: ${err instanceof Error ? err.message : String(err)}`,
+      )
+    }
   }
 }
 
@@ -1211,8 +1221,7 @@ export async function evaluateClimateInference(): Promise<void> {
 
       if (closedByRecovery) return
 
-      const durationMin =
-        inferedRainStartedAt !== null ? (nowMs - inferedRainStartedAt) / 60000 : 0
+      const durationMin = inferedRainStartedAt !== null ? (nowMs - inferedRainStartedAt) / 60000 : 0
 
       // 5. ☁️ Cese por Estancamiento — Día y Noche (Evaluación Deslizante de 10m en muestras de 20m)
       if (durationMin >= 10 && tempBatches.length >= 1 && humBatches.length >= 1) {

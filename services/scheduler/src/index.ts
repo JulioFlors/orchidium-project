@@ -1,7 +1,7 @@
 import { prisma, TaskStatus, CollisionGuard, ZoneType, DeviceStatus } from '@package/database'
 import { Cron } from 'croner'
 
-import { Logger, colors } from './lib/logger'
+import { Logger, colors, formatFriendlyHeartbeatDate } from './lib/logger'
 import { InferenceEngine } from './lib/inference-engine'
 import {
   mqttClient,
@@ -237,7 +237,7 @@ let lastFirmwareHeartbeat: number = 0
 let isEmaSleeping = false
 let emaSleepFallbackTimer: NodeJS.Timeout | null = null
 let emaSessionStartAt: number = 0
-let lastEmaTelemetryBatchAt: number = 0
+const lastEmaTelemetryBatchAt: number = 0
 let emaSessionSupervisionTimer: NodeJS.Timeout | null = null
 let lastSyncTimestamp: number = 0
 let lastTimeSyncSent: number = 0
@@ -579,9 +579,12 @@ function setupMqttHandlers() {
 
               if (!hasActiveAudits) {
                 const hasPublishedBatch = lastEmaTelemetryBatchAt >= emaSessionStartAt
+
                 if (hasPublishedBatch) {
                   Logger.node('SLEEP', 'Weather Station Orquideario')
-                  Logger.info('💤 Inferencia (90s): Lotes de telemetría recibidos. Marcando en SLEEP.')
+                  Logger.info(
+                    '💤 Inferencia (90s): Lotes de telemetría recibidos. Marcando en SLEEP.',
+                  )
                   isEmaSleeping = true
                   emaManager.setOffline()
                   await saveDeviceLog(
@@ -706,7 +709,9 @@ function setupMqttHandlers() {
 
           if (hasPublishedBatchInSession && hasNoAudits) {
             Logger.node('SLEEP', 'Weather Station Orquideario')
-            Logger.info('💤 Desconexión de red tras publicación limpia de lotes. Marcando en SLEEP.')
+            Logger.info(
+              '💤 Desconexión de red tras publicación limpia de lotes. Marcando en SLEEP.',
+            )
             isEmaSleeping = true
             emaManager.setOffline()
             await saveDeviceLog(
@@ -1106,9 +1111,7 @@ function setupMqttHandlers() {
               }).format(nowForLux),
             )
             const sanitizedLuxValues =
-              caracasHourForLux < 7 || caracasHourForLux >= 18
-                ? luxValues.map(() => 0)
-                : luxValues
+              caracasHourForLux < 7 || caracasHourForLux >= 18 ? luxValues.map(() => 0) : luxValues
 
             // Encolar los resúmenes de lote correspondientes en RainManager
             RainManager.pushClimateBatch(tempValues, humValues, sanitizedLuxValues)
@@ -1302,9 +1305,9 @@ async function initializeHeartbeatsFromPostgres() {
       const ts = latestEmaLog.timestamp.getTime()
 
       lastEmaHeartbeat = ts
-      Logger.info(
-        `[INICIALIZACIÓN] Último latido EMA (ZONA_A) en Postgres: ${latestEmaLog.timestamp.toISOString()} (${latestEmaLog.status})`,
-      )
+      const formattedDate = formatFriendlyHeartbeatDate(latestEmaLog.timestamp)
+
+      Logger.info(`Último latido [Nodo EMA]  ${formattedDate} ${latestEmaLog.status}`)
       if (latestEmaLog.status === 'SLEEP') {
         isEmaSleeping = true
         emaManager.setOffline()
@@ -1327,9 +1330,9 @@ async function initializeHeartbeatsFromPostgres() {
       const ts = latestActuatorLog.timestamp.getTime()
 
       lastFirmwareHeartbeat = ts
-      Logger.info(
-        `[INICIALIZACIÓN] Último latido Actuador en Postgres: ${latestActuatorLog.timestamp.toISOString()} (${latestActuatorLog.status})`,
-      )
+      const formattedDate = formatFriendlyHeartbeatDate(latestActuatorLog.timestamp)
+
+      Logger.info(`Último latido [Nodo Actuador]  ${formattedDate} ${latestActuatorLog.status}`)
     }
   } catch (error) {
     Logger.error('Error al inicializar latido de Actuador desde Postgres:', error)

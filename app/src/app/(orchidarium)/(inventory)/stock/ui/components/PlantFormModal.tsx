@@ -142,7 +142,7 @@ export function PlantFormModal({
 
         <FormField htmlFor="plant-date" label="Fecha">
           <Input
-            className="cursor-pointer dark:[color-scheme:dark]"
+            className="cursor-pointer dark:scheme-dark"
             id="plant-date"
             type="date"
             value={pottingDate}

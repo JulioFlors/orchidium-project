@@ -163,7 +163,7 @@ export function FloweringEventModal({
             <FormField htmlFor="flowering-end-date" label="Fecha de Finalización">
               <Input
                 required
-                className="cursor-pointer dark:[color-scheme:dark]"
+                className="cursor-pointer dark:scheme-dark"
                 id="flowering-end-date"
                 min={startDate}
                 type="date"
@@ -226,7 +226,7 @@ export function FloweringEventModal({
               <FormField htmlFor="flowering-start-date" label="Fecha de Inicio">
                 <Input
                   required
-                  className="cursor-pointer dark:[color-scheme:dark]"
+                  className="cursor-pointer dark:scheme-dark"
                   id="flowering-start-date"
                   type="date"
                   value={startDate}
@@ -245,7 +245,7 @@ export function FloweringEventModal({
                 <FormField htmlFor="flowering-end-date" label="Fecha de Finalización">
                   <Input
                     required
-                    className="cursor-pointer dark:[color-scheme:dark]"
+                    className="cursor-pointer dark:scheme-dark"
                     id="flowering-end-date"
                     min={startDate}
                     type="date"

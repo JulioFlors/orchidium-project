@@ -40,6 +40,75 @@ export function formatCaracasDateTime(date: Date): string {
   return cleanAmPm(formatted)
 }
 
+function formatTimeAmPm(date: Date): string {
+  const formatted = new Intl.DateTimeFormat('es-VE', {
+    timeZone: 'America/Caracas',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(date)
+
+  return cleanAmPm(formatted).replace(/\s+/g, '')
+}
+
+export function formatFriendlyHeartbeatDate(date: Date, now = new Date()): string {
+  const timeStr = formatTimeAmPm(date)
+
+  const dateFormatter = new Intl.DateTimeFormat('es-VE', {
+    timeZone: 'America/Caracas',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  })
+
+  const getCaracasYMD = (d: Date) => {
+    const parts = dateFormatter.formatToParts(d)
+    let year = 0
+    let month = 0
+    let day = 0
+
+    for (const p of parts) {
+      if (p.type === 'year') year = parseInt(p.value, 10)
+      if (p.type === 'month') month = parseInt(p.value, 10)
+      if (p.type === 'day') day = parseInt(p.value, 10)
+    }
+
+    return { year, month, day }
+  }
+
+  const targetYMD = getCaracasYMD(date)
+  const nowYMD = getCaracasYMD(now)
+
+  const targetUtc = Date.UTC(targetYMD.year, targetYMD.month - 1, targetYMD.day)
+  const nowUtc = Date.UTC(nowYMD.year, nowYMD.month - 1, nowYMD.day)
+  const diffDays = Math.round((nowUtc - targetUtc) / (1000 * 60 * 60 * 24))
+
+  if (diffDays === 0) {
+    return timeStr
+  } else if (diffDays === 1) {
+    return `Ayer ${timeStr}`
+  } else {
+    const longFormatter = new Intl.DateTimeFormat('es-VE', {
+      timeZone: 'America/Caracas',
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+    })
+    const fullParts = longFormatter.formatToParts(date)
+    let weekday = ''
+    let dayNum = ''
+    let monthName = ''
+
+    for (const p of fullParts) {
+      if (p.type === 'weekday') weekday = p.value.charAt(0).toUpperCase() + p.value.slice(1)
+      if (p.type === 'day') dayNum = p.value
+      if (p.type === 'month') monthName = p.value.charAt(0).toUpperCase() + p.value.slice(1)
+    }
+
+    return `${weekday} ${dayNum} ${monthName} ${timeStr}`
+  }
+}
+
 const getLogTime = () => {
   const formatted = new Intl.DateTimeFormat('es-VE', {
     timeZone: 'America/Caracas',
@@ -125,7 +194,8 @@ export const Logger = {
   // ---- Generales ----
 
   /** Información general del sistema. */
-  info: (msg: string, icon = '📡') => console.log(formatLog(icon, 'INFO', colors.blue, msg)),
+  info: (msg: string, icon = '📡', color = colors.blue) =>
+    console.log(formatLog(icon, 'INFO', color, msg)),
 
   /** Operación completada exitosamente. */
   success: (msg: string) => console.log(formatLog('✅', 'DONE', colors.green, msg)),
