@@ -154,9 +154,11 @@ sudo chmod 644 infrastructure/certs/influxdb/fullchain.pem
 
 # D. n8n (Usuario interno node UID 1000)
 echo -e "   └─ Configurando permisos para n8n (UID 1000)..."
-sudo chown -R 1000:1000 infrastructure/certs/n8n/
+mkdir -p infrastructure/n8n/data
+sudo chown -R 1000:1000 infrastructure/certs/n8n/ infrastructure/n8n/data
 sudo chmod 600 infrastructure/certs/n8n/privkey.pem
 sudo chmod 644 infrastructure/certs/n8n/fullchain.pem
+sudo chmod 775 infrastructure/n8n/data
 
 # -------------------------------------------------------------------------------------
 # REINICIAR SERVICIOS

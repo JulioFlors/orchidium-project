@@ -26,10 +26,12 @@ async function notifySchedulerSync() {
 
 /**
  * Obtiene todas las rutinas (AutomationSchedule)
+ * @param executionType Filtro opcional ('HARDWARE' | 'MANUAL')
  */
-export async function getSchedules() {
+export async function getSchedules(executionType?: ExecutionType) {
   try {
     const schedules = await prisma.automationSchedule.findMany({
+      where: executionType ? { executionType } : undefined,
       orderBy: [{ purpose: 'asc' }, { name: 'asc' }],
     })
 
@@ -53,15 +55,17 @@ export async function toggleSchedule(id: string, isEnabled: boolean) {
 
       if (!schedule) return { success: false, error: 'Rutina no encontrada' }
 
-      const collisionCheck = await CollisionGuard.validateCronSchedule(
-        schedule.cronTrigger,
-        schedule.durationMinutes,
-        7,
-        id,
-      )
+      if (schedule.executionType === 'HARDWARE') {
+        const collisionCheck = await CollisionGuard.validateCronSchedule(
+          schedule.cronTrigger,
+          schedule.durationMinutes,
+          7,
+          id,
+        )
 
-      if (collisionCheck.hasCollision) {
-        return { success: false, error: collisionCheck.details || 'Colisión detectada' }
+        if (collisionCheck.hasCollision) {
+          return { success: false, error: collisionCheck.details || 'Colisión detectada' }
+        }
       }
     }
 
@@ -71,6 +75,7 @@ export async function toggleSchedule(id: string, isEnabled: boolean) {
     })
 
     revalidatePath('/schedules')
+    revalidatePath('/dosing-schedules')
     await notifySchedulerSync()
 
     return { success: true, data: updated }
@@ -99,8 +104,8 @@ interface ScheduleInput {
  */
 export async function upsertSchedule(data: ScheduleInput) {
   try {
-    const isManual = data.executionType === 'MANUAL' || data.purpose === 'FUMIGATION'
-    const executionType = isManual ? 'MANUAL' : data.executionType || 'HARDWARE'
+    const isManual = data.executionType === 'MANUAL'
+    const executionType = isManual ? 'MANUAL' : 'HARDWARE'
 
     if (!isManual) {
       const collisionCheck = await CollisionGuard.validateCronSchedule(
@@ -155,6 +160,7 @@ export async function upsertSchedule(data: ScheduleInput) {
     }
 
     revalidatePath('/schedules')
+    revalidatePath('/dosing-schedules')
     await notifySchedulerSync()
 
     return { success: true, data: result }
@@ -186,6 +192,7 @@ export async function deleteSchedule(id: string) {
       where: { id },
     })
     revalidatePath('/schedules')
+    revalidatePath('/dosing-schedules')
     await notifySchedulerSync()
 
     return { success: true }

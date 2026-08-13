@@ -8,9 +8,6 @@ export async function getHistoryTasks(limit = 20, offset = 0) {
   try {
     const tasks = await prisma.taskLog.findMany({
       where: {
-        purpose: {
-          in: [TaskPurpose.IRRIGATION, TaskPurpose.HUMIDIFICATION, TaskPurpose.SOIL_WETTING],
-        },
         status: {
           in: [
             TaskStatus.PENDING,

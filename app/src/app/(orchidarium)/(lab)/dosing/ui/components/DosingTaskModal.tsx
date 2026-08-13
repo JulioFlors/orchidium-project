@@ -29,24 +29,20 @@ export function DosingTaskModal({
   const { success, error } = useToast()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const [agrochemicalId, setAgrochemicalId] = useState(
-    () => editingTask?.agrochemicalId || agrochemicals[0]?.id || '',
-  )
+  const [agrochemicalId, setAgrochemicalId] = useState(() => editingTask?.agrochemicalId || '')
 
   const initialTaskDate = editingTask ? new Date(editingTask.scheduledAt) : null
 
   const [scheduledDate, setScheduledDate] = useState(() =>
-    initialTaskDate
-      ? initialTaskDate.toISOString().split('T')[0]
-      : new Date().toISOString().split('T')[0],
+    initialTaskDate ? initialTaskDate.toISOString().split('T')[0] : '',
   )
   const [scheduledTime, setScheduledTime] = useState(() =>
     initialTaskDate
       ? `${String(initialTaskDate.getHours()).padStart(2, '0')}:${String(initialTaskDate.getMinutes()).padStart(2, '0')}`
-      : '08:00',
+      : '',
   )
   const [selectedZones, setSelectedZones] = useState<ZoneType[]>(() =>
-    editingTask?.zones && editingTask.zones.length > 0 ? editingTask.zones : [ZoneType.ZONA_A],
+    editingTask?.zones && editingTask.zones.length > 0 ? editingTask.zones : [],
   )
   const [notes, setNotes] = useState(() => editingTask?.notes || '')
   const [isCompleted, setIsCompleted] = useState(() => editingTask?.status === 'COMPLETED')
@@ -62,6 +58,12 @@ export function DosingTaskModal({
 
     if (!scheduledDate) {
       error('Selecciona una fecha')
+
+      return
+    }
+
+    if (!scheduledTime) {
+      error('Selecciona una hora')
 
       return
     }
@@ -123,9 +125,7 @@ export function DosingTaskModal({
 
   const toggleZone = (zone: ZoneType) => {
     if (selectedZones.includes(zone)) {
-      if (selectedZones.length > 1) {
-        setSelectedZones(selectedZones.filter((z) => z !== zone))
-      }
+      setSelectedZones(selectedZones.filter((z) => z !== zone))
     } else {
       setSelectedZones([...selectedZones, zone])
     }
@@ -150,6 +150,7 @@ export function DosingTaskModal({
         <FormField htmlFor="agrochemicalIdSelect" label="Insumo Agroquímico">
           <SelectDropdown
             options={agroOptions}
+            placeholder="Seleccionar"
             value={agrochemicalId}
             onChange={(val) => setAgrochemicalId(String(val))}
           />
@@ -204,7 +205,7 @@ export function DosingTaskModal({
               return (
                 <button
                   key={z}
-                  className={`flex h-9 cursor-pointer items-center justify-center rounded-sm border px-3.5 text-xs font-bold transition-all duration-300 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-accessibility focus-visible:ring-offset-1 focus-visible:ring-offset-surface ${
+                  className={`flex h-9 min-w-[70px] flex-1 cursor-pointer items-center justify-center rounded-sm border px-3.5 text-xs font-bold transition-all duration-300 outline-none focus:outline-none focus-visible:ring-2 focus-visible:ring-accessibility focus-visible:ring-offset-1 focus-visible:ring-offset-surface ${
                     isSelected
                       ? 'bg-action border-action text-white shadow-xs'
                       : 'bg-surface border-input-outline text-secondary hover:border-primary/30 hover:bg-hover-overlay'
@@ -219,12 +220,12 @@ export function DosingTaskModal({
           </div>
         </FormField>
 
-        {/* Observaciones / Notas */}
-        <FormField htmlFor="dosingNotesTextarea" label="Observaciones / Notas">
+        {/* Observaciones */}
+        <FormField htmlFor="dosingNotesTextarea" label="Observaciones">
           <textarea
             className="focus-input mt-1.5 w-full resize-none border border-input-outline text-sm"
             id="dosingNotesTextarea"
-            placeholder="Opcional..."
+            placeholder=""
             rows={2}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}

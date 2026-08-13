@@ -160,9 +160,9 @@ export function InferredRainGuide() {
             </div>
             <p className="leading-relaxed">
               Las reglas se evalúan en secuencia estricta de prioridad física (1ª ☀️ Recuperación
-              Solar &rarr; 2ª 🌤️ Recuperación Progresiva &rarr; 3ª 🌡️ Variación Térmica &rarr; 4ª
-              ☁️ Cese por Estancamiento). Las tres primeras aplican solo durante el día [7:00 am -
-              6:00 pm]; la última aplica las 24 h.
+              Solar &rarr; 2ª 🌤️ Recuperación Progresiva &rarr; 3ª 🌡️ Variación Térmica &rarr; 4ª ☁️
+              Cese por Estancamiento). Las tres primeras aplican solo durante el día [7:00 am - 6:00
+              pm]; la última aplica las 24 h.
             </p>
 
             <ul className="mt-1 flex flex-col gap-2 leading-relaxed">

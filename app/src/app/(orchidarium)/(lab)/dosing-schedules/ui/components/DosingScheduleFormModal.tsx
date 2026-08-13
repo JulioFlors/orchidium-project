@@ -7,28 +7,24 @@ import { zodResolver } from '@hookform/resolvers/zod'
 
 import {
   PlannerCircuitSelect,
-  PlannerZoneSelect,
-  PlannerDurationInput,
+  PlannerMultiZoneSelect,
   PlannerProgramSelect,
   PlannerDaysSelector,
-} from './PlannerInputs'
-
+} from '@/app/(orchidarium)/(operations)/schedules/ui/components/PlannerInputs'
 import { ZoneType } from '@/config/mappings'
 import { Modal, Button, FormField, Input } from '@/components/ui'
 import { useFormDraftStore } from '@/store'
 import { upsertSchedule } from '@/actions/planner/schedule-actions'
 import { getPrograms } from '@/actions/lab/programs'
 
-// Zod Schema para Rutinas Automatizadas de Hardware
+// Zod Schema para Rutinas de Dosificación Manual
 const programSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(3, 'Mínimo 3 caracteres').max(50, 'Máximo 50 caracteres'),
-  purpose: z.enum(
-    ['IRRIGATION', 'FERTIGATION', 'FUMIGATION', 'HUMIDIFICATION', 'SOIL_WETTING'] as const,
-    { message: 'Debes seleccionar una tarea' },
-  ),
+  purpose: z.enum(['FERTIGATION', 'FUMIGATION'] as const, {
+    message: 'Debes seleccionar una tarea (Fertilización o Control Fitosanitario)',
+  }),
   time: z.string().regex(/^([01]\d|2[0-3]):?([0-5]\d)$/, 'Hora inválida (HH:mm)'),
-  duration: z.coerce.number().min(1, 'La duración debe ser mayor a 0 minutos'),
   zones: z.array(z.nativeEnum(ZoneType)).min(1, 'Selecciona al menos una zona'),
   fertilizationProgramId: z.string().optional(),
   phytosanitaryProgramId: z.string().optional(),
@@ -66,13 +62,11 @@ function cronToDays(cronStr: string): number[] {
   return dayPart.split(',').map(Number)
 }
 
-export interface ScheduleInitialData {
+export interface DosingScheduleInitialData {
   id: string
   name: string
-  purpose: 'IRRIGATION' | 'FERTIGATION' | 'FUMIGATION' | 'HUMIDIFICATION' | 'SOIL_WETTING'
-  executionType?: 'HARDWARE' | 'MANUAL'
+  purpose: 'FERTIGATION' | 'FUMIGATION'
   cronTrigger: string
-  durationMinutes: number
   zones?: string[]
   fertilizationProgramId?: string | null
   phytosanitaryProgramId?: string | null
@@ -82,10 +76,10 @@ interface Props {
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
-  initialData?: ScheduleInitialData | null
+  initialData?: DosingScheduleInitialData | null
 }
 
-export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: Props) {
+export function DosingScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: Props) {
   const {
     control,
     handleSubmit,
@@ -97,9 +91,8 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
     resolver: zodResolver(programSchema),
     defaultValues: {
       name: '',
-      purpose: '' as 'IRRIGATION',
+      purpose: 'FERTIGATION',
       time: '',
-      duration: 10,
       zones: [ZoneType.ZONA_A],
       fertilizationProgramId: '',
       phytosanitaryProgramId: '',
@@ -107,7 +100,7 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
     },
   })
 
-  const draftKey = 'schedule-form-draft-hardware'
+  const draftKey = 'dosing-schedule-form-draft'
   const isRestoringRef = React.useRef(false)
 
   const currentPurpose = useWatch({ control, name: 'purpose' })
@@ -150,7 +143,6 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
           name: initialData.name,
           purpose: initialData.purpose,
           time: cronToTime(initialData.cronTrigger),
-          duration: initialData.durationMinutes || 10,
           zones:
             initialData.zones && initialData.zones.length > 0
               ? (initialData.zones as ZoneType[])
@@ -171,9 +163,8 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
           savedDraft ?? {
             id: undefined,
             name: '',
-            purpose: '' as 'IRRIGATION',
+            purpose: 'FERTIGATION',
             time: '',
-            duration: 10,
             zones: [ZoneType.ZONA_A],
             fertilizationProgramId: '',
             phytosanitaryProgramId: '',
@@ -213,9 +204,9 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
         id: parsedData.id,
         name: parsedData.name,
         purpose: parsedData.purpose,
-        executionType: 'HARDWARE',
+        executionType: 'MANUAL',
         cronTrigger: cron,
-        durationMinutes: parsedData.duration || 10,
+        durationMinutes: 0,
         zones: parsedData.zones,
         fertilizationProgramId:
           parsedData.purpose === 'FERTIGATION' ? parsedData.fertilizationProgramId : null,
@@ -231,7 +222,9 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
         setError('root', { message: res.error })
       }
     } catch {
-      setError('root', { message: 'Ocurrió un error inesperado al guardar la rutina.' })
+      setError('root', {
+        message: 'Ocurrió un error inesperado al guardar la rutina de dosificación.',
+      })
     }
   }
 
@@ -239,7 +232,7 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
     <Modal
       isOpen={isOpen}
       size="md"
-      title={initialData ? 'Editar Rutina de Riego' : 'Nueva Rutina de Riego'}
+      title={initialData ? 'Editar Rutina de Dosificación' : 'Nueva Rutina de Dosificación'}
       onClose={onClose}
     >
       {errors.root && (
@@ -278,22 +271,12 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
           )}
         </FormField>
 
-        {/* 2. Tarea + Zona */}
-        <div className="grid grid-cols-2 gap-4">
-          <FormField htmlFor="purpose" label="Tarea">
-            <PlannerCircuitSelect
-              control={control}
-              error={errors.purpose?.message}
-              name="purpose"
-            />
-          </FormField>
+        {/* 2. Tarea */}
+        <FormField htmlFor="purpose" label="Tarea">
+          <PlannerCircuitSelect control={control} error={errors.purpose?.message} name="purpose" />
+        </FormField>
 
-          <FormField htmlFor="zones" label="Zona">
-            <PlannerZoneSelect control={control} error={errors.zones?.message} name="zones" />
-          </FormField>
-        </div>
-
-        {/* 3. Programa (solo para ferti/fito automatizado) */}
+        {/* 3. Programa */}
         {currentPurpose === 'FERTIGATION' && (
           <FormField htmlFor="fertilizationProgramId" label="Programa de Fertilización">
             <PlannerProgramSelect
@@ -316,42 +299,36 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
           </FormField>
         )}
 
-        {/* 4. Hora de Inicio + Duración */}
-        <div className="grid grid-cols-2 gap-4">
-          <FormField htmlFor="time" label="Hora de Inicio">
-            <Input
-              className="cursor-pointer dark:scheme-dark"
-              error={errors.time?.message}
-              id="time"
-              step="60"
-              type="time"
-              {...register('time')}
-              onClick={(e) => {
-                try {
-                  e.currentTarget.showPicker()
-                } catch {
-                  // Fallback
-                }
-              }}
-            />
-            {errors.time && (
-              <span className="text-[11px] font-medium tracking-wide text-red-500">
-                {errors.time.message}
-              </span>
-            )}
-          </FormField>
+        {/* 4. Hora de Aplicación */}
+        <FormField htmlFor="time" label="Hora de Aplicación">
+          <Input
+            className="cursor-pointer dark:scheme-dark"
+            error={errors.time?.message}
+            id="time"
+            step="60"
+            type="time"
+            {...register('time')}
+            onClick={(e) => {
+              try {
+                e.currentTarget.showPicker()
+              } catch {
+                // Fallback
+              }
+            }}
+          />
+          {errors.time && (
+            <span className="text-[11px] font-medium tracking-wide text-red-500">
+              {errors.time.message}
+            </span>
+          )}
+        </FormField>
 
-          <FormField htmlFor="duration" label="Duración">
-            <PlannerDurationInput
-              control={control}
-              error={errors.duration?.message}
-              name="duration"
-              register={register}
-            />
-          </FormField>
-        </div>
+        {/* 5. Zonas Múltiples */}
+        <FormField htmlFor="zones" label="Zonas">
+          <PlannerMultiZoneSelect control={control} error={errors.zones?.message} name="zones" />
+        </FormField>
 
-        {/* 5. Días de Ejecución */}
+        {/* 6. Días de Ejecución */}
         <FormField htmlFor="days" label="Días de Ejecución">
           <PlannerDaysSelector control={control} error={errors.days?.message} name="days" />
         </FormField>

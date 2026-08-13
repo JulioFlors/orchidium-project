@@ -12,56 +12,59 @@
           ]
         }
       },
-      "id": "1a2b3c4d-0001-4000-8000-000000000001",
+      "id": "85b3aeba-781e-4375-9011-97bae248843f",
       "name": "Schedule Trigger (Cada 1 min)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [250, 300]
+      "position": [1152, 160]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT name, status, \"updatedAt\" FROM \"Device\" WHERE name IN ('ema', 'actuador');"
+        "query": "WITH EmaLogs AS (\n  SELECT status AS current_status, timestamp AS current_timestamp\n  FROM \"DeviceLog\" WHERE device = 'Weather_Station_ZONA_A'\n  ORDER BY timestamp DESC LIMIT 1\n),\nEmaPrev AS (\n  SELECT status AS prev_status, timestamp AS prev_timestamp\n  FROM \"DeviceLog\" \n  WHERE device = 'Weather_Station_ZONA_A' \n    AND timestamp < (SELECT current_timestamp FROM EmaLogs)\n    AND status != (SELECT current_status FROM EmaLogs)\n  ORDER BY timestamp DESC LIMIT 1\n),\nEmaCycleStart AS (\n  SELECT timestamp AS cycle_start_timestamp\n  FROM \"DeviceLog\"\n  WHERE device = 'Weather_Station_ZONA_A'\n    AND status IN ('ONLINE', 'SLEEP')\n  ORDER BY timestamp ASC LIMIT 1\n),\nActLogs AS (\n  SELECT status AS current_status, timestamp AS current_timestamp\n  FROM \"DeviceLog\" WHERE device = 'Actuator_Controller'\n  ORDER BY timestamp DESC LIMIT 1\n),\nActOfflineDuration AS (\n  SELECT \n    CASE \n      WHEN (SELECT current_status FROM ActLogs) = 'OFFLINE' \n      THEN EXTRACT(EPOCH FROM (NOW() - (SELECT current_timestamp FROM ActLogs)))::integer\n      ELSE 0 \n    END AS actuator_offline_seconds\n)\nSELECT \n  (SELECT current_status FROM EmaLogs) AS ema_current_status,\n  (SELECT current_timestamp FROM EmaLogs) AS ema_current_time,\n  (SELECT prev_status FROM EmaPrev) AS ema_prev_status,\n  (SELECT prev_timestamp FROM EmaPrev) AS ema_prev_time,\n  (SELECT cycle_start_timestamp FROM EmaCycleStart) AS ema_cycle_start_time,\n  (SELECT current_status FROM ActLogs) AS act_current_status,\n  (SELECT current_timestamp FROM ActLogs) AS act_current_time,\n  (SELECT actuator_offline_seconds FROM ActOfflineDuration) AS act_offline_seconds;",
+        "options": {}
       },
-      "id": "1a2b3c4d-0002-4000-8000-000000000002",
+      "id": "a48ab45a-63fe-4c73-b7ba-60015044a934",
       "name": "Consultar Estados Nodos",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [480, 300],
+      "position": [1392, 160],
       "credentials": {
         "postgres": {
-          "id": "postgres-pristinoplant",
-          "name": "Postgres PristinoPlant"
+          "id": "u0KCV3BiGESIicjN",
+          "name": "Postgres account"
         }
       }
     },
     {
       "parameters": {
-        "jsCode": "// Correlación de estados EMA vs Actuador\nconst items = $input.all();\nconst ema = items.find(i => i.json.name === 'ema')?.json || {};\nconst actuador = items.find(i => i.json.name === 'actuador')?.json || {};\n\nlet alertType = 'NONE';\nlet message = '';\n\nif (ema.status === 'offline' && actuador.status === 'offline') {\n  alertType = 'APAGÓN_GENERAL';\n  message = '⚠️ *ALERTA INFRAESTRUCTURA*\\n\\nCaída masiva de conectividad. Nodos *EMA* y *Actuador* desconectados.\\n\\nPosible corte de energía eléctrica o fallo de internet local.';\n} else if (ema.status === 'offline' && actuador.status === 'online') {\n  alertType = 'BATERÍA_EMA';\n  message = '🪫 *ALERTA HARDWARE*\\n\\nNodo *EMA* OFFLINE (Batería agotada o falla local).\\n\\nEl nodo *Actuador* permanece ONLINE y funcional.';\n} else if (ema.status === 'online') {\n  alertType = 'EMA_RESTABLECIDO';\n  message = '✅ *NODO RESTABLECIDO*\\n\\nNodo *EMA* ONLINE.\\n\\nAlimentación de energía o conectividad restablecida con éxito.';\n}\n\nreturn [{ json: { alertType, message, emaStatus: ema.status, actuadorStatus: actuador.status } }];"
+        "jsCode": "const data = $input.first().json;\n\nconst emaCurrent = data.ema_current_status || 'UNKNOWN';\nconst emaPrev = data.ema_prev_status || 'UNKNOWN';\nconst actCurrent = data.act_current_status || 'UNKNOWN';\nconst actOfflineSeconds = data.act_offline_seconds || 0;\n\nconst now = new Date().getTime();\nconst emaChangeTime = data.ema_current_time ? new Date(data.ema_current_time).getTime() : 0;\n// Verificar si el cambio ocurrió en los últimos 3 minutos\nconst isEmaNewChange = (now - emaChangeTime) <= 180000 && emaCurrent !== emaPrev;\n\nlet alertType = 'NONE';\nlet message = '';\n\n// CASO A: Sin Conexión WiFi (Apagón General / El Actuador ya llevaba >= 5 min OFFLINE)\nif (emaCurrent === 'OFFLINE' && actCurrent === 'OFFLINE' && actOfflineSeconds >= 300) {\n  if (isEmaNewChange) {\n    alertType = 'SIN_CONEXION_WIFI';\n    message = '**Sin Conexión WiFi**\\n\\nNodo EMA: Offline\\nNodo Actuador: Offline';\n  }\n}\n// CASO B: Batería Agotada (Nodo EMA OFFLINE por batería mientras Actuador está bien)\nelse if (emaCurrent === 'OFFLINE' && (actCurrent !== 'OFFLINE' || actOfflineSeconds < 300)) {\n  if (isEmaNewChange) {\n    alertType = 'BATERIA_AGOTADA';\n    \n    // Cálculo exacto de duración de batería\n    let durationText = 'Desconocida';\n    if (data.ema_current_time && data.ema_cycle_start_time) {\n      const cycleStart = new Date(data.ema_cycle_start_time).getTime();\n      const cycleEnd = new Date(data.ema_current_time).getTime();\n      const diffMs = cycleEnd - cycleStart;\n      \n      if (diffMs > 0) {\n        const totalMinutes = Math.floor(diffMs / (1000 * 60));\n        const days = Math.floor(totalMinutes / (60 * 24));\n        const hours = Math.floor((totalMinutes % (60 * 24)) / 60);\n        const mins = totalMinutes % 60;\n        \n        let parts = [];\n        if (days > 0) parts.push(`${days}d`);\n        if (hours > 0) parts.push(`${hours}h`);
+        if (mins > 0 || parts.length === 0) parts.push(`${mins}min`);\n        durationText = parts.join(' ');\n      }\n    }\n    \n    message = `**Batería Agotada**\\nNodo EMA: Offline.\\nDuración: ${durationText}`;\n  }\n}\n// CASO C: Restablecimiento del Nodo EMA (Transición de OFFLINE -> ONLINE/SLEEP tras cambio de batería)\nelse if ((emaCurrent === 'ONLINE' || emaCurrent === 'SLEEP') && emaPrev === 'OFFLINE') {\n  if (isEmaNewChange && actOfflineSeconds < 300) {\n    alertType = 'EMA_RESTABLECIDO';\n    message = '**Nodo EMA**\\nOperativo.';\n  }\n}\n\nif (alertType === 'NONE') {\n  return [];\n}\n\nreturn [{ json: { alertType, message } }];"
       },
-      "id": "1a2b3c4d-0003-4000-8000-000000000003",
+      "id": "12e3d36b-8439-4b24-a22f-0e0b676e0995",
       "name": "Evaluar Correlación",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [700, 300]
+      "position": [1616, 160]
     },
     {
       "parameters": {
-        "chatId": "={{ $env.TELEGRAM_CHAT_ID }}",
+        "chatId": "=-1004373843373",
         "text": "={{ $json.message }}",
         "additionalFields": {
+          "appendAttribution": false,
           "parse_mode": "Markdown"
         }
       },
-      "id": "1a2b3c4d-0004-4000-8000-000000000004",
+      "id": "36ae9ea4-542c-417b-8f88-914cb1701283",
       "name": "Enviar Alerta Telegram",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [920, 300],
+      "position": [1824, 160],
       "credentials": {
         "telegramApi": {
-          "id": "telegram-pristinoplant",
-          "name": "Telegram PristinoBot"
+          "id": "KQbL3ZD1kE32GDfc",
+          "name": "PristinoBot"
         }
       }
     }

@@ -279,9 +279,9 @@ async function processEnvironmentPacket(
         // manteniendo la distancia relativa entre las muestras del batch.
         unixTimestamp += backtrackingOffset
 
-        // Si no se requirió backtracking y proviene de Weather_Station en ZONA_A,
+        // Si no se requirió backtracking y proviene de Weather_Station,
         // el timestamp está en hora local Caracas (UTC-4). Sumamos 4 horas (14400s) para llevar a UTC.
-        if (backtrackingOffset === 0 && source === 'Weather_Station' && zone === ZoneType.ZONA_A) {
+        if (backtrackingOffset === 0 && source === 'Weather_Station') {
           unixTimestamp += 4 * 3600
         }
 

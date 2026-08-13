@@ -237,7 +237,7 @@ let lastFirmwareHeartbeat: number = 0
 let isEmaSleeping = false
 let emaSleepFallbackTimer: NodeJS.Timeout | null = null
 let emaSessionStartAt: number = 0
-const lastEmaTelemetryBatchAt: number = 0
+let lastEmaTelemetryBatchAt: number = 0
 let emaSessionSupervisionTimer: NodeJS.Timeout | null = null
 let lastSyncTimestamp: number = 0
 let lastTimeSyncSent: number = 0
@@ -1112,6 +1112,8 @@ function setupMqttHandlers() {
             )
             const sanitizedLuxValues =
               caracasHourForLux < 7 || caracasHourForLux >= 18 ? luxValues.map(() => 0) : luxValues
+
+            lastEmaTelemetryBatchAt = Date.now()
 
             // Encolar los resúmenes de lote correspondientes en RainManager
             RainManager.pushClimateBatch(tempValues, humValues, sanitizedLuxValues)

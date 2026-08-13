@@ -1,0 +1,525 @@
+{
+  "name": "PristinoBot - Atención de Comandos (/status, /dosing, /help)",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message",
+          "callback_query"
+        ]
+      },
+      "id": "3c4d5e6f-0001-4000-8000-000000000001",
+      "name": "Telegram Trigger (Mensajes y Callbacks)",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-pristinoplant",
+          "name": "Telegram PristinoBot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.item.json;\nconst callback = item.callback_query;\nconst msg = item.message;\n\nlet eventType = 'UNKNOWN';\nlet timePreset = 'all';\nlet statusPreset = 'all';\nlet chatId = null;\nlet messageId = null;\nlet fromUser = 'Usuario';\nlet callbackData = '';\n\nif (callback) {\n  chatId = callback.message?.chat?.id;\n  messageId = callback.message?.message_id;\n  fromUser = callback.from?.first_name || 'Usuario';\n  callbackData = callback.data || '';\n\n  if (callbackData.startsWith('dosing_time:')) {\n    eventType = 'DOSING_STATUS_MENU';\n    timePreset = callbackData.replace('dosing_time:', '');\n  } else if (callbackData.startsWith('dosing_query:')) {\n    eventType = 'DOSING_QUERY';\n    const parts = callbackData.replace('dosing_query:', '').split(':');\n    timePreset = parts[0] || 'all';\n    statusPreset = parts[1] || 'all';\n  }\n} else if (msg && msg.text) {\n  chatId = msg.chat?.id;\n  messageId = msg.message_id;\n  fromUser = msg.from?.first_name || 'Usuario';\n  const text = msg.text.trim();\n\n  if (text.startsWith('/status')) {\n    eventType = 'STATUS';\n  } else if (text.startsWith('/dosing')) {\n    eventType = 'DOSING_TIME_MENU';\n  } else if (text.startsWith('/help') || text.startsWith('/start')) {\n    eventType = 'HELP';\n  }\n}\n\nreturn [{\n  json: {\n    eventType,\n    chatId,\n    messageId,\n    fromUser,\n    callbackData,\n    timePreset,\n    statusPreset\n  }\n}];"
+      },
+      "id": "3c4d5e6f-0002-4000-8000-000000000002",
+      "name": "Parsear Evento",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "mode": "rules",
+        "fallbackOutput": "none",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.eventType }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "STATUS"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.eventType }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "DOSING_TIME_MENU"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.eventType }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "DOSING_STATUS_MENU"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.eventType }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "DOSING_QUERY"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.eventType }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "HELP"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        }
+      },
+      "id": "3c4d5e6f-0003-4000-8000-000000000003",
+      "name": "Enrutador de Comandos",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT DISTINCT ON (device) device AS name, status, timestamp AS \"updatedAt\" FROM \"DeviceLog\" WHERE device IN ('Weather_Station_ZONA_A', 'Actuator_Controller') ORDER BY device, timestamp DESC;"
+      },
+      "id": "3c4d5e6f-0004-4000-8000-000000000004",
+      "name": "Consultar BD (Status)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [950, 100],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-pristinoplant",
+          "name": "Postgres PristinoPlant"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const chatId = $('Parsear Evento').first().json.chatId;\nconst items = $input.all();\nconst ema = items.find(i => i.json.name === 'Weather_Station_ZONA_A')?.json || {};\nconst actuador = items.find(i => i.json.name === 'Actuator_Controller')?.json || {};\n\nconst formatStatus = (s) => {\n  if (!s) return 'Offline';\n  const upper = String(s).toUpperCase();\n  if (upper === 'ONLINE' || upper === 'REBOOT') return 'Online';\n  if (upper === 'SLEEP') return 'Sleep';\n  return 'Offline';\n};\n\nconst replyText = `*Estado de Infraestructura*\\n\\n` +\n  `Nodo EMA: ${formatStatus(ema.status)}\\n` +\n  `Nodo Actuador: ${formatStatus(actuador.status)}`;\n\nreturn [{ json: { chatId, replyText } }];"
+      },
+      "id": "3c4d5e6f-0005-4000-8000-000000000005",
+      "name": "Formatear Respuesta Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1180, 100]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.replyText }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "3c4d5e6f-0006-4000-8000-000000000006",
+      "name": "Responder Telegram (Status)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1400, 100],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-pristinoplant",
+          "name": "Telegram PristinoBot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "*Filtro de Dosificación*\n\nSelecciona el rango de tiempo:",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "Hoy",
+                    "additionalFields": {
+                      "callback_data": "dosing_time:today"
+                    }
+                  },
+                  {
+                    "text": "Esta Semana",
+                    "additionalFields": {
+                      "callback_data": "dosing_time:week"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "Prox. Semana",
+                    "additionalFields": {
+                      "callback_data": "dosing_time:next-week"
+                    }
+                  },
+                  {
+                    "text": "Este Mes",
+                    "additionalFields": {
+                      "callback_data": "dosing_time:month"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "Prox. Mes",
+                    "additionalFields": {
+                      "callback_data": "dosing_time:next-month"
+                    }
+                  },
+                  {
+                    "text": "Todos los Tiempos",
+                    "additionalFields": {
+                      "callback_data": "dosing_time:all"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "3c4d5e6f-0007-4000-8000-000000000007",
+      "name": "Menú Tiempo Dosificación",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [950, 250],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-pristinoplant",
+          "name": "Telegram PristinoBot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $json.chatId }}",
+        "messageId": "={{ $json.messageId }}",
+        "text": "=*Filtro de Dosificación*\n\n{{ $json.timePreset === 'today' ? 'Hoy' : ($json.timePreset === 'week' ? 'Esta Semana' : ($json.timePreset === 'next-week' ? 'Prox. Semana' : ($json.timePreset === 'month' ? 'Este Mes' : ($json.timePreset === 'next-month' ? 'Prox. Mes' : 'Todos los Tiempos')))) }}\n\nSelecciona el estado:",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "Pendientes",
+                    "additionalFields": {
+                      "callback_data": "=dosing_query:{{ $json.timePreset }}:PENDING"
+                    }
+                  },
+                  {
+                    "text": "Completados",
+                    "additionalFields": {
+                      "callback_data": "=dosing_query:{{ $json.timePreset }}:COMPLETED"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "Cancelados",
+                    "additionalFields": {
+                      "callback_data": "=dosing_query:{{ $json.timePreset }}:CANCELLED"
+                    }
+                  },
+                  {
+                    "text": "Todos los Estados",
+                    "additionalFields": {
+                      "callback_data": "=dosing_query:{{ $json.timePreset }}:all"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "3c4d5e6f-0008-4000-8000-000000000008",
+      "name": "Menú Estado Dosificación",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [950, 400],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-pristinoplant",
+          "name": "Telegram PristinoBot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=WITH actual_logs AS (SELECT m.id, m.status::text AS status, m.\"scheduledAt\", m.zones, COALESCE(a.name, 'Aplicación Manual') AS \"agrochemicalName\", COALESCE(a.preparation, '') AS preparation FROM \"ManualDosingLog\" m LEFT JOIN \"Agrochemical\" a ON m.\"agrochemicalId\" = a.id), routine_schedules AS (SELECT s.id, 'PENDING' AS status, NOW() + INTERVAL '7 days' AS \"scheduledAt\", s.zones, COALESCE(fa.name, pa.name, s.name) AS \"agrochemicalName\", COALESCE(fa.preparation, pa.preparation, '') AS preparation FROM \"AutomationSchedule\" s LEFT JOIN \"FertilizationProgram\" fp ON s.\"fertilizationProgramId\" = fp.id LEFT JOIN \"FertilizationCycle\" fc ON fc.\"programId\" = fp.id AND fc.sequence = 1 LEFT JOIN \"Agrochemical\" fa ON fc.\"agrochemicalId\" = fa.id LEFT JOIN \"PhytosanitaryProgram\" pp ON s.\"phytosanitaryProgramId\" = pp.id LEFT JOIN \"PhytosanitaryCycle\" pc ON pc.\"programId\" = pp.id AND pc.sequence = 1 LEFT JOIN \"Agrochemical\" pa ON pc.\"agrochemicalId\" = pa.id WHERE s.\"executionType\" = 'MANUAL' AND s.\"isEnabled\" = true AND NOT EXISTS (SELECT 1 FROM \"ManualDosingLog\" ml WHERE ml.\"scheduleId\" = s.id AND ml.status = 'PENDING')), all_tasks AS (SELECT * FROM actual_logs UNION ALL SELECT * FROM routine_schedules) SELECT * FROM all_tasks WHERE ('{{ $json.statusPreset }}' = 'all' OR status = '{{ $json.statusPreset }}') AND ('{{ $json.timePreset }}' = 'all' OR ('{{ $json.timePreset }}' = 'today' AND \"scheduledAt\" >= CURRENT_DATE AND \"scheduledAt\" < CURRENT_DATE + INTERVAL '1 day') OR ('{{ $json.timePreset }}' = 'week' AND \"scheduledAt\" >= date_trunc('week', CURRENT_DATE) AND \"scheduledAt\" < date_trunc('week', CURRENT_DATE) + INTERVAL '1 week') OR ('{{ $json.timePreset }}' = 'next-week' AND \"scheduledAt\" >= date_trunc('week', CURRENT_DATE) + INTERVAL '1 week' AND \"scheduledAt\" < date_trunc('week', CURRENT_DATE) + INTERVAL '2 weeks') OR ('{{ $json.timePreset }}' = 'month' AND \"scheduledAt\" >= date_trunc('month', CURRENT_DATE) AND \"scheduledAt\" < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month') OR ('{{ $json.timePreset }}' = 'next-month' AND \"scheduledAt\" >= date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' AND \"scheduledAt\" < date_trunc('month', CURRENT_DATE) + INTERVAL '2 months')) ORDER BY \"scheduledAt\" DESC LIMIT 10;"
+      },
+      "settings": {
+        "alwaysOutputData": true
+      },
+      "id": "3c4d5e6f-0009-4000-8000-000000000009",
+      "name": "Consultar BD (Dosing Filtered)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [950, 550],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-pristinoplant",
+          "name": "Postgres PristinoPlant"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $('Parsear Evento').first().json;\nconst items = $input.all();\n\nconst ZONE_LABELS = {\n  ZONA_A: 'Orquideario',\n  ZONA_B: 'Jardín',\n  ZONA_C: 'Terraza',\n  ZONA_D: 'Ventanas',\n  EXTERIOR: 'Exterior'\n};\n\nconst STATUS_LABELS = {\n  PENDING: 'Pendiente',\n  COMPLETED: 'Completada',\n  CANCELLED: 'Cancelada'\n};\n\nconst timeMap = {\n  'today': 'Hoy',\n  'week': 'Esta Semana',\n  'next-week': 'Prox. Semana',\n  'month': 'Este Mes',\n  'next-month': 'Prox. Mes',\n  'all': 'Todos los Tiempos'\n};\n\nconst statusMap = {\n  'PENDING': 'Pendientes',\n  'COMPLETED': 'Completadas',\n  'CANCELLED': 'Canceladas',\n  'all': 'Todos los Estados'\n};\n\nconst timeLabel = timeMap[event.timePreset] || 'Todos los Tiempos';\nconst statusLabel = statusMap[event.statusPreset] || 'Todos los Estados';\n\nconst DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];\nconst MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];\n\nfunction formatDate(dateObj) {\n  const dayName = DAYS[dateObj.getDay()];\n  const dayNum = dateObj.getDate();\n  const monthName = MONTHS[dateObj.getMonth()];\n  return `${dayName} ${dayNum} ${monthName}`;\n}\n\nfunction formatTime(dateObj) {\n  let hours = dateObj.getHours();\n  const minutes = dateObj.getMinutes().toString().padStart(2, '0');\n  const ampm = hours >= 12 ? 'pm' : 'am';\n  hours = hours % 12;\n  hours = hours ? hours : 12;\n  return `${hours}:${minutes} ${ampm}`;\n}\n\nfunction formatZones(zones) {\n  if (!zones) return 'General';\n  let zoneArray = Array.isArray(zones) ? zones : [zones];\n  if (typeof zones === 'string' && zones.startsWith('{')) {\n    zoneArray = zones.replace(/[{}]/g, '').split(',');\n  }\n  return zoneArray.map(z => ZONE_LABELS[z.trim()] || z.trim()).join(', ');\n}\n\nif (items.length === 0 || !items[0].json.id) {\n  return [{\n    json: {\n      chatId: event.chatId,\n      messageId: event.messageId,\n      replyText: `\\u200B\\n*Tareas de Dosificación*\\n${timeLabel}\\n${statusLabel}\\n\\nSin tareas registradas` \n    }\n  }];\n}\n\nlet replyText = `\\u200B\\n*Tareas de Dosificación*\\n${timeLabel}\\n${statusLabel}\\n\\n`;\nitems.forEach((item, index) => {\n  const row = item.json;\n  const agroName = row.agrochemicalName || 'Producto';\n  const statusStr = STATUS_LABELS[row.status] || row.status;\n  const zonesStr = formatZones(row.zones);\n  const dateObj = new Date(row.scheduledAt);\n  const dateStr = formatDate(dateObj);\n  const timeStr = formatTime(dateObj);\n  const prepStr = row.preparation ? row.preparation.trim() : '';\n  \n  replyText += `${index + 1}. ${agroName} - ${statusStr}\\n`;\n  if (prepStr) {\n    replyText += `   Receta: ${prepStr}\\n`;\n  }\n  replyText += `   Zonas: ${zonesStr}\\n`;\n  replyText += `   Fecha: ${dateStr}\\n`;\n  replyText += `   Hora: ${timeStr}\\n\\n`;\n});\n\nreturn [{\n  json: {\n    chatId: event.chatId,\n    messageId: event.messageId,\n    replyText: replyText.trimEnd()\n  }\n}];"
+      },
+      "id": "3c4d5e6f-0010-4000-8000-000000000010",
+      "name": "Formatear Respuesta Dosing Filtered",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1180, 550]
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $json.chatId }}",
+        "messageId": "={{ $json.messageId }}",
+        "text": "={{ $json.replyText }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "3c4d5e6f-0011-4000-8000-000000000011",
+      "name": "Editar Mensaje Telegram (Dosing Filtered)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1400, 550],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-pristinoplant",
+          "name": "Telegram PristinoBot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "*PristinoBot*\n\n/status - Estado de infraestructura\n/dosing - Tareas de dosificación\n/help - Lista de comandos",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "3c4d5e6f-0012-4000-8000-000000000012",
+      "name": "Responder Telegram (Help)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [950, 700],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-pristinoplant",
+          "name": "Telegram PristinoBot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger (Mensajes y Callbacks)": {
+      "main": [
+        [
+          {
+            "node": "Parsear Evento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsear Evento": {
+      "main": [
+        [
+          {
+            "node": "Enrutador de Comandos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrutador de Comandos": {
+      "main": [
+        [
+          {
+            "node": "Consultar BD (Status)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Menú Tiempo Dosificación",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Menú Estado Dosificación",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Consultar BD (Dosing Filtered)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder Telegram (Help)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar BD (Status)": {
+      "main": [
+        [
+          {
+            "node": "Formatear Respuesta Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Respuesta Status": {
+      "main": [
+        [
+          {
+            "node": "Responder Telegram (Status)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar BD (Dosing Filtered)": {
+      "main": [
+        [
+          {
+            "node": "Formatear Respuesta Dosing Filtered",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Respuesta Dosing Filtered": {
+      "main": [
+        [
+          {
+            "node": "Editar Mensaje Telegram (Dosing Filtered)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

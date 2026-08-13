@@ -191,90 +191,90 @@ export async function classifyCurrentDay(targetDate?: Date): Promise<DayClassifi
       if (row.illuminance != null) currentLux = Number(row.illuminance)
     }
 
-    // 3. Minutos consecutivos recientes bajo umbral de nublado (<15k)
-    // Consultamos los últimos 120 min y contamos hacia atrás desde el más reciente
-    const twoHoursAgo = new Date(now.getTime() - 120 * 60 * 1000).toISOString()
+    // 3. Minutos consecutivos recientes bajo umbral de nublado (<26k) y nublado intenso (<10k)
+    // Consultamos la ventana botánica del día actual (8:00 AM hasta now / 4:00 PM)
     const overcastQuery = `
       SELECT illuminance, time
       FROM "environment_metrics"
-      WHERE time >= '${twoHoursAgo}'
+      WHERE time >= '${startISO}'
+        AND time <= '${endISO}'
         AND "zone" = 'EXTERIOR'
       ORDER BY time DESC
     `
     const overcastStream = influxClient.query(overcastQuery)
     let overcastMinutes = 0
     let overcastHeavyMinutes = 0
-    let lastTime: Date | null = null
+    let lastTimeStandard: Date | null = null
     let lastTimeHeavy: Date | null = null
-    let heavyBroken = false // Rompe la cadena de nubosidad intensa (<10k)
-    let standardBroken = false // Rompe la cadena de nubosidad estándar (10k-26k)
+    let standardBroken = false // Rompe la cadena de nubosidad estándar (<=26k lux)
+    let heavyBroken = false // Rompe la cadena de nubosidad intensa (<10k lux)
 
     for await (const row of overcastStream) {
-      const lux = Number(row.illuminance || 0)
+      const lux = Number(row.illuminance ?? 0)
       const rowTime = rowTimeToDate(row.time)
 
       // Protección contra timestamps inválidos de InfluxDB
       if (isNaN(rowTime.getTime())) continue
 
       // Filtro de horario botánico estricto (8:00:00 AM – 4:00:59 PM)
-      // Las lecturas fuera de este rango no son representativas del estado del cielo
-      // y podrían acumular minutos erróneos durante el amanecer o atardecer.
-      if (!isWithinBotanicalHours(rowTime)) {
-        heavyBroken = true
-        standardBroken = true
-        continue
-      }
+      if (!isWithinBotanicalHours(rowTime)) continue
 
-      // ── Nubosidad estándar (<=26k lux) ──
+      // ── Nubosidad estándar (<= 26,000 lux) ──
       if (!standardBroken) {
         if (lux <= OVERCAST_LUX_THRESHOLD) {
-          if (!lastTime) {
-            // Primera muestra: sumamos tiempo desde el dato hasta "ahora"
-            const ageMs = now.getTime() - rowTime.getTime()
+          if (!lastTimeStandard) {
+            // Primera muestra: sumamos la diferencia desde la muestra hasta el final de la ventana
+            const gapToEval = (endEval.getTime() - rowTime.getTime()) / 60000
 
-            overcastMinutes += Math.min(ageMs, 70 * 60000) / 60000
-            lastTime = rowTime
+            if (gapToEval <= 15) {
+              overcastMinutes += gapToEval
+            }
+            lastTimeStandard = rowTime
           } else {
-            const jumpMs = lastTime.getTime() - rowTime.getTime()
+            const gapMin = (lastTimeStandard.getTime() - rowTime.getTime()) / 60000
 
-            if (jumpMs > 70 * 60000) {
+            if (gapMin > 15) {
+              // Brecha de datos mayor a 15 min: cadena discontinua
               standardBroken = true
             } else {
-              overcastMinutes += jumpMs / 60000
-              lastTime = rowTime
+              overcastMinutes += gapMin
+              lastTimeStandard = rowTime
             }
           }
         } else {
+          // Sol directo (> 26k lux): rompe la cadena de nubosidad
           standardBroken = true
         }
       }
 
-      // ── Nubosidad intensa (<10k lux) ──
+      // ── Nubosidad intensa (< 10,000 lux — Nubes Grises) ──
       if (!heavyBroken) {
         if (lux < HEAVY_OVERCAST_LUX_THRESHOLD) {
           if (!lastTimeHeavy) {
-            // Primera muestra: sumamos tiempo desde el dato hasta "ahora"
-            const ageMs = now.getTime() - rowTime.getTime()
+            const gapToEval = (endEval.getTime() - rowTime.getTime()) / 60000
 
-            overcastHeavyMinutes += Math.min(ageMs, 70 * 60000) / 60000
+            if (gapToEval <= 15) {
+              overcastHeavyMinutes += gapToEval
+            }
             lastTimeHeavy = rowTime
           } else {
-            const jumpMs = lastTimeHeavy.getTime() - rowTime.getTime()
+            const gapMin = (lastTimeHeavy.getTime() - rowTime.getTime()) / 60000
 
-            if (jumpMs > 70 * 60000) {
+            if (gapMin > 15) {
               heavyBroken = true
             } else {
-              overcastHeavyMinutes += jumpMs / 60000
+              overcastHeavyMinutes += gapMin
               lastTimeHeavy = rowTime
             }
           }
         } else {
+          // Cielo aclarado (>= 10k lux): rompe la cadena intensa
           heavyBroken = true
         }
       }
 
-      // Optimización: si ambas cadenas están rotas, no hay necesidad de seguir iterando
-      if (heavyBroken && standardBroken) break
+      // Optimización: si ambas cadenas están rotas, detendremos la iteración
+      if (standardBroken && heavyBroken) break
     }
 
     overcastMinutes = Math.round(overcastMinutes)

@@ -21,7 +21,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const query = $input.item.json.callback_query || {};\nconst data = query.data || '';\nconst fromUser = query.from?.username || query.from?.first_name || 'Admin';\nconst messageId = query.message?.message_id;\nconst chatId = query.message?.chat?.id;\n\nlet action = '';\nlet taskId = '';\n\nif (data.startsWith('confirm_')) {\n  action = 'CONFIRMED';\n  taskId = data.replace('confirm_', '');\n} else if (data.startsWith('cancel_')) {\n  action = 'CANCELLED';\n  taskId = data.replace('cancel_', '');\n}\n\nreturn [{ json: { action, taskId, fromUser, messageId, chatId } }];"
+        "jsCode": "const query = $input.item.json.callback_query || {};\nconst data = query.data || '';\nconst fromUser = query.from?.username || query.from?.first_name || 'Admin';\nconst messageId = query.message?.message_id;\nconst chatId = query.message?.chat?.id;\n\nlet action = '';\nlet taskId = '';\n\nif (data.startsWith('confirm_')) {\n  action = 'COMPLETED';\n  taskId = data.replace('confirm_', '');\n} else if (data.startsWith('cancel_')) {\n  action = 'CANCELLED';\n  taskId = data.replace('cancel_', '');\n}\n\nreturn [{ json: { action, taskId, fromUser, messageId, chatId } }];"
       },
       "id": "2b3c4d5e-0002-4000-8000-000000000002",
       "name": "Parsear Callback Data",
@@ -32,7 +32,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "=UPDATE \"Task\" SET status = '{{ $json.action }}', \"confirmedBy\" = '{{ $json.fromUser }}', \"updatedAt\" = NOW() WHERE id = '{{ $json.taskId }}';"
+        "query": "=UPDATE \"ManualDosingLog\" SET status = '{{ $json.action }}'::\"TaskStatus\", \"executedAt\" = NOW() WHERE id = '{{ $json.taskId }}';"
       },
       "id": "2b3c4d5e-0003-4000-8000-000000000003",
       "name": "Actualizar Estado en Postgres",
@@ -51,9 +51,9 @@
         "operation": "editMessageText",
         "chatId": "={{ $json.chatId }}",
         "messageId": "={{ $json.messageId }}",
-        "text": "={{ $json.action === 'CONFIRMED' ? '✅ *TAREA CONFIRMADA POR @' + $json.fromUser + '*\\n\\nCircuito hidráulico de fertirriego activado.' : '❌ *TAREA CANCELADA POR @' + $json.fromUser + '*' }}",
+        "text": "={{ $json.action === 'COMPLETED' ? '[ Tarea Confirmada ]\\n@' + $json.fromUser + ' - Registro actualizado' : '[ Tarea Cancelada ]\\n@' + $json.fromUser + ' - Operación cancelada' }}",
         "additionalFields": {
-          "parse_mode": "Markdown"
+          "appendAttribution": false
         }
       },
       "id": "2b3c4d5e-0004-4000-8000-000000000004",

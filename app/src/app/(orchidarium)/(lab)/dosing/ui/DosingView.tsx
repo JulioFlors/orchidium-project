@@ -99,43 +99,54 @@ export function DosingView({ initialTasks, agrochemicals }: DosingViewProps) {
         if (taskYmd !== selectedDate) return false
       } else {
         // 3. Filtro por Presets Temporales
+        let startRange: Date | null = null
+        let endRange: Date | null = null
+
         if (timePreset === 'today') {
-          const isSameDay =
-            taskDate.getDate() === now.getDate() &&
-            taskDate.getMonth() === now.getMonth() &&
-            taskDate.getFullYear() === now.getFullYear()
+          startRange = new Date(now)
+          startRange.setHours(0, 0, 0, 0)
 
-          if (!isSameDay) return false
+          endRange = new Date(now)
+          endRange.setHours(23, 59, 59, 999)
         } else if (timePreset === 'week') {
-          // Esta Semana (próximos 7 días)
-          const endOfWeek = new Date(now)
+          // Esta Semana: Lunes (00:00:00) a Domingo (23:59:59.999) de la semana actual
+          const day = now.getDay()
+          const diffToMonday = now.getDate() - (day === 0 ? 6 : day - 1)
 
-          endOfWeek.setDate(now.getDate() + 7)
-          if (taskDate < now || taskDate > endOfWeek) return false
+          startRange = new Date(now)
+          startRange.setDate(diffToMonday)
+          startRange.setHours(0, 0, 0, 0)
+
+          endRange = new Date(startRange)
+          endRange.setDate(startRange.getDate() + 6)
+          endRange.setHours(23, 59, 59, 999)
         } else if (timePreset === 'next-week') {
-          // Próxima Semana (de 7 a 14 días desde hoy)
-          const startOfNextWeek = new Date(now)
+          // Próxima Semana: Lunes (00:00:00) a Domingo (23:59:59.999) de la semana siguiente
+          const day = now.getDay()
+          const diffToMonday = now.getDate() - (day === 0 ? 6 : day - 1)
+          const thisMonday = new Date(now)
 
-          startOfNextWeek.setDate(now.getDate() + 7)
-          const endOfNextWeek = new Date(now)
+          thisMonday.setDate(diffToMonday)
+          thisMonday.setHours(0, 0, 0, 0)
 
-          endOfNextWeek.setDate(now.getDate() + 14)
-          if (taskDate < startOfNextWeek || taskDate > endOfNextWeek) return false
+          startRange = new Date(thisMonday)
+          startRange.setDate(thisMonday.getDate() + 7)
+
+          endRange = new Date(startRange)
+          endRange.setDate(startRange.getDate() + 6)
+          endRange.setHours(23, 59, 59, 999)
         } else if (timePreset === 'month') {
-          // Este Mes (próximos 30 días)
-          const endOfMonth = new Date(now)
-
-          endOfMonth.setDate(now.getDate() + 30)
-          if (taskDate < now || taskDate > endOfMonth) return false
+          // Este Mes: Día 1 (00:00:00) al último día del mes actual (23:59:59.999)
+          startRange = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0)
+          endRange = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
         } else if (timePreset === 'next-month') {
-          // Próximo Mes (de 30 a 60 días desde hoy)
-          const startOfNextMonth = new Date(now)
+          // Próximo Mes: Día 1 (00:00:00) al último día del mes siguiente (23:59:59.999)
+          startRange = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0)
+          endRange = new Date(now.getFullYear(), now.getMonth() + 2, 0, 23, 59, 59, 999)
+        }
 
-          startOfNextMonth.setDate(now.getDate() + 30)
-          const endOfNextMonth = new Date(now)
-
-          endOfNextMonth.setDate(now.getDate() + 60)
-          if (taskDate < startOfNextMonth || taskDate > endOfNextMonth) return false
+        if (startRange && endRange) {
+          if (taskDate < startRange || taskDate > endRange) return false
         }
       }
 

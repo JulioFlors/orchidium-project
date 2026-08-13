@@ -135,22 +135,28 @@ export const adminRoutes: AdminRoute[] = [
     layout: 'hybrid',
     items: [
       {
-        name: 'Insumos Agroquímicos',
+        name: 'Agroquímicos',
         url: '/supplies',
         icon: <IoPricetagsOutline />,
-        description: 'Catálogo de fertilizantes y fungicidas',
-      },
-      {
-        name: 'Programas de Dosificación',
-        url: '/recipes',
-        icon: <IoFlaskOutline />,
-        description: 'Ciclos de aplicación de agroquímicos',
+        description: 'Catálogo de insumos agroquímicos',
       },
       {
         name: 'Dosificación',
         url: '/dosing',
         icon: <IoCalendarOutline />,
         description: 'Cronograma de dosificación',
+      },
+      {
+        name: 'Planificación',
+        url: '/recipes',
+        icon: <IoFlaskOutline />,
+        description: 'Ciclos de aplicación de agroquímicos',
+      },
+      {
+        name: 'Rutinas',
+        url: '/dosing-schedules',
+        icon: <IoCalendarOutline />,
+        description: 'Programacion de los ciclos de aplicación de agroquímicos',
       },
     ],
   },

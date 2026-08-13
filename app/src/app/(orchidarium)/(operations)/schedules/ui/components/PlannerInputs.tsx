@@ -1,6 +1,6 @@
 import { Controller, Control, UseFormRegister, FieldValues, Path, useWatch } from 'react-hook-form'
 import clsx from 'clsx'
-import { TaskPurpose, ExecutionType, ZoneType } from '@package/database/enums'
+import { TaskPurpose, ZoneType } from '@package/database/enums'
 
 import { SelectDropdown, Input } from '@/components'
 import { TaskPurposeLabels, ZoneTypeLabels, ZoneCapabilities } from '@/config/mappings'
@@ -12,11 +12,6 @@ const ACTION_MAP = {
   FERTIGATION: { label: 'Fertilización' },
   FUMIGATION: { label: 'Control Fitosanitario' },
 }
-
-const EXECUTION_TYPE_OPTIONS = [
-  { value: ExecutionType.MANUAL, label: 'Dosificación Manual' },
-  { value: ExecutionType.HARDWARE, label: 'Sistema de Riego' },
-]
 
 interface InputProps<T extends FieldValues> {
   control?: Control<T>
@@ -51,42 +46,6 @@ export function PlannerCircuitSelect<T extends FieldValues>({
                 label: act.label,
               })),
             ]}
-            placeholder="Seleccionar"
-            value={value}
-            onChange={onChange}
-            {...rest}
-          />
-        )}
-      />
-      {error && (
-        <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
-          {error}
-        </span>
-      )}
-    </div>
-  )
-}
-
-// ----------------------------------------------------------------------
-// COMPONENTE: Selector de Modo de Ejecución
-// ----------------------------------------------------------------------
-export function PlannerExecutionTypeSelect<T extends FieldValues>({
-  control,
-  name,
-  error,
-}: Omit<InputProps<T>, 'register'>) {
-  if (!control) return null
-
-  return (
-    <div className="flex flex-col gap-1.5">
-      <Controller
-        control={control}
-        name={name}
-        render={({ field: { value, onChange, ...rest } }) => (
-          <SelectDropdown
-            error={error}
-            id={name}
-            options={EXECUTION_TYPE_OPTIONS}
             placeholder="Seleccionar"
             value={value}
             onChange={onChange}

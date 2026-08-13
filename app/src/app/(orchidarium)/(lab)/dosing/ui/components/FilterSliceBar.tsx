@@ -200,7 +200,7 @@ export function FilterSliceBar({
   return (
     <div
       aria-label="Barra de filtros de dosificación"
-      className="relative flex w-full items-center select-none"
+      className="relative flex w-full items-center select-none isolate"
       onKeyDown={handleKeyDown}
     >
       {/* Botón Flotante Izquierdo */}
