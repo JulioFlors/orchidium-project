@@ -22,7 +22,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const item = $input.item.json;\nconst callback = item.callback_query;\nconst msg = item.message;\n\nlet eventType = 'UNKNOWN';\nlet timePreset = 'all';\nlet statusPreset = 'all';\nlet chatId = null;\nlet messageId = null;\nlet fromUser = 'Usuario';\nlet callbackData = '';\n\nif (callback) {\n  chatId = callback.message?.chat?.id;\n  messageId = callback.message?.message_id;\n  fromUser = callback.from?.first_name || 'Usuario';\n  callbackData = callback.data || '';\n\n  if (callbackData.startsWith('dosing_time:')) {\n    eventType = 'DOSING_STATUS_MENU';\n    timePreset = callbackData.replace('dosing_time:', '');\n  } else if (callbackData.startsWith('dosing_query:')) {\n    eventType = 'DOSING_QUERY';\n    const parts = callbackData.replace('dosing_query:', '').split(':');\n    timePreset = parts[0] || 'all';\n    statusPreset = parts[1] || 'all';\n  }\n} else if (msg && msg.text) {\n  chatId = msg.chat?.id;\n  messageId = msg.message_id;\n  fromUser = msg.from?.first_name || 'Usuario';\n  const text = msg.text.trim();\n\n  if (text.startsWith('/status')) {\n    eventType = 'STATUS';\n  } else if (text.startsWith('/dosing')) {\n    eventType = 'DOSING_TIME_MENU';\n  } else if (text.startsWith('/help') || text.startsWith('/start')) {\n    eventType = 'HELP';\n  }\n}\n\nreturn [{\n  json: {\n    eventType,\n    chatId,\n    messageId,\n    fromUser,\n    callbackData,\n    timePreset,\n    statusPreset\n  }\n}];"
+        "jsCode": "const item = $input.item.json;\nconst callback = item.callback_query;\nconst msg = item.message;\n\nlet eventType = 'UNKNOWN';\nlet timePreset = 'all';\nlet statusPreset = 'all';\nlet chatId = null;\nlet messageId = null;\nlet fromUser = 'Usuario';\nlet callbackData = '';\n\nif (callback) {\n  chatId = callback.message?.chat?.id;\n  messageId = callback.message?.message_id;\n  fromUser = callback.from?.first_name || 'Usuario';\n  callbackData = callback.data || '';\n\n  if (callbackData.startsWith('dosing_time:')) {\n    eventType = 'DOSING_STATUS_MENU';\n    timePreset = callbackData.replace('dosing_time:', '');\n  } else if (callbackData.startsWith('dosing_query:')) {\n    eventType = 'DOSING_QUERY';\n    const parts = callbackData.replace('dosing_query:', '').split(':');\n    timePreset = parts[0] || 'all';\n    statusPreset = parts[1] || 'all';\n  } else if (callbackData.startsWith('agro_hw_confirm:')) {\n    eventType = 'AGRO_HW_CONFIRM';\n  } else if (callbackData.startsWith('agro_hw_cancel:')) {\n    eventType = 'AGRO_HW_CANCEL';\n  } else if (callbackData.startsWith('agro_hw_postpone:')) {\n    eventType = 'AGRO_HW_POSTPONE';\n  } else if (callbackData.startsWith('agro_man_complete:')) {\n    eventType = 'AGRO_MAN_COMPLETE';\n  } else if (callbackData.startsWith('agro_man_cancel:')) {\n    eventType = 'AGRO_MAN_CANCEL';\n  } else if (callbackData.startsWith('agro_man_read:')) {\n    eventType = 'AGRO_MAN_READ';\n  }\n} else if (msg && msg.text) {\n  chatId = msg.chat?.id;\n  messageId = msg.message_id;\n  fromUser = msg.from?.first_name || 'Usuario';\n  const text = msg.text.trim();\n\n  if (text.startsWith('/status')) {\n    eventType = 'STATUS';\n  } else if (text.startsWith('/dosing')) {\n    eventType = 'DOSING_TIME_MENU';\n  } else if (text.startsWith('/complete') || text.startsWith('/completar')) {\n    eventType = 'COMPLETE_MENU';\n  } else if (text.startsWith('/help') || text.startsWith('/start')) {\n    eventType = 'HELP';\n  }\n}\n\nreturn [{\n  json: {\n    eventType,\n    chatId,\n    messageId,\n    fromUser,\n    callbackData,\n    timePreset,\n    statusPreset\n  }\n}];"
       },
       "id": "3c4d5e6f-0002-4000-8000-000000000002",
       "name": "Parsear Evento",
@@ -111,6 +111,46 @@
                       "operation": "equals"
                     },
                     "rightValue": "DOSING_QUERY"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.eventType }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "COMPLETE_MENU"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.eventType }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "startsWith"
+                    },
+                    "rightValue": "AGRO_"
                   }
                 ],
                 "combinator": "and"
@@ -393,7 +433,7 @@
     {
       "parameters": {
         "chatId": "={{ $json.chatId }}",
-        "text": "*PristinoBot*\n\n/status - Estado de infraestructura\n/dosing - Tareas de dosificación\n/help - Lista de comandos",
+        "text": "*PristinoBot*\n\n/status - Estado de infraestructura\n/dosing - Tareas de dosificación\n/complete - Marcar tareas manuales completadas\n/help - Lista de comandos",
         "additionalFields": {
           "appendAttribution": false,
           "parse_mode": "Markdown"

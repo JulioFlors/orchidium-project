@@ -1,6 +1,6 @@
 'use server'
 
-import { prisma, TaskStatus, TaskPurpose } from '@package/database'
+import { prisma, TaskStatus } from '@package/database'
 
 import { Logger } from '@/lib'
 

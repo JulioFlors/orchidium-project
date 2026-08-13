@@ -1,0 +1,138 @@
+{
+  "name": "PristinoBot - Notificaciones de Agroquímicos (Hardware y Manual)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/1 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "agronotif-0001-trigger-cron",
+      "name": "Cron Poll (Cada 1 Min)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT n.id AS notif_id, n.type, n.title, n.description, n.\"taskId\", t.purpose, t.zones, t.\"scheduledAt\", s.name AS schedule_name, a.name AS agrochemical_name, a.preparation FROM \"Notification\" n JOIN \"TaskLog\" t ON n.\"taskId\" = t.id LEFT JOIN \"AutomationSchedule\" s ON t.\"scheduleId\" = s.id LEFT JOIN \"Agrochemical\" a ON t.\"agrochemicalId\" = a.id WHERE n.type = 'AGROCHEMICAL_CONFIRM' AND n.\"readAt\" IS NULL ORDER BY n.\"createdAt\" ASC LIMIT 5;"
+      },
+      "id": "agronotif-0002-query-hw",
+      "name": "Consultar Confirmaciones HW Pendientes",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [480, 200],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-pristinoplant",
+          "name": "Postgres PristinoPlant"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst ZONE_LABELS = { ZONA_A: 'Orquideario', ZONA_B: 'Jardín', ZONA_C: 'Terraza', ZONA_D: 'Ventanas', EXTERIOR: 'Exterior' };\nconst results = [];\n\nfor (const item of items) {\n  const row = item.json;\n  if (!row.notif_id) continue;\n\n  let zonesStr = 'General';\n  if (row.zones) {\n    let arr = Array.isArray(row.zones) ? row.zones : [row.zones];\n    if (typeof row.zones === 'string' && row.zones.startsWith('{')) {\n      arr = row.zones.replace(/[{}]/g, '').split(',');\n    }\n    zonesStr = arr.map(z => ZONE_LABELS[z.trim()] || z.trim()).join(', ');\n  }\n\n  const dateObj = new Date(row.scheduledAt);\n  const timeStr = dateObj.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Caracas' });\n\n  const replyText = `\\u200B\\n⚠️ *Confirmación de Tanque de Agroquímicos*\\n\\n` +\n    `*Rutina*: ${row.schedule_name || 'Riego Agroquímico'}\\n` +\n    (row.agrochemical_name ? `*Producto*: ${row.agrochemical_name}\\n` : '') +\n    (row.preparation ? `*Receta*: ${row.preparation}\\n` : '') +\n    `*Zonas*: ${zonesStr}\\n` +\n    `*Hora Programada*: ${timeStr}\\n\\n` +\n    `¿El tanque de mezcla se encuentra preparado para la ejecución automática?`;\n\n  const keyboard = {\n    inline_keyboard: [\n      [{ text: '✅ Confirmar Tanque', callback_data: `agro_hw_confirm:${row.taskId}:${row.notif_id}` }],\n      [\n        { text: '⏱️ Posponer 24h', callback_data: `agro_hw_postpone:${row.taskId}:24:${row.notif_id}` },\n        { text: '⏱️ Posponer 48h', callback_data: `agro_hw_postpone:${row.taskId}:48:${row.notif_id}` }\n      ],\n      [{ text: '❌ Cancelar', callback_data: `agro_hw_cancel:${row.taskId}:${row.notif_id}` }]\n    ]\n  };\n\n  results.push({ json: { taskId: row.taskId, notifId: row.notif_id, replyText, keyboard } });\n}\n\nreturn results;"
+      },
+      "id": "agronotif-0003-format-hw",
+      "name": "Formatear Mensaje Push HW",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 200]
+    },
+    {
+      "parameters": {
+        "chatId": "-1002482379768",
+        "text": "={{ $json.replyText }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": "={{ $json.keyboard }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "agronotif-0004-send-hw-telegram",
+      "name": "Enviar Push Telegram HW",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [920, 200],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-pristinoplant",
+          "name": "Telegram PristinoBot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE \"Notification\" SET \"readAt\" = NOW() WHERE id = '{{ $json.notifId }}';"
+      },
+      "id": "agronotif-0005-mark-notif-read",
+      "name": "Marcar Notificación Notificada",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1140, 200],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-pristinoplant",
+          "name": "Postgres PristinoPlant"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Cron Poll (Cada 1 Min)": {
+      "main": [
+        [
+          {
+            "node": "Consultar Confirmaciones HW Pendientes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Confirmaciones HW Pendientes": {
+      "main": [
+        [
+          {
+            "node": "Formatear Mensaje Push HW",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Mensaje Push HW": {
+      "main": [
+        [
+          {
+            "node": "Enviar Push Telegram HW",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Push Telegram HW": {
+      "main": [
+        [
+          {
+            "node": "Marcar Notificación Notificada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

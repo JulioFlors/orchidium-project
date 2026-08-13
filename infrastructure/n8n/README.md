@@ -39,17 +39,12 @@ Maneja las interacciones del cultivador con Telegram a través de comandos inter
 
 ---
 
-## Estructura Final del Encabezado `/dosing`
+## 2. Workflow de Notificaciones de Agroquímicos (`dosing_notifications.json`)
 
-```text
+### Funcionalidad
+1. **Confirmación Push de Hardware (12h Antes)**: Escucha la tabla `Notification` en Postgres para notificaciones de tipo `AGROCHEMICAL_CONFIRM`. Envía al grupo de Telegram una tarjeta interactiva con botones:
+   - `[ ✅ Confirmar Tanque ]` ➔ Actualiza `TaskLog` a `AUTHORIZED` para autorizar la apertura del circuito al llegar la hora.
+   - `[ ⏱️ Posponer 24h / 48h ]` ➔ Reagenda `scheduledAt` en `TaskLog`.
+   - `[ ❌ Cancelar ]` ➔ Transiciona a `CANCELLED`.
+2. **Comando Interactivo `/complete` o `/completar`**: Permite al cultivador listar tareas manuales pendientes (`PENDING`) de días pasados y del día de hoy, ofreciendo botones interactivos `[ ✅ Marcar como Completada ]` por cada tarea listada.
 
-*Tareas de Dosificación*
-Todos los Tiempos
-Todos los Estados
-
-1. Dalguin (aminoalgas) - Pendiente
-   Receta: 5 mL/L
-   Zonas: Orquideario, Jardín, Exterior
-   Fecha: Jueves 19 Agosto
-   Hora: 4:30 pm
-```
