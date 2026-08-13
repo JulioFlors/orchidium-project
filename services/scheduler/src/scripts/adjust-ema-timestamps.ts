@@ -11,21 +11,23 @@ function rowTimeToDate(rawTime: unknown): Date {
 
 async function main() {
   const args = process.argv.slice(2)
-  const shiftHours = args[0] ? Number(args[0]) : 4 // Por defecto desplazar +4 horas
-  const runWrite = args[1] === '--write'
+  const targetZone = args[0] && !args[0].startsWith('--') && isNaN(Number(args[0])) ? args[0] : 'EXTERIOR'
+  const shiftHoursArg = args.find((a) => !isNaN(Number(a)))
+  const shiftHours = shiftHoursArg ? Number(shiftHoursArg) : 4 // Por defecto desplazar +4 horas
+  const runWrite = args.includes('--write')
 
   console.log('==================================================')
-  console.log('AJUSTADOR DE TIMESTAMPS DEL NODO EMA (ZONA_A)')
-  console.log(`Configuración: Desplazamiento = ${shiftHours} horas | Modo escritura = ${runWrite}`)
+  console.log(`AJUSTADOR DE TIMESTAMPS DEL NODO EMA (${targetZone})`)
+  console.log(`Configuración: Zona = ${targetZone} | Desplazamiento = ${shiftHours} horas | Modo escritura = ${runWrite}`)
   console.log('==================================================')
 
   try {
-    // 1. Obtener registros de las últimas 12 horas para ZONA_A
+    // 1. Obtener registros de las últimas 16 horas para la zona objetivo
     const query = `
       SELECT time, temperature, humidity, illuminance, source, context
       FROM "environment_metrics"
-      WHERE "zone" = 'ZONA_A'
-        AND time >= now() - INTERVAL '12 hours'
+      WHERE "zone" = '${targetZone}'
+        AND time >= now() - INTERVAL '16 hours'
       ORDER BY time ASC
     `
     const stream = influxClient.query(query)
@@ -57,7 +59,7 @@ async function main() {
       // Crear el nuevo punto corregido
       const point = Point.measurement('environment_metrics')
         .setTag('source', String(row.source || 'Weather_Station'))
-        .setTag('zone', 'ZONA_A')
+        .setTag('zone', targetZone)
         .setTag('context', String(row.context || 'readings'))
         .setTimestamp(adjustedTime)
 
