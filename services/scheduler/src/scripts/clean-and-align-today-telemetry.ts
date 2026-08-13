@@ -140,7 +140,7 @@ async function main() {
 
         if (newTemp !== null) point.setFloatField('temperature', newTemp)
         if (newHum !== null) point.setFloatField('humidity', newHum)
-        if (newLux !== null) point.setIntField('illuminance', newLux)
+        if (newLux !== null) point.setFloatField('illuminance', newLux)
         if (current.rainIntensity !== null) point.setFloatField('rain_intensity', current.rainIntensity)
 
         pointsToWrite.push(point)
