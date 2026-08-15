@@ -174,7 +174,7 @@ export function Modal({
         aria-labelledby="modal-title"
         aria-modal="true"
         className={clsx(
-          'bg-surface border-input-outline relative z-10 w-full overflow-hidden rounded-2xl border shadow-xl',
+          'bg-surface border-input-outline relative z-10 w-full isolate rounded-2xl border shadow-xl',
           SIZE_MAP[size],
           className,
         )}

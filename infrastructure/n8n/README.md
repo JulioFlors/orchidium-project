@@ -20,8 +20,8 @@ Maneja las interacciones del cultivador con Telegram a través de comandos inter
 
 #### Problema B: Faltaban tareas pendientes proyectadas en Telegram
 * **Síntoma**: La vista web mostraba 5 tareas (3 completadas y 2 pendientes proyectadas), pero Telegram solo mostraba 3 completadas.
-* **Causa Raíz**: La consulta SQL solo buscaba en la tabla `ManualDosingLog`. En PristinoPlant, las tareas pendientes de rutinas manuales activas residen en `AutomationSchedule` (`executionType = 'MANUAL'`).
-* **Solución**: Se implementó una consulta SQL con `WITH ... UNION ALL` que une `ManualDosingLog` (logs reales) con `AutomationSchedule` (rutinas manuales proyectadas), devolviendo el espectro completo de tareas.
+* **Causa Raíz**: La consulta SQL solo buscaba en la tabla de logs. En PristinoPlant, las tareas pendientes de rutinas de dosificación activas residen en `DosingSchedule`.
+* **Solución**: Se implementó una consulta SQL con `WITH ... UNION ALL` que une `DosingLog` (logs reales) con `DosingSchedule` (rutinas de dosificación proyectadas), devolviendo el espectro completo de tareas.
 
 #### Problema C: La línea en blanco inicial no se renderizaba en Telegram
 * **Síntoma**: La API de Telegram trunca de forma nativa los saltos de línea iniciales (`\n`) en mensajes Markdown.

@@ -217,9 +217,9 @@ export function SchedulesView() {
               <strong className="text-primary">{scheduleToDelete?.name}</strong>?
             </p>
 
-            <div className="bg-surface/50 border-input-outline rounded-lg border border-dashed p-4">
-              <p className="text-secondary text-xs leading-relaxed">
-                <span className="font-bold text-pink-400 uppercase">Nota:</span> Esta acción no se
+            <div className="bg-surface/50 rounded-lg border border-dashed border-red-500/30 p-4">
+              <p className="text-primary text-xs leading-relaxed">
+                <span className="font-bold text-red-500 uppercase">Nota:</span> Esta acción no se
                 puede deshacer y eliminará permanentemente la rutina programada.
               </p>
             </div>

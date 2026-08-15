@@ -17,7 +17,7 @@ import {
 } from './components'
 
 import { SpeciesFloweringSection } from '@/app/(shop)/plant/[slug]/ui/SpeciesFloweringSection'
-import { Heading, Button } from '@/components'
+import { Heading, Button, Modal } from '@/components'
 import {
   PotSizeLabels as POT_SIZE_LABELS,
   ZoneTypeLabels as ZONE_LABELS,
@@ -96,6 +96,9 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
   const [isFloweringModalOpen, setIsFloweringModalOpen] = useState(false)
   const [floweringTargetPlant, setFloweringTargetPlant] = useState<PlantInstance | null>(null)
 
+  const [variantToDelete, setVariantToDelete] = useState<Variant | null>(null)
+  const [plantToDelete, setPlantToDelete] = useState<PlantInstance | null>(null)
+
   // -------------------------------------------------------------
   // Lógica de Variantes (Comercial)
   // -------------------------------------------------------------
@@ -149,10 +152,14 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
   }
 
   function handleDeleteVariant(variant: Variant) {
-    if (!confirm(`¿Eliminar la variante ${variant.size}?`)) return
+    setVariantToDelete(variant)
+  }
+
+  function handleConfirmDeleteVariant() {
+    if (!variantToDelete) return
 
     startTransition(async () => {
-      const result = await deleteVariant(variant.id)
+      const result = await deleteVariant(variantToDelete.id)
 
       if (!result.ok) {
         addToast(result.message ?? 'Error al eliminar.', 'error')
@@ -162,8 +169,9 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
 
       setSpecies((prev) => ({
         ...prev,
-        variants: prev.variants.filter((v) => v.id !== variant.id),
+        variants: prev.variants.filter((v) => v.id !== variantToDelete.id),
       }))
+      setVariantToDelete(null)
     })
   }
 
@@ -274,10 +282,14 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
   }
 
   function handleDeletePlant(plant: PlantInstance) {
-    if (!confirm(`¿Eliminar la planta #${plant.id.slice(-8).toUpperCase()}?`)) return
+    setPlantToDelete(plant)
+  }
+
+  function handleConfirmDeletePlant() {
+    if (!plantToDelete) return
 
     startTransition(async () => {
-      const res = await deletePlant(plant.id)
+      const res = await deletePlant(plantToDelete.id)
 
       if (!res.ok) {
         addToast(res.message ?? 'Error al eliminar la planta.', 'error')
@@ -287,8 +299,9 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
 
       setSpecies((prev) => ({
         ...prev,
-        plants: prev.plants.filter((p) => p.id !== plant.id),
+        plants: prev.plants.filter((p) => p.id !== plantToDelete.id),
       }))
+      setPlantToDelete(null)
     })
   }
 
@@ -664,6 +677,63 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
         onClose={() => setIsFloweringModalOpen(false)}
         onSave={handleSaveFlowering}
       />
+
+      <Modal
+        isOpen={!!variantToDelete}
+        size="md"
+        title="Eliminar Tamaño"
+        onClose={() => setVariantToDelete(null)}
+      >
+        <div className="flex flex-col gap-5">
+          <div className="bg-surface/50 rounded-lg border border-dashed border-red-500/30 p-4">
+            <p className="text-primary text-xs leading-relaxed">
+              <span className="font-bold text-red-500 uppercase">Nota:</span> Esta acción no se
+              puede deshacer. Se eliminará permanentemente la variante{' '}
+              {variantToDelete ? POT_SIZE_LABELS[variantToDelete.size] || variantToDelete.size : ''}
+              .
+            </p>
+          </div>
+
+          <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+            <Button variant="ghost" onClick={() => setVariantToDelete(null)}>
+              Volver
+            </Button>
+            <Button
+              isLoading={isPending}
+              variant="destructive"
+              onClick={handleConfirmDeleteVariant}
+            >
+              Eliminar Tamaño
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!plantToDelete}
+        size="md"
+        title="Eliminar Planta"
+        onClose={() => setPlantToDelete(null)}
+      >
+        <div className="flex flex-col gap-5">
+          <div className="bg-surface/50 rounded-lg border border-dashed border-red-500/30 p-4">
+            <p className="text-primary text-xs leading-relaxed">
+              <span className="font-bold text-red-500 uppercase">Nota:</span> Esta acción no se
+              puede deshacer. Se eliminará permanentemente el ejemplar #
+              {plantToDelete?.id.slice(-8).toUpperCase()}.
+            </p>
+          </div>
+
+          <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+            <Button variant="ghost" onClick={() => setPlantToDelete(null)}>
+              Volver
+            </Button>
+            <Button isLoading={isPending} variant="destructive" onClick={handleConfirmDeletePlant}>
+              Eliminar Planta
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

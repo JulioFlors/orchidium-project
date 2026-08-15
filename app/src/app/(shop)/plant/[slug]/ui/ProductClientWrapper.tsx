@@ -30,9 +30,9 @@ export function ProductClientWrapper({ product }: Props) {
     : hasGlobalStock
 
   return (
-    <div className="tds-lg:gap-12 tds-lg:mt-8 tds-lg:grid-cols-3 mb-20 grid grid-cols-1 gap-7">
-      {/* Columna Izquierda: Imágenes */}
-      <div className="tds-lg:col-span-2 col-span-1">
+    <div className="tds-lg:mt-8 tds-lg:flex tds-lg:gap-12 mb-20 grid grid-cols-1 gap-7">
+      {/* Columna Izquierda: Imágenes (64.4%) */}
+      <div className="tds-lg:w-[64.4%] col-span-1">
         <MobileSlideshow
           className="tds-lg:hidden -mx-6 block sm:-mx-9"
           images={product.images}
@@ -47,9 +47,9 @@ export function ProductClientWrapper({ product }: Props) {
         />
       </div>
 
-      {/* Columna Derecha: Detalles */}
-      <div className="col-span-1 flex flex-col">
-        <h1 className="text-primary tds-sm:text-3xl tds-sm:leading-7 text-2xl leading-10 font-semibold tracking-tighter text-balance hyphens-auto antialiased">
+      {/* Columna Derecha: Detalles (35.6%) */}
+      <div className="tds-lg:w-[35.6%] col-span-1 flex flex-col">
+        <h1 className="text-primary tds-sm:text-3xl tds-sm:leading-10 text-2xl leading-10 font-semibold tracking-tight text-balance hyphens-auto antialiased">
           {product.name}
         </h1>
 
@@ -63,7 +63,7 @@ export function ProductClientWrapper({ product }: Props) {
 
         {product.description && (
           <div className="mt-6 max-w-[75ch]">
-            <h3 className="text-primary pb-3 font-bold">Descripción</h3>
+            <h3 className="text-primary pb-3 font-semibold">Descripción</h3>
             <p className="text-secondary text-pretty">{product.description}</p>
           </div>
         )}

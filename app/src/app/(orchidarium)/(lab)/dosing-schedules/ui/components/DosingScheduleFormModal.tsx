@@ -12,24 +12,51 @@ import {
   PlannerDaysSelector,
 } from '@/app/(orchidarium)/(operations)/schedules/ui/components/PlannerInputs'
 import { ZoneType } from '@/config/mappings'
-import { Modal, Button, FormField, Input } from '@/components/ui'
+import { Modal, Button, FormField, Input } from '@/components'
 import { useFormDraftStore } from '@/store'
-import { upsertSchedule } from '@/actions/planner/schedule-actions'
+import { upsertDosingSchedule } from '@/actions/lab/dosing-schedule-actions'
 import { getPrograms } from '@/actions/lab/programs'
 
 // Zod Schema para Rutinas de Dosificación Manual
-const programSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().min(3, 'Mínimo 3 caracteres').max(50, 'Máximo 50 caracteres'),
-  purpose: z.enum(['FERTIGATION', 'FUMIGATION'] as const, {
-    message: 'Debes seleccionar una tarea (Fertilización o Control Fitosanitario)',
-  }),
-  time: z.string().regex(/^([01]\d|2[0-3]):?([0-5]\d)$/, 'Hora inválida (HH:mm)'),
-  zones: z.array(z.nativeEnum(ZoneType)).min(1, 'Selecciona al menos una zona'),
-  fertilizationProgramId: z.string().optional(),
-  phytosanitaryProgramId: z.string().optional(),
-  days: z.array(z.number()).min(1, 'Selecciona al menos un día'),
-})
+const programSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().min(3, 'Mínimo 3 caracteres').max(50, 'Máximo 50 caracteres'),
+    purpose: z.enum(['FERTIGATION', 'FUMIGATION'] as const, {
+      message: 'Debes seleccionar una tarea (Fertilización o Control Fitosanitario)',
+    }),
+    time: z.string().regex(/^([01]\d|2[0-3]):?([0-5]\d)$/, 'Hora inválida (HH:mm)'),
+    zones: z.array(z.nativeEnum(ZoneType)).min(1, 'Selecciona al menos una zona'),
+    fertilizationProgramId: z.string().optional(),
+    phytosanitaryProgramId: z.string().optional(),
+    days: z.array(z.number()).min(1, 'Selecciona al menos un día'),
+  })
+  .refine(
+    (data) => {
+      if (data.purpose === 'FERTIGATION') {
+        return !!data.fertilizationProgramId && data.fertilizationProgramId.trim() !== ''
+      }
+
+      return true
+    },
+    {
+      message: 'Debes seleccionar un Plan de Fertilización',
+      path: ['fertilizationProgramId'],
+    },
+  )
+  .refine(
+    (data) => {
+      if (data.purpose === 'FUMIGATION') {
+        return !!data.phytosanitaryProgramId && data.phytosanitaryProgramId.trim() !== ''
+      }
+
+      return true
+    },
+    {
+      message: 'Debes seleccionar un Plan Fitosanitario',
+      path: ['phytosanitaryProgramId'],
+    },
+  )
 
 type ProgramFormInputs = z.infer<typeof programSchema>
 
@@ -200,11 +227,10 @@ export function DosingScheduleFormModal({ isOpen, onClose, onSuccess, initialDat
       const parsedData = programSchema.parse(data)
       const cron = timeToCron(parsedData.time, parsedData.days)
 
-      const res = await upsertSchedule({
+      const res = await upsertDosingSchedule({
         id: parsedData.id,
         name: parsedData.name,
         purpose: parsedData.purpose,
-        executionType: 'MANUAL',
         cronTrigger: cron,
         durationMinutes: 0,
         zones: parsedData.zones,
@@ -273,7 +299,12 @@ export function DosingScheduleFormModal({ isOpen, onClose, onSuccess, initialDat
 
         {/* 2. Tarea */}
         <FormField htmlFor="purpose" label="Tarea">
-          <PlannerCircuitSelect control={control} error={errors.purpose?.message} name="purpose" />
+          <PlannerCircuitSelect
+            allowedPurposes={['FERTIGATION', 'FUMIGATION']}
+            control={control}
+            error={errors.purpose?.message}
+            name="purpose"
+          />
         </FormField>
 
         {/* 3. Programa */}
@@ -333,7 +364,7 @@ export function DosingScheduleFormModal({ isOpen, onClose, onSuccess, initialDat
           <PlannerDaysSelector control={control} error={errors.days?.message} name="days" />
         </FormField>
 
-        <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+        <div className="border-input-outline -mx-6 mt-2 grid grid-cols-1 gap-3 border-t px-6 pt-4 tds-sm:grid-cols-2">
           <Button variant="ghost" onClick={onClose}>
             Cancelar
           </Button>

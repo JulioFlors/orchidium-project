@@ -1,6 +1,7 @@
 'use client'
 
-import { type Agrochemical } from '@package/database'
+import type { Agrochemical } from '@package/database'
+
 import React, { useState, useTransition } from 'react'
 import { IoAddOutline } from 'react-icons/io5'
 import { MdOutlineHistoryToggleOff } from 'react-icons/md'
@@ -9,7 +10,9 @@ import { type ProgramCycle } from './components'
 import { ProgramForm, ProgramCard } from './components'
 
 import { deleteFertilizationProgram, deletePhytosanitaryProgram } from '@/actions'
-import { Button, Heading } from '@/components'
+import { Button, Heading, Modal } from '@/components'
+import { Logger } from '@/lib'
+import { useToastStore } from '@/store'
 
 // Interfaces para los programas con sus ciclos poblados
 
@@ -33,134 +36,164 @@ interface Props {
   availableAgrochemicals: Agrochemical[]
 }
 
-type ModalType = 'fertilization' | 'phytosanitary'
-
 export function RecipesView({
-  fertilizationPrograms,
-  phytosanitaryPrograms,
-  availableAgrochemicals,
+  fertilizationPrograms = [],
+  phytosanitaryPrograms = [],
+  availableAgrochemicals = [],
 }: Props) {
-  const [modalState, setModalState] = useState<{
-    isOpen: boolean
-    type: ModalType
-    selectedData: FertilizationProgramWithCycles | PhytosanitaryProgramWithCycles | null
-  }>({
-    isOpen: false,
-    type: 'fertilization',
-    selectedData: null,
-  })
-
-  // fix_this: delete isDeleting
   const [, startTransition] = useTransition()
+  const [isDeleting, setIsDeleting] = useState(false)
 
-  const handleOpenNew = (type: ModalType) => {
-    setModalState({ isOpen: true, type, selectedData: null })
+  // Estados de los modales
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [selectedProgram, setSelectedProgram] = useState<
+    FertilizationProgramWithCycles | PhytosanitaryProgramWithCycles | null
+  >(null)
+  const [initialType, setInitialType] = useState<'fertilization' | 'phytosanitary'>('fertilization')
+  const [programToDelete, setProgramToDelete] = useState<{
+    id: string
+    type: 'fertilization' | 'phytosanitary'
+  } | null>(null)
+
+  // Lista unificada ordenada alfabéticamente
+  const allPrograms = React.useMemo(() => {
+    const fert = fertilizationPrograms.map((p) => ({ ...p, programType: 'fertilization' as const }))
+    const phyt = phytosanitaryPrograms.map((p) => ({ ...p, programType: 'phytosanitary' as const }))
+
+    return [...fert, ...phyt].sort((a, b) => a.name.localeCompare(b.name))
+  }, [fertilizationPrograms, phytosanitaryPrograms])
+
+  // Abrir modal para crear
+  const handleOpenCreate = () => {
+    setSelectedProgram(null)
+    setInitialType('fertilization')
+    setIsModalOpen(true)
   }
 
+  // Abrir modal para editar
   const handleOpenEdit = (
-    type: ModalType,
-    data: FertilizationProgramWithCycles | PhytosanitaryProgramWithCycles,
+    type: 'fertilization' | 'phytosanitary',
+    program: FertilizationProgramWithCycles | PhytosanitaryProgramWithCycles,
   ) => {
-    setModalState({ isOpen: true, type, selectedData: data })
+    setSelectedProgram(program)
+    setInitialType(type)
+    setIsModalOpen(true)
   }
 
-  const handleDelete = (type: ModalType, id: string) => {
-    if (!confirm('¿Estás seguro de eliminar este programa?')) return
+  // Confirmar eliminación
+  const handleConfirmDelete = () => {
+    if (!programToDelete) return
 
+    setIsDeleting(true)
     startTransition(async () => {
-      const result =
-        type === 'fertilization'
-          ? await deleteFertilizationProgram(id)
-          : await deletePhytosanitaryProgram(id)
+      try {
+        const result =
+          programToDelete.type === 'fertilization'
+            ? await deleteFertilizationProgram(programToDelete.id)
+            : await deletePhytosanitaryProgram(programToDelete.id)
 
-      if (!result.ok) {
-        alert(result.message)
+        if (result.ok) {
+          useToastStore.getState().addToast('Plan eliminado correctamente', 'success')
+          setProgramToDelete(null)
+        } else {
+          useToastStore.getState().addToast(result.message || 'Error al eliminar el plan', 'error')
+        }
+      } catch (error) {
+        Logger.error('Error al eliminar:', error)
+        useToastStore.getState().addToast('Error al procesar la solicitud', 'error')
+      } finally {
+        setIsDeleting(false)
       }
     })
   }
 
   return (
     <div className="tds-sm:px-0 mx-auto mt-9 flex w-full max-w-7xl flex-col gap-8 px-4 pb-12">
-      {/* SECCIÓN: FERTILIZACIÓN */}
+      {/* HEADER PRINCIPAL */}
       <section className="flex flex-col gap-6">
         <Heading
           action={
             <Button
               className="tds-sm:w-auto flex w-full items-center justify-center gap-2"
               variant="primary"
-              onClick={() => handleOpenNew('fertilization')}
+              onClick={handleOpenCreate}
             >
-              <IoAddOutline className="size-5" /> Nueva Receta
+              <IoAddOutline className="size-5" /> Nuevo Plan
             </Button>
           }
-          description="Ciclos de aplicación de nutrientes para el desarrollo, mantenimiento y floración de las orquideas."
-          title="Programas de Fertilización"
+          description="Diseño y gestión de los planes nutricionales y fitosanitarios para el ciclo biológico de las orquídeas."
+          title="Planificación de Dosificación"
         />
 
-        {fertilizationPrograms.length === 0 ? (
-          <div className="border-input-outline bg-surface/50 flex flex-col items-center justify-center rounded-xl border border-dashed p-10">
-            <MdOutlineHistoryToggleOff className="text-secondary/20 mb-3 h-12 w-12" />
-            <p className="text-secondary text-sm">No hay programas de fertilización definidos.</p>
-          </div>
-        ) : (
+        {/* GRID UNIFICADO DE PROGRAMAS */}
+        {allPrograms.length > 0 ? (
           <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-3 grid grid-cols-1 gap-4">
-            {fertilizationPrograms.map((program) => (
+            {allPrograms.map((program) => (
               <ProgramCard
-                key={program.id}
+                key={`${program.programType}-${program.id}`}
                 program={program}
-                type="fertilization"
-                onDelete={handleDelete}
+                type={program.programType}
+                onDelete={(type, id) => setProgramToDelete({ id, type })}
                 onEdit={handleOpenEdit}
               />
             ))}
           </div>
+        ) : (
+          <div className="border-input-outline bg-surface/50 flex flex-col items-center justify-center rounded-xl border border-dashed py-12 text-center">
+            <MdOutlineHistoryToggleOff className="text-secondary size-12 opacity-40" />
+            <p className="text-secondary mt-2 text-sm">
+              No hay planes de dosificación configurados.
+            </p>
+          </div>
         )}
       </section>
 
-      {/* SECCIÓN: FITOSANITARIOS */}
-      <section className="flex flex-col gap-6">
-        <Heading
-          action={
+      {/* MODAL FORMULARIO DE PROGRAMA */}
+      {isModalOpen && (
+        <ProgramForm
+          availableAgrochemicals={availableAgrochemicals}
+          initialData={selectedProgram}
+          initialType={initialType}
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          onSuccess={() => {
+            setIsModalOpen(false)
+            useToastStore
+              .getState()
+              .addToast(
+                selectedProgram ? 'Plan actualizado con éxito' : 'Plan creado con éxito',
+                'success',
+              )
+          }}
+        />
+      )}
+
+      {/* MODAL CONFIRMACIÓN ELIMINAR */}
+      {programToDelete && (
+        <Modal
+          isOpen={!!programToDelete}
+          size="sm"
+          title="Eliminar Plan"
+          onClose={() => setProgramToDelete(null)}
+        >
+          <p className="text-secondary text-sm">
+            ¿Estás seguro de que deseas eliminar este plan? Las rutinas que dependan de este plan
+            quedarán sin receta asignada.
+          </p>
+          <div className="mt-6 flex justify-end gap-3">
             <Button
-              className="tds-sm:w-auto flex w-full items-center justify-center gap-2"
-              variant="primary"
-              onClick={() => handleOpenNew('phytosanitary')}
+              disabled={isDeleting}
+              variant="secondary"
+              onClick={() => setProgramToDelete(null)}
             >
-              <IoAddOutline className="size-5" /> Nuevo Programa
+              Cancelar
             </Button>
-          }
-          description="Ciclos de prevención y tratamiento contra plagas, hongos y virus."
-          title="Programas Fitosanitarios"
-        />
-
-        {phytosanitaryPrograms.length === 0 ? (
-          <div className="border-input-outline bg-surface/50 flex flex-col items-center justify-center rounded-xl border border-dashed p-10">
-            <MdOutlineHistoryToggleOff className="text-secondary/20 mb-3 h-12 w-12" />
-            <p className="text-secondary text-sm">No hay programas fitosanitarios definidos.</p>
+            <Button disabled={isDeleting} variant="destructive" onClick={handleConfirmDelete}>
+              {isDeleting ? 'Eliminando...' : 'Eliminar'}
+            </Button>
           </div>
-        ) : (
-          <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-3 grid grid-cols-1 gap-4">
-            {phytosanitaryPrograms.map((program) => (
-              <ProgramCard
-                key={program.id}
-                program={program}
-                type="phytosanitary"
-                onDelete={handleDelete}
-                onEdit={handleOpenEdit}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-
-      <ProgramForm
-        availableAgrochemicals={availableAgrochemicals}
-        initialData={modalState.selectedData}
-        isOpen={modalState.isOpen}
-        type={modalState.type}
-        onClose={() => setModalState((s) => ({ ...s, isOpen: false }))}
-        onSuccess={() => setModalState((s) => ({ ...s, isOpen: false }))}
-      />
+        </Modal>
+      )}
     </div>
   )
 }

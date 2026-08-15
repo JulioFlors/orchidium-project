@@ -17,7 +17,7 @@ import {
 } from './lib/mqtt-handler'
 import {
   cleanupExpiredTasks,
-  preScheduleAgrochemicals,
+  preScheduleHydraulicAgrochemicals,
   processAuthorizedTasks,
   processPostponedTasks,
   processTaskLog,
@@ -28,6 +28,8 @@ import { processDay, getCaracasMidnight } from './lib/telemetry-processor'
 import * as RainManager from './lib/rain-manager'
 import * as DropsSensorManager from './lib/drops-sensor-manager'
 import { scheduleManager } from './lib/schedule-manager'
+import { dosingScheduleManager } from './lib/dosing-schedule-manager'
+import { filterMaintenanceManager } from './lib/filter-maintenance-manager'
 
 // ---- Configuración de Reglas ----
 
@@ -460,6 +462,7 @@ function setupMqttHandlers() {
 
       if (topic === 'PristinoPlant/System/Scheduler/Sync') {
         await scheduleManager.syncAutomationSchedules(runTask)
+        await dosingScheduleManager.syncDosingSchedules()
 
         return
       }
@@ -1966,9 +1969,10 @@ async function initScheduler() {
     await cleanupExpiredTasks()
   })
 
-  // Cron de Pre-Agendamiento de Agroquímicos (12h antes)
+  // Cron de Pre-Agendamiento de Agroquímicos (Hidráulicos y Manuales con 12h de anticipación)
   new Cron('0 * * * *', { timezone: 'America/Caracas' }, async () => {
-    await preScheduleAgrochemicals()
+    await preScheduleHydraulicAgrochemicals()
+    await dosingScheduleManager.preScheduleDosing()
   })
 
   // Poller de Tareas Autorizadas (cada 1 min)
@@ -2000,21 +2004,9 @@ async function initScheduler() {
     }
   })
 
-  // Cron de Mantenimiento de Filtros (Lunes y Jueves 8:00 AM)
-  new Cron('0 8 * * 1,4', { timezone: 'America/Caracas' }, async () => {
-    try {
-      await prisma.notification.create({
-        data: {
-          type: 'MAINTENANCE_REMINDER',
-          title: 'Mantenimiento de Filtros',
-          description: 'Recordatorio periódico: Limpiar filtros del sistema de riego.',
-          priority: 'NORMAL',
-        },
-      })
-      Logger.cron('Notificación de mantenimiento de filtros generada.')
-    } catch (error) {
-      Logger.error('Error generando notificación de mantenimiento:', error)
-    }
+  // Cron de Mantenimiento de Filtro de Agua (Diario 8:00 AM - regla de 48 horas)
+  new Cron('0 8 * * *', { timezone: 'America/Caracas' }, async () => {
+    await filterMaintenanceManager.evaluateDailyFilterMaintenance()
   })
 
   // Cron de cierre oficial diario (Media noche 12:01 AM)
@@ -2033,10 +2025,15 @@ async function initScheduler() {
 
   // Sincronización e inicialización de rutinas activas en memoria
   await scheduleManager.syncAutomationSchedules(runTask)
+  await dosingScheduleManager.syncDosingSchedules()
+  await preScheduleHydraulicAgrochemicals()
+  await dosingScheduleManager.preScheduleDosing()
 
   // Cron nocturno de auditoría silenciosa (12:10 AM)
   new Cron('10 0 * * *', { timezone: 'America/Caracas' }, async () => {
     await scheduleManager.syncAutomationSchedules(runTask, true)
+    await dosingScheduleManager.syncDosingSchedules(true)
+    await filterMaintenanceManager.evaluateDailyFilterMaintenance()
   })
 
   // 1. Cron principal de BCV: cada día a las 8:30 PM (hora de Caracas)
@@ -2216,20 +2213,21 @@ async function runTask(scheduleId: string) {
       return
     }
 
-    // Lógica especial para Agroquímicos
+    // Pre-evaluación preventiva de filtro de agua antes de iniciar circuito hidráulico
+    await filterMaintenanceManager.evaluatePreIrrigationFilterCheck(schedule.name)
+
+    // Lógica especial para Agroquímicos del Circuito Hidráulico
     if (schedule.purpose === 'FERTIGATION' || schedule.purpose === 'FUMIGATION') {
-      // Buscar si ya existe una tarea pre-agendada
       const taskLog = await prisma.taskLog.findFirst({
         where: {
           scheduleId: schedule.id,
           scheduledAt: {
-            gte: new Date(Date.now() - 60000), // Ventana de 1min para el trigger exacto
+            gte: new Date(Date.now() - 60000),
             lte: new Date(Date.now() + 60000),
           },
         },
       })
 
-      // Si no existe (por algún motivo falló el pre-scheduler), crearla ahora
       if (!taskLog) {
         const nextOccurrence = new Date(Date.now() + 12 * 60 * 60 * 1000)
         const task = await prisma.taskLog.create({
@@ -2241,15 +2239,14 @@ async function runTask(scheduleId: string) {
             source: 'ROUTINE',
             scheduledAt: nextOccurrence,
             duration: schedule.durationMinutes,
-            notes: 'Tarea pre-agendada para confirmación (12h de antelación).',
+            notes: `Tarea pre-agendada de tanque para confirmación: ${schedule.name}`,
           },
         })
 
-        // Crear notificación de confirmación
         await prisma.notification.create({
           data: {
             type: 'AGROCHEMICAL_CONFIRM',
-            title: 'Confirmación de Agroquímicos',
+            title: 'Confirmación de Tanque de Riego',
             description: `Se requiere preparar el tanque para la rutina: ${schedule.name} programada para el ${nextOccurrence.toLocaleTimeString('es-VE')}`,
             taskId: task.id,
             priority: 'HIGH',
@@ -2257,18 +2254,18 @@ async function runTask(scheduleId: string) {
         })
 
         Logger.agro(
-          `Pre-agendada rutina "${schedule.name}" para el ${nextOccurrence.toLocaleString('es-VE')}`,
+          `Pre-agendada rutina hidráulica de agroquímicos "${schedule.name}" para el ${nextOccurrence.toLocaleString('es-VE')}`,
         )
       }
 
-      // Si está en WAITING_CONFIRMATION, NO se ejecuta. Se queda esperando 24h.
+      // Si está en WAITING_CONFIRMATION, NO se acciona hardware. Espera confirmación del usuario.
       if (taskLog && taskLog.status === TaskStatus.WAITING_CONFIRMATION) {
-        Logger.agro(`Tarea ${taskLog.id.slice(0, 8)} (${schedule.name}) en espera de confirmación.`)
+        Logger.agro(`Tarea ${taskLog.id.slice(0, 8)} (${schedule.name}) en espera de confirmación de tanque.`)
 
         return
       }
 
-      // Si ya está AUTHORIZED (por confirmación manual anticipada), procesar con Veto ambiental
+      // Si ya está AUTHORIZED por el usuario, procesar con Veto ambiental y ejecutar
       if (taskLog && taskLog.status === TaskStatus.AUTHORIZED) {
         if (inference.shouldCancel) {
           Logger.agro(`VETO AMBIENTAL aplicado a tarea autorizada: ${inference.reason}`)
@@ -2284,7 +2281,7 @@ async function runTask(scheduleId: string) {
       return
     }
 
-    // Lógica estándar para otras tareas (IRRIGATION, etc.)
+    // Lógica para circuito hidráulico estándar (IRRIGATION, HUMIDIFICATION, SOIL_WETTING)
     if (inference.shouldCancel) {
       Logger.inference(`Rutina CANCELADA: ${schedule.name}. Motivo: ${inference.reason}`)
 

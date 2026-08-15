@@ -28,7 +28,7 @@ class ScheduleManager {
   ): Promise<void> {
     try {
       const activeSchedules = await prisma.automationSchedule.findMany({
-        where: { isEnabled: true, executionType: 'HARDWARE' },
+        where: { isEnabled: true },
       })
 
       const dbScheduleIds = new Set(activeSchedules.map((s) => s.id))

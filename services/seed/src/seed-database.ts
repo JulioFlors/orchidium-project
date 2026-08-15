@@ -303,8 +303,6 @@ async function main() {
           speciesId: createdSpecies.id,
           size: v.size,
           price: v.price,
-          quantity: v.quantity,
-          available: v.available
         }))
       })
     }

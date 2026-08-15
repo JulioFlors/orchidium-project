@@ -2,13 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import useSWR from 'swr'
-import {
-  IoAddOutline,
-  IoFlaskOutline,
-  IoWaterOutline,
-  IoCalendarOutline,
-  IoWarningOutline,
-} from 'react-icons/io5'
+import { IoAddOutline, IoFlaskOutline, IoWaterOutline, IoCalendarOutline } from 'react-icons/io5'
 import { MdDewPoint, MdOutlineHistoryToggleOff } from 'react-icons/md'
 import { PiSprayBottle } from 'react-icons/pi'
 
@@ -262,10 +256,10 @@ export function QueueView() {
             </div>
           )}
 
-          <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
-            <p className="flex items-center gap-2 text-xs font-medium text-red-500">
-              <IoWarningOutline className="h-4 w-4 shrink-0" />
-              Esta acción no se puede deshacer.
+          <div className="bg-surface/50 rounded-lg border border-dashed border-red-500/30 p-4">
+            <p className="text-primary text-xs leading-relaxed">
+              <span className="font-bold text-red-500 uppercase">Nota:</span> Esta acción no se
+              puede deshacer.
             </p>
           </div>
 

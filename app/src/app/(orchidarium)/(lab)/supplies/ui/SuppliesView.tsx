@@ -1,6 +1,6 @@
 'use client'
 
-import type { Agrochemical } from '@package/database'
+import type { AgrochemicalWithMix } from './components'
 
 import React, { useState, useTransition } from 'react'
 import { IoAddOutline } from 'react-icons/io5'
@@ -9,36 +9,49 @@ import { MdOutlineHistoryToggleOff } from 'react-icons/md'
 import { AgrochemicalForm, AgrochemicalCard } from './components'
 
 import { deleteAgrochemical } from '@/actions'
-import { Button, Heading } from '@/components'
+import { Button, Heading, Modal } from '@/components'
+import { useToastStore } from '@/store/toast/toast.store'
 
 interface Props {
-  agrochemicals: Agrochemical[]
+  agrochemicals: AgrochemicalWithMix[]
 }
 
 export function SuppliesView({ agrochemicals }: Props) {
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [selectedAgrochemical, setSelectedAgrochemical] = useState<Agrochemical | null>(null)
-
-  const [, startTransition] = useTransition()
+  const [selectedAgrochemical, setSelectedAgrochemical] = useState<AgrochemicalWithMix | null>(null)
+  const { addToast } = useToastStore()
+  const [agrochemicalToDelete, setAgrochemicalToDelete] = useState<AgrochemicalWithMix | null>(null)
+  const [isDeleting, startTransition] = useTransition()
 
   const handleOpenNew = () => {
     setSelectedAgrochemical(null)
     setIsModalOpen(true)
   }
 
-  const handleOpenEdit = (agro: Agrochemical) => {
+  const handleOpenEdit = (agro: AgrochemicalWithMix) => {
     setSelectedAgrochemical(agro)
     setIsModalOpen(true)
   }
 
   const handleDelete = (id: string) => {
-    if (!confirm('¿Estás seguro de eliminar este insumo?')) return
+    const agro = agrochemicals.find((a) => a.id === id)
+
+    if (agro) {
+      setAgrochemicalToDelete(agro)
+    }
+  }
+
+  const handleConfirmDelete = () => {
+    if (!agrochemicalToDelete) return
 
     startTransition(async () => {
-      const result = await deleteAgrochemical(id)
+      const result = await deleteAgrochemical(agrochemicalToDelete.id)
 
-      if (!result.ok) {
-        alert(result.message)
+      if (result.ok) {
+        addToast('Insumo eliminado con éxito.', 'success')
+        setAgrochemicalToDelete(null)
+      } else {
+        addToast(result.message || 'Error al eliminar el insumo.', 'error')
       }
     })
   }
@@ -87,11 +100,38 @@ export function SuppliesView({ agrochemicals }: Props) {
       </section>
 
       <AgrochemicalForm
+        availableAgrochemicals={agrochemicals}
         initialData={selectedAgrochemical}
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSuccess={() => setIsModalOpen(false)}
       />
+
+      <Modal
+        isOpen={!!agrochemicalToDelete}
+        size="md"
+        title="Eliminar Insumo"
+        onClose={() => setAgrochemicalToDelete(null)}
+      >
+        <div className="flex flex-col gap-5">
+          <div className="bg-surface/50 rounded-lg border border-dashed border-red-500/30 p-4">
+            <p className="text-primary text-xs leading-relaxed">
+              <span className="font-bold text-red-500 uppercase">Nota:</span> Esta acción no se
+              puede deshacer. Se eliminará permanentemente el insumo &quot;
+              {agrochemicalToDelete?.name}&quot;.
+            </p>
+          </div>
+
+          <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+            <Button variant="ghost" onClick={() => setAgrochemicalToDelete(null)}>
+              Volver
+            </Button>
+            <Button isLoading={isDeleting} variant="destructive" onClick={handleConfirmDelete}>
+              Eliminar Insumo
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

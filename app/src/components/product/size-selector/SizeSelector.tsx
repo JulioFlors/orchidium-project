@@ -19,11 +19,11 @@ export function SizeSelector({ selectedVariant, variants, onVariantChanged }: Pr
          1. justify-start: Alinea todo a la izquierda (antes estaban separados a los extremos).
          2. items-baseline: Alinea el texto base del título y la descripción para que se lean en la misma línea visual.
       */}
-      <div className="mb-2 flex items-baseline justify-start">
-        <h3 className="text-primary font-semibold">Maceta</h3>
+      <div className="mb-4 flex items-baseline justify-start">
+        <h3 className="text-primary font-semibold leading-4 ">Maceta</h3>
 
         {selectedVariant && (
-          <span className="text-secondary fade-in ml-4 font-semibold transition-all">
+          <span className="text-secondary fade-in ml-4 leading-4 font-semibold transition-all">
             {PotSizeDimensions[selectedVariant.size]}
           </span>
         )}

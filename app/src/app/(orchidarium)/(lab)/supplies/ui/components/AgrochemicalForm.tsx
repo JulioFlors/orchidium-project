@@ -1,22 +1,110 @@
 'use client'
 
-import { type Agrochemical } from '@package/database'
+import type { AgrochemicalWithMix } from './AgrochemicalCard'
+
 import { AgrochemicalType, AgrochemicalPurpose } from '@package/database/enums'
-import React, { useTransition } from 'react'
-import { useForm, useWatch, Controller } from 'react-hook-form'
+import React, { useTransition, useEffect, useRef } from 'react'
+import { useForm, useWatch, Controller, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { IoAddOutline, IoTrashOutline } from 'react-icons/io5'
 import * as z from 'zod'
 
 import { createAgrochemical, updateAgrochemical } from '@/actions'
-import { FormField, Button, SelectDropdown, Input, Textarea, Modal } from '@/components/ui'
+import { FormField, Button, SelectDropdown, Input, Textarea, Modal, ActionMenu } from '@/components'
+import { useFormDraftStore, useToastStore } from '@/store'
 
-const agrochemicalSchema = z.object({
-  name: z.string().min(3, 'El nombre debe tener al menos 3 caracteres'),
-  description: z.string().min(5, 'La descripción es obligatoria'),
-  type: z.nativeEnum(AgrochemicalType),
-  purpose: z.nativeEnum(AgrochemicalPurpose),
-  preparation: z.string().min(2, 'La preparación es obligatoria (ej: 1g/L)'),
+const mixIngredientSchema = z.object({
+  ingredientId: z.string().min(1, 'Debes seleccionar un insumo'),
+  dosageValue: z
+    .string()
+    .min(1, 'Ingresa cantidad')
+    .regex(/^[1-9][0-9]?$/, 'Ingresa un entero válido del 1 al 99'),
+  dosageUnit: z.enum(['ML_L', 'G_L'] as const, {
+    message: 'Seleccionar',
+  }),
 })
+
+const agrochemicalSchema = z
+  .object({
+    name: z.string().min(3, 'El nombre debe tener al menos 3 caracteres'),
+    description: z.string().min(5, 'La descripción es obligatoria'),
+    type: z.nativeEnum(AgrochemicalType, { message: 'Debes seleccionar un tipo' }),
+    purpose: z
+      .nativeEnum(AgrochemicalPurpose, { message: 'Debes seleccionar un propósito' })
+      .optional(),
+    isMix: z.boolean(),
+    dosageValue: z.string().optional(),
+    dosageUnit: z.enum(['ML_L', 'G_L'] as const).optional(),
+    mixIngredients: z.array(mixIngredientSchema).optional(),
+  })
+  .refine(
+    (data) => {
+      if (!data.isMix) {
+        return !!data.purpose
+      }
+
+      return true
+    },
+    {
+      message: 'Debes seleccionar un propósito',
+      path: ['purpose'],
+    },
+  )
+  .refine(
+    (data) => {
+      if (!data.isMix) {
+        return !!data.dosageValue && /^[1-9][0-9]?$/.test(data.dosageValue)
+      }
+
+      return true
+    },
+    {
+      message: 'Ingresa una cantidad entera válida del 1 al 99',
+      path: ['dosageValue'],
+    },
+  )
+  .refine(
+    (data) => {
+      if (!data.isMix) {
+        return !!data.dosageUnit
+      }
+
+      return true
+    },
+    {
+      message: 'Debes seleccionar la unidad',
+      path: ['dosageUnit'],
+    },
+  )
+  .refine(
+    (data) => {
+      if (data.isMix) {
+        return !!data.mixIngredients && data.mixIngredients.length >= 2
+      }
+
+      return true
+    },
+    {
+      message: 'Una mezcla compuesta debe incluir al menos 2 insumos',
+      path: ['mixIngredients'],
+    },
+  )
+  .refine(
+    (data) => {
+      if (data.isMix && data.mixIngredients && data.mixIngredients.length > 0) {
+        const selectedIds = data.mixIngredients.map((i) => i.ingredientId).filter(Boolean)
+        const uniqueIds = new Set(selectedIds)
+
+        return uniqueIds.size === selectedIds.length
+      }
+
+      return true
+    },
+    {
+      message: 'No puedes seleccionar el mismo insumo más de una vez en la mezcla',
+      path: ['mixIngredients'],
+    },
+  )
 
 type FormValues = z.infer<typeof agrochemicalSchema>
 
@@ -24,38 +112,128 @@ interface Props {
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
-  initialData?: Agrochemical | null
+  initialData?: AgrochemicalWithMix | null
+  availableAgrochemicals?: AgrochemicalWithMix[]
 }
 
-export function AgrochemicalForm({ isOpen, onClose, onSuccess, initialData }: Props) {
+export function AgrochemicalForm({
+  isOpen,
+  onClose,
+  onSuccess,
+  initialData,
+  availableAgrochemicals = [],
+}: Props) {
   const [isPending, startTransition] = useTransition()
+  const isRestoringRef = useRef(false)
+  const draftKey = 'agrochemical-form-draft'
 
   const {
     register,
     handleSubmit,
     control,
     setValue,
+    reset,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(agrochemicalSchema),
-    defaultValues: initialData
-      ? {
+    defaultValues: {
+      name: '',
+      description: '',
+      type: '' as AgrochemicalType,
+      purpose: '' as AgrochemicalPurpose,
+      isMix: false,
+      dosageValue: '',
+      dosageUnit: undefined,
+      mixIngredients: [],
+    },
+  })
+
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: 'mixIngredients',
+  })
+
+  const selectedType = useWatch({ control, name: 'type' })
+  const isMix = useWatch({ control, name: 'isMix' })
+  const watchedIngredients = useWatch({ control, name: 'mixIngredients' })
+  const watchedName = useWatch({ control, name: 'name' })
+
+  // Cargar borrador de Zustand al abrir (solo si es nuevo insumo) o cargar datos iniciales en edición
+  useEffect(() => {
+    if (isOpen) {
+      isRestoringRef.current = true
+
+      if (initialData) {
+        reset({
           name: initialData.name,
           description: initialData.description,
           type: initialData.type,
           purpose: initialData.purpose,
-          preparation: initialData.preparation,
-        }
-      : {
-          type: AgrochemicalType.FERTILIZANTE,
-          purpose: AgrochemicalPurpose.DESARROLLO,
-        },
-  })
+          isMix: initialData.isMix || false,
+          dosageValue: initialData.dosageValue ? String(initialData.dosageValue) : '',
+          dosageUnit: (initialData.dosageUnit as 'ML_L' | 'G_L') || undefined,
+          mixIngredients: initialData.mixIngredients
+            ? initialData.mixIngredients.map((m) => ({
+                ingredientId: m.ingredientId,
+                dosageValue: String(m.dosageValue),
+                dosageUnit: m.dosageUnit,
+              }))
+            : [],
+        })
+      } else {
+        const savedDraft = useFormDraftStore.getState().getDraft(draftKey) as FormValues | undefined
 
-  const selectedType = useWatch({ control, name: 'type' })
-  const currentPurpose = useWatch({ control, name: 'purpose' })
+        reset(
+          savedDraft ?? {
+            name: '',
+            description: '',
+            type: '' as AgrochemicalType,
+            purpose: '' as AgrochemicalPurpose,
+            isMix: false,
+            dosageValue: '',
+            dosageUnit: undefined,
+            mixIngredients: [
+              { ingredientId: '', dosageValue: '', dosageUnit: 'ML_L' },
+              { ingredientId: '', dosageValue: '', dosageUnit: 'ML_L' },
+            ],
+          },
+        )
+      }
 
-  // Opciones de propósito filtradas por tipo
+      requestAnimationFrame(() => {
+        isRestoringRef.current = false
+      })
+    }
+  }, [isOpen, initialData, reset])
+
+  // Persistir cambios en Zustand en tiempo real para mantener el estado del borrador
+  const watchedValues = useWatch({ control })
+  const watchedString = JSON.stringify(watchedValues)
+
+  useEffect(() => {
+    if (!isOpen || isRestoringRef.current || !!initialData) return
+
+    const currentDraft = useFormDraftStore.getState().getDraft(draftKey) as FormValues | undefined
+
+    if (JSON.stringify(currentDraft) !== watchedString) {
+      useFormDraftStore.getState().setDraft(draftKey, JSON.parse(watchedString) as FormValues)
+    }
+  }, [watchedString, isOpen, initialData])
+
+  // Inferir automáticamente el nombre de la mezcla compuesta
+  useEffect(() => {
+    if (isMix && watchedIngredients && watchedIngredients.length > 0) {
+      const names = watchedIngredients
+        .map((item) => availableAgrochemicals.find((a) => a.id === item.ingredientId)?.name)
+        .filter(Boolean)
+
+      if (names.length > 0) {
+        setValue('name', names.join(' + '))
+      }
+    }
+  }, [isMix, watchedIngredients, availableAgrochemicals, setValue])
+
+  // Opciones de propósito filtradas por el tipo seleccionado
   const purposeOptions = React.useMemo(() => {
     if (selectedType === AgrochemicalType.FERTILIZANTE) {
       return [
@@ -65,34 +243,98 @@ export function AgrochemicalForm({ isOpen, onClose, onSuccess, initialData }: Pr
       ]
     }
 
-    return [
-      { label: 'Acaricida', value: AgrochemicalPurpose.ACARICIDA },
-      { label: 'Bactericida', value: AgrochemicalPurpose.BACTERICIDA },
-      { label: 'Fungicida', value: AgrochemicalPurpose.FUNGICIDA },
-      { label: 'Insecticida', value: AgrochemicalPurpose.INSECTICIDA },
-    ]
+    if (selectedType === AgrochemicalType.FITOSANITARIO) {
+      return [
+        { label: 'Acaricida', value: AgrochemicalPurpose.ACARICIDA },
+        { label: 'Bactericida', value: AgrochemicalPurpose.BACTERICIDA },
+        { label: 'Fungicida', value: AgrochemicalPurpose.FUNGICIDA },
+        { label: 'Insecticida', value: AgrochemicalPurpose.INSECTICIDA },
+      ]
+    }
+
+    return []
   }, [selectedType])
 
-  // Si el tipo cambia y el propósito actual no es válido para el nuevo tipo, lo reseteamos
-  React.useEffect(() => {
-    const isValid = purposeOptions.some((opt) => opt.value === currentPurpose)
+  // Insumos disponibles para mezclas filtrados por fila para evitar duplicados
+  const getFilteredAgroOptions = React.useCallback(
+    (currentIndex: number) => {
+      const selectedOtherIds = new Set(
+        (watchedIngredients || [])
+          .filter((_, i) => i !== currentIndex)
+          .map((item) => item?.ingredientId)
+          .filter(Boolean),
+      )
 
-    if (!isValid) {
-      setValue('purpose', purposeOptions[0].value)
-    }
-  }, [selectedType, purposeOptions, setValue, currentPurpose])
+      return availableAgrochemicals
+        .filter(
+          (a) =>
+            !a.isMix &&
+            a.id !== initialData?.id &&
+            (!selectedType || a.type === selectedType) &&
+            !selectedOtherIds.has(a.id),
+        )
+        .map((a) => ({ label: a.name, value: a.id }))
+    },
+    [availableAgrochemicals, initialData, selectedType, watchedIngredients],
+  )
 
   const onSubmit = (values: FormValues) => {
     startTransition(async () => {
+      let prepText = ''
+
+      if (values.isMix && values.mixIngredients && values.mixIngredients.length > 0) {
+        prepText = values.mixIngredients
+          .map((item) => {
+            const agro = availableAgrochemicals.find((a) => a.id === item.ingredientId)
+            const unitLabel = item.dosageUnit === 'ML_L' ? 'mL/L' : 'g/L'
+
+            return `${agro?.name || 'Insumo'} (${item.dosageValue} ${unitLabel})`
+          })
+          .join(' + ')
+      } else {
+        const unitLabel = values.dosageUnit === 'ML_L' ? 'mL/L' : 'g/L'
+
+        prepText = `${values.dosageValue} ${unitLabel}`
+      }
+
+      const finalPurpose: AgrochemicalPurpose = values.isMix
+        ? availableAgrochemicals.find((a) => a.id === values.mixIngredients?.[0]?.ingredientId)
+            ?.purpose ||
+          (values.type === AgrochemicalType.FERTILIZANTE
+            ? AgrochemicalPurpose.DESARROLLO
+            : AgrochemicalPurpose.FUNGICIDA)
+        : values.purpose || AgrochemicalPurpose.DESARROLLO
+
+      const payload = {
+        name: values.name,
+        description: values.description,
+        type: values.type,
+        purpose: finalPurpose,
+        preparation: prepText,
+        dosageValue: values.isMix ? null : Number(values.dosageValue),
+        dosageUnit: values.isMix ? null : values.dosageUnit,
+        isMix: values.isMix,
+        mixIngredients: values.isMix
+          ? values.mixIngredients?.map((i) => ({
+              ingredientId: i.ingredientId,
+              dosageValue: Number(i.dosageValue),
+              dosageUnit: i.dosageUnit,
+            }))
+          : undefined,
+      }
+
       const result = initialData
-        ? await updateAgrochemical(initialData.id, values)
-        : await createAgrochemical(values)
+        ? await updateAgrochemical(initialData.id, payload)
+        : await createAgrochemical(payload)
 
       if (result.ok) {
+        useFormDraftStore.getState().clearDraft(draftKey)
         onSuccess()
         onClose()
       } else {
-        alert(result.message || 'Error al procesar la solicitud')
+        useToastStore
+          .getState()
+          .addToast(result.message || 'Error al procesar la solicitud', 'error')
       }
     })
   }
@@ -104,35 +346,61 @@ export function AgrochemicalForm({ isOpen, onClose, onSuccess, initialData }: Pr
       title={initialData ? 'Editar Insumo' : 'Nuevo Insumo'}
       onClose={onClose}
     >
-      <form className="flex flex-col gap-6" onSubmit={handleSubmit(onSubmit)}>
-        <FormField htmlFor="name" label="Nombre">
-          <Input
-            error={errors.name?.message}
-            id="name"
-            placeholder=""
-            type="text"
-            {...register('name')}
+      <form className="flex flex-col gap-5 text-left" onSubmit={handleSubmit(onSubmit)}>
+        {/* 1. Selector de Tipo de Insumo / Preparación (Simple vs Mezcla) */}
+        <FormField htmlFor="isMix" label="Preparación">
+          <Controller
+            control={control}
+            name="isMix"
+            render={({ field }) => (
+              <SelectDropdown
+                disabled={!!initialData}
+                options={[
+                  { label: 'Simple', value: 'false' },
+                  { label: 'Mezcla', value: 'true' },
+                ]}
+                placeholder="Seleccionar"
+                value={field.value ? 'true' : 'false'}
+                onChange={(val) => {
+                  if (!initialData) {
+                    field.onChange(val === 'true')
+                  }
+                }}
+              />
+            )}
           />
         </FormField>
 
-        <div className="grid grid-cols-2 gap-4">
-          <FormField htmlFor="type" label="Tipo">
-            <Controller
-              control={control}
-              name="type"
-              render={({ field }) => (
-                <SelectDropdown
-                  options={[
-                    { label: 'Fertilizante', value: AgrochemicalType.FERTILIZANTE },
-                    { label: 'Fitosanitario', value: AgrochemicalType.FITOSANITARIO },
-                  ]}
-                  value={field.value}
-                  onChange={field.onChange}
-                />
-              )}
-            />
-          </FormField>
+        {/* 2. Tipo (Fertilizante / Fitosanitario) */}
+        <FormField htmlFor="type" label="Tipo">
+          <Controller
+            control={control}
+            name="type"
+            render={({ field }) => (
+              <SelectDropdown
+                disabled={!!initialData}
+                options={[
+                  { label: 'Fertilizante', value: AgrochemicalType.FERTILIZANTE },
+                  { label: 'Fitosanitario', value: AgrochemicalType.FITOSANITARIO },
+                ]}
+                placeholder="Seleccionar"
+                value={field.value}
+                onChange={(val) => {
+                  field.onChange(val)
+                  setValue('purpose', '' as AgrochemicalPurpose)
+                }}
+              />
+            )}
+          />
+          {errors.type && (
+            <span className="mt-1 text-[11px] font-medium tracking-wide text-red-500">
+              {errors.type.message}
+            </span>
+          )}
+        </FormField>
 
+        {/* 3. Propósito (Solo para Insumos Simples) */}
+        {!isMix && (
           <FormField htmlFor="purpose" label="Propósito">
             <Controller
               control={control}
@@ -140,39 +408,220 @@ export function AgrochemicalForm({ isOpen, onClose, onSuccess, initialData }: Pr
               render={({ field }) => (
                 <SelectDropdown
                   options={purposeOptions}
+                  placeholder="Seleccionar"
                   value={field.value}
                   onChange={field.onChange}
                 />
               )}
             />
+            {errors.purpose && (
+              <span className="mt-1 text-[11px] font-medium tracking-wide text-red-500">
+                {errors.purpose.message}
+              </span>
+            )}
           </FormField>
-        </div>
+        )}
 
-        <FormField htmlFor="preparation" label="Preparación">
-          <Input
-            error={errors.preparation?.message}
-            id="preparation"
-            placeholder="ml/L"
-            type="text"
-            {...register('preparation')}
-          />
-        </FormField>
+        {/* 4. Nombre (Solo visible para Insumos Simples, ya que en Mezcla se muestra e infiere en el bloque de composición) */}
+        {!isMix && (
+          <FormField htmlFor="name" label="Nombre">
+            <Input
+              error={errors.name?.message}
+              id="name"
+              placeholder=""
+              type="text"
+              {...register('name')}
+            />
+            {errors.name && (
+              <span className="mt-1 text-[11px] font-medium tracking-wide text-red-500">
+                {errors.name.message}
+              </span>
+            )}
+          </FormField>
+        )}
 
-        <FormField htmlFor="description" label="Notas">
+        {/* 5. Dosificación ESTRUCTURADA para Producto Simple */}
+        {!isMix ? (
+          <div className="grid grid-cols-1 gap-4 tds-xs:grid-cols-2">
+            <FormField htmlFor="dosageValue" label="Cantidad">
+              <Input
+                error={errors.dosageValue?.message}
+                id="dosageValue"
+                maxLength={2}
+                placeholder=""
+                type="text"
+                {...register('dosageValue', {
+                  onChange: (e) => {
+                    const cleaned = e.target.value.replace(/[^0-9]/g, '').slice(0, 2)
+
+                    setValue('dosageValue', cleaned)
+                  },
+                })}
+              />
+              {errors.dosageValue && (
+                <span className="mt-1 text-[11px] font-medium tracking-wide text-red-500">
+                  {errors.dosageValue.message}
+                </span>
+              )}
+            </FormField>
+
+            <FormField htmlFor="dosageUnit" label="Unidad">
+              <Controller
+                control={control}
+                name="dosageUnit"
+                render={({ field }) => (
+                  <SelectDropdown
+                    options={[
+                      { label: 'mL/L', value: 'ML_L' },
+                      { label: 'g/L', value: 'G_L' },
+                    ]}
+                    placeholder="Seleccionar"
+                    value={field.value || ''}
+                    onChange={field.onChange}
+                  />
+                )}
+              />
+              {errors.dosageUnit && (
+                <span className="mt-1 text-[11px] font-medium tracking-wide text-red-500">
+                  {errors.dosageUnit.message}
+                </span>
+              )}
+            </FormField>
+          </div>
+        ) : (
+          /* 6. Sub-formulario para Insumo Compuesto / Mezcla */
+          <div className="bg-surface-hover/30 border-input-outline flex flex-col gap-4 rounded-xl border p-4">
+            <div className="flex flex-col gap-1">
+              <span className="text-secondary text-[11px] font-bold uppercase tracking-wider opacity-60">
+                Mezcla
+              </span>
+              <span className="text-primary text-sm font-bold">
+                {watchedName || 'Seleccione insumos...'}
+              </span>
+            </div>
+
+            {fields.map((field, idx) => (
+              <div
+                key={field.id}
+                className="border-input-outline/40 flex flex-col gap-3 border-b pb-4"
+              >
+                {/* FILA 1: DROPDOWN INSUMO W-FULL + ACTION MENU PARA ELIMINAR */}
+                <div className="flex items-end justify-between gap-2">
+                  <div className="flex-1">
+                    <FormField
+                      htmlFor={`mixIngredients.${idx}.ingredientId`}
+                      label={`Insumo ${idx + 1}`}
+                    >
+                      <Controller
+                        control={control}
+                        name={`mixIngredients.${idx}.ingredientId`}
+                        render={({ field: f }) => (
+                          <SelectDropdown
+                            options={getFilteredAgroOptions(idx)}
+                            placeholder="Seleccionar"
+                            value={f.value}
+                            onChange={f.onChange}
+                          />
+                        )}
+                      />
+                    </FormField>
+                  </div>
+
+                  {fields.length > 2 && (
+                    <ActionMenu
+                      hoverOnly={false}
+                      items={[
+                        {
+                          icon: <IoTrashOutline className="h-4 w-4" />,
+                          label: 'Eliminar de la mezcla',
+                          variant: 'destructive',
+                          onClick: () => remove(idx),
+                        },
+                      ]}
+                      triggerClassName="mb-1"
+                    />
+                  )}
+                </div>
+
+                {/* FILA 2: DOSIS Y UNIDAD (MISMO ANCHO 50/50 QUE COLAPSA SOLO EN <= tds-xs) */}
+                <div className="grid grid-cols-1 gap-4 tds-xs:grid-cols-2">
+                  <FormField htmlFor={`mixIngredients.${idx}.dosageValue`} label="Dosis">
+                    <Input
+                      maxLength={2}
+                      placeholder=""
+                      type="text"
+                      {...register(`mixIngredients.${idx}.dosageValue` as const, {
+                        onChange: (e) => {
+                          const cleaned = e.target.value.replace(/[^0-9]/g, '').slice(0, 2)
+
+                          setValue(`mixIngredients.${idx}.dosageValue`, cleaned)
+                        },
+                      })}
+                    />
+                  </FormField>
+
+                  <FormField htmlFor={`mixIngredients.${idx}.dosageUnit`} label="Unidad">
+                    <Controller
+                      control={control}
+                      name={`mixIngredients.${idx}.dosageUnit`}
+                      render={({ field: f }) => (
+                        <SelectDropdown
+                          options={[
+                            { label: 'mL/L', value: 'ML_L' },
+                            { label: 'g/L', value: 'G_L' },
+                          ]}
+                          placeholder="Seleccionar"
+                          value={f.value}
+                          onChange={f.onChange}
+                        />
+                      )}
+                    />
+                  </FormField>
+                </div>
+              </div>
+            ))}
+
+            <div className="flex justify-center pt-1">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() =>
+                  append({
+                    ingredientId: '',
+                    dosageValue: '',
+                    dosageUnit: 'ML_L',
+                  })
+                }
+              >
+                <IoAddOutline className="mr-1 h-4 w-4" /> Agregar Insumo
+              </Button>
+            </div>
+
+            {errors.mixIngredients && (
+              <span className="mt-1 text-center text-[11px] font-medium tracking-wide text-red-500">
+                {errors.mixIngredients.message}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* 7. Notas */}
+        <FormField htmlFor="description" label="Notas / Instrucciones">
           <Textarea
             error={errors.description?.message}
             id="description"
-            placeholder="Beneficios y advertencias de uso."
+            placeholder=""
             {...register('description')}
           />
         </FormField>
 
-        <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+        {/* Botones de Acción Simples "Cancelar" y "Guardar" */}
+        <div className="border-input-outline -mx-6 mt-2 grid grid-cols-1 gap-3 border-t px-6 pt-4 tds-sm:grid-cols-2">
           <Button variant="ghost" onClick={onClose}>
             Cancelar
           </Button>
           <Button isLoading={isPending} type="submit">
-            {initialData ? 'Actualizar' : 'Guardar'}
+            Guardar
           </Button>
         </div>
       </form>

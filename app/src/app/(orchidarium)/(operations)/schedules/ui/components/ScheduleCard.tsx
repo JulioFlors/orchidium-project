@@ -2,22 +2,27 @@
 
 import React from 'react'
 import { clsx } from 'clsx'
-import { IoTimeOutline, IoSettingsOutline, IoCloseOutline, IoPersonOutline } from 'react-icons/io5'
+import {
+  IoTimeOutline,
+  IoSettingsOutline,
+  IoCloseOutline,
+  IoCalendarOutline,
+} from 'react-icons/io5'
 import { RxStopwatch } from 'react-icons/rx'
-import { MdLayers } from 'react-icons/md'
 
-import { StatusCircleIcon, ActionMenu, ActionMenuItem } from '@/components/ui'
-import { TaskPurposeLabels, ZoneTypeLabels } from '@/config/mappings'
+import { StatusCircleIcon, ActionMenu, ActionMenuItem, ZoneBadges } from '@/components'
+import { TaskPurposeLabels } from '@/config/mappings'
 
 interface AutomationSchedule {
   id: string
   name: string
   purpose: 'IRRIGATION' | 'FERTIGATION' | 'FUMIGATION' | 'HUMIDIFICATION' | 'SOIL_WETTING'
-  executionType?: 'HARDWARE' | 'MANUAL'
   cronTrigger: string
   durationMinutes: number
   isEnabled: boolean
   zones: string[]
+  fertilizationProgramId?: string | null
+  phytosanitaryProgramId?: string | null
 }
 
 interface ScheduleCardProps {
@@ -28,6 +33,37 @@ interface ScheduleCardProps {
   icon: React.ReactNode
   colorClassName: string
   isLoading?: boolean
+}
+
+// Mapeo de días para formateo dinámico de cron
+const DAY_MAP_FULL: Record<number, string> = {
+  1: 'Lunes',
+  2: 'Martes',
+  3: 'Miércoles',
+  4: 'Jueves',
+  5: 'Viernes',
+  6: 'Sábado',
+  0: 'Domingo',
+}
+
+const DAY_MAP_SHORT: Record<number, string> = {
+  1: 'Lun',
+  2: 'Mar',
+  3: 'Mié',
+  4: 'Jue',
+  5: 'Vie',
+  6: 'Sáb',
+  0: 'Dom',
+}
+
+const DAY_MAP_ULTRA: Record<number, string> = {
+  1: 'L',
+  2: 'M',
+  3: 'X',
+  4: 'J',
+  5: 'V',
+  6: 'S',
+  0: 'D',
 }
 
 export function ScheduleCard({
@@ -53,6 +89,27 @@ export function ScheduleCard({
     return `${hours12}:${minutes} ${ampm}`
   }
 
+  // Helper para formatear días según la cantidad seleccionada
+  const formatCronDays = (cronStr: string) => {
+    const parts = cronStr.split(' ')
+
+    if (parts.length < 5) return 'Todos los días'
+    const dayPart = parts[4]
+
+    if (dayPart === '*') return 'Todos los días'
+
+    const days = dayPart.split(',').map(Number)
+
+    if (days.length === 7) return 'Todos los días'
+    if (days.length === 1) return DAY_MAP_FULL[days[0]] || '1 día'
+
+    if (days.length <= 3) {
+      return days.map((d) => DAY_MAP_SHORT[d] || d).join(', ')
+    }
+
+    return days.map((d) => DAY_MAP_ULTRA[d] || d).join(', ')
+  }
+
   const menuItems: ActionMenuItem[] = [
     {
       label: 'Editar',
@@ -70,25 +127,28 @@ export function ScheduleCard({
   return (
     <div
       className={clsx(
-        'bg-surface border-input-outline group relative flex flex-col gap-4 rounded-xl border p-4 shadow-sm transition-all',
+        'bg-surface border-input-outline group focus-within:z-5 relative flex flex-col gap-4 rounded-xl border p-4 shadow-sm transition-colors duration-200',
         !schedule.isEnabled && 'opacity-60 grayscale-[0.5]',
         isLoading && 'pointer-events-none opacity-50',
       )}
     >
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4 overflow-hidden">
-          <StatusCircleIcon colorClassName={colorClassName} icon={icon} variant="overlay" />
+          <StatusCircleIcon
+            className="tds-xs:flex hidden shrink-0"
+            colorClassName={colorClassName}
+            icon={icon}
+            variant="overlay"
+          />
           <div className="flex flex-col overflow-hidden text-left">
             <h3
-              className="text-primary text-[15px] leading-tight font-bold whitespace-normal"
+              className="text-primary text-[15px] leading-tight font-bold whitespace-normal break-words antialiased"
               title={schedule.name}
             >
               {schedule.name}
             </h3>
             <span className="text-secondary text-[11px] font-medium opacity-60">
-              {schedule.executionType === 'MANUAL'
-                ? 'Dosificación Manual'
-                : TaskPurposeLabels[schedule.purpose] || schedule.purpose}
+              {TaskPurposeLabels[schedule.purpose] || schedule.purpose}
             </span>
           </div>
         </div>
@@ -111,41 +171,31 @@ export function ScheduleCard({
 
       <div className="border-black-and-white/5 mt-1 border-t border-dashed pt-4">
         <div className="flex items-center justify-between gap-4">
-          <div className="flex flex-row flex-wrap items-center gap-x-6 gap-y-2">
+          <div className="flex flex-row flex-wrap items-center gap-x-5 gap-y-2">
             {/* Hora de ejecución */}
             <div className="text-primary flex shrink-0 items-center gap-1.5 font-mono text-xs font-bold tracking-tighter whitespace-nowrap uppercase">
               <IoTimeOutline className="h-4 w-4 opacity-40" />
               <span>{formatCronTime(schedule.cronTrigger)}</span>
             </div>
 
-            {/* Duración */}
-            <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
-              <RxStopwatch className="text-secondary h-4 w-4 opacity-30" />
-              <span className="text-primary font-mono text-[11px] font-bold tracking-tight uppercase">
-                {schedule.durationMinutes} min
-              </span>
+            {/* Días de ejecución */}
+            <div className="text-primary flex shrink-0 items-center gap-1.5 font-mono text-[11px] font-bold tracking-tight uppercase whitespace-nowrap">
+              <IoCalendarOutline className="h-4 w-4 opacity-40" />
+              <span>{formatCronDays(schedule.cronTrigger)}</span>
             </div>
 
-            {/* Zona */}
-            <div className="flex flex-wrap items-center gap-1.5 overflow-hidden">
-              <MdLayers className="text-secondary h-4 w-4 shrink-0 opacity-30" />
-              {schedule.zones.map((z) => (
-                <span
-                  key={z}
-                  className="text-primary font-mono text-[11px] font-bold tracking-tight uppercase whitespace-nowrap"
-                >
-                  {ZoneTypeLabels[z as keyof typeof ZoneTypeLabels] || z}
+            {/* Duración (solo si es mayor a 0) */}
+            {schedule.durationMinutes > 0 && (
+              <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+                <RxStopwatch className="text-secondary h-4 w-4 opacity-30" />
+                <span className="text-primary font-mono text-[11px] font-bold tracking-tight">
+                  {schedule.durationMinutes} min
                 </span>
-              ))}
-            </div>
-
-            {/* Etiqueta Modo Manual */}
-            {schedule.executionType === 'MANUAL' && (
-              <div className="text-action flex shrink-0 items-center gap-1.5 font-mono text-[11px] font-bold tracking-tight uppercase whitespace-nowrap">
-                <IoPersonOutline className="h-4 w-4 opacity-70" />
-                <span>Manual</span>
               </div>
             )}
+
+            {/* Zonas de la rutina */}
+            <ZoneBadges zones={schedule.zones} />
           </div>
 
           <div className="flex shrink-0">

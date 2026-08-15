@@ -28,7 +28,7 @@ import {
 } from 'recharts'
 import clsx from 'clsx'
 
-import { ActionMenu, Card } from '@/components'
+import { ActionMenu, Card, Modal, Button } from '@/components'
 import { authClient, clearAuditData } from '@/lib'
 import { formatSmartDateTime } from '@/utils'
 import { getAuditHistory, clearAuditHistory } from '@/actions'
@@ -224,6 +224,8 @@ export function ToolboxGrid({
   onToggleTimeline,
   supportedAudits,
 }: ToolboxGridProps) {
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false)
+
   return (
     <div className="@container w-full">
       <div className="grid grid-cols-1 gap-4 @min-[340px]:grid-cols-2 @min-[540px]:grid-cols-3 @min-[740px]:grid-cols-4 @min-[940px]:grid-cols-5 @min-[1140px]:grid-cols-6">
@@ -330,11 +332,40 @@ export function ToolboxGrid({
           disabled={!isOnline}
           icon={<IoPulseOutline className="rotate-90 text-red-500" size={24} />}
           label="Node Reset"
-          onClick={() => {
-            if (confirm('¿Reiniciar dispositivo?')) onCommand('reset', null)
-          }}
+          onClick={() => setIsResetModalOpen(true)}
         />
       </div>
+
+      <Modal
+        isOpen={isResetModalOpen}
+        size="md"
+        title="Reiniciar Dispositivo"
+        onClose={() => setIsResetModalOpen(false)}
+      >
+        <div className="flex flex-col gap-5">
+          <div className="bg-surface/50 rounded-lg border border-dashed border-red-500/30 p-4">
+            <p className="text-primary text-xs leading-relaxed">
+              <span className="font-bold text-red-500 uppercase">Nota:</span> ¿Estás seguro de
+              enviar la orden de reinicio al dispositivo hardware?
+            </p>
+          </div>
+
+          <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+            <Button variant="ghost" onClick={() => setIsResetModalOpen(false)}>
+              Volver
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                onCommand('reset', null)
+                setIsResetModalOpen(false)
+              }}
+            >
+              Reiniciar
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

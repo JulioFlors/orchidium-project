@@ -59,7 +59,7 @@ export function ProgramCard({ program, type, onEdit, onDelete }: ProgramCardProp
   return (
     <motion.div
       animate={{ opacity: 1, y: 0 }}
-      className="bg-surface border-input-outline group hover:bg-hover-overlay relative flex flex-col gap-4 rounded-xl border p-4 shadow-sm transition-all"
+      className="bg-surface border-input-outline group hover:bg-hover-overlay focus-within:z-5 relative flex flex-col gap-4 rounded-xl border p-4 shadow-sm transition-colors duration-200"
       initial={{ opacity: 0, y: 5 }}
     >
       <div className="flex flex-col gap-4">

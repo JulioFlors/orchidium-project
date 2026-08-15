@@ -59,15 +59,14 @@ async function main() {
 
       count++
 
-      // Crear punto con la estampa de tiempo exacta e invalidar métricas con NaN / NULL
+      // Crear punto con la estampa de tiempo exacta cargando solo la bandera 'invalidated = true'
+      // En Line Protocol de InfluxDB, al no incluir los campos numéricos (temp, hum, lux),
+      // DataFusion registra automáticamente NULL para esas columnas.
       const point = Point.measurement('environment_metrics')
         .setTag('source', String(row.source || 'Weather_Station'))
         .setTag('zone', String(row.zone || targetZone))
         .setTag('context', String(row.context || 'readings'))
         .setTimestamp(t)
-        .setFloatField('temperature', Number.NaN)
-        .setFloatField('humidity', Number.NaN)
-        .setFloatField('illuminance', Number.NaN)
         .setBooleanField('invalidated', true)
 
       pointsToWrite.push(point)

@@ -15,7 +15,7 @@ import {
   SpeciesFormModal,
 } from './components'
 
-import { Heading, ActionMenu } from '@/components'
+import { Heading, ActionMenu, Modal, Button } from '@/components'
 import { updateGenus, deleteGenus, createGenus, createSpecies } from '@/actions'
 import { useToastStore } from '@/store/toast/toast.store'
 import { useFormDraftStore } from '@/store'
@@ -83,6 +83,7 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
   // Estados Locales
   const [speciesList, setSpeciesList] = useState<Species[]>(initialSpecies)
   const [generaList, setGeneraList] = useState<Genus[]>(initialGenera)
+  const [genusToDelete, setGenusToDelete] = useState<Genus | null>(null)
 
   // Scroll automático y enfoque a la especie modificada
   useEffect(() => {
@@ -227,14 +228,19 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
       return
     }
 
-    if (!confirm(`¿Estás seguro de eliminar el género "${genus.name}"?`)) return
+    setGenusToDelete(genus)
+  }
+
+  function handleConfirmDeleteGenus() {
+    if (!genusToDelete) return
 
     startTransition(async () => {
-      const result = await deleteGenus(genus.id)
+      const result = await deleteGenus(genusToDelete.id)
 
       if (result.ok) {
         addToast('Género eliminado con éxito.', 'success')
-        setGeneraList((prev) => prev.filter((g) => g.id !== genus.id))
+        setGeneraList((prev) => prev.filter((g) => g.id !== genusToDelete.id))
+        setGenusToDelete(null)
       } else {
         addToast(result.message || 'Error al eliminar el género.', 'error')
       }
@@ -470,6 +476,32 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
         onClose={() => setIsSpeciesCreateModalOpen(false)}
         onSave={handleSaveSpecies}
       />
+
+      <Modal
+        isOpen={!!genusToDelete}
+        size="md"
+        title="Eliminar Género"
+        onClose={() => setGenusToDelete(null)}
+      >
+        <div className="flex flex-col gap-5">
+          <div className="bg-surface/50 rounded-lg border border-dashed border-red-500/30 p-4">
+            <p className="text-primary text-xs leading-relaxed">
+              <span className="font-bold text-red-500 uppercase">Nota:</span> Esta acción no se
+              puede deshacer. Se eliminará permanentemente el género &quot;
+              {genusToDelete?.name}&quot;.
+            </p>
+          </div>
+
+          <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+            <Button variant="ghost" onClick={() => setGenusToDelete(null)}>
+              Volver
+            </Button>
+            <Button isLoading={isPending} variant="destructive" onClick={handleConfirmDeleteGenus}>
+              Eliminar Género
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

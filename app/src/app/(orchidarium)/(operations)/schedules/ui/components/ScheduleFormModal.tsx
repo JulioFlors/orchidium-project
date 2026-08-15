@@ -20,20 +20,47 @@ import { upsertSchedule } from '@/actions/planner/schedule-actions'
 import { getPrograms } from '@/actions/lab/programs'
 
 // Zod Schema para Rutinas Automatizadas de Hardware
-const programSchema = z.object({
-  id: z.string().optional(),
-  name: z.string().min(3, 'Mínimo 3 caracteres').max(50, 'Máximo 50 caracteres'),
-  purpose: z.enum(
-    ['IRRIGATION', 'FERTIGATION', 'FUMIGATION', 'HUMIDIFICATION', 'SOIL_WETTING'] as const,
-    { message: 'Debes seleccionar una tarea' },
-  ),
-  time: z.string().regex(/^([01]\d|2[0-3]):?([0-5]\d)$/, 'Hora inválida (HH:mm)'),
-  duration: z.coerce.number().min(1, 'La duración debe ser mayor a 0 minutos'),
-  zones: z.array(z.nativeEnum(ZoneType)).min(1, 'Selecciona al menos una zona'),
-  fertilizationProgramId: z.string().optional(),
-  phytosanitaryProgramId: z.string().optional(),
-  days: z.array(z.number()).min(1, 'Selecciona al menos un día'),
-})
+const programSchema = z
+  .object({
+    id: z.string().optional(),
+    name: z.string().min(3, 'Mínimo 3 caracteres').max(50, 'Máximo 50 caracteres'),
+    purpose: z.enum(
+      ['IRRIGATION', 'FERTIGATION', 'FUMIGATION', 'HUMIDIFICATION', 'SOIL_WETTING'] as const,
+      { message: 'Debes seleccionar una tarea' },
+    ),
+    time: z.string().regex(/^([01]\d|2[0-3]):?([0-5]\d)$/, 'Hora inválida (HH:mm)'),
+    duration: z.coerce.number().min(1, 'La duración debe ser mayor a 0 minutos'),
+    zones: z.array(z.nativeEnum(ZoneType)).min(1, 'Selecciona al menos una zona'),
+    fertilizationProgramId: z.string().optional(),
+    phytosanitaryProgramId: z.string().optional(),
+    days: z.array(z.number()).min(1, 'Selecciona al menos un día'),
+  })
+  .refine(
+    (data) => {
+      if (data.purpose === 'FERTIGATION') {
+        return !!data.fertilizationProgramId && data.fertilizationProgramId.trim() !== ''
+      }
+
+      return true
+    },
+    {
+      message: 'Debes seleccionar un Plan de Fertilización',
+      path: ['fertilizationProgramId'],
+    },
+  )
+  .refine(
+    (data) => {
+      if (data.purpose === 'FUMIGATION') {
+        return !!data.phytosanitaryProgramId && data.phytosanitaryProgramId.trim() !== ''
+      }
+
+      return true
+    },
+    {
+      message: 'Debes seleccionar un Plan Fitosanitario',
+      path: ['phytosanitaryProgramId'],
+    },
+  )
 
 type ProgramFormInputs = z.infer<typeof programSchema>
 
@@ -70,7 +97,6 @@ export interface ScheduleInitialData {
   id: string
   name: string
   purpose: 'IRRIGATION' | 'FERTIGATION' | 'FUMIGATION' | 'HUMIDIFICATION' | 'SOIL_WETTING'
-  executionType?: 'HARDWARE' | 'MANUAL'
   cronTrigger: string
   durationMinutes: number
   zones?: string[]
@@ -213,7 +239,6 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
         id: parsedData.id,
         name: parsedData.name,
         purpose: parsedData.purpose,
-        executionType: 'HARDWARE',
         cronTrigger: cron,
         durationMinutes: parsedData.duration || 10,
         zones: parsedData.zones,
@@ -278,8 +303,8 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
           )}
         </FormField>
 
-        {/* 2. Tarea + Zona */}
-        <div className="grid grid-cols-2 gap-4">
+        {/* 2. Tarea + Zona (1 columna en móvil) */}
+        <div className="grid grid-cols-1 gap-4 tds-sm:grid-cols-2">
           <FormField htmlFor="purpose" label="Tarea">
             <PlannerCircuitSelect
               control={control}
@@ -316,8 +341,8 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
           </FormField>
         )}
 
-        {/* 4. Hora de Inicio + Duración */}
-        <div className="grid grid-cols-2 gap-4">
+        {/* 4. Hora de Inicio + Duración (1 columna en móvil) */}
+        <div className="grid grid-cols-1 gap-4 tds-sm:grid-cols-2">
           <FormField htmlFor="time" label="Hora de Inicio">
             <Input
               className="cursor-pointer dark:scheme-dark"
@@ -356,7 +381,7 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
           <PlannerDaysSelector control={control} error={errors.days?.message} name="days" />
         </FormField>
 
-        <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+        <div className="border-input-outline -mx-6 mt-2 grid grid-cols-1 gap-3 border-t px-6 pt-4 tds-sm:grid-cols-2">
           <Button variant="ghost" onClick={onClose}>
             Cancelar
           </Button>

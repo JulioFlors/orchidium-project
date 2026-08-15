@@ -92,7 +92,11 @@ export function ActionMenu({
   }
 
   return (
-    <div ref={menuRef} className={cn('relative', className)} onKeyDown={handleKeyDown}>
+    <div
+      ref={menuRef}
+      className={cn('relative', isOpen && 'z-5', className)}
+      onKeyDown={handleKeyDown}
+    >
       {/* Trigger Button */}
       <button
         aria-expanded={isOpen}
@@ -114,7 +118,7 @@ export function ActionMenu({
           setIsOpen(!isOpen)
         }}
       >
-        {/* Mobile: Vertical Dots (Always reachable but user says vertical) */}
+        {/* Mobile: Vertical Dots */}
         <IoEllipsisVertical className="tds-sm:hidden h-4 w-4" />
         {/* Desktop: Horizontal Dots */}
         <IoEllipsisHorizontal className="tds-sm:block hidden h-4 w-4" />
@@ -126,7 +130,7 @@ export function ActionMenu({
           <motion.div
             animate={{ opacity: 1, scale: 1, y: 0 }}
             className={cn(
-              'border-input-outline bg-surface absolute z-30 mt-1 w-max min-w-40 overflow-hidden rounded-md border py-1.5 shadow-xl',
+              'border-input-outline bg-surface transform-gpu antialiased [backface-visibility:hidden] absolute z-5 mt-1 w-max min-w-40 overflow-hidden rounded-md border py-1.5 shadow-xl',
               align === 'left' ? 'left-0 origin-top-left' : 'right-0 origin-top-right',
             )}
             exit={{ opacity: 0, scale: 0.95, y: 5 }}

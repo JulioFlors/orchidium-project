@@ -228,15 +228,6 @@ export async function confirmOrderPayment(orderId: string, adminUserId?: string)
             data: { status: 'SOLD' },
           })
         }
-
-        if (item.variantId) {
-          await tx.productVariant.update({
-            where: { id: item.variantId },
-            data: {
-              quantity: { decrement: item.quantity },
-            },
-          })
-        }
       }
 
       await tx.saleRecord.create({
@@ -251,34 +242,6 @@ export async function confirmOrderPayment(orderId: string, adminUserId?: string)
         },
       })
     })
-
-    // Sincronizar el stock comercial según el número real de plantas disponibles
-    for (const item of order.items) {
-      if (item.variantId) {
-        const variant = await prisma.productVariant.findUnique({
-          where: { id: item.variantId },
-          select: { speciesId: true, size: true },
-        })
-
-        if (variant) {
-          const availableCount = await prisma.plant.count({
-            where: {
-              speciesId: variant.speciesId,
-              currentSize: variant.size,
-              status: 'AVAILABLE',
-            },
-          })
-
-          await prisma.productVariant.update({
-            where: { id: item.variantId },
-            data: {
-              quantity: availableCount,
-              available: availableCount > 0,
-            },
-          })
-        }
-      }
-    }
 
     revalidatePath('/admin/orders')
     revalidatePath('/account/orders')

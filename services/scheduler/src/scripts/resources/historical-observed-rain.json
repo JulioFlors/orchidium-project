@@ -292,5 +292,26 @@
     "startedAt": "2026-08-09T16:00:00-04:00",
     "endedAt": "2026-08-09T16:10:00-04:00",
     "description": "Domingo 9 de agosto: 4:00pm Garua, 4:10pm cese"
+  },
+  {
+    "id": "14-08-26-Rain-1",
+    "dayOfWeek": "Viernes",
+    "startedAt": "2026-08-14T08:20:00-04:00",
+    "endedAt": "2026-08-14T08:43:00-04:00",
+    "description": "Viernes 14 de agosto: 8:20am totalmente nublado garuando, 8:43am cesó"
+  },
+  {
+    "id": "14-08-26-Rain-2",
+    "dayOfWeek": "Viernes",
+    "startedAt": "2026-08-14T10:00:00-04:00",
+    "endedAt": "2026-08-14T10:10:00-04:00",
+    "description": "Viernes 14 de agosto: 10:00am inicio una nueva lluvia, 10:10am cesó"
+  },
+  {
+    "id": "14-08-26-Rain-3",
+    "dayOfWeek": "Viernes",
+    "startedAt": "2026-08-14T13:45:00-04:00",
+    "endedAt": "2026-08-14T14:10:00-04:00",
+    "description": "Viernes 14 de agosto: 1:45pm inicio de lluvia, 1:53pm se intensificó la lluvia, 2:10pm cesó"
   }
 ]

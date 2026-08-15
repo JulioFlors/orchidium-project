@@ -28,8 +28,15 @@ export function PlannerCircuitSelect<T extends FieldValues>({
   control,
   name,
   error,
-}: Omit<InputProps<T>, 'register'>) {
+  allowedPurposes,
+}: Omit<InputProps<T>, 'register'> & { allowedPurposes?: (keyof typeof ACTION_MAP)[] }) {
   if (!control) return null
+
+  const filteredEntries = allowedPurposes
+    ? Object.entries(ACTION_MAP).filter(([val]) =>
+        allowedPurposes.includes(val as keyof typeof ACTION_MAP),
+      )
+    : Object.entries(ACTION_MAP)
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -40,12 +47,10 @@ export function PlannerCircuitSelect<T extends FieldValues>({
           <SelectDropdown
             error={error}
             id={name}
-            options={[
-              ...Object.entries(ACTION_MAP).map(([val, act]) => ({
-                value: val,
-                label: act.label,
-              })),
-            ]}
+            options={filteredEntries.map(([val, act]) => ({
+              value: val,
+              label: act.label,
+            }))}
             placeholder="Seleccionar"
             value={value}
             onChange={onChange}

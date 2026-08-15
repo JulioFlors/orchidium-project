@@ -9,7 +9,7 @@ import {
   PiArrowClockwiseBold,
 } from 'react-icons/pi'
 
-import { Badge, Button } from '@/components'
+import { Badge, Button, Modal } from '@/components'
 import { getActiveBiologicalEvents, endFlowering } from '@/actions'
 import { useToastStore } from '@/store/toast/toast.store'
 
@@ -88,14 +88,21 @@ export function BiologicalAuditPanel() {
     })
   }, [loadData])
 
+  const [floweringEventToEnd, setFloweringEventToEnd] = useState<string | null>(null)
+
   const handleEndFlowering = (eventId: string) => {
-    if (!confirm('¿Confirmas que deseas dar por terminada la floración de esta planta hoy?')) return
+    setFloweringEventToEnd(eventId)
+  }
+
+  const handleConfirmEndFlowering = () => {
+    if (!floweringEventToEnd) return
 
     startTransition(async () => {
-      const res = await endFlowering(eventId, new Date())
+      const res = await endFlowering(floweringEventToEnd, new Date())
 
       if (res.success) {
         addToast('Floración finalizada correctamente.', 'success')
+        setFloweringEventToEnd(null)
         loadData()
       } else {
         addToast(res.error || 'No se pudo finalizar la floración.', 'error')
@@ -341,6 +348,31 @@ export function BiologicalAuditPanel() {
           )}
         </div>
       )}
+
+      <Modal
+        isOpen={!!floweringEventToEnd}
+        size="md"
+        title="Finalizar Floración"
+        onClose={() => setFloweringEventToEnd(null)}
+      >
+        <div className="flex flex-col gap-5">
+          <div className="bg-surface/50 rounded-lg border border-dashed border-amber-500/30 p-4">
+            <p className="text-primary text-xs leading-relaxed">
+              <span className="font-bold text-amber-500 uppercase">Nota:</span> ¿Confirmas que
+              deseas dar por terminada la floración de esta planta hoy?
+            </p>
+          </div>
+
+          <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+            <Button variant="ghost" onClick={() => setFloweringEventToEnd(null)}>
+              Volver
+            </Button>
+            <Button isLoading={isPending} variant="primary" onClick={handleConfirmEndFlowering}>
+              Finalizar Floración
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

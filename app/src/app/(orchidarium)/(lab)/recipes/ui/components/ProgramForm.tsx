@@ -1,6 +1,8 @@
 'use client'
 
-import { type Agrochemical } from '@package/database'
+import type { Agrochemical } from '@package/database'
+
+import { AgrochemicalType } from '@package/database/enums'
 import { zodResolver } from '@hookform/resolvers/zod'
 import React, { useTransition } from 'react'
 import { useForm, useFieldArray, Controller, useWatch } from 'react-hook-form'
@@ -8,24 +10,86 @@ import { IoAddOutline, IoTrashOutline, IoArrowUpOutline, IoArrowDownOutline } fr
 import * as z from 'zod'
 
 import { upsertFertilizationProgram, upsertPhytosanitaryProgram } from '@/actions'
-import { FormField, Button, SelectDropdown, Input, Modal } from '@/components/ui'
+import {
+  FormField,
+  Button,
+  SelectDropdown,
+  Input,
+  Modal,
+  ActionMenu,
+  type ActionMenuItem,
+} from '@/components'
 import { useFormDraftStore } from '@/store'
+import { useToastStore } from '@/store/toast/toast.store'
 
 const cycleSchema = z.object({
   agrochemicalId: z.string().min(1, 'Debe seleccionar un insumo'),
   sequence: z.number(),
 })
 
-const programSchema = z.object({
-  name: z.string().min(3, 'El nombre debe tener al menos 3 caracteres'),
-  frequency: z.number().min(1, 'La frecuencia debe ser al menos 1'),
-  cycles: z.array(cycleSchema).min(1, 'Debe agregar al menos un paso al programa'),
-})
+const programSchema = z
+  .object({
+    purposeType: z.enum(['fertilization', 'phytosanitary']),
+    name: z.string().min(3, 'El nombre debe tener al menos 3 caracteres'),
+    frequency: z
+      .union([z.string(), z.number()])
+      .refine((val) => val !== '' && val !== undefined && val !== null, {
+        message: 'Debe ingresar un intervalo',
+      })
+      .transform((val) => Number(val))
+      .pipe(
+        z
+          .number({ message: 'Debe ser un número entero' })
+          .int('Debe ser un número entero')
+          .min(1, 'El intervalo debe ser al menos 1'),
+      ),
+    cycles: z.array(cycleSchema).min(1, 'Debe agregar al menos un paso al programa'),
+  })
+  .superRefine((data, ctx) => {
+    if (data.purposeType === 'fertilization') {
+      if (data.frequency > 4) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'La frecuencia semanal no puede ser mayor a 4 semanas',
+          path: ['frequency'],
+        })
+      }
+      if (data.cycles.length > 4) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Los planes de fertilización no pueden tener más de 4 pasos (1 por semana)',
+          path: ['cycles'],
+        })
+      }
+    } else {
+      if (data.frequency < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'El espaciamiento fitosanitario debe ser de al menos 2 meses',
+          path: ['frequency'],
+        })
+      }
+      if (data.frequency > 12) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'La frecuencia mensual no puede exceder 12 meses',
+          path: ['frequency'],
+        })
+      }
+      if (data.cycles.length > 6) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Los planes fitosanitarios no pueden tener más de 6 pasos al año',
+          path: ['cycles'],
+        })
+      }
+    }
+  })
 
 type FormValues = z.infer<typeof programSchema>
 
 // Interfaces locales para los programas con sus ciclos
-interface ProgramWithCycles {
+export interface ProgramWithCycles {
   id: string
   name: string
   productsCycle: {
@@ -41,21 +105,26 @@ interface Props {
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
-  type: 'fertilization' | 'phytosanitary'
+  initialType?: 'fertilization' | 'phytosanitary'
   initialData?: ProgramWithCycles | null
   availableAgrochemicals: Agrochemical[]
 }
+
+const PURPOSE_OPTIONS = [
+  { label: 'Fertilización', value: 'fertilization' },
+  { label: 'Control Fitosanitario', value: 'phytosanitary' },
+]
 
 export function ProgramForm({
   isOpen,
   onClose,
   onSuccess,
-  type,
+  initialType = 'fertilization',
   initialData,
   availableAgrochemicals,
 }: Props) {
   const [isPending, startTransition] = useTransition()
-  const draftKey = `program-draft-${type}`
+  const draftKey = `program-draft-${initialType}`
   const isRestoringRef = React.useRef(false)
 
   const {
@@ -63,27 +132,32 @@ export function ProgramForm({
     handleSubmit,
     control,
     reset,
+    setValue,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(programSchema),
     defaultValues: initialData
       ? {
+          purposeType: initialType,
           name: initialData.name,
           frequency:
-            type === 'fertilization' ? initialData.weeklyFrequency : initialData.monthlyFrequency,
+            initialType === 'fertilization'
+              ? (initialData.weeklyFrequency ?? ('' as unknown as number))
+              : (initialData.monthlyFrequency ?? ('' as unknown as number)),
           cycles: initialData.productsCycle.map((pc) => ({
             agrochemicalId: pc.agrochemicalId,
             sequence: pc.sequence,
           })),
         }
       : {
+          purposeType: initialType,
           name: '',
-          frequency: 1,
+          frequency: '' as unknown as number,
           cycles: [{ agrochemicalId: '', sequence: 1 }],
         },
   })
 
-  // Cargar borrador al abrir el modal (solo para creación, es decir, cuando no hay initialData)
+  // Cargar borrador al abrir el modal (solo para creación)
   React.useEffect(() => {
     if (isOpen && !initialData) {
       const savedDraft = useFormDraftStore.getState().getDraft(draftKey) as FormValues | undefined
@@ -91,8 +165,9 @@ export function ProgramForm({
       isRestoringRef.current = true
       reset(
         savedDraft ?? {
+          purposeType: initialType,
           name: '',
-          frequency: 1,
+          frequency: '' as unknown as number,
           cycles: [{ agrochemicalId: '', sequence: 1 }],
         },
       )
@@ -100,12 +175,14 @@ export function ProgramForm({
         isRestoringRef.current = false
       })
     } else if (isOpen && initialData) {
-      // Si estamos editando, cargar los datos iniciales
       isRestoringRef.current = true
       reset({
+        purposeType: initialType,
         name: initialData.name,
         frequency:
-          type === 'fertilization' ? initialData.weeklyFrequency : initialData.monthlyFrequency,
+          initialType === 'fertilization'
+            ? (initialData.weeklyFrequency ?? ('' as unknown as number))
+            : (initialData.monthlyFrequency ?? ('' as unknown as number)),
         cycles: initialData.productsCycle.map((pc) => ({
           agrochemicalId: pc.agrochemicalId,
           sequence: pc.sequence,
@@ -115,11 +192,12 @@ export function ProgramForm({
         isRestoringRef.current = false
       })
     }
-  }, [isOpen, initialData, reset, draftKey, type])
+  }, [isOpen, initialData, reset, draftKey, initialType])
 
   // Persistir cambios en tiempo real
   const watchedValues = useWatch({ control })
   const watchedString = JSON.stringify(watchedValues)
+  const currentPurposeType = watchedValues?.purposeType || initialType
 
   React.useEffect(() => {
     if (!isOpen || isRestoringRef.current || !!initialData) return
@@ -136,30 +214,23 @@ export function ProgramForm({
     name: 'cycles',
   })
 
+  // Filtrar insumos disponibles según el propósito seleccionado
   const agroOptions = React.useMemo(() => {
-    // Filtrar agroquímicos según el tipo de programa
-    const filtered = availableAgrochemicals.filter((a) => {
-      if (type === 'fertilization') {
-        // Nutrición/Fertilización
-        return (
-          a.purpose === 'DESARROLLO' || a.purpose === 'FLORACION' || a.purpose === 'MANTENIMIENTO'
-        )
-      } else {
-        // Protección Fitosanitaria
-        return (
-          a.purpose === 'ACARICIDA' ||
-          a.purpose === 'BACTERICIDA' ||
-          a.purpose === 'FUNGICIDA' ||
-          a.purpose === 'INSECTICIDA'
-        )
+    const activeAgros = availableAgrochemicals.filter((a) => a.isActive !== false)
+
+    const filtered = activeAgros.filter((a) => {
+      if (currentPurposeType === 'fertilization') {
+        return a.type === AgrochemicalType.FERTILIZANTE
       }
+
+      return a.type === AgrochemicalType.FITOSANITARIO
     })
 
     return filtered.map((a) => ({
-      label: `${a.name} (${a.purpose})`,
+      label: a.isMix ? `${a.name} (Mezcla)` : a.name,
       value: a.id,
     }))
-  }, [availableAgrochemicals, type])
+  }, [availableAgrochemicals, currentPurposeType])
 
   const onSubmit = (values: FormValues) => {
     startTransition(async () => {
@@ -168,38 +239,38 @@ export function ProgramForm({
         sequence: index + 1,
       }))
 
+      const isFert = values.purposeType === 'fertilization'
       const payload = {
         id: initialData?.id,
-        name: values.name,
-        [type === 'fertilization' ? 'weeklyFrequency' : 'monthlyFrequency']: values.frequency,
+        name: values.name.trim(),
+        [isFert ? 'weeklyFrequency' : 'monthlyFrequency']: values.frequency,
         cycles: formattedCycles,
       }
 
-      const result =
-        type === 'fertilization'
-          ? await upsertFertilizationProgram(
-              payload as {
-                id?: string
-                name: string
-                weeklyFrequency: number
-                cycles: { sequence: number; agrochemicalId: string }[]
-              },
-            )
-          : await upsertPhytosanitaryProgram(
-              payload as {
-                id?: string
-                name: string
-                monthlyFrequency: number
-                cycles: { sequence: number; agrochemicalId: string }[]
-              },
-            )
+      const result = isFert
+        ? await upsertFertilizationProgram(
+            payload as {
+              id?: string
+              name: string
+              weeklyFrequency: number
+              cycles: { sequence: number; agrochemicalId: string }[]
+            },
+          )
+        : await upsertPhytosanitaryProgram(
+            payload as {
+              id?: string
+              name: string
+              monthlyFrequency: number
+              cycles: { sequence: number; agrochemicalId: string }[]
+            },
+          )
 
       if (result.ok) {
         useFormDraftStore.getState().clearDraft(draftKey)
         onSuccess()
         onClose()
       } else {
-        alert(result.message || 'Error al guardar el programa')
+        useToastStore.getState().addToast(result.message || 'Error al guardar el programa', 'error')
       }
     })
   }
@@ -208,125 +279,201 @@ export function ProgramForm({
     <Modal
       isOpen={isOpen}
       size="md"
-      title={
-        type === 'fertilization'
-          ? `${initialData ? 'Editar' : 'Nueva'} Receta de Fertirriego`
-          : `${initialData ? 'Editar' : 'Nuevo'} Plan Fitosanitario`
-      }
+      title={initialData ? 'Editar Plan de Dosificación' : 'Nuevo Plan de Dosificación'}
       onClose={onClose}
     >
       <form className="flex flex-col gap-6" onSubmit={handleSubmit(onSubmit)}>
-        <div className="grid grid-cols-2 gap-4">
-          <FormField htmlFor="name" label="Nombre del Programa">
-            <Input
-              error={errors.name?.message}
-              id="name"
-              placeholder="Ej: Desarrollo Solucat"
-              type="text"
-              {...register('name')}
-            />
-          </FormField>
+        {/* 1. Propósito (SelectDropdown, w-full, placeholder "Seleccionar") */}
+        <FormField htmlFor="purposeType" label="Propósito">
+          <Controller
+            control={control}
+            name="purposeType"
+            render={({ field: f }) => (
+              <SelectDropdown
+                options={PURPOSE_OPTIONS}
+                placeholder="Seleccionar"
+                value={f.value}
+                onChange={(val) => {
+                  f.onChange(val)
+                  // Limpiar frecuencia si cambia de tipo para obligar a introducir el intervalo adecuado
+                  setValue('frequency', '' as unknown as number)
+                }}
+              />
+            )}
+          />
+        </FormField>
 
-          <FormField
-            htmlFor="frequency"
-            label={type === 'fertilization' ? 'Frecuencia Semanal' : 'Frecuencia Mensual'}
-          >
-            <Input
-              error={errors.frequency?.message}
-              id="frequency"
-              min="1"
-              type="number"
-              {...register('frequency', { valueAsNumber: true })}
-            />
-          </FormField>
-        </div>
+        {/* 2. Nombre (w-full, sin placeholder) */}
+        <FormField htmlFor="name" label="Nombre">
+          <Input error={errors.name?.message} id="name" type="text" {...register('name')} />
+          {errors.name && (
+            <span className="mt-1 text-[11px] font-medium tracking-wide text-red-500">
+              {errors.name.message}
+            </span>
+          )}
+        </FormField>
 
-        <div className="space-y-4">
-          <div className="border-divider flex items-center justify-between border-b pb-2">
-            <h3 className="text-secondary text-[11px] font-bold tracking-wider uppercase opacity-60">
-              Pasos / Ciclo de Productos
-            </h3>
-            <Button
-              size="sm"
-              type="button"
-              variant="secondary"
-              onClick={() => append({ agrochemicalId: '', sequence: fields.length + 1 })}
-            >
-              <IoAddOutline className="mr-1 h-4 w-4" />
-              Agregar Paso
-            </Button>
+        {/* 3. Intervalo Dinámico (Semanal 1-4 vs Mensual 2-12) */}
+        <FormField
+          htmlFor="frequency"
+          label={
+            currentPurposeType === 'fertilization'
+              ? 'Intervalo Semanal (1 a 4 semanas)'
+              : 'Intervalo Mensual (2 a 12 meses)'
+          }
+        >
+          <Input
+            error={errors.frequency?.message}
+            id="frequency"
+            placeholder=""
+            type="text"
+            {...register('frequency', {
+              onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+                const raw = e.target.value.replace(/[^0-9]/g, '')
+
+                // Si queda vacío o escribe 0 inicial, dejar vacío
+                if (!raw || raw === '0') {
+                  setValue('frequency', '' as unknown as number)
+
+                  return
+                }
+
+                const num = parseInt(raw, 10)
+
+                if (currentPurposeType === 'fertilization') {
+                  // Solo permitir dígitos 1 al 4
+                  if (num >= 1 && num <= 4) {
+                    setValue('frequency', num)
+                  } else {
+                    setValue('frequency', 4)
+                  }
+                } else {
+                  // Fitosanitarios: rango 2 a 12
+                  // Permitir '1' temporalmente solo para escribir 10, 11, 12
+                  if (raw === '1') {
+                    setValue('frequency', 1)
+                  } else if (num > 12) {
+                    setValue('frequency', 12)
+                  } else {
+                    setValue('frequency', num)
+                  }
+                }
+              },
+            })}
+          />
+          {errors.frequency ? (
+            <span className="mt-1 text-[11px] font-medium tracking-wide text-red-500">
+              {errors.frequency.message}
+            </span>
+          ) : (
+            <span className="text-secondary mt-0.5 text-[11px] opacity-50">
+              {currentPurposeType === 'fertilization'
+                ? 'Indica cada cuántas semanas se repetirá la aplicación del ciclo.'
+                : 'Indica el espaciamiento en meses entre cada tratamiento preventivo.'}
+            </span>
+          )}
+        </FormField>
+
+        {/* 4. Sección Ciclo de Aplicación (Sin separador, título con mismo estilo que label) */}
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-secondary text-xs font-semibold">Ciclo de Aplicación</span>
+            <span className="text-secondary text-[11px] opacity-60">
+              {fields.length} de {currentPurposeType === 'fertilization' ? 4 : 6} pasos
+            </span>
           </div>
 
           <div className="flex flex-col gap-3">
-            {fields.map((field, index) => (
-              <div
-                key={field.id}
-                className="bg-surface/30 border-input-outline hover:border-action/20 group relative flex flex-col gap-3 overflow-hidden rounded-xl border p-4 transition-all"
-              >
-                <div className="flex items-center justify-between border-b border-dashed border-white/5 pb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="bg-action/10 text-action flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-bold">
-                      {index + 1}
-                    </span>
-                    <span className="text-secondary text-[11px] font-bold tracking-tight uppercase opacity-60">
-                      Paso del Ciclo
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      className="size-7!"
-                      disabled={index === 0}
-                      size="icon"
-                      type="button"
-                      variant="ghost"
-                      onClick={() => move(index, index - 1)}
-                    >
-                      <IoArrowUpOutline className="size-3.5" />
-                    </Button>
-                    <Button
-                      className="size-7!"
-                      disabled={index === fields.length - 1}
-                      size="icon"
-                      type="button"
-                      variant="ghost"
-                      onClick={() => move(index, index + 1)}
-                    >
-                      <IoArrowDownOutline className="size-3.5" />
-                    </Button>
-                    <Button
-                      className="size-7! text-red-500/60 hover:text-red-500"
-                      size="icon"
-                      type="button"
-                      variant="ghost"
-                      onClick={() => remove(index)}
-                    >
-                      <IoTrashOutline className="size-3.5" />
-                    </Button>
-                  </div>
-                </div>
+            {fields.map((field, index) => {
+              const stepMenuItems: ActionMenuItem[] = [
+                ...(index > 0
+                  ? [
+                      {
+                        label: 'Subir paso',
+                        icon: <IoArrowUpOutline className="size-4" />,
+                        onClick: () => move(index, index - 1),
+                      },
+                    ]
+                  : []),
+                ...(index < fields.length - 1
+                  ? [
+                      {
+                        label: 'Bajar paso',
+                        icon: <IoArrowDownOutline className="size-4" />,
+                        onClick: () => move(index, index + 1),
+                      },
+                    ]
+                  : []),
+                ...(fields.length > 1
+                  ? [
+                      {
+                        label: 'Eliminar paso',
+                        icon: <IoTrashOutline className="size-4" />,
+                        onClick: () => remove(index),
+                        variant: 'destructive' as const,
+                      },
+                    ]
+                  : []),
+              ]
 
-                <div className="grid grid-cols-1 gap-4">
-                  <FormField htmlFor={`cycles.${index}.agrochemicalId`} label="Insumo a aplicar">
+              const stepError = errors.cycles?.[index]?.agrochemicalId?.message
+
+              return (
+                <div
+                  key={field.id}
+                  className="bg-surface/30 border-input-outline relative flex flex-col gap-3.5 rounded-xl border p-4 transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-primary text-[13px] font-semibold antialiased">
+                      {currentPurposeType === 'fertilization'
+                        ? `Semana ${index + 1}`
+                        : `Paso ${index + 1}`}
+                    </span>
+
+                    {stepMenuItems.length > 0 && <ActionMenu items={stepMenuItems} />}
+                  </div>
+
+                  <FormField htmlFor={`cycles.${index}.agrochemicalId`} label="Insumo">
                     <Controller
                       control={control}
                       name={`cycles.${index}.agrochemicalId`}
                       render={({ field: fieldProps }) => (
                         <SelectDropdown
                           options={agroOptions}
-                          placeholder="Seleccione un insumo del inventario"
+                          placeholder="Seleccionar"
                           value={fieldProps.value}
                           onChange={fieldProps.onChange}
                         />
                       )}
                     />
+                    {stepError && (
+                      <span className="mt-1 text-[11px] font-medium tracking-wide text-red-500">
+                        {stepError}
+                      </span>
+                    )}
                   </FormField>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
+          {/* Botón centrado en el footer con variante ghost (limitado según propósito) */}
+          {fields.length < (currentPurposeType === 'fertilization' ? 4 : 6) && (
+            <div className="mt-1 flex justify-center">
+              <Button
+                className="text-secondary hover:text-primary flex items-center gap-1.5"
+                type="button"
+                variant="ghost"
+                onClick={() => append({ agrochemicalId: '', sequence: fields.length + 1 })}
+              >
+                <IoAddOutline className="size-4" />
+                <span>Agregar Paso</span>
+              </Button>
+            </div>
+          )}
+
           {errors.cycles && (
-            <p className="mt-2 text-center text-sm text-red-500">{errors.cycles.message}</p>
+            <p className="mt-1 text-center text-xs text-red-500">{errors.cycles.message}</p>
           )}
         </div>
 

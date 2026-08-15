@@ -32,7 +32,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "=UPDATE \"ManualDosingLog\" SET status = '{{ $json.action }}'::\"TaskStatus\", \"executedAt\" = NOW() WHERE id = '{{ $json.taskId }}';"
+        "query": "=UPDATE \"DosingLog\" SET status = '{{ $json.action }}'::\"TaskStatus\", \"executedAt\" = NOW() WHERE id = '{{ $json.taskId }}';"
       },
       "id": "2b3c4d5e-0003-4000-8000-000000000003",
       "name": "Actualizar Estado en Postgres",

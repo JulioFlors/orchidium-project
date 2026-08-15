@@ -86,7 +86,7 @@ export function QuantityDropdown({ quantity, maxQuantity = 5, onQuantityChanged 
             className="ml-1"
             transition={{ duration: 0 }}
           >
-            <IoChevronDownSharp className="h-[17px] w-[17.5px]" />
+            <IoChevronDownSharp className="h-4.25 w-[17.5px]" />
           </motion.div>
         </motion.button>
 

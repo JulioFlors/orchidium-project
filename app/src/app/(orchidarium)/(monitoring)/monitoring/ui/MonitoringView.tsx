@@ -10,7 +10,7 @@ import { EnvironmentCard, EnvironmentDataChart, InferredRainGuide } from './comp
 
 import { ZoneType, ZoneMetrics, MetricLabels, MetricUnits } from '@/config/mappings'
 import { Heading, DeviceStatus } from '@/components'
-import { useDeviceHeartbeat, useEventStream, useToast } from '@/hooks'
+import { useDeviceHeartbeat, useToast } from '@/hooks'
 import { useMqttStore } from '@/store/mqtt/mqtt.store'
 import { formatTime12h, formatDateLong, getHourInCaracas } from '@/utils/timeFormat'
 
@@ -166,8 +166,8 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
   const isExterior = zone === ZoneType.EXTERIOR
   const baseBatchInterval = isExterior ? 600000 : 1800000
 
-  // 1. Consulta para "Current Status" / Tarjetas (Rango optimizado según nodo)
-  const cardRange = isExterior ? '30m' : '90m'
+  // 1. Consulta para "Current Status" / Tarjetas (Rango estricto de precarga <= 30 min)
+  const cardRange = '30m'
   const {
     data: cardStatusResponse,
     error: cardStatusError,
@@ -273,19 +273,31 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     },
   )
 
-  // Revalidación Reactiva Dirigida por Eventos Batch (SSE / Ingest)
-  useEventStream((event) => {
-    if (event.type === 'BATCH_INGESTED' && (!event.zone || event.zone === zone)) {
-      if (!isStaticHistoricalRange) {
-        mutateCardStatus()
-        mutateChart()
-      }
-      if (!isRainStaticRange(physicalRainRange)) {
-        mutatePhysicalRain()
-        mutateInferredRain()
-      }
+  // Revalidación Reactiva Dirigida por Eventos MQTT (/readings)
+  const readingsTopic = `PristinoPlant/Weather_Station/${zone}/readings`
+  const lastReadingsMsg = mqttMessages[readingsTopic]
+
+  useEffect(() => {
+    if (!lastReadingsMsg) return
+
+    if (!isStaticHistoricalRange) {
+      mutateCardStatus()
+      mutateChart()
     }
-  })
+    if (!isRainStaticRange(physicalRainRange)) {
+      mutatePhysicalRain()
+      mutateInferredRain()
+    }
+  }, [
+    lastReadingsMsg,
+    zone,
+    isStaticHistoricalRange,
+    physicalRainRange,
+    mutateCardStatus,
+    mutateChart,
+    mutatePhysicalRain,
+    mutateInferredRain,
+  ])
 
   // ----- Carga de Gráfico Consolidado -----
   const isLoadingMetric = useMemo(() => {
@@ -466,9 +478,9 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
       return isNaN(num) ? null : num
     }
 
-    // Buscamos el último valor no nulo y verificamos que no sea antiguo (> 65 min para ZONA_A, > 25 min para otras)
+    // Buscamos el último valor no nulo y verificamos que no sea antiguo (> 30 min)
     const getLastValid = (key: string) => {
-      const STALE_THRESHOLD = zone === ZoneType.ZONA_A ? 65 * 60 * 1000 : 25 * 60 * 1000
+      const STALE_THRESHOLD = 30 * 60 * 1000
       const nowMs = now
 
       for (let i = cardStatusData.length - 1; i >= 0; i--) {
@@ -478,7 +490,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
         if (val != null) {
           const sampleTime = new Date(String(row.time)).getTime()
 
-          // Si el dato es más viejo que el umbral, lo consideramos caducado
+          // Si el dato es más viejo que 30 minutos, lo consideramos caducado
           if (nowMs - sampleTime > STALE_THRESHOLD) return null
 
           return val
@@ -525,7 +537,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     }
 
     return merged
-  }, [cardStatusData, mqttReadings, now, zone])
+  }, [cardStatusData, mqttReadings, now])
 
   // Normalizar datos del gráfico para que Recharts encuentre las métricas por sus nombres estándar
   const normalizedChartData = useMemo(() => {
@@ -724,8 +736,8 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     // Tiempo desde la última actualización del dato
     const minutesSinceLastUpdate = (now ? now - lastUpdateDate.getTime() : 0) / 60000
     // "isStale" solo aplica dentro del horario donde el sensor DEBERÍA estar enviando datos
-    // Si supera el límite de inactividad (65 min para ZONA_A y 25 min para otras) se considera offline.
-    const staleLimit = zone === ZoneType.ZONA_A ? 65 : 25
+    // Límite estricto de inactividad de 30 minutos.
+    const staleLimit = 30
     const isStale = sensorIsActive && minutesSinceLastUpdate > staleLimit
 
     const luxTrend = calculateTrend('illuminance')

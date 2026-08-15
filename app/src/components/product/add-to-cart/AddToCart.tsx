@@ -93,7 +93,7 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
   return (
     <>
       {/* ---- Price ---- */}
-      <p className="text-primary fade-in tds-sm:mt-2 mt-0.5 mb-3 text-xl leading-6 font-semibold">
+      <p className="text-primary fade-in tds-sm:mt-2 mt-0.5 mb-5 text-[19px] leading-2 font-semibold">
         {getPriceLabel()}
       </p>
 

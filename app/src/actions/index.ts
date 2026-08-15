@@ -24,6 +24,10 @@ export * from './lab/agrochemicals'
 
 export * from './lab/programs'
 
+export * from './lab/dosing-actions'
+
+export * from './lab/dosing-schedule-actions'
+
 export * from './navigation/get-plants-navigation'
 
 export * from './operations/biological-actions'
@@ -33,6 +37,10 @@ export * from './operations/control-actions'
 export * from './operations/history-actions'
 
 export * from './operations/queue-actions'
+
+export * from './operations/filter-actions'
+
+export * from './planner/schedule-actions'
 
 export * from './product/get-all-species'
 

@@ -1,7 +1,13 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma, TaskPurpose, TaskStatus, TaskSource, type ZoneType } from '@package/database'
+import {
+  prisma,
+  TaskPurpose,
+  TaskStatus,
+  type DosingSource,
+  type ZoneType,
+} from '@package/database'
 import { Cron } from 'croner'
 
 import { Logger } from '@/lib'
@@ -14,7 +20,7 @@ export interface DosingTaskItem {
   scheduledAt: string
   executedAt: string | null
   status: TaskStatus
-  source: TaskSource
+  source: DosingSource
   notes: string | null
   agrochemicalId: string | null
   agrochemical?: {
@@ -35,12 +41,12 @@ export interface DosingTaskItem {
 
 /**
  * Obtiene la agenda e historial de dosificaciones manuales combinando
- * registros confirmados (ManualDosingLog) y proyecciones de rutinas manuales.
+ * registros de DosingLog y proyecciones de DosingSchedule.
  */
 export async function getDosingTasks(limit = 50, offset = 0) {
   try {
-    // 1. Obtener registros confirmados / agendados de la base de datos (ManualDosingLog)
-    const logs = await prisma.manualDosingLog.findMany({
+    // 1. Obtener registros confirmados / agendados de la base de datos (DosingLog)
+    const logs = await prisma.dosingLog.findMany({
       include: {
         agrochemical: true,
         schedule: {
@@ -78,7 +84,7 @@ export async function getDosingTasks(limit = 50, offset = 0) {
         scheduledAt: task.scheduledAt.toISOString(),
         executedAt: task.executedAt ? task.executedAt.toISOString() : null,
         status: task.status,
-        source: TaskSource.MANUAL,
+        source: task.source,
         notes: task.notes,
         agrochemicalId: task.agrochemicalId,
         agrochemical: task.agrochemical
@@ -102,11 +108,10 @@ export async function getDosingTasks(limit = 50, offset = 0) {
       }
     })
 
-    // 2. Obtener rutinas activas de dosificación manual para calcular proyecciones futuras
-    const manualSchedules = await prisma.automationSchedule.findMany({
+    // 2. Obtener rutinas activas de dosificación para calcular proyecciones futuras
+    const dosingSchedules = await prisma.dosingSchedule.findMany({
       where: {
         isEnabled: true,
-        executionType: 'MANUAL',
       },
       include: {
         fertilizationProgram: {
@@ -128,7 +133,7 @@ export async function getDosingTasks(limit = 50, offset = 0) {
 
     const projectedTasks: DosingTaskItem[] = []
 
-    for (const schedule of manualSchedules) {
+    for (const schedule of dosingSchedules) {
       try {
         const cron = new Cron(schedule.cronTrigger, { timezone: 'America/Caracas' })
         const nextRun = cron.nextRun()
@@ -151,37 +156,49 @@ export async function getDosingTasks(limit = 50, offset = 0) {
             routineName = schedule.name
           }
 
-          projectedTasks.push({
-            id: `proj-${schedule.id}-${nextRun.getTime()}`,
-            purpose: schedule.purpose,
-            zones: schedule.zones,
-            duration: schedule.durationMinutes,
-            scheduledAt: nextRun.toISOString(),
-            executedAt: null,
-            status: TaskStatus.PENDING,
-            source: TaskSource.ROUTINE,
-            notes: 'Proyección automática de rutina manual',
-            agrochemicalId: agro?.id || null,
-            agrochemical: agro
-              ? {
-                  id: agro.id,
-                  name: agro.name,
-                  purpose: agro.purpose,
-                  type: agro.type,
-                  preparation: agro.preparation,
-                }
-              : null,
-            schedule: {
-              id: schedule.id,
-              name: schedule.name,
-              fertilizationProgram: schedule.fertilizationProgram,
-              phytosanitaryProgram: schedule.phytosanitaryProgram,
-            },
-            routineName,
-          })
+          // Verificar que no coincida con un DosingLog ya creado
+          const alreadyCreated = actualTasks.some(
+            (t) =>
+              t.schedule?.id === schedule.id &&
+              Math.abs(new Date(t.scheduledAt).getTime() - nextRun.getTime()) < 120000,
+          )
+
+          if (!alreadyCreated) {
+            projectedTasks.push({
+              id: `proj-${schedule.id}-${nextRun.getTime()}`,
+              purpose: schedule.purpose,
+              zones: schedule.zones,
+              duration: schedule.durationMinutes || 15,
+              scheduledAt: nextRun.toISOString(),
+              executedAt: null,
+              status: TaskStatus.PENDING,
+              source: 'ROUTINE',
+              notes: 'Proyección automática de rutina de dosificación',
+              agrochemicalId: agro?.id || null,
+              agrochemical: agro
+                ? {
+                    id: agro.id,
+                    name: agro.name,
+                    purpose: agro.purpose,
+                    type: agro.type,
+                    preparation: agro.preparation,
+                  }
+                : null,
+              schedule: {
+                id: schedule.id,
+                name: schedule.name,
+                fertilizationProgram: schedule.fertilizationProgram,
+                phytosanitaryProgram: schedule.phytosanitaryProgram,
+              },
+              routineName,
+            })
+          }
         }
       } catch (err) {
-        Logger.warn(`Error calculando proyección cron para rutina ${schedule.id}:`, err)
+        Logger.warn(
+          `Error calculando proyección cron para rutina de dosificación ${schedule.id}:`,
+          err,
+        )
       }
     }
 
@@ -205,7 +222,7 @@ export async function getDosingTasks(limit = 50, offset = 0) {
 }
 
 /**
- * Crea un nuevo registro/tarea manual de dosificación en ManualDosingLog.
+ * Crea un nuevo registro/tarea manual de dosificación en DosingLog.
  */
 export async function createDosingTask(data: {
   agrochemicalId: string
@@ -228,13 +245,14 @@ export async function createDosingTask(data: {
       }
     }
 
-    const newTask = await prisma.manualDosingLog.create({
+    const newTask = await prisma.dosingLog.create({
       data: {
         agrochemicalId: data.agrochemicalId,
         purpose: data.purpose,
         scheduledAt: scheduledDate,
         executedAt: isCompleted ? scheduledDate : undefined,
         status: finalStatus,
+        source: 'DEFERRED',
         zones: data.zones,
         notes: data.notes || null,
         duration: 15,
@@ -258,7 +276,7 @@ export async function createDosingTask(data: {
 }
 
 /**
- * Actualiza los datos de una tarea de dosificación existente en ManualDosingLog.
+ * Actualiza los datos de una tarea de dosificación existente en DosingLog.
  */
 export async function updateDosingTask(
   taskId: string,
@@ -284,7 +302,7 @@ export async function updateDosingTask(
       }
     }
 
-    const updatedTask = await prisma.manualDosingLog.update({
+    const updatedTask = await prisma.dosingLog.update({
       where: { id: taskId },
       data: {
         agrochemicalId: data.agrochemicalId,
@@ -322,7 +340,7 @@ export async function updateDosingTaskStatus(
   postponeHours?: number,
 ) {
   try {
-    const existingTask = await prisma.manualDosingLog.findUnique({
+    const existingTask = await prisma.dosingLog.findUnique({
       where: { id: taskId },
     })
 
@@ -341,7 +359,7 @@ export async function updateDosingTaskStatus(
       executedAt = new Date()
     }
 
-    const updatedTask = await prisma.manualDosingLog.update({
+    const updatedTask = await prisma.dosingLog.update({
       where: { id: taskId },
       data: {
         status,
@@ -367,11 +385,11 @@ export async function updateDosingTaskStatus(
 }
 
 /**
- * Elimina una tarea de dosificación en ManualDosingLog.
+ * Elimina una tarea de dosificación en DosingLog.
  */
 export async function deleteDosingTask(taskId: string) {
   try {
-    await prisma.manualDosingLog.delete({
+    await prisma.dosingLog.delete({
       where: { id: taskId },
     })
 

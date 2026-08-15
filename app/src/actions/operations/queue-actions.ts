@@ -48,11 +48,10 @@ export async function getQueueTasks() {
       isRoutine: !!task.scheduleId,
     }))
 
-    // 2. Obtener rutinas activas de hardware para proyectar la próxima ejecución
+    // 2. Obtener rutinas activas de riego para proyectar la próxima ejecución
     const routines = await prisma.automationSchedule.findMany({
       where: {
         isEnabled: true,
-        executionType: 'HARDWARE',
         zones: {
           has: ZoneType.ZONA_A,
         },

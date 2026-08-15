@@ -87,3 +87,5 @@ export * from './title/Title'
 export * from './toast/Toast'
 
 export * from './selector-group/SelectorGroup'
+
+export * from './zone-badges/ZoneBadges'

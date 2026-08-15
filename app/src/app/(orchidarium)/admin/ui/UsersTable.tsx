@@ -13,6 +13,7 @@ import {
   Card,
   CardHeader,
   CardTitle,
+  Modal,
   Table,
   TableBody,
   TableCell,
@@ -20,45 +21,57 @@ import {
   TableHeader,
   TableRow,
 } from '@/components'
+import { useToastStore } from '@/store/toast/toast.store'
 
 interface Props {
   users: User[]
 }
 
 export function UsersTable({ users }: Props) {
+  const { addToast } = useToastStore()
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [roleChangeTarget, setRoleChangeTarget] = useState<{ user: User; newRole: string } | null>(
+    null,
+  )
+  const [userToDelete, setUserToDelete] = useState<User | null>(null)
 
-  const handleRoleChange = async (userId: string, currentRole: string) => {
-    const newRole = currentRole === 'ADMIN' ? 'USER' : 'ADMIN'
+  const handleRoleChange = (user: User) => {
+    const newRole = user.role === 'ADMIN' ? 'USER' : 'ADMIN'
 
-    if (
-      !window.confirm(
-        `¿Estás seguro de cambiar el rol a ${newRole === 'ADMIN' ? 'Administrador' : 'Usuario'}?`,
-      )
-    )
-      return
+    setRoleChangeTarget({ user, newRole })
+  }
+
+  const handleConfirmRoleChange = async () => {
+    if (!roleChangeTarget) return
 
     setLoading(true)
-    const { ok, message } = await changeUserRole(userId, newRole)
+    const { ok, message } = await changeUserRole(roleChangeTarget.user.id, roleChangeTarget.newRole)
 
-    if (!ok) {
-      alert(message)
+    if (ok) {
+      addToast('Rol de usuario actualizado con éxito.', 'success')
+      setRoleChangeTarget(null)
+    } else {
+      addToast(message || 'Error al cambiar el rol.', 'error')
     }
     setLoading(false)
   }
 
-  const handleDelete = async (userId: string) => {
-    if (
-      !window.confirm('¿Estás seguro de eliminar este usuario? Esta acción no se puede deshacer.')
-    )
-      return
+  const handleDelete = (user: User) => {
+    setUserToDelete(user)
+  }
+
+  const handleConfirmDeleteUser = async () => {
+    if (!userToDelete) return
 
     setLoading(true)
-    const { ok, message } = await deleteUser(userId)
+    const { ok, message } = await deleteUser(userToDelete.id)
 
-    if (!ok) {
-      alert(message)
+    if (ok) {
+      addToast('Usuario eliminado con éxito.', 'success')
+      setUserToDelete(null)
+    } else {
+      addToast(message || 'Error al eliminar el usuario.', 'error')
     }
     setLoading(false)
   }
@@ -133,7 +146,7 @@ export function UsersTable({ users }: Props) {
                     className="p-2"
                     title={user.role === 'ADMIN' ? 'Degradar a Usuario' : 'Promover a Admin'}
                     variant="ghost"
-                    onClick={() => handleRoleChange(user.id, user.role)}
+                    onClick={() => handleRoleChange(user)}
                   >
                     <IoShieldCheckmarkOutline size={18} />
                   </Button>
@@ -141,7 +154,7 @@ export function UsersTable({ users }: Props) {
                     className="p-2"
                     title="Eliminar Usuario"
                     variant="ghost"
-                    onClick={() => handleDelete(user.id)}
+                    onClick={() => handleDelete(user)}
                   >
                     <IoTrashOutline size={18} />
                   </Button>
@@ -159,6 +172,58 @@ export function UsersTable({ users }: Props) {
           )}
         </TableBody>
       </Table>
+
+      <Modal
+        isOpen={!!roleChangeTarget}
+        size="md"
+        title="Cambiar Rol de Usuario"
+        onClose={() => setRoleChangeTarget(null)}
+      >
+        <div className="flex flex-col gap-5">
+          <div className="bg-surface/50 rounded-lg border border-dashed border-amber-500/30 p-4">
+            <p className="text-primary text-xs leading-relaxed">
+              <span className="font-bold text-amber-500 uppercase">Nota:</span> ¿Estás seguro de
+              cambiar el rol de &quot;{roleChangeTarget?.user.name || roleChangeTarget?.user.email}
+              &quot; a {roleChangeTarget?.newRole === 'ADMIN' ? 'Administrador' : 'Usuario'}?
+            </p>
+          </div>
+
+          <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+            <Button variant="ghost" onClick={() => setRoleChangeTarget(null)}>
+              Volver
+            </Button>
+            <Button isLoading={loading} variant="primary" onClick={handleConfirmRoleChange}>
+              Confirmar Cambio
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!userToDelete}
+        size="md"
+        title="Eliminar Usuario"
+        onClose={() => setUserToDelete(null)}
+      >
+        <div className="flex flex-col gap-5">
+          <div className="bg-surface/50 rounded-lg border border-dashed border-red-500/30 p-4">
+            <p className="text-primary text-xs leading-relaxed">
+              <span className="font-bold text-red-500 uppercase">Nota:</span> Esta acción no se
+              puede deshacer. Se eliminará permanentemente la cuenta de &quot;
+              {userToDelete?.name || userToDelete?.email}&quot;.
+            </p>
+          </div>
+
+          <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+            <Button variant="ghost" onClick={() => setUserToDelete(null)}>
+              Volver
+            </Button>
+            <Button isLoading={loading} variant="destructive" onClick={handleConfirmDeleteUser}>
+              Eliminar Usuario
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </Card>
   )
 }

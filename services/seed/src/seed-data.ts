@@ -33,8 +33,6 @@ interface SeedGenus {
 interface SeedVariant {
   size: PotSize
   price: number
-  quantity: number
-  available: boolean
 }
 
 interface SeedSpecies {

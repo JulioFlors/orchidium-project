@@ -621,7 +621,7 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
             <Textarea
               className="min-h-35 resize-none"
               id="species-desc"
-              placeholder="Detalles sobre cuidados, origen, hábitat..."
+              placeholder="Detalles sobre cuidados, origen, hábitat"
               value={form.description}
               onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
             />

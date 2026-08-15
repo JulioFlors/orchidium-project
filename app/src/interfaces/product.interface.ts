@@ -18,8 +18,8 @@ export interface ProductVariant {
   id: string
   size: PotSize
   price: number
-  quantity: number
-  available: boolean
+  quantity?: number
+  available?: boolean
   speciesId: string
 }
 

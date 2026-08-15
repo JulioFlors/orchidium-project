@@ -17,8 +17,8 @@ export interface VariantData {
   id: string
   size: PotSize
   price: number
-  quantity: number
-  available: boolean
+  quantity?: number
+  available?: boolean
 }
 
 interface ProductVariantCardProps {
@@ -35,7 +35,7 @@ export function ProductVariantCard({ variant, onEdit, onDelete }: ProductVariant
   return (
     <motion.div
       animate={{ opacity: 1, y: 0 }}
-      className="bg-surface border-input-outline group hover:bg-hover-overlay isolate relative flex min-w-[160px] items-center justify-between gap-2.5 rounded-xl border p-2.5 shadow-xs transition-all duration-300 tds-xs:gap-4 tds-xs:p-4"
+      className="bg-surface border-input-outline group hover:bg-hover-overlay focus-within:z-5 relative flex min-w-40 items-center justify-between gap-2.5 rounded-xl border p-2.5 shadow-xs transition-colors duration-200 tds-xs:gap-4 tds-xs:p-4"
       initial={{ opacity: 0, y: 5 }}
     >
       {/* 1. Maceta (StatusCircleIcon sin glow y con color por PotSize) */}

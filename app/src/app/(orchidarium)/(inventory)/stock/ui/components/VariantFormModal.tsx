@@ -10,8 +10,8 @@ interface Variant {
   id: string
   size: PotSize
   price: number
-  quantity: number
-  available: boolean
+  quantity?: number
+  available?: boolean
 }
 
 interface VariantFormModalProps {
@@ -23,8 +23,8 @@ interface VariantFormModalProps {
   onSave: (formValues: {
     size: PotSize
     price: number
-    quantity: number
-    available: boolean
+    quantity?: number
+    available?: boolean
   }) => void
   potSizes: PotSize[]
   potSizeLabels: Record<PotSize, string>

@@ -1,34 +1,19 @@
 'use client'
 
-import { useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import clsx from 'clsx'
-import { initialData } from '@service/seeding'
 
 import { QuantityDropdown, buttonVariants } from '@/components'
 import { getImageUrl, useFormatPrice } from '@/lib'
-
-const productsInCart = [
-  initialData.species[3],
-  initialData.species[4],
-  initialData.species[5],
-  initialData.species[13],
-  initialData.species[15],
-  initialData.species[11],
-  initialData.species[10],
-  initialData.species[6],
-  initialData.species[12],
-]
+import { useCartStore } from '@/store'
 
 export function CartView() {
-  const [quantity, setQuantity] = useState<number>(1)
-  const { format: formatPrice } = useFormatPrice()
+  const { cart, updateProductQuantity, removeProduct, getSummaryInformation } = useCartStore()
+  const { format: formatPrice, rate } = useFormatPrice()
 
-  // Todo -> Usando la data del seed por ahora
-  const itemsInCart = productsInCart.length
+  const { subTotal, itemsInCart } = getSummaryInformation()
 
-  // ---- Renderizado del carrito con items ---- //
   return (
     <div className="tds-sm:-mx-9 tds-xl:-mx-12 -mx-6">
       <div className="tds-lg:max-w-300 tds-sm:px-9 tds-xl:px-12 mx-auto flex w-full max-w-150 px-6">
@@ -61,88 +46,79 @@ export function CartView() {
               >
                 Continúa comprando
               </Link>
-
-              <Link
-                className={buttonVariants({
-                  variant: 'secondary',
-                  className:
-                    'tds-lg:justify-center tds-lg:w-[320px] mt-4 w-full justify-items-start',
-                })}
-                href="/auth/login"
-              >
-                Iniciar sesión
-              </Link>
             </div>
           ) : (
             // ---- Carrito ---- //
-            <div className="tds-lg:grid-cols-2 tds-sm:-mt-6 tds-sm:mb-6 mt-0 mb-0 -ml-6 grid grid-cols-1">
-              {/* ---- tds-flex-item  ---- */}
+            <div className="tds-lg:grid-cols-2 tds-sm:-mt-6 tds-sm:mb-6 mt-0 mb-0 -ml-6 grid grid-cols-1 gap-8">
+              {/* ---- Lista de Ítems ---- */}
               <div className="tds-sm:pt-6 flex w-full min-w-28 flex-1 flex-col pt-0 pl-6">
-                {/* ---- Tag Continúa comprando  ---- */}
-                {/* El self-start evitará que el Link se estire a todo lo ancho debido a su padre flex-col */}
-                {/* <div className="tds-lg:mb-0 mt-6 mb-8 flex flex-col">
-                  <p className="tracking-wide max-w-[75ch] font-semibold">
-                    Le faltan $ 10 de compra para obtener el envío gratuito
-                  </p>
-
-                  <Link
-                    className="tracking-wide underline-secondary mt-0.5 self-start"
-                    href="/category/plants"
+                {cart.map((item) => (
+                  <div
+                    key={item.variantId}
+                    className="tds-sm:mt-0 tds-lg:max-w-136.5 mt-6 border-b border-border/40 pb-6"
                   >
-                    Continúa comprando
-                  </Link>
-                </div> */}
-
-                {/* ---- lineitems__container ---- */}
-                {productsInCart.map((product) => (
-                  // ---- lineitem__container-wrapper ---- //
-                  <div key={product.slug} className="tds-sm:mt-0 tds-lg:max-w-136.5 mt-6">
-                    {/* ---- lineitem__container tds-flex tds-flex-gutters ---- // */}
                     <div className="tds-lg:mt-6 relative mt-0 flex flex-1">
-                      {/* ---- lineitem__main-info ---- // */}
-                      <div className="flex w-full flex-row flex-nowrap">
+                      <div className="flex w-full flex-row flex-nowrap items-start justify-between">
+                        {/* Imagen R2 */}
                         <div className="tds-sm:pt-6 max-h-28.5 max-w-22.5 shrink-0 pt-0">
                           <Link
-                            aria-label={`Ver detalles de ${product.name}`}
-                            href={`/product/${product.slug}`}
+                            aria-label={`Ver detalles de ${item.name}`}
+                            href={`/product/${item.slug}`}
                           >
                             <Image
-                              alt={product.name}
+                              alt={item.name}
                               className="tds-lg:h-22.5 tds-lg:w-22.5 tds-lg:min-w-22.5 tds-lg:mb-0 mb-1.25 aspect-square h-20 w-20 min-w-20 rounded object-cover"
                               height={80}
-                              src={getImageUrl(product.images[0])}
+                              src={getImageUrl(item.image)}
                               width={80}
                             />
                           </Link>
                         </div>
 
-                        <div className="tds-sm:pt-6 flex-1 pt-0 pl-6">
-                          {/* ---- lineitem - Title ---- */}
+                        {/* Detalles */}
+                        <div className="tds-sm:pt-6 flex-1 pt-0 pl-4">
                           <Link
-                            href={`/product/${product.slug}`}
-                            id={`${product.slug}__link`}
-                            tabIndex={-1} // Evita que reciba focus al navegar con Tab
+                            href={`/product/${item.slug}`}
+                            id={`${item.slug}__link`}
+                            tabIndex={-1}
                           >
-                            <p className="max-w-[75ch] font-semibold tracking-wide">
-                              {product.name}
+                            <p className="max-w-[75ch] font-semibold tracking-wide text-primary">
+                              {item.name}
                             </p>
                           </Link>
 
-                          <p className="max-w-[75ch] pt-0.75">Maceta, P10</p>
+                          <p className="max-w-[75ch] pt-0.75 text-sm text-secondary">
+                            Tamaño: {item.size}
+                          </p>
 
-                          <div className="flex pt-0.75">
-                            {/* ---- Selector de Cantidad ---- */}
-                            <QuantityDropdown quantity={quantity} onQuantityChanged={setQuantity} />
-                            <button className="underline-secondary cursor-pointer" type="button">
+                          <div className="flex items-center gap-3 pt-2">
+                            <QuantityDropdown
+                              maxQuantity={item.maxStock}
+                              quantity={item.quantity}
+                              onQuantityChanged={(newQty) =>
+                                updateProductQuantity(item.variantId, newQty)
+                              }
+                            />
+                            <button
+                              className="text-xs text-red-500 hover:underline cursor-pointer"
+                              type="button"
+                              onClick={() => removeProduct(item.variantId)}
+                            >
                               Quitar
                             </button>
                           </div>
                         </div>
-                        {/* ---- lineitem__price ---- // */}
-                        <div className="lineitem__price">
-                          <p className="max-w-[75ch] font-semibold tracking-wide">
-                            {formatPrice(product.variants[0].price)}
+
+                        {/* Precio con espacio holgado */}
+                        <div className="lineitem__price pl-4 text-right min-w-[110px] shrink-0">
+                          <p className="font-semibold tracking-wide whitespace-nowrap text-primary">
+                            {formatPrice(item.price * item.quantity)}
                           </p>
+                          {item.quantity > 1 && (
+                            <p className="text-xs text-secondary whitespace-nowrap">
+                              c/u {formatPrice(item.price)}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -150,44 +126,46 @@ export function CartView() {
                 ))}
               </div>
 
-              {/* ---- tds-flex-item  ---- */}
+              {/* ---- Resumen del Pedido ---- */}
               <div className="tds-sm:pt-6 flex-1 pt-0 pl-6">
-                {/* ---- Order Summary - Resumen del pedido ---- */}
-                <div className="order-summary">
-                  {/* ---- Order Summary - Title ---- */}
-                  <h2 className="text-primary tds-sm:text-xl tds-sm:leading-7 pt-0 pb-2 text-[17px] leading-5 font-semibold tracking-tighter transition-all duration-300 ease-in-out">
+                <div className="order-summary bg-surface p-6 rounded-lg border border-border/50 shadow-sm">
+                  <h2 className="text-primary tds-sm:text-xl tds-sm:leading-7 pt-0 pb-4 text-[17px] leading-5 font-semibold tracking-tighter transition-all duration-300 ease-in-out border-b border-border/40">
                     Resumen del pedido
                   </h2>
 
-                  {/* // fixed cart-store by zustand */}
-                  {/* <OrderSummary /> */}
-
-                  <div className="mb-6 flex flex-col">
-                    <div className="my-2.5 flex justify-between">
-                      <span className="">Envío</span>
-                      <span className="text-right">Cobro a destino</span>
+                  <div className="my-4 flex flex-col gap-3">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-secondary">Envío</span>
+                      <span className="text-right font-medium">Cobro a destino</span>
                     </div>
 
-                    <div className="text-primary tds-sm:text-xl tds-sm:leading-7 flex items-center justify-between py-2 text-[17px] leading-5 font-semibold tracking-tighter transition-all duration-300 ease-in-out">
+                    <div className="text-primary tds-sm:text-xl tds-sm:leading-7 flex items-center justify-between py-2 text-[17px] leading-5 font-semibold tracking-tighter transition-all duration-300 ease-in-out border-t border-border/30 pt-4">
                       <h2>Subtotal</h2>
-                      <h2 translate="no">{formatPrice(10)}</h2>
+                      <h2 className="whitespace-nowrap" translate="no">
+                        {formatPrice(subTotal)}
+                      </h2>
                     </div>
 
-                    <div className="text-tds-grey-30 text-sm">Tasa referencial del BCV</div>
+                    {rate && rate > 0 && (
+                      <div className="text-xs text-secondary bg-surface-hover/50 p-2.5 rounded border border-border/20">
+                        <span className="font-medium">Tasa referencial BCV:</span> Bs.{' '}
+                        {rate.toFixed(2)} / USD
+                      </div>
+                    )}
                   </div>
 
-                  {/* ---- Checkout ---- */}
-                  <div className="checkout-button">
-                    <div className="my-2.5 flex w-full justify-center">
+                  {/* ---- Botón Checkout ---- */}
+                  <div className="checkout-button pt-2">
+                    <div className="flex w-full justify-center">
                       <Link
                         className={buttonVariants({
                           variant: 'primary',
                           className:
-                            'tds-lg:max-w-none w-full max-w-125 justify-center align-middle tracking-wide',
+                            'tds-lg:max-w-none w-full max-w-125 justify-center align-middle tracking-wide py-3',
                         })}
-                        href="/checkout/address"
+                        href="/checkout"
                       >
-                        Pagar
+                        Continuar al Checkout
                       </Link>
                     </div>
                   </div>

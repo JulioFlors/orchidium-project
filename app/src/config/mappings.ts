@@ -10,7 +10,7 @@ import {
   TaskStatus,
   TaskPurpose,
   TaskSource,
-  ExecutionType,
+  DosingSource,
 } from '@package/database/enums'
 
 export {
@@ -24,13 +24,13 @@ export {
   Role,
   TaskPurpose,
   TaskSource,
-  ExecutionType,
+  DosingSource,
   Severity,
 }
 
-export const ExecutionTypeLabels: Record<ExecutionType, string> = {
-  [ExecutionType.HARDWARE]: 'Hardware (Automatizado)',
-  [ExecutionType.MANUAL]: 'Manual (Cultivador)',
+export const DosingSourceLabels: Record<DosingSource, string> = {
+  [DosingSource.ROUTINE]: 'Rutina Programada',
+  [DosingSource.DEFERRED]: 'Aplicación Manual Diferida',
 }
 
 export const RoleLabels: Record<Role, string> = {

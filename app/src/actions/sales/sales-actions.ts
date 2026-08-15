@@ -54,15 +54,6 @@ export async function registerDirectSale(input: RegisterDirectSaleInput) {
             data: { status: 'SOLD' },
           })
         }
-
-        if (item.variantId) {
-          await tx.productVariant.update({
-            where: { id: item.variantId },
-            data: {
-              quantity: { decrement: item.quantity },
-            },
-          })
-        }
       }
 
       return record

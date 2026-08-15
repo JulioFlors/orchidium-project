@@ -1,12 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import prisma, {
-  type TaskPurpose,
-  type ZoneType,
-  type ExecutionType,
-  CollisionGuard,
-} from '@package/database'
+import prisma, { type TaskPurpose, type ZoneType, CollisionGuard } from '@package/database'
 
 import { sendMqttCommand } from '@/lib/server'
 
@@ -25,13 +20,15 @@ async function notifySchedulerSync() {
 }
 
 /**
- * Obtiene todas las rutinas (AutomationSchedule)
- * @param executionType Filtro opcional ('HARDWARE' | 'MANUAL')
+ * Obtiene todas las rutinas de riego automatizado (AutomationSchedule)
  */
-export async function getSchedules(executionType?: ExecutionType) {
+export async function getSchedules() {
   try {
     const schedules = await prisma.automationSchedule.findMany({
-      where: executionType ? { executionType } : undefined,
+      include: {
+        fertilizationProgram: true,
+        phytosanitaryProgram: true,
+      },
       orderBy: [{ purpose: 'asc' }, { name: 'asc' }],
     })
 
@@ -46,7 +43,7 @@ export async function getSchedules(executionType?: ExecutionType) {
 }
 
 /**
- * Activa o desactiva una rutina específica
+ * Activa o desactiva una rutina de riego específica
  */
 export async function toggleSchedule(id: string, isEnabled: boolean) {
   try {
@@ -55,17 +52,15 @@ export async function toggleSchedule(id: string, isEnabled: boolean) {
 
       if (!schedule) return { success: false, error: 'Rutina no encontrada' }
 
-      if (schedule.executionType === 'HARDWARE') {
-        const collisionCheck = await CollisionGuard.validateCronSchedule(
-          schedule.cronTrigger,
-          schedule.durationMinutes,
-          7,
-          id,
-        )
+      const collisionCheck = await CollisionGuard.validateCronSchedule(
+        schedule.cronTrigger,
+        schedule.durationMinutes,
+        7,
+        id,
+      )
 
-        if (collisionCheck.hasCollision) {
-          return { success: false, error: collisionCheck.details || 'Colisión detectada' }
-        }
+      if (collisionCheck.hasCollision) {
+        return { success: false, error: collisionCheck.details || 'Colisión detectada' }
       }
     }
 
@@ -75,7 +70,6 @@ export async function toggleSchedule(id: string, isEnabled: boolean) {
     })
 
     revalidatePath('/schedules')
-    revalidatePath('/dosing-schedules')
     await notifySchedulerSync()
 
     return { success: true, data: updated }
@@ -85,13 +79,12 @@ export async function toggleSchedule(id: string, isEnabled: boolean) {
 }
 
 /**
- * DTO para crear o editar rutinas
+ * DTO para crear o editar rutinas de riego
  */
-interface ScheduleInput {
+export interface ScheduleInput {
   id?: string
   name: string
   purpose: TaskPurpose
-  executionType?: ExecutionType
   cronTrigger: string // e.g., "0 16 * * *"
   durationMinutes: number
   zones: ZoneType[]
@@ -100,24 +93,33 @@ interface ScheduleInput {
 }
 
 /**
- * Crea o actualiza una rutina
+ * Crea o actualiza una rutina de riego
  */
 export async function upsertSchedule(data: ScheduleInput) {
   try {
-    const isManual = data.executionType === 'MANUAL'
-    const executionType = isManual ? 'MANUAL' : 'HARDWARE'
+    const existingName = await prisma.automationSchedule.findFirst({
+      where: {
+        name: data.name.trim(),
+        id: data.id ? { not: data.id } : undefined,
+      },
+    })
 
-    if (!isManual) {
-      const collisionCheck = await CollisionGuard.validateCronSchedule(
-        data.cronTrigger,
-        data.durationMinutes,
-        7,
-        data.id,
-      )
-
-      if (collisionCheck.hasCollision) {
-        return { success: false, error: collisionCheck.details || 'Colisión de horario detectada' }
+    if (existingName) {
+      return {
+        success: false,
+        error: `Ya existe una rutina de riego llamada "${data.name}".`,
       }
+    }
+
+    const collisionCheck = await CollisionGuard.validateCronSchedule(
+      data.cronTrigger,
+      data.durationMinutes,
+      7,
+      data.id,
+    )
+
+    if (collisionCheck.hasCollision) {
+      return { success: false, error: collisionCheck.details || 'Colisión de horario detectada' }
     }
 
     let result
@@ -126,9 +128,8 @@ export async function upsertSchedule(data: ScheduleInput) {
       result = await prisma.automationSchedule.update({
         where: { id: data.id },
         data: {
-          name: data.name,
+          name: data.name.trim(),
           purpose: data.purpose,
-          executionType,
           cronTrigger: data.cronTrigger,
           durationMinutes: data.durationMinutes,
           zones: data.zones,
@@ -143,9 +144,8 @@ export async function upsertSchedule(data: ScheduleInput) {
     } else {
       result = await prisma.automationSchedule.create({
         data: {
-          name: data.name,
+          name: data.name.trim(),
           purpose: data.purpose,
-          executionType,
           cronTrigger: data.cronTrigger,
           durationMinutes: data.durationMinutes,
           zones: data.zones,
@@ -160,12 +160,10 @@ export async function upsertSchedule(data: ScheduleInput) {
     }
 
     revalidatePath('/schedules')
-    revalidatePath('/dosing-schedules')
     await notifySchedulerSync()
 
     return { success: true, data: result }
   } catch (error: unknown) {
-    // Si el nombre ya existe (Unique constraint p2002 via prisma)
     if (
       typeof error === 'object' &&
       error !== null &&
@@ -184,7 +182,7 @@ export async function upsertSchedule(data: ScheduleInput) {
 }
 
 /**
- * Elimina una rutina
+ * Elimina una rutina de riego
  */
 export async function deleteSchedule(id: string) {
   try {
@@ -192,7 +190,6 @@ export async function deleteSchedule(id: string) {
       where: { id },
     })
     revalidatePath('/schedules')
-    revalidatePath('/dosing-schedules')
     await notifySchedulerSync()
 
     return { success: true }

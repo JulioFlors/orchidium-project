@@ -1,26 +1,28 @@
 # Lista de Tareas: Carrito, Checkout Único y Ventas Admin
 
-- [ ] **Fase 1: Modelo de Datos & Migraciones Prisma (Protocolo Biblia BD)**
-  - [ ] Añadir enums `OrderStatus`, `PaymentMethod`, `SaleType` a `schema.prisma`.
-  - [ ] Añadir `SOLD` y `RESERVED` a `PlantStatus`.
-  - [ ] Crear modelos `UserAddress`, `Order`, `OrderItem`, `SaleRecord` en `schema.prisma`.
-  - [ ] Generar migración SQL usando flag `-o` (UTF-8 sin BOM) o `prisma migrate dev --create-only`.
-  - [ ] Verificar script SQL (sin `DROP` accidental).
-  - [ ] Aplicar migración con `prisma migrate deploy`.
+- [x] **Fase 1: Modelo de Datos & Migraciones Prisma (Protocolo Biblia BD)**
+  - [x] Añadir enums `OrderStatus`, `PaymentMethod`, `SaleType` a `schema.prisma`.
+  - [x] Añadir `SOLD` y `RESERVED` a `PlantStatus`.
+  - [x] Crear modelos `UserAddress`, `Order`, `OrderItem`, `SaleRecord` en `schema.prisma`.
+  - [x] Generar migración SQL usando flag `-o` (UTF-8 sin BOM) o `prisma migrate dev --create-only`.
+  - [x] Verificar script SQL (sin `DROP` accidental).
+  - [x] Eliminar las columnas `quantity` y `available` redundantes de `ProductVariant` en `schema.prisma`, `seed-data.ts` y migración SQL dedicada.
+  - [x] Aplicar migración con `prisma migrate deploy`.
 
-- [ ] **Fase 2: State Management & Correcciones UI Carrito (`CartView.tsx`)**
-  - [ ] Habilitar y tipar `useCartStore`.
-  - [ ] Conectar imágenes de productos en el carrito usando la utilidad `getImageUrl` (compatibilidad R2).
-  - [ ] Conectar `QuantityDropdown` con el stock real disponible en DB por variante.
-  - [ ] Mostrar el valor numérico de la Tasa BCV vigente en la card de resumen del pedido.
-  - [ ] Ampliar el espacio/layout de precios a la derecha para evitar rupturas de línea en cifras en Bolívares (VES).
-  - [ ] Crear `useCheckoutStore` (gestión de Step 1 / Step 2 y formulario persistente en `/checkout`).
-  - [ ] Crear `useAdminSaleStore` (carrito de ventas POS para administrador con asignación de `PlantInstance`).
+- [x] **Fase 2: State Management & Correcciones UI Carrito (`CartView.tsx`)**
+  - [x] Habilitar y tipar `useCartStore`.
+  - [x] Conectar imágenes de productos en el carrito usando la utilidad `getImageUrl` (compatibilidad R2).
+  - [x] Conectar `QuantityDropdown` con el stock real disponible en DB por variante.
+  - [x] Mostrar el valor numérico de la Tasa BCV vigente en la card de resumen del pedido.
+  - [x] Ampliar el espacio/layout de precios a la derecha para evitar rupturas de línea en cifras en Bolívares (VES).
+  - [x] Crear `useCheckoutStore` (gestión de Step 1 / Step 2 y formulario persistente en `/checkout`).
+  - [x] Crear `useAdminSaleStore` (carrito de ventas POS para administrador con asignación de `PlantInstance`).
 
-- [ ] **Fase 3: Server Actions**
-  - [ ] `address-actions.ts`: CRUD direcciones de usuario.
-  - [ ] `order-actions.ts`: Creación de orden con reserva de stock, consulta cliente/admin, aprobación/cancelación.
-  - [ ] `sales-actions.ts`: Registro de venta manual masiva (POS admin) y venta de planta individual desde Gemelo Digital.
+- [x] **Fase 3: Server Actions**
+  - [x] `address-actions.ts`: CRUD direcciones de usuario.
+  - [x] `order-actions.ts`: Creación de orden con reserva de stock, consulta cliente/admin, aprobación/cancelación.
+  - [x] `sales-actions.ts`: Registro de venta manual masiva (POS admin) y venta de planta individual desde Gemelo Digital.
+
 
 - [ ] **Fase 4: Storefront (Ruta Única `/checkout` & Mi Cuenta)**
   - [ ] Implementar vista unificada `/checkout` con selector de Step 1 (Datos & Pago) y Step 2 (Resumen & Confirmación).

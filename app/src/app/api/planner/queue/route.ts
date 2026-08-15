@@ -44,11 +44,10 @@ export async function GET() {
       source: task.source,
     }))
 
-    // 2. Fetch enabled automation schedules (Hardware only)
+    // 2. Fetch enabled automation schedules (Hydraulic only)
     const schedules = await prisma.automationSchedule.findMany({
       where: {
         isEnabled: true,
-        executionType: 'HARDWARE',
       },
     })
 

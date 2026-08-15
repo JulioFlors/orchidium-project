@@ -6,6 +6,7 @@ import Image from 'next/image'
 
 import { getImageUrl } from '@/lib'
 import { Badge } from '@/components'
+import { useToastStore } from '@/store/toast/toast.store'
 
 interface SpeciesItem {
   id: string
@@ -39,7 +40,7 @@ export function FeaturedSpeciesManager({
 
   const handleAdd = (id: string) => {
     if (featuredIds.length >= 9) {
-      alert('Máximo de 9 especies destacadas alcanzado.')
+      useToastStore.getState().addToast('Máximo de 9 especies destacadas alcanzado.', 'error')
 
       return
     }

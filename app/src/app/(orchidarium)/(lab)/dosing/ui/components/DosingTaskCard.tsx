@@ -14,20 +14,18 @@ import {
   IoTrashOutline,
   IoPencilOutline,
 } from 'react-icons/io5'
-import { MdLayers } from 'react-icons/md'
 import { TbBug, TbSpider } from 'react-icons/tb'
 import { FaBacteria } from 'react-icons/fa'
 import { GiSuperMushroom, GiChemicalDrop } from 'react-icons/gi'
 import { PiSprayBottle, PiFlowerThin } from 'react-icons/pi'
 import { GrCycle } from 'react-icons/gr'
 
-import { StatusCircleIcon, ActionMenu, ActionMenuItem, Badge } from '@/components/ui'
+import { StatusCircleIcon, ActionMenu, ActionMenuItem, Badge, ZoneBadges } from '@/components/ui'
 import { TaskStatusBadge } from '@/app/(orchidarium)/(operations)/queue/ui/components/TaskStatusBadge'
 import { formatTime12h } from '@/utils'
 import {
   AgrochemicalPurposeLabels,
   AgrochemicalPurposeStyles,
-  ZoneTypeLabels,
   type AgrochemicalPurpose,
 } from '@/config/mappings'
 
@@ -44,7 +42,8 @@ const PURPOSE_ICONS: Record<string, React.ReactNode> = {
 interface DosingTaskCardProps {
   task: DosingTaskItem
   onStatusChange: (taskId: string, status: string, postponeHours?: number) => void
-  onDelete: (taskId: string) => void
+  onDelete: (task: DosingTaskItem) => void
+  onCancel?: (task: DosingTaskItem) => void
   onEdit?: (task: DosingTaskItem) => void
 }
 
@@ -53,7 +52,13 @@ interface DosingTaskCardProps {
  *
  * Combina la estructura híbrida responsiva de QueueTaskCard y los estilos agrónomos de AgrochemicalCard.
  */
-export function DosingTaskCard({ task, onStatusChange, onDelete, onEdit }: DosingTaskCardProps) {
+export function DosingTaskCard({
+  task,
+  onStatusChange,
+  onDelete,
+  onCancel,
+  onEdit,
+}: DosingTaskCardProps) {
   const dateObj = new Date(task.scheduledAt)
   const isPast = dateObj < new Date()
 
@@ -87,7 +92,7 @@ export function DosingTaskCard({ task, onStatusChange, onDelete, onEdit }: Dosin
           {
             label: 'Cancelar Tarea',
             icon: <IoCloseOutline className="text-amber-500" />,
-            onClick: () => onStatusChange(task.id, 'CANCELLED'),
+            onClick: () => (onCancel ? onCancel(task) : onStatusChange(task.id, 'CANCELLED')),
             variant: 'destructive' as const,
           },
         ]
@@ -95,7 +100,7 @@ export function DosingTaskCard({ task, onStatusChange, onDelete, onEdit }: Dosin
     {
       label: 'Eliminar Registro',
       icon: <IoTrashOutline className="text-red-500" />,
-      onClick: () => onDelete(task.id),
+      onClick: () => onDelete(task),
       variant: 'destructive' as const,
     },
   ]
@@ -107,7 +112,7 @@ export function DosingTaskCard({ task, onStatusChange, onDelete, onEdit }: Dosin
   return (
     <motion.div
       animate={{ opacity: 1, y: 0 }}
-      className="bg-surface border-input-outline group hover:bg-hover-overlay tds-sm:flex-row tds-sm:items-center relative flex flex-col gap-4 rounded-xl border p-4 shadow-sm transition-all"
+      className="bg-surface border-input-outline group hover:bg-hover-overlay focus-within:z-5 tds-sm:flex-row tds-sm:items-center relative flex flex-col gap-4 rounded-xl border p-4 shadow-sm transition-colors duration-200"
       initial={{ opacity: 0, y: 5 }}
     >
       <div className="tds-sm:grid tds-sm:grid-cols-[1fr_auto] tds-sm:items-center tds-sm:gap-x-6 flex flex-1 flex-col gap-4">
@@ -188,17 +193,7 @@ export function DosingTaskCard({ task, onStatusChange, onDelete, onEdit }: Dosin
               </div>
 
               {/* Zonas Involucradas */}
-              <div className="flex flex-wrap items-center gap-1.5 overflow-hidden">
-                <MdLayers className="text-secondary h-4 w-4 shrink-0 opacity-30" />
-                {task.zones.map((z) => (
-                  <span
-                    key={z}
-                    className="text-primary font-mono text-[11px] font-bold tracking-tight uppercase whitespace-nowrap"
-                  >
-                    {ZoneTypeLabels[z] || z}
-                  </span>
-                ))}
-              </div>
+              <ZoneBadges zones={task.zones} />
             </div>
 
             {/* Menú de Acciones */}

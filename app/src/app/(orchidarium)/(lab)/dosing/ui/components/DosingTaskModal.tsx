@@ -156,8 +156,8 @@ export function DosingTaskModal({
           />
         </FormField>
 
-        {/* Fecha y Hora */}
-        <div className="grid grid-cols-2 gap-4">
+        {/* Fecha y Hora (1 columna en móvil, 2 en desktop) */}
+        <div className="grid grid-cols-1 gap-4 tds-sm:grid-cols-2">
           <FormField htmlFor="scheduledDateInput" label="Fecha">
             <Input
               required

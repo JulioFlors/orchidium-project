@@ -37,6 +37,27 @@ const stats = {
 
 const inferredEventsForComparison: { startedAt: Date; endedAt: Date }[] = []
 
+/**
+ * 🛡️ PARCHE DE TELEMETRÍA CORRUPTA (12/08/2026):
+ * Omitir el procesamiento del 12 de Agosto de 2026 debido al desfase horaria
+ * y duplicación de datos registrados en esa fecha para la estación EMA EXTERIOR.
+ */
+function isAugust12_2026(date: Date): boolean {
+  try {
+    const caracasStr = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Caracas',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date)
+    const [m, d, y] = caracasStr.split('/')
+
+    return y === '2026' && m === '08' && d === '12'
+  } catch {
+    return false
+  }
+}
+
 async function main() {
   const now = new Date()
   let startTime: Date
@@ -363,6 +384,14 @@ async function rebuildPhysicalRain(startTime: Date, endTime: Date) {
     if (nextMs > endMs) nextMs = endMs
     const blockEnd = new Date(nextMs)
 
+    if (isAugust12_2026(blockStart)) {
+      Logger.warn(
+        `⚠️ PARCHE (12/08/2026): Omitiendo reconstrucción de lluvia física para ${blockStart.toISOString()} debido a telemetría corrupta de EMA EXTERIOR.`,
+      )
+      startMs = nextMs
+      continue
+    }
+
     const query = `
       SELECT time, "rain_intensity"
       FROM "environment_metrics"
@@ -471,6 +500,8 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
   let baselineLux: number | null = null
   let baselineTemp: number | null = null
   let baselineHum: number | null = null
+  let baselineVarTemp: number | null = null
+  let baselineVarHum: number | null = null
   let baselineAgeMinutes: number | null = null
   let rainStartedAt: number | null = null
   let lastRainClosedAt: number | null = null
@@ -543,6 +574,11 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
       let dropPct = 0
 
       if (isDay) {
+        // Guarda de seguridad: durante el día exigimos un baseLux1 válido (lote 1 de lux con lecturas > 0)
+        if (luxBatches.length < 2 || luxBatches[1].max === 0) {
+          return
+        }
+
         // --- REGLAS DIURNAS ---
         const baseTemp1 = tempBatches[1].max
         const baseHum1 = humBatches[1].min
@@ -857,6 +893,21 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
         baselineHum = calculatedBaselineHum ?? humBatches[0].min
         baselineAgeMinutes = calculatedBaselineAgeMinutes
 
+        if (tempBatches.length >= 4 && humBatches.length >= 4) {
+          const varTemp1 = tempBatches[1].max - tempBatches[1].min
+          const varTemp2 = tempBatches[2].max - tempBatches[2].min
+          const varTemp3 = tempBatches[3].max - tempBatches[3].min
+          baselineVarTemp = Math.max(varTemp1, varTemp2, varTemp3, 0.15)
+
+          const varHum1 = humBatches[1].max - humBatches[1].min
+          const varHum2 = humBatches[2].max - humBatches[2].min
+          const varHum3 = humBatches[3].max - humBatches[3].min
+          baselineVarHum = Math.max(varHum1, varHum2, varHum3, 0.5)
+        } else {
+          baselineVarTemp = null
+          baselineVarHum = null
+        }
+
         let preciseStartMs = timestampMs
         const baselineT = calculatedBaselineTemp ?? tempBatches[1]?.max ?? baselineTemp
         const samplesT = tempBatches[0].samples
@@ -992,33 +1043,60 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
                 },
               )
               maxHumInRain = null
+              baselineVarTemp = null
+              baselineVarHum = null
               createdCount++
             }
           }
         }
 
-        // 4. Cese por Variación Térmica Diurna (Cese de Lluvia Intermitente)
+        // 4. Cese por Variación Térmica Diurna (Evaluación Deslizante 10m en 20m)
         if (!closedByRecovery && isDay && minTempInRain !== null) {
-          const currentTemp = tempBatches[0].min
           const currentHum = humBatches[0].max
-          const tempRecovery = currentTemp - minTempInRain
           const isSaturated = currentHum >= 96.0
           const minRecoveryRequired = isSaturated ? 1.2 : 0.6
 
-          if (tempRecovery >= minRecoveryRequired) {
-            closedByRecovery = true
-            let preciseEndMs = timestampMs
-            const matchingEndSample = tempBatches[0].samples.find(
-              (s) => s.value >= minTempInRain! + 0.6,
-            )
+          const combinedTempSamples: Sample[] = []
+          if (tempBatches.length >= 1) combinedTempSamples.push(...tempBatches[0].samples)
+          if (tempBatches.length >= 2) combinedTempSamples.push(...tempBatches[1].samples)
 
-            if (matchingEndSample) {
-              preciseEndMs = matchingEndSample.timestamp
-            } else {
-              const lastSample = tempBatches[0].samples[tempBatches[0].samples.length - 1]
+          combinedTempSamples.sort((a, b) => a.timestamp - b.timestamp)
 
-              if (lastSample) preciseEndMs = lastSample.timestamp
+          let foundThermalRecoverySubWindow = false
+          let thermalRecoveryStartMs = timestampMs
+          let maxThermalRecovery = 0
+
+          if (combinedTempSamples.length >= 3) {
+            const newestTs = combinedTempSamples[combinedTempSamples.length - 1].timestamp
+            const oldestTs = combinedTempSamples[0].timestamp
+
+            if (newestTs - oldestTs >= 8 * 60 * 1000) {
+              for (let offsetMin = 10; offsetMin >= 0; offsetMin -= 1) {
+                const winEnd = newestTs - offsetMin * 60 * 1000
+                const winStart = winEnd - 10 * 60 * 1000
+
+                const subT = combinedTempSamples.filter(
+                  (s) => s.timestamp >= winStart && s.timestamp <= winEnd,
+                )
+
+                if (subT.length >= 3) {
+                  const minSubTemp = Math.min(...subT.map((s) => s.value))
+                  const recovery = minSubTemp - minTempInRain
+
+                  if (recovery >= minRecoveryRequired) {
+                    foundThermalRecoverySubWindow = true
+                    thermalRecoveryStartMs = subT[0].timestamp
+                    maxThermalRecovery = Math.max(...subT.map((s) => s.value)) - minTempInRain
+                    break
+                  }
+                }
+              }
             }
+          }
+
+          if (foundThermalRecoverySubWindow) {
+            closedByRecovery = true
+            let preciseEndMs = thermalRecoveryStartMs
 
             if (preciseEndMs < rainStartedAt) {
               preciseEndMs = rainStartedAt
@@ -1026,18 +1104,25 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
             const endSampleT =
               tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
+              (tempBatches.length >= 2 &&
+                tempBatches[1].samples.find((s) => s.timestamp === preciseEndMs)) ||
               tempBatches[0].samples[tempBatches[0].samples.length - 1]
             const endSampleH =
               humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
+              (tempBatches.length >= 2 &&
+                humBatches[1].samples.find((s) => s.timestamp === preciseEndMs)) ||
               humBatches[0].samples[humBatches[0].samples.length - 1]
             const endSampleL =
               luxBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
+              (luxBatches.length >= 2 &&
+                luxBatches[1].samples.find((s) => s.timestamp === preciseEndMs)) ||
               luxBatches[0].samples[luxBatches[0].samples.length - 1]
 
             isTelemetryRainActive = false
             lastRainClosedAt = preciseEndMs
 
-            const closeReasonText = `🌡️ Cese de Lluvia Intermitente (Variación Térmica): la temperatura se recuperó +${tempRecovery.toFixed(2)}°C (Temp: ${currentTemp.toFixed(1)}°C vs mínimo en lluvia: ${minTempInRain.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}% HR, Lux: ${currentMinLux.toFixed(0)} lx)`
+            const currentTemp = tempBatches[0].min
+            const closeReasonText = `🌡️ Cese de Lluvia Intermitente (Variación Térmica): la temperatura se recuperó +${maxThermalRecovery.toFixed(2)}°C (Temp: ${currentTemp.toFixed(1)}°C vs mínimo en lluvia: ${minTempInRain.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}% HR, Lux: ${currentMinLux.toFixed(0)} lx)`
 
             await closeVirtualEvent(
               new Date(preciseEndMs),
@@ -1051,10 +1136,12 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
               {
                 type: 'THERMAL_VARIATION',
                 minTemp: minTempInRain,
-                tempRecovery: tempRecovery,
+                tempRecovery: maxThermalRecovery,
               },
             )
             maxHumInRain = null
+            baselineVarTemp = null
+            baselineVarHum = null
             createdCount++
           }
         }
@@ -1079,6 +1166,11 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           let stagnantEndMs = timestampMs
           let stagnantDiffTemp = 0
           let stagnantDiffHum = 0
+
+          const tempCeseThreshold =
+            baselineVarTemp !== null ? Math.max(0.4, 1.2 * baselineVarTemp) : 0.4
+          const humCeseThreshold =
+            baselineVarHum !== null ? Math.max(1.0, 1.2 * baselineVarHum) : 1.0
 
           if (combinedTempSamples.length >= 3 && combinedHumSamples.length >= 3) {
             const newestTs = combinedTempSamples[combinedTempSamples.length - 1].timestamp
@@ -1109,8 +1201,8 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
                   const maxHum = Math.max(...subH.map((s) => s.value))
                   const isSaturated = maxHum >= 100.0
 
-                  const isHumStag = isSaturated ? true : netHumRise <= 1.0
-                  const isTempStag = netTempDrop <= 0.4
+                  const isHumStag = isSaturated ? true : netHumRise <= humCeseThreshold
+                  const isTempStag = netTempDrop <= tempCeseThreshold
 
                   if (isHumStag && isTempStag) {
                     foundStagnantSubWindow = true
@@ -1127,13 +1219,41 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           if (foundStagnantSubWindow) {
             let preciseEndMs = stagnantEndMs
 
-            if (preciseEndMs < activeVirtualEvent.startedAt.getTime()) {
+            // Búsqueda precisa del punto donde comenzó la estabilidad neta (meseta)
+            const sortedTempDesc = [...combinedTempSamples].sort((a, b) => b.timestamp - a.timestamp)
+            const sortedHumDesc = [...combinedHumSamples].sort((a, b) => b.timestamp - a.timestamp)
+
+            if (sortedTempDesc.length > 0 && sortedHumDesc.length > 0) {
+              const lastSample = sortedTempDesc[0]
+              const lastT = lastSample.value
+              const lastHSample = sortedHumDesc.find(
+                (s) => Math.abs(s.timestamp - lastSample.timestamp) < 5000,
+              )
+              const lastH = lastHSample ? lastHSample.value : sortedHumDesc[0].value
+
+              for (const tSample of sortedTempDesc) {
+                const hSample = sortedHumDesc.find(
+                  (s) => Math.abs(s.timestamp - tSample.timestamp) < 5000,
+                )
+
+                if (hSample) {
+                  const diffT = Math.abs(tSample.value - lastT)
+                  const diffH = Math.abs(hSample.value - lastH)
+
+                  if (diffT <= 0.15 && diffH <= 0.5) {
+                    preciseEndMs = tSample.timestamp
+                  } else {
+                    break
+                  }
+                }
+              }
+            }
+
+            if (activeVirtualEvent && preciseEndMs < activeVirtualEvent.startedAt.getTime()) {
               preciseEndMs = activeVirtualEvent.startedAt.getTime()
             }
             const diffTemp = stagnantDiffTemp
             const diffHum = stagnantDiffHum
-            const tempCeseThreshold = 0.4
-            const humCeseThreshold = 1.0
 
             const endSampleT =
               tempBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
@@ -1200,6 +1320,8 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             }
 
             maxHumInRain = null
+            baselineVarTemp = null
+            baselineVarHum = null
             createdCount++
 
             return
@@ -1215,6 +1337,14 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
     if (nextMs > endMs) nextMs = endMs
     const blockEnd = new Date(nextMs)
+
+    if (isAugust12_2026(blockStart)) {
+      Logger.warn(
+        `⚠️ PARCHE (12/08/2026): Omitiendo reconstrucción de lluvia inferida para ${blockStart.toISOString()} debido a telemetría corrupta de EMA EXTERIOR.`,
+      )
+      startMs = nextMs
+      continue
+    }
 
     const query = `
       SELECT time, temperature, humidity, illuminance

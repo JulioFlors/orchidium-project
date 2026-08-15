@@ -472,9 +472,10 @@ export async function cleanupExpiredTasks() {
 }
 
 /**
- * Pre-agenda tareas de agroquímicos 12h antes de su ejecución para que el usuario pueda confirmarlas.
+ * Pre-agenda tareas de agroquímicos del circuito hidráulico (AutomationSchedule FERTIGATION / FUMIGATION)
+ * 12h antes de su ejecución para que el usuario pueda preparar el tanque y confirmarlas.
  */
-export async function preScheduleAgrochemicals() {
+export async function preScheduleHydraulicAgrochemicals() {
   try {
     const agroSchedules = await prisma.automationSchedule.findMany({
       where: {
@@ -491,7 +492,7 @@ export async function preScheduleAgrochemicals() {
       const nextOccurrence = cron.nextRun()
 
       if (nextOccurrence && nextOccurrence <= twelveHoursAhead) {
-        // Verificar si ya existe una tarea para esta fecha exacta (con margen de 1 min)
+        // Verificar si ya existe una tarea en TaskLog para esta fecha exacta (con margen de 1 min)
         const startWindow = new Date(nextOccurrence.getTime() - 60000)
         const endWindow = new Date(nextOccurrence.getTime() + 60000)
 
@@ -512,15 +513,15 @@ export async function preScheduleAgrochemicals() {
               source: 'ROUTINE',
               scheduledAt: nextOccurrence,
               duration: schedule.durationMinutes,
-              notes: 'Tarea pre-agendada para confirmación (12h de antelación).',
+              notes: `Tarea de fertirriego/fumigación automatizada pre-agendada: ${schedule.name}`,
             },
           })
 
-          // Crear notificación de confirmación
+          // Crear notificación de confirmación de tanque para Telegram / n8n
           await prisma.notification.create({
             data: {
               type: 'AGROCHEMICAL_CONFIRM',
-              title: 'Confirmación de Agroquímicos',
+              title: 'Confirmación de Tanque de Riego',
               description: `Se requiere preparar el tanque para la rutina: ${schedule.name} programada para el ${nextOccurrence.toLocaleTimeString('es-VE')}`,
               taskId: task.id,
               priority: 'HIGH',
@@ -528,13 +529,13 @@ export async function preScheduleAgrochemicals() {
           })
 
           Logger.agro(
-            `Pre-agendada rutina "${schedule.name}" para el ${nextOccurrence.toLocaleString('es-VE')}`,
+            `Pre-agendada rutina de fertirriego/fumigación automatizada "${schedule.name}" para el ${nextOccurrence.toLocaleString('es-VE')}`,
           )
         }
       }
     }
   } catch (error) {
-    Logger.error('Error en preScheduleAgrochemicals:', error)
+    Logger.error('Error en preScheduleHydraulicAgrochemicals:', error)
   }
 }
 

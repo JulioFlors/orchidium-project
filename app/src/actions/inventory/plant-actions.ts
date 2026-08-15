@@ -25,38 +25,9 @@ async function getOrCreateLocationForZone(zone: ZoneType) {
   return location
 }
 
-// Auxiliar para sincronizar el stock comercial de una variante según plantas disponibles
-export async function syncVariantStock(speciesId: string, size: PotSize) {
-  try {
-    const availableCount = await prisma.plant.count({
-      where: {
-        speciesId,
-        currentSize: size,
-        status: 'AVAILABLE',
-      },
-    })
-
-    const existingVariant = await prisma.productVariant.findUnique({
-      where: {
-        speciesId_size: {
-          speciesId,
-          size,
-        },
-      },
-    })
-
-    if (existingVariant) {
-      await prisma.productVariant.update({
-        where: { id: existingVariant.id },
-        data: {
-          quantity: availableCount,
-          available: availableCount > 0,
-        },
-      })
-    }
-  } catch (error) {
-    Logger.error('[Plant] Error al sincronizar variante comercial:', error)
-  }
+// Auxiliar para sincronizar el stock comercial (no-op tras migración, stock derivado en vivo)
+export async function syncVariantStock(_speciesId: string, _size: PotSize) {
+  // Las variantes ya no almacenan columas quantity/available estáticas; el stock es 100% derivado dinámicamente de Plant
 }
 
 // ─────────────────────────────────────────────────────────────

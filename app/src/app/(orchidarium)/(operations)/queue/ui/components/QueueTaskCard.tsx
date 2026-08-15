@@ -5,15 +5,14 @@ import { motion } from 'motion/react'
 import { clsx } from 'clsx'
 import { IoCalendarOutline, IoTimeOutline, IoCloseOutline } from 'react-icons/io5'
 import { RxStopwatch } from 'react-icons/rx'
-import { MdLayers } from 'react-icons/md'
 import { useSWRConfig } from 'swr'
 
 import { TaskStatusBadge } from './TaskStatusBadge'
 
-import { StatusCircleIcon, ActionMenu, ActionMenuItem, Button } from '@/components/ui'
+import { StatusCircleIcon, ActionMenu, ActionMenuItem, Button, ZoneBadges } from '@/components/ui'
 import { formatTime12h } from '@/utils'
 import { useToast } from '@/hooks'
-import { TaskPurpose, ZoneType, TaskPurposeLabels, ZoneTypeLabels } from '@/config/mappings'
+import { TaskPurpose, ZoneType, TaskPurposeLabels } from '@/config/mappings'
 
 interface PendingTask {
   id: string
@@ -136,7 +135,7 @@ export function QueueTaskCard({ task, onCancel, icon, colorClassName }: QueueTas
   return (
     <motion.div
       animate={{ opacity: 1, y: 0 }}
-      className="bg-surface border-input-outline group hover:bg-hover-overlay tds-sm:flex-row tds-sm:items-center relative flex flex-col gap-4 rounded-xl border p-4 shadow-sm transition-all"
+      className="bg-surface border-input-outline group hover:bg-hover-overlay focus-within:z-5 tds-sm:flex-row tds-sm:items-center relative flex flex-col gap-4 rounded-xl border p-4 shadow-sm transition-colors duration-200"
       initial={{ opacity: 0, y: 5 }}
     >
       <div className="tds-sm:grid tds-sm:grid-cols-[1fr_auto] tds-sm:items-center tds-sm:gap-x-6 flex flex-1 flex-col gap-4">
@@ -204,17 +203,7 @@ export function QueueTaskCard({ task, onCancel, icon, colorClassName }: QueueTas
               </div>
 
               {/* Zonas */}
-              <div className="flex flex-wrap items-center gap-1.5 overflow-hidden">
-                <MdLayers className="text-secondary h-4 w-4 shrink-0 opacity-30" />
-                {task.zones.map((z) => (
-                  <span
-                    key={z}
-                    className="text-primary font-mono text-[11px] font-bold tracking-tight uppercase whitespace-nowrap"
-                  >
-                    {ZoneTypeLabels[z] || z}
-                  </span>
-                ))}
-              </div>
+              <ZoneBadges zones={task.zones} />
             </div>
 
             {/* Acciones */}

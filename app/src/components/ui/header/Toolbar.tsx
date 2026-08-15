@@ -18,7 +18,7 @@ import {
   SidebarTrigger,
   ThemeToggle,
 } from '@/components'
-import { useUIStore } from '@/store'
+import { useCartStore, useUIStore } from '@/store'
 
 interface Props {
   isOrchidarium: boolean
@@ -33,6 +33,9 @@ export function Toolbar({ isOrchidarium, isAuthLayout, suggestions, closeDropdow
   const isSearchBoxExpanded = useUIStore((state) => state.isSearchBoxExpanded)
   const searchTerm = useUIStore((state) => state.searchTerm)
   const isSidebarOpen = useUIStore((state) => state.isSidebarOpen)
+
+  const cart = useCartStore((state) => state.cart)
+  const totalCartItems = cart.reduce((total, item) => total + item.quantity, 0)
 
   const searchContainerRef = useRef<HTMLDivElement>(null)
 
@@ -136,9 +139,12 @@ export function Toolbar({ isOrchidarium, isAuthLayout, suggestions, closeDropdow
             href="/cart"
             onClick={() => closeDropdown?.()}
           >
-            <div className="relative">
-              <span className="text-black-and-white absolute -top-2 -right-2 rounded-full bg-emerald-500 px-1 text-xs font-bold" />
-              {/* todo: Reemplazar con la cuenta real del carrito */}
+            <div className="relative flex items-center justify-center">
+              {totalCartItems > 0 && (
+                <span className="text-black-and-white absolute -top-1 -right-1 flex min-h-3 min-w-3 items-center justify-center rounded-full bg-action px-1 text-[8px] font-medium leading-none shadow-sm">
+                  {totalCartItems}
+                </span>
+              )}
               <CartIcon className="tds-icon" />
             </div>
           </Link>

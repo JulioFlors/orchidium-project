@@ -16,8 +16,9 @@ import {
 } from './components'
 
 import { getDosingTasks, updateDosingTaskStatus, deleteDosingTask } from '@/actions/lab'
-import { Heading, Button } from '@/components/ui'
+import { Heading, Button, Modal } from '@/components/ui'
 import { useToast } from '@/hooks'
+import { useFormDraftStore } from '@/store'
 
 interface DosingViewProps {
   initialTasks: DosingTaskItem[]
@@ -51,6 +52,15 @@ export function DosingView({ initialTasks, agrochemicals }: DosingViewProps) {
     },
   )
 
+  const [taskToCancel, setTaskToCancel] = useState<DosingTaskItem | null>(null)
+  const [taskToDelete, setTaskToDelete] = useState<DosingTaskItem | null>(null)
+  const [isCancelling, setIsCancelling] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const { drafts, setDraft, clearDraft } = useFormDraftStore()
+  const cancelReasonKey = taskToCancel ? `cancel-dosing-task-${taskToCancel.id}` : ''
+  const cancelReason = taskToCancel ? ((drafts[cancelReasonKey] as string | undefined) ?? '') : ''
+
   const handleStatusChange = async (taskId: string, status: string, postponeHours?: number) => {
     try {
       const res = await updateDosingTaskStatus(taskId, status as TaskStatus, postponeHours)
@@ -66,18 +76,46 @@ export function DosingView({ initialTasks, agrochemicals }: DosingViewProps) {
     }
   }
 
-  const handleDelete = async (taskId: string) => {
+  const handleConfirmCancelTask = async () => {
+    if (!taskToCancel || !cancelReason.trim()) return
+
+    setIsCancelling(true)
     try {
-      const res = await deleteDosingTask(taskId)
+      const res = await updateDosingTaskStatus(taskToCancel.id, 'CANCELLED' as TaskStatus)
+
+      if (res.success) {
+        success('Tarea cancelada correctamente')
+        clearDraft(cancelReasonKey)
+        setTaskToCancel(null)
+        mutate()
+      } else {
+        toastError(res.error || 'No se pudo cancelar la tarea')
+      }
+    } catch {
+      toastError('Error al cancelar la tarea')
+    } finally {
+      setIsCancelling(false)
+    }
+  }
+
+  const handleConfirmDeleteTask = async () => {
+    if (!taskToDelete) return
+
+    setIsDeleting(true)
+    try {
+      const res = await deleteDosingTask(taskToDelete.id)
 
       if (res.success) {
         success('Registro eliminado')
+        setTaskToDelete(null)
         mutate()
       } else {
         toastError(res.error || 'No se pudo eliminar')
       }
     } catch {
       toastError('Error al eliminar')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -200,7 +238,8 @@ export function DosingView({ initialTasks, agrochemicals }: DosingViewProps) {
               <DosingTaskCard
                 key={task.id}
                 task={task}
-                onDelete={handleDelete}
+                onCancel={(t) => setTaskToCancel(t)}
+                onDelete={(t) => setTaskToDelete(t)}
                 onEdit={(taskToEdit) => {
                   setEditingTask(taskToEdit)
                   setIsAddModalOpen(true)
@@ -224,6 +263,92 @@ export function DosingView({ initialTasks, agrochemicals }: DosingViewProps) {
         }}
         onSuccess={() => mutate()}
       />
+
+      <Modal
+        isOpen={!!taskToCancel}
+        size="md"
+        title={
+          taskToCancel
+            ? `Cancelar Tarea - ${taskToCancel.agrochemical?.name || 'Dosificación'}`
+            : 'Cancelar Tarea'
+        }
+        onClose={() => setTaskToCancel(null)}
+      >
+        <div className="flex flex-col gap-5">
+          {taskToCancel?.scheduledAt && (
+            <div className="flex items-center gap-1.5 text-xs font-semibold">
+              <span className="text-secondary">Programada para el </span>
+              <span className="text-primary font-mono font-bold">
+                {new Date(taskToCancel.scheduledAt).toLocaleDateString('es-VE', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                })}
+              </span>
+            </div>
+          )}
+
+          <div className="bg-surface/50 rounded-lg border border-dashed border-red-500/30 p-4">
+            <p className="text-primary text-xs leading-relaxed">
+              <span className="font-bold text-red-500 uppercase">Nota:</span> Esta acción no se
+              puede deshacer.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <label className="text-secondary text-sm font-medium" htmlFor="cancel-dosing-reason">
+              Motivo de cancelación
+            </label>
+            <textarea
+              className="focus-input border-input-outline w-full resize-none border text-sm"
+              id="cancel-dosing-reason"
+              placeholder="Ej: Cambio de prioridades, insumo agotado..."
+              rows={3}
+              value={cancelReason}
+              onChange={(e) => setDraft(cancelReasonKey, e.target.value)}
+            />
+          </div>
+
+          <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+            <Button variant="ghost" onClick={() => setTaskToCancel(null)}>
+              Volver
+            </Button>
+            <Button
+              disabled={!cancelReason.trim()}
+              isLoading={isCancelling}
+              variant="destructive"
+              onClick={handleConfirmCancelTask}
+            >
+              {isCancelling ? 'Cancelando' : 'Cancelar Tarea'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!taskToDelete}
+        size="md"
+        title="Eliminar Registro de Dosificación"
+        onClose={() => setTaskToDelete(null)}
+      >
+        <div className="flex flex-col gap-5">
+          <div className="bg-surface/50 rounded-lg border border-dashed border-red-500/30 p-4">
+            <p className="text-primary text-xs leading-relaxed">
+              <span className="font-bold text-red-500 uppercase">Nota:</span> Esta acción no se
+              puede deshacer. Se eliminará permanentemente este registro de dosificación.
+            </p>
+          </div>
+
+          <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
+            <Button variant="ghost" onClick={() => setTaskToDelete(null)}>
+              Volver
+            </Button>
+            <Button isLoading={isDeleting} variant="destructive" onClick={handleConfirmDeleteTask}>
+              Eliminar Registro
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

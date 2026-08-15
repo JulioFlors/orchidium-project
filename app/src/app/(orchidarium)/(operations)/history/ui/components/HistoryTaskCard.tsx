@@ -13,19 +13,17 @@ import {
   IoCalendarOutline,
 } from 'react-icons/io5'
 import { RxStopwatch } from 'react-icons/rx'
-import { MdLayers } from 'react-icons/md'
 import { LuRadioTower } from 'react-icons/lu'
 import { HiOutlineCog } from 'react-icons/hi'
 import { TaskPurpose, TaskStatus, TaskSource, ZoneType } from '@package/database/enums'
 
-import { Badge, StatusCircleIcon } from '@/components'
+import { Badge, StatusCircleIcon, ZoneBadges } from '@/components'
 import { formatTime12h } from '@/utils'
 import {
   TaskPurposeLabels,
   TaskSourceLabels,
   TaskStatusLabels,
   TaskStatusStyles,
-  ZoneTypeLabels,
 } from '@/config/mappings'
 
 interface HistoryTask {
@@ -147,17 +145,7 @@ export function HistoryTaskCard({
                 </span>
               </div>
 
-              <div className="flex flex-wrap items-center gap-1.5 overflow-hidden">
-                <MdLayers className="text-secondary h-4 w-4 shrink-0 opacity-30" />
-                {task.zones.map((z) => (
-                  <span
-                    key={z}
-                    className="text-primary font-mono text-[11px] font-bold tracking-tight uppercase whitespace-nowrap"
-                  >
-                    {ZoneTypeLabels[z] || z}
-                  </span>
-                ))}
-              </div>
+              <ZoneBadges zones={task.zones} />
             </div>
           </div>
 

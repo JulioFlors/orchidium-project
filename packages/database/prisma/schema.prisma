@@ -100,8 +100,6 @@ model ProductVariant {
   id            String                     @id @default(uuid())
   size          PotSize
   price         Float
-  quantity      Int                        @default(0)
-  available     Boolean                    @default(false)
   speciesId     String
   createdAt     DateTime                   @default(now())
   updatedAt     DateTime                   @updatedAt
@@ -174,25 +172,51 @@ model Plant {
   @@index([status])
 }
 
+enum DosageUnit {
+  ML_L
+  G_L
+}
+
 model Agrochemical {
-  id                  String               @id @default(uuid())
-  name                String               @unique
+  id                  String                @id @default(uuid())
+  name                String                @unique
   description         String
   type                AgrochemicalType
   purpose             AgrochemicalPurpose
   preparation         String
+  dosageValue         Float?
+  dosageUnit          DosageUnit?
+  isMix               Boolean               @default(false)
+  isActive            Boolean               @default(true)
+  mixIngredients      AgrochemicalMixItem[] @relation("ParentMix")
+  usedInMixes         AgrochemicalMixItem[] @relation("Ingredient")
   fertilizationCycles FertilizationCycle[]
   phytosanitaryCycles PhytosanitaryCycle[]
   tasksExecuted       TaskLog[]
-  manualDosingLogs    ManualDosingLog[]
+  dosingLogs          DosingLog[]
+
+  @@index([isActive])
+}
+
+model AgrochemicalMixItem {
+  id           String       @id @default(uuid())
+  parentMixId  String
+  ingredientId String
+  dosageValue  Float
+  dosageUnit   DosageUnit
+  parentMix    Agrochemical @relation("ParentMix", fields: [parentMixId], references: [id], onDelete: Cascade)
+  ingredient   Agrochemical @relation("Ingredient", fields: [ingredientId], references: [id], onDelete: Cascade)
+
+  @@unique([parentMixId, ingredientId])
 }
 
 model FertilizationProgram {
-  id              String               @id @default(uuid())
-  name            String               @unique
-  weeklyFrequency Int
-  schedules       AutomationSchedule[]
-  productsCycle   FertilizationCycle[]
+  id                  String               @id @default(uuid())
+  name                String               @unique
+  weeklyFrequency     Int
+  automationSchedules AutomationSchedule[]
+  dosingSchedules     DosingSchedule[]
+  productsCycle       FertilizationCycle[]
 }
 
 model FertilizationCycle {
@@ -200,18 +224,19 @@ model FertilizationCycle {
   sequence       Int
   agrochemicalId String
   programId      String
-  agrochemical   Agrochemical         @relation(fields: [agrochemicalId], references: [id], onDelete: Cascade)
+  agrochemical   Agrochemical         @relation(fields: [agrochemicalId], references: [id], onDelete: Restrict)
   program        FertilizationProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
 
   @@unique([programId, sequence])
 }
 
 model PhytosanitaryProgram {
-  id               String               @id @default(uuid())
-  name             String               @unique
-  monthlyFrequency Int
-  schedules        AutomationSchedule[]
-  productsCycle    PhytosanitaryCycle[]
+  id                  String               @id @default(uuid())
+  name                String               @unique
+  monthlyFrequency    Int
+  automationSchedules AutomationSchedule[]
+  dosingSchedules     DosingSchedule[]
+  productsCycle       PhytosanitaryCycle[]
 }
 
 model PhytosanitaryCycle {
@@ -219,7 +244,7 @@ model PhytosanitaryCycle {
   sequence       Int
   agrochemicalId String
   programId      String
-  agrochemical   Agrochemical         @relation(fields: [agrochemicalId], references: [id], onDelete: Cascade)
+  agrochemical   Agrochemical         @relation(fields: [agrochemicalId], references: [id], onDelete: Restrict)
   program        PhytosanitaryProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
 
   @@unique([programId, sequence])
@@ -230,20 +255,36 @@ model AutomationSchedule {
   name                   String                @unique
   description            String?
   isEnabled              Boolean               @default(true)
-  executionType          ExecutionType         @default(HARDWARE)
   purpose                TaskPurpose
   cronTrigger            String
   intervalDays           Int                   @default(1)
   durationMinutes        Int                   @default(10)
   zones                  ZoneType[]
   fertilizationProgramId String?
-  createdAt              DateTime              @default(now())
-  updatedAt              DateTime              @updatedAt
   phytosanitaryProgramId String?
   fertilizationProgram   FertilizationProgram? @relation(fields: [fertilizationProgramId], references: [id])
   phytosanitaryProgram   PhytosanitaryProgram? @relation(fields: [phytosanitaryProgramId], references: [id])
   taskLogs               TaskLog[]
-  manualDosingLogs       ManualDosingLog[]
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+}
+
+model DosingSchedule {
+  id                     String                @id @default(uuid())
+  name                   String                @unique
+  description            String?
+  isEnabled              Boolean               @default(true)
+  purpose                TaskPurpose
+  cronTrigger            String
+  durationMinutes        Int                   @default(0)
+  zones                  ZoneType[]
+  fertilizationProgramId String?
+  phytosanitaryProgramId String?
+  fertilizationProgram   FertilizationProgram? @relation(fields: [fertilizationProgramId], references: [id])
+  phytosanitaryProgram   PhytosanitaryProgram? @relation(fields: [phytosanitaryProgramId], references: [id])
+  dosingLogs             DosingLog[]
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
 }
 
 model TaskLog {
@@ -269,24 +310,39 @@ model TaskLog {
   @@index([status])
 }
 
-model ManualDosingLog {
-  id             String              @id @default(uuid())
+model DosingLog {
+  id             String          @id @default(uuid())
   scheduledAt    DateTime
   executedAt     DateTime?
-  status         TaskStatus          @default(PENDING)
+  status         TaskStatus      @default(PENDING)
+  source         DosingSource    @default(DEFERRED)
   purpose        TaskPurpose
   zones          ZoneType[]
-  duration       Int                 @default(15)
+  duration       Int             @default(15)
   notes          String?
   agrochemicalId String
   scheduleId     String?
-  agrochemical   Agrochemical        @relation(fields: [agrochemicalId], references: [id], onDelete: Cascade)
-  schedule       AutomationSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  agrochemical   Agrochemical    @relation(fields: [agrochemicalId], references: [id], onDelete: Restrict)
+  schedule       DosingSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  notifications  Notification[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
 
   @@index([scheduledAt])
   @@index([status])
+}
+
+model FilterCleaningLog {
+  id          String   @id @default(uuid())
+  cleanedAt   DateTime @default(now())
+  nextDueAt   DateTime
+  notes       String?
+  confirmedBy String?
+  source      String   @default("MANUAL")
+  createdAt   DateTime @default(now())
+
+  @@index([cleanedAt])
+  @@index([nextDueAt])
 }
 
 model TaskEventLog {
@@ -643,9 +699,9 @@ enum TaskSource {
   INFERENCE
 }
 
-enum ExecutionType {
-  HARDWARE
-  MANUAL
+enum DosingSource {
+  ROUTINE
+  DEFERRED
 }
 
 enum TaskPurpose {
@@ -725,6 +781,8 @@ model Notification {
   priority     NotificationPriority @default(NORMAL)
   taskId       String?
   task         TaskLog?             @relation(fields: [taskId], references: [id])
+  dosingLogId  String?
+  dosingLog    DosingLog?           @relation(fields: [dosingLogId], references: [id])
   targetUserId String?
   targetUser   User?                @relation(fields: [targetUserId], references: [id])
   createdAt    DateTime             @default(now())

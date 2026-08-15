@@ -7,7 +7,11 @@ import { IoFlaskOutline, IoAddOutline, IoCalendarOutline } from 'react-icons/io5
 import { DosingScheduleFormModal } from './components/DosingScheduleFormModal'
 
 import { useToast } from '@/hooks'
-import { getSchedules, toggleSchedule, deleteSchedule } from '@/actions/planner/schedule-actions'
+import {
+  getDosingSchedules,
+  toggleDosingSchedule,
+  deleteDosingSchedule,
+} from '@/actions/lab/dosing-schedule-actions'
 import { TaskPurposeLabels } from '@/config/mappings'
 import { Button, Heading, Modal } from '@/components'
 import { ScheduleCard } from '@/app/(orchidarium)/(operations)/schedules/ui/components/ScheduleCard'
@@ -25,11 +29,10 @@ const ACTION_MAP: Record<string, { label: string; icon: React.ReactNode; color: 
   },
 }
 
-interface AutomationSchedule {
+export interface DosingScheduleItem {
   id: string
   name: string
   purpose: 'IRRIGATION' | 'FERTIGATION' | 'FUMIGATION' | 'HUMIDIFICATION' | 'SOIL_WETTING'
-  executionType?: 'HARDWARE' | 'MANUAL'
   cronTrigger: string
   durationMinutes: number
   isEnabled: boolean
@@ -40,22 +43,22 @@ interface AutomationSchedule {
 
 export function DosingSchedulesView() {
   const [isFormModalOpen, setIsFormModalOpen] = useState(false)
-  const [editingSchedule, setEditingSchedule] = useState<AutomationSchedule | null>(null)
-  const [scheduleToDelete, setScheduleToDelete] = useState<AutomationSchedule | null>(null)
+  const [editingSchedule, setEditingSchedule] = useState<DosingScheduleItem | null>(null)
+  const [scheduleToDelete, setScheduleToDelete] = useState<DosingScheduleItem | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set())
   const { success, error } = useToast()
 
-  // SWR para cargar las rutinas manuales de dosificación
+  // SWR para cargar las rutinas de dosificación
   const fetcher = async () => {
-    const res = await getSchedules('MANUAL')
+    const res = await getDosingSchedules()
 
     if (!res.success) throw new Error(res.error)
 
     return res.data
   }
 
-  const { data: schedules = [], isLoading, mutate } = useSWR('schedules-manual', fetcher)
+  const { data: schedules = [], isLoading, mutate } = useSWR('dosing-schedules', fetcher)
 
   const handleToggle = async (id: string, currentStatus: boolean) => {
     if (pendingIds.has(id)) return
@@ -63,7 +66,7 @@ export function DosingSchedulesView() {
     setPendingIds((prev) => new Set(prev).add(id))
 
     try {
-      const res = await toggleSchedule(id, !currentStatus)
+      const res = await toggleDosingSchedule(id, !currentStatus)
 
       if (res.success) {
         success('Estado de rutina actualizado')
@@ -92,7 +95,7 @@ export function DosingSchedulesView() {
 
     setIsDeleting(true)
     try {
-      const res = await deleteSchedule(scheduleToDelete.id)
+      const res = await deleteDosingSchedule(scheduleToDelete.id)
 
       if (res.success) {
         success('Rutina eliminada correctamente')
@@ -111,7 +114,7 @@ export function DosingSchedulesView() {
     }
   }
 
-  const openEditModal = (schedule: AutomationSchedule) => {
+  const openEditModal = (schedule: DosingScheduleItem) => {
     setEditingSchedule(schedule)
     setIsFormModalOpen(true)
   }
@@ -128,58 +131,73 @@ export function DosingSchedulesView() {
           action={
             <Button
               className="tds-sm:w-auto flex w-full items-center justify-center gap-2"
+              size="sm"
+              variant="default"
               onClick={openNewModal}
             >
-              <IoAddOutline className="h-5 w-5" /> Nueva Rutina
+              <IoAddOutline className="h-5 w-5" />
+              <span>Nueva Rutina</span>
             </Button>
           }
-          description="Programación de ciclos de fertilización y control fitosanitario."
-          title="Rutinas de Dosificación Manual"
+          description="Programa y gestiona la frecuencia de fertilizaciones y controles fitosanitarios del laboratorio."
+          eyebrow="Laboratorio"
+          title="Rutinas de Dosificación"
         />
+      </div>
 
-        {isLoading ? (
-          <div className="border-input-outline flex h-48 flex-col items-center justify-center gap-4 rounded-xl border border-dashed">
-            <div className="text-primary h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
-            <span className="text-primary animate-pulse text-sm font-medium">
-              Cargando rutinas de dosificación...
-            </span>
+      {isLoading ? (
+        <div className="text-secondary flex h-64 items-center justify-center">
+          <p className="animate-pulse text-sm">Cargando rutinas de dosificación...</p>
+        </div>
+      ) : schedules.length === 0 ? (
+        <div className="border-black-and-white/5 flex flex-col items-center justify-center rounded-2xl border border-dashed py-16 text-center">
+          <div className="bg-surface mb-4 flex h-16 w-16 items-center justify-center rounded-full shadow-sm">
+            <IoCalendarOutline className="text-secondary h-8 w-8 opacity-40" />
           </div>
-        ) : schedules.length === 0 ? (
-          <div className="border-input-outline bg-surface/50 flex flex-col items-center justify-center rounded-xl border border-dashed p-16 shadow-sm">
-            <IoCalendarOutline className="text-secondary/20 mb-3 h-16 w-16" />
-            <p className="text-secondary text-base font-medium">
-              No hay rutinas de dosificación activas
-            </p>
-            <p className="text-secondary mt-1 text-sm opacity-60">
-              Aún no has configurado ninguna rutina manual de fertilización o fumigación.
-            </p>
-          </div>
-        ) : (
-          <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-3 grid grid-cols-1 gap-4">
-            {schedules.map((schedule: AutomationSchedule) => {
-              const action = ACTION_MAP[schedule.purpose] || ACTION_MAP.FERTIGATION
+          <h3 className="text-primary text-base font-semibold">
+            No hay rutinas de dosificación configuradas
+          </h3>
+          <p className="text-secondary mt-1 max-w-sm text-sm opacity-60">
+            Crea una rutina para automatizar la proyección de tareas de fertilización y fumigación
+            en tu agenda.
+          </p>
+          <Button
+            className="mt-6 flex items-center gap-2"
+            size="sm"
+            variant="outline"
+            onClick={openNewModal}
+          >
+            <IoAddOutline className="h-4 w-4" />
+            <span>Crear primera rutina</span>
+          </Button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {schedules.map((schedule) => {
+            const actionInfo = ACTION_MAP[schedule.purpose] || {
+              label: schedule.purpose,
+              icon: <IoFlaskOutline className="h-5 w-5" />,
+              color: 'text-primary',
+            }
 
-              return (
-                <ScheduleCard
-                  key={schedule.id}
-                  colorClassName={action.color}
-                  icon={action.icon}
-                  isLoading={pendingIds.has(schedule.id)}
-                  schedule={schedule}
-                  onDelete={(id) => {
-                    const target = schedules.find((s: AutomationSchedule) => s.id === id)
+            return (
+              <ScheduleCard
+                key={schedule.id}
+                colorClassName={actionInfo.color}
+                icon={actionInfo.icon}
+                isLoading={pendingIds.has(schedule.id)}
+                schedule={schedule}
+                onDelete={() => setScheduleToDelete(schedule)}
+                onEdit={() => openEditModal(schedule)}
+                onToggle={(id, current) => handleToggle(id, current)}
+              />
+            )
+          })}
+        </div>
+      )}
 
-                    if (target) setScheduleToDelete(target)
-                  }}
-                  onEdit={openEditModal}
-                  onToggle={handleToggle}
-                />
-              )
-            })}
-          </div>
-        )}
-
-        {/* Modal de Creación / Edición */}
+      {/* Modal para Crear / Editar Rutina */}
+      {isFormModalOpen && (
         <DosingScheduleFormModal
           initialData={
             editingSchedule
@@ -196,47 +214,33 @@ export function DosingSchedulesView() {
           }
           isOpen={isFormModalOpen}
           onClose={() => setIsFormModalOpen(false)}
-          onSuccess={() => {
-            success(editingSchedule ? 'Rutina actualizada' : 'Rutina creada con éxito')
-            mutate()
-          }}
+          onSuccess={() => mutate()}
         />
+      )}
 
-        {/* Modal de Confirmación de Eliminación */}
+      {/* Modal de Confirmación de Eliminación */}
+      {scheduleToDelete && (
         <Modal
+          description={`¿Estás seguro de que deseas eliminar la rutina "${scheduleToDelete.name}"? Esta acción no se puede deshacer.`}
           isOpen={!!scheduleToDelete}
-          size="md"
+          size="sm"
           title="Eliminar Rutina de Dosificación"
           onClose={() => setScheduleToDelete(null)}
         >
-          <div className="flex flex-col gap-5">
-            <p className="text-secondary text-sm">
-              ¿Estás seguro de que deseas eliminar la rutina{' '}
-              <strong className="text-primary">{scheduleToDelete?.name}</strong>?
-            </p>
-
-            <div className="bg-surface/50 border-input-outline rounded-lg border border-dashed p-4">
-              <p className="text-secondary text-xs leading-relaxed">
-                <span className="font-bold text-pink-400 uppercase">Nota:</span> Esta acción no se
-                puede deshacer y eliminará permanentemente la rutina programada.
-              </p>
-            </div>
-
-            <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
-              <Button
-                disabled={isDeleting}
-                variant="ghost"
-                onClick={() => setScheduleToDelete(null)}
-              >
-                Cancelar
-              </Button>
-              <Button isLoading={isDeleting} variant="destructive" onClick={handleConfirmDelete}>
-                Eliminar
-              </Button>
-            </div>
+          <div className="mt-6 flex justify-end gap-3">
+            <Button
+              disabled={isDeleting}
+              variant="outline"
+              onClick={() => setScheduleToDelete(null)}
+            >
+              Cancelar
+            </Button>
+            <Button disabled={isDeleting} variant="danger" onClick={handleConfirmDelete}>
+              {isDeleting ? 'Eliminando...' : 'Eliminar'}
+            </Button>
           </div>
         </Modal>
-      </div>
+      )}
     </div>
   )
 }

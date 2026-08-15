@@ -117,7 +117,7 @@ export function PlantInstanceCard({
   return (
     <motion.div
       animate={{ opacity: 1, y: 0 }}
-      className="bg-surface border-input-outline group relative flex min-w-0 w-full flex-col gap-4 rounded-xl border p-4 shadow-sm transition-all hover:bg-hover-overlay"
+      className="bg-surface border-input-outline group focus-within:z-5 relative flex min-w-0 w-full flex-col gap-4 rounded-xl border p-4 shadow-sm transition-colors duration-200 hover:bg-hover-overlay"
       initial={{ opacity: 0, y: 5 }}
     >
       {/* 1. Cabecera Limpia (StatusCircleIcon + Código ID) */}
