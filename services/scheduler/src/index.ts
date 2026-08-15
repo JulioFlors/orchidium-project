@@ -5,8 +5,8 @@ import { Logger, colors, formatFriendlyHeartbeatDate } from './lib/logger'
 import { InferenceEngine } from './lib/inference-engine'
 import {
   mqttClient,
+  actuatorManager,
   irrigationRetryManager,
-  systemRetryManager,
   emaManager,
   syncNodeSampling,
   resetSamplingState,
@@ -382,8 +382,8 @@ function flushBootLog(nodeSource: string) {
   } else {
     // Sincronización para el Actuador Exterior
     resetSamplingState()
-    syncNodeSampling(undefined, true, 'actuator')
     sendCaracasTimeToActuator()
+    syncNodeSampling(undefined, true, 'actuator')
 
     // Al reconectarse o reiniciarse el nodo, asumimos que se inicializa en INTERVAL_NORMAL.
     lastSentRainInterval = 'INTERVAL_NORMAL'
@@ -477,8 +477,7 @@ function setupMqttHandlers() {
             // El scheduler acaba de iniciar y el nodo ya estaba operando.
             // Transicionamos a READY de inmediato sin estabilización ni sincronización redundante.
             await handleNodeSync('ping', previousHeartbeat)
-            irrigationRetryManager.setReady()
-            systemRetryManager.setReady()
+            actuatorManager.setReady()
             isSystemReady = true
           }
 
@@ -499,8 +498,7 @@ function setupMqttHandlers() {
           lastLuxBatchAt = Date.now()
 
           if (message === 'online') {
-            irrigationRetryManager.setStabilizing()
-            systemRetryManager.setStabilizing()
+            actuatorManager.setStabilizing()
             isSystemReady = false
           }
 
@@ -523,18 +521,16 @@ function setupMqttHandlers() {
           }
 
           // Para reboot
-          if (!isFreshSession && irrigationRetryManager.connectionState === 'online') {
+          if (!isFreshSession && actuatorManager.connectionState === 'online') {
             lastFirmwareHeartbeat = Date.now()
           }
 
-          if (irrigationRetryManager.connectionState === 'none') {
+          if (actuatorManager.connectionState === 'none') {
             if (!isFreshSession) {
               await handleNodeSync('reboot', previousHeartbeat)
-              irrigationRetryManager.setReady()
-              systemRetryManager.setReady()
+              actuatorManager.setReady()
             } else {
-              irrigationRetryManager.setStabilizing()
-              systemRetryManager.setStabilizing()
+              actuatorManager.setStabilizing()
               await handleNodeSync('reboot', previousHeartbeat)
             }
           } else {
@@ -862,8 +858,7 @@ function setupMqttHandlers() {
             let confirmation = null
 
             if (isActuator) {
-              confirmation = irrigationRetryManager.confirmByTaskId(taskId)
-              systemRetryManager.confirm(taskId)
+              confirmation = actuatorManager.confirmByTaskId(taskId)
             } else {
               confirmation = emaManager.confirm(taskId)
               if (taskId.startsWith('audit_')) {
@@ -886,8 +881,7 @@ function setupMqttHandlers() {
             }
           } else {
             if (isActuator) {
-              irrigationRetryManager.confirmByTaskId(message)
-              systemRetryManager.confirm(message)
+              actuatorManager.confirmByTaskId(message)
             } else {
               emaManager.confirm(message)
               if (message.startsWith('audit_')) {
@@ -897,8 +891,7 @@ function setupMqttHandlers() {
           }
         } catch {
           if (isActuator) {
-            irrigationRetryManager.confirmByTaskId(message)
-            systemRetryManager.confirm(message)
+            actuatorManager.confirmByTaskId(message)
           } else {
             emaManager.confirm(message)
             if (message && message.startsWith('audit_')) {
@@ -939,8 +932,7 @@ function setupMqttHandlers() {
           const { state, task_id: taskId } = info
 
           if (state === 'ON' && taskId) {
-            irrigationRetryManager.confirmByTaskId(taskId)
-            systemRetryManager.confirm(taskId)
+            actuatorManager.confirmByTaskId(taskId)
             await recordTaskEvent(taskId, TaskStatus.IN_PROGRESS, 'Circuito de Riego abierto.', {
               actualStartAt: new Date(),
             })
@@ -1312,7 +1304,7 @@ async function initializeHeartbeatsFromPostgres() {
       lastEmaHeartbeat = ts
       const formattedDate = formatFriendlyHeartbeatDate(latestEmaLog.timestamp)
 
-      Logger.info(`Último latido [Nodo EMA]  ${formattedDate} ${latestEmaLog.status}`)
+      Logger.info(`Nodo EMA: ${formattedDate} ${latestEmaLog.status}`)
       if (latestEmaLog.status === 'SLEEP') {
         isEmaSleeping = true
         emaManager.setOffline()
@@ -1337,7 +1329,7 @@ async function initializeHeartbeatsFromPostgres() {
       lastFirmwareHeartbeat = ts
       const formattedDate = formatFriendlyHeartbeatDate(latestActuatorLog.timestamp)
 
-      Logger.info(`Último latido [Nodo Actuador]  ${formattedDate} ${latestActuatorLog.status}`)
+      Logger.info(`Nodo Actuador: ${formattedDate} ${latestActuatorLog.status}`)
     }
   } catch (error) {
     Logger.error('Error al inicializar latido de Actuador desde Postgres:', error)
@@ -1387,9 +1379,7 @@ async function checkEmaHeartbeat() {
     )
 
     // Evaluar si es una Desconexión Solitaria (Nodo Actuador sigue ONLINE) para notificar batería agotada
-    const isActuatorOnline =
-      systemRetryManager.connectionState === 'online' ||
-      irrigationRetryManager.connectionState === 'online'
+    const isActuatorOnline = actuatorManager.connectionState === 'online'
 
     if (isActuatorOnline && !hadSolitaryBatteryOffline) {
       hadSolitaryBatteryOffline = true
@@ -1471,7 +1461,7 @@ function checkSensorsHealth() {
  * Gestiona la desconexión del nodo y la limpieza de tareas interrumpidas.
  */
 async function handleNodeOffline(reason: string, origin: 'BROKER' | 'NODE' | 'SCHEDULER') {
-  if (irrigationRetryManager.connectionState === 'offline') return
+  if (actuatorManager.connectionState === 'offline') return
 
   if (climateSyncTimer) {
     clearInterval(climateSyncTimer)
@@ -1480,8 +1470,7 @@ async function handleNodeOffline(reason: string, origin: 'BROKER' | 'NODE' | 'SC
   climateSyncAttempts = 0
   climateSyncPhase = 'idle'
 
-  irrigationRetryManager.setOffline()
-  systemRetryManager.setOffline()
+  actuatorManager.setOffline()
   Logger.node('OFFLINE', origin)
   resetSamplingState()
 
@@ -1498,8 +1487,7 @@ async function handleNodeOffline(reason: string, origin: 'BROKER' | 'NODE' | 'SC
   })
 
   for (const task of interruptedTasks) {
-    irrigationRetryManager.confirmByTaskId(task.id)
-    systemRetryManager.confirm(task.id)
+    actuatorManager.confirmByTaskId(task.id)
 
     let extraNotes: string
     let addedMinutes = 0
@@ -1541,7 +1529,7 @@ async function handleNodeOffline(reason: string, origin: 'BROKER' | 'NODE' | 'SC
     )
   }
 
-  irrigationRetryManager.clear()
+  actuatorManager.clear()
 }
 
 /**
@@ -1597,7 +1585,7 @@ async function handleNodeSync(
   }
 
   if (
-    irrigationRetryManager.connectionState !== 'online' ||
+    actuatorManager.connectionState !== 'online' ||
     statusToSave === 'REBOOT' ||
     message !== 'ping'
   ) {
@@ -1606,13 +1594,11 @@ async function handleNodeSync(
 
   // Asegurar que el secuenciador transicione a modo estabilización (online)
   // Esto evita que latidos posteriores disparen eventos ONLINE duplicados.
-  if (irrigationRetryManager.connectionState === 'offline') {
+  if (actuatorManager.connectionState === 'offline') {
     if (statusToSave === 'ONLINE') {
-      irrigationRetryManager.setStabilizing()
-      systemRetryManager.setStabilizing()
+      actuatorManager.setStabilizing()
     } else {
-      irrigationRetryManager.setReady()
-      systemRetryManager.setReady()
+      actuatorManager.setReady()
     }
   }
 
@@ -1628,8 +1614,7 @@ async function handleNodeSync(
     })
 
     for (const task of interruptedTasks) {
-      irrigationRetryManager.confirmByTaskId(task.id)
-      systemRetryManager.confirm(task.id)
+      actuatorManager.confirmByTaskId(task.id)
 
       let extraNotes: string
       let addedMinutes = 0
@@ -2260,7 +2245,9 @@ async function runTask(scheduleId: string) {
 
       // Si está en WAITING_CONFIRMATION, NO se acciona hardware. Espera confirmación del usuario.
       if (taskLog && taskLog.status === TaskStatus.WAITING_CONFIRMATION) {
-        Logger.agro(`Tarea ${taskLog.id.slice(0, 8)} (${schedule.name}) en espera de confirmación de tanque.`)
+        Logger.agro(
+          `Tarea ${taskLog.id.slice(0, 8)} (${schedule.name}) en espera de confirmación de tanque.`,
+        )
 
         return
       }

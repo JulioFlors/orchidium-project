@@ -51,8 +51,6 @@ interface UpsertVariantData {
   speciesId: string
   size: PotSize
   price: number
-  quantity: number
-  available: boolean
 }
 
 export async function upsertVariant(data: UpsertVariantData) {
@@ -77,26 +75,15 @@ export async function upsertVariant(data: UpsertVariantData) {
       }
     }
 
-    // Calcular la cantidad real disponible basada en el inventario de plantas físicas
-    const availableCount = await prisma.plant.count({
-      where: {
-        speciesId: data.speciesId,
-        currentSize: data.size,
-        status: 'AVAILABLE',
-      },
-    })
-
     const variant = await prisma.productVariant.upsert({
       where: { id: id || 'new-uuid-placeholder' },
       update: {
         price: rest.price,
-        quantity: availableCount,
-        available: availableCount > 0,
       },
       create: {
-        ...rest,
-        quantity: availableCount,
-        available: availableCount > 0,
+        speciesId: rest.speciesId,
+        size: rest.size,
+        price: rest.price,
       },
     })
 
@@ -129,26 +116,6 @@ export async function deleteVariant(id: string) {
     Logger.error('[Store] Error al eliminar variante:', err)
 
     return { ok: false, message: 'Error al eliminar la variante comercial.' }
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// QUICK ACTIONS
-// ─────────────────────────────────────────────────────────────
-
-export async function updateVariantStock(id: string, newQuantity: number) {
-  try {
-    await prisma.productVariant.update({
-      where: { id },
-      data: { quantity: newQuantity },
-    })
-    revalidatePath('/shop-manager')
-
-    return { ok: true }
-  } catch (err) {
-    Logger.error('[Store] Error al actualizar stock:', err)
-
-    return { ok: false, message: 'No se pudo actualizar el inventario.' }
   }
 }
 

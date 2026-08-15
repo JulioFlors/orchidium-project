@@ -35,7 +35,9 @@ async function main() {
 
   console.log('==================================================')
   console.log(`INVALIDADOR DE TELEMETRÍA A NULL (${targetZone})`)
-  console.log(`Configuración: Zona = ${targetZone} | Fecha = ${targetDateStr} | Modo escritura = ${runWrite}`)
+  console.log(
+    `Configuración: Zona = ${targetZone} | Fecha = ${targetDateStr} | Modo escritura = ${runWrite}`,
+  )
   console.log('==================================================')
 
   try {
@@ -48,7 +50,9 @@ async function main() {
       ORDER BY time ASC
     `
 
-    console.log(`\n📡 Consultando registros de InfluxDB para zona '${targetZone}' el día ${targetDateStr}...`)
+    console.log(
+      `\n📡 Consultando registros de InfluxDB para zona '${targetZone}' el día ${targetDateStr}...`,
+    )
     const stream = influxClient.query(query)
     const pointsToWrite: Point[] = []
     let count = 0
@@ -76,6 +80,7 @@ async function main() {
 
     if (count === 0) {
       console.log('ℹ️ No se encontraron registros en el rango especificado.')
+
       return
     }
 
@@ -99,7 +104,9 @@ async function main() {
     } else {
       console.log('\nℹ️ Simulación (Dry-Run) finalizada sin modificar la base de datos.')
       console.log('   Para aplicar la invalidación a NULL real en InfluxDB, ejecute con "--write":')
-      console.log(`   npx tsx src/scripts/invalidate-august12-telemetry.ts ${targetZone} ${targetDateStr} --write`)
+      console.log(
+        `   npx tsx src/scripts/invalidate-august12-telemetry.ts ${targetZone} ${targetDateStr} --write`,
+      )
     }
   } catch (err) {
     console.error('❌ Error durante la invalidación:', err)

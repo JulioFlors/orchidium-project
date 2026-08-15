@@ -132,7 +132,7 @@ export function DosingSchedulesView() {
             <Button
               className="tds-sm:w-auto flex w-full items-center justify-center gap-2"
               size="sm"
-              variant="default"
+              variant="primary"
               onClick={openNewModal}
             >
               <IoAddOutline className="h-5 w-5" />
@@ -140,7 +140,6 @@ export function DosingSchedulesView() {
             </Button>
           }
           description="Programa y gestiona la frecuencia de fertilizaciones y controles fitosanitarios del laboratorio."
-          eyebrow="Laboratorio"
           title="Rutinas de Dosificación"
         />
       </div>
@@ -164,7 +163,7 @@ export function DosingSchedulesView() {
           <Button
             className="mt-6 flex items-center gap-2"
             size="sm"
-            variant="outline"
+            variant="secondary"
             onClick={openNewModal}
           >
             <IoAddOutline className="h-4 w-4" />
@@ -221,21 +220,23 @@ export function DosingSchedulesView() {
       {/* Modal de Confirmación de Eliminación */}
       {scheduleToDelete && (
         <Modal
-          description={`¿Estás seguro de que deseas eliminar la rutina "${scheduleToDelete.name}"? Esta acción no se puede deshacer.`}
           isOpen={!!scheduleToDelete}
           size="sm"
           title="Eliminar Rutina de Dosificación"
           onClose={() => setScheduleToDelete(null)}
         >
+          <p className="text-secondary text-sm">
+            {`¿Estás seguro de que deseas eliminar la rutina "${scheduleToDelete.name}"? Esta acción no se puede deshacer.`}
+          </p>
           <div className="mt-6 flex justify-end gap-3">
             <Button
               disabled={isDeleting}
-              variant="outline"
+              variant="secondary"
               onClick={() => setScheduleToDelete(null)}
             >
               Cancelar
             </Button>
-            <Button disabled={isDeleting} variant="danger" onClick={handleConfirmDelete}>
+            <Button disabled={isDeleting} variant="destructive" onClick={handleConfirmDelete}>
               {isDeleting ? 'Eliminando...' : 'Eliminar'}
             </Button>
           </div>

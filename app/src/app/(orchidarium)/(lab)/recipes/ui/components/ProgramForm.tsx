@@ -32,17 +32,9 @@ const programSchema = z
     purposeType: z.enum(['fertilization', 'phytosanitary']),
     name: z.string().min(3, 'El nombre debe tener al menos 3 caracteres'),
     frequency: z
-      .union([z.string(), z.number()])
-      .refine((val) => val !== '' && val !== undefined && val !== null, {
-        message: 'Debe ingresar un intervalo',
-      })
-      .transform((val) => Number(val))
-      .pipe(
-        z
-          .number({ message: 'Debe ser un número entero' })
-          .int('Debe ser un número entero')
-          .min(1, 'El intervalo debe ser al menos 1'),
-      ),
+      .number({ message: 'Debe ingresar un número válido' })
+      .int('Debe ser un número entero')
+      .min(1, 'El intervalo debe ser al menos 1'),
     cycles: z.array(cycleSchema).min(1, 'Debe agregar al menos un paso al programa'),
   })
   .superRefine((data, ctx) => {

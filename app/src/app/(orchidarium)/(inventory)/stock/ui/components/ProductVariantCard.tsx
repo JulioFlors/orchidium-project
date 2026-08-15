@@ -17,8 +17,6 @@ export interface VariantData {
   id: string
   size: PotSize
   price: number
-  quantity?: number
-  available?: boolean
 }
 
 interface ProductVariantCardProps {

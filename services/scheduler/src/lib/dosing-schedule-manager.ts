@@ -68,9 +68,13 @@ class DosingScheduleManager {
           addedCount++
         } else if (existing.cronTrigger !== schedule.cronTrigger) {
           existing.cron.stop()
-          const newCron = new Cron(schedule.cronTrigger, { timezone: 'America/Caracas' }, async () => {
-            await this.handleDosingTrigger(schedule.id)
-          })
+          const newCron = new Cron(
+            schedule.cronTrigger,
+            { timezone: 'America/Caracas' },
+            async () => {
+              await this.handleDosingTrigger(schedule.id)
+            },
+          )
 
           this.activeCrons.set(schedule.id, { cron: newCron, cronTrigger: schedule.cronTrigger })
           updatedCount++
@@ -81,15 +85,9 @@ class DosingScheduleManager {
       const hasChanges = addedCount > 0 || removedCount > 0 || updatedCount > 0
 
       if (!silent || hasChanges) {
-        if (hasChanges) {
-          Logger.cron(
-            `Sincronización de rutinas de dosificación: ${totalActive} activas (+${addedCount} / -${removedCount} / ~${updatedCount})`,
-          )
-        } else {
-          Logger.cron(
-            `Sincronización de dosificación completada. ${totalActive} rutinas activas.`,
-          )
-        }
+        Logger.cron(
+          `Dosificación Manual: ${totalActive} rutinas activas (+${addedCount} / -${removedCount} / ~${updatedCount})`,
+        )
       }
     } catch (error) {
       Logger.error('Error durante la sincronización de rutinas de dosificación:', error)
@@ -147,7 +145,9 @@ class DosingScheduleManager {
             const agroId = firstCycle?.agrochemicalId
 
             if (!agroId) {
-              Logger.warn(`Rutina de dosificación ${schedule.name} no tiene agroquímicos asociados.`)
+              Logger.warn(
+                `Rutina de dosificación ${schedule.name} no tiene agroquímicos asociados.`,
+              )
               continue
             }
 

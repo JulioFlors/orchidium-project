@@ -133,6 +133,10 @@ export async function getGroupedStockRequestsByUser() {
               orderBy: { position: 'asc' },
               take: 1,
             },
+            plants: {
+              where: { status: 'AVAILABLE' },
+              select: { currentSize: true },
+            },
           },
         },
         variant: {
@@ -140,8 +144,6 @@ export async function getGroupedStockRequestsByUser() {
             id: true,
             size: true,
             price: true,
-            quantity: true,
-            available: true,
           },
         },
       },
@@ -162,11 +164,21 @@ export async function getGroupedStockRequestsByUser() {
 
       const userGroup = userMap.get(key)!
 
-      let isAvailable = false
+      const targetSize = req.variant?.size || req.size
+      const availableCount = targetSize
+        ? req.species.plants.filter((p) => p.currentSize === targetSize).length
+        : 0
+      const isAvailable = availableCount > 0
 
-      if (req.variant) {
-        isAvailable = req.variant.available && req.variant.quantity > 0
-      }
+      const formattedVariant = req.variant
+        ? {
+            id: req.variant.id,
+            size: req.variant.size,
+            price: req.variant.price,
+            quantity: availableCount,
+            available: isAvailable,
+          }
+        : null
 
       const mainImage = req.species.images[0]?.url || null
 
@@ -181,7 +193,7 @@ export async function getGroupedStockRequestsByUser() {
           slug: req.species.slug,
           image: mainImage,
         },
-        variant: req.variant,
+        variant: formattedVariant,
         size: req.size,
         isAvailable,
       })

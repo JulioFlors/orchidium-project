@@ -73,15 +73,9 @@ class ScheduleManager {
       const hasChanges = addedCount > 0 || removedCount > 0 || updatedCount > 0
 
       if (!silent || hasChanges) {
-        if (hasChanges) {
-          Logger.cron(
-            `Sincronización de rutinas: ${totalActive} activas (+${addedCount} / -${removedCount} / ~${updatedCount})`,
-          )
-        } else {
-          Logger.cron(
-            `Sincronización de rutinas completada. ${totalActive} rutinas activas programadas.`,
-          )
-        }
+        Logger.cron(
+          `Circuito Hidraulico: ${totalActive} rutinas activas (+${addedCount} / -${removedCount} / ~${updatedCount})`,
+        )
       }
     } catch (error) {
       Logger.error('Error durante la sincronización de rutinas (ScheduleManager):', error)

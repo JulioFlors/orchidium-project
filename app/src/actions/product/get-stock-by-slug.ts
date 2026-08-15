@@ -6,20 +6,14 @@ import { Logger } from '@/lib'
 
 export const getStockBySlug = async (slug: string): Promise<number> => {
   try {
-    const species = await prisma.species.findFirst({
-      where: { slug },
-      include: {
-        variants: {
-          select: {
-            quantity: true,
-          },
-        },
+    const availablePlantsCount = await prisma.plant.count({
+      where: {
+        species: { slug },
+        status: 'AVAILABLE',
       },
     })
 
-    if (!species) return 0
-
-    return species.variants.reduce((total, variant) => total + variant.quantity, 0)
+    return availablePlantsCount
   } catch (error) {
     Logger.error(`Error al obtener el stock de ${slug}:`, error)
 

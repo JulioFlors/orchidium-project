@@ -8,6 +8,7 @@ import { Logger } from './logger'
  */
 function calculateNextDueAt(from: Date): Date {
   const nextDate = new Date(from.getTime() + 2 * 24 * 60 * 60 * 1000)
+
   // Fijar a las 8:00 AM
   nextDate.setHours(8, 0, 0, 0)
 

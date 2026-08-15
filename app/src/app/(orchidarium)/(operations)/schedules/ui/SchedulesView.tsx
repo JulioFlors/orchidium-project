@@ -63,7 +63,7 @@ export function SchedulesView() {
 
   // SWR para cargar las rutinas de hardware vía Server Action
   const fetcher = async () => {
-    const res = await getSchedules('HARDWARE')
+    const res = await getSchedules()
 
     if (!res.success) throw new Error(res.error)
 

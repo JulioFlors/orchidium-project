@@ -72,7 +72,7 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
       size: selectedVariant.size,
       image: imageUrl,
       quantity: quantity,
-      maxStock: selectedVariant.quantity,
+      maxStock: selectedVariant.quantity ?? 1,
     })
 
     Logger.info('Agregado al carrito:', {

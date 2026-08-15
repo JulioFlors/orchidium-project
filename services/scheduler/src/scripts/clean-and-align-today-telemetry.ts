@@ -36,13 +36,16 @@ function getMedian(values: number[]): number {
 
 async function main() {
   const args = process.argv.slice(2)
-  const targetZone = args[0] && !args[0].startsWith('--') && isNaN(Number(args[0])) ? args[0] : 'EXTERIOR'
+  const targetZone =
+    args[0] && !args[0].startsWith('--') && isNaN(Number(args[0])) ? args[0] : 'EXTERIOR'
   const hours = 24
   const runWrite = args.includes('--write')
 
   console.log('==================================================')
   console.log(`DESDUPLICADOR Y ALINEADOR DE TELEMETRÍA (${targetZone})`)
-  console.log(`Configuración: Zona = ${targetZone} | Ventana = ${hours}h | Modo escritura = ${runWrite}`)
+  console.log(
+    `Configuración: Zona = ${targetZone} | Ventana = ${hours}h | Modo escritura = ${runWrite}`,
+  )
   console.log('==================================================')
 
   try {
@@ -79,6 +82,7 @@ async function main() {
 
     if (rows.length === 0) {
       console.log('ℹ️ No hay registros para procesar.')
+
       return
     }
 
@@ -94,9 +98,15 @@ async function main() {
       const endIdx = Math.min(rows.length - 1, i + Math.floor(WINDOW_SIZE / 2))
       const neighborWindow = rows.slice(startIdx, endIdx + 1)
 
-      const tempNeighbors = neighborWindow.map((r) => r.temperature).filter((v): v is number => v !== null)
-      const humNeighbors = neighborWindow.map((r) => r.humidity).filter((v): v is number => v !== null)
-      const luxNeighbors = neighborWindow.map((r) => r.illuminance).filter((v): v is number => v !== null)
+      const tempNeighbors = neighborWindow
+        .map((r) => r.temperature)
+        .filter((v): v is number => v !== null)
+      const humNeighbors = neighborWindow
+        .map((r) => r.humidity)
+        .filter((v): v is number => v !== null)
+      const luxNeighbors = neighborWindow
+        .map((r) => r.illuminance)
+        .filter((v): v is number => v !== null)
 
       const medianTemp = getMedian(tempNeighbors)
       const medianHum = getMedian(humNeighbors)
@@ -127,9 +137,16 @@ async function main() {
         correctedCount++
         if (correctedCount <= 10) {
           console.log(`\n[Anomalía detectada #${correctedCount} @ ${current.time.toISOString()}]:`)
-          if (current.temperature !== newTemp) console.log(`  - Temp: ${current.temperature}°C -> ${newTemp}°C (Mediana: ${medianTemp.toFixed(1)}°C)`)
-          if (current.humidity !== newHum) console.log(`  - Hum:  ${current.humidity}% -> ${newHum}% (Mediana: ${medianHum.toFixed(1)}%)`)
-          if (current.illuminance !== newLux) console.log(`  - Lux:  ${current.illuminance} -> ${newLux} (Mediana: ${medianLux})`)
+          if (current.temperature !== newTemp)
+            console.log(
+              `  - Temp: ${current.temperature}°C -> ${newTemp}°C (Mediana: ${medianTemp.toFixed(1)}°C)`,
+            )
+          if (current.humidity !== newHum)
+            console.log(
+              `  - Hum:  ${current.humidity}% -> ${newHum}% (Mediana: ${medianHum.toFixed(1)}%)`,
+            )
+          if (current.illuminance !== newLux)
+            console.log(`  - Lux:  ${current.illuminance} -> ${newLux} (Mediana: ${medianLux})`)
         }
 
         const point = Point.measurement('environment_metrics')
@@ -141,7 +158,8 @@ async function main() {
         if (newTemp !== null) point.setFloatField('temperature', newTemp)
         if (newHum !== null) point.setFloatField('humidity', newHum)
         if (newLux !== null) point.setFloatField('illuminance', newLux)
-        if (current.rainIntensity !== null) point.setFloatField('rain_intensity', current.rainIntensity)
+        if (current.rainIntensity !== null)
+          point.setFloatField('rain_intensity', current.rainIntensity)
 
         pointsToWrite.push(point)
       }
@@ -170,7 +188,9 @@ async function main() {
       console.log('   Para aplicar la sobreescritura real en InfluxDB, ejecute con "--write":')
       console.log(`   npx tsx src/scripts/clean-and-align-today-telemetry.ts ${targetZone} --write`)
     } else {
-      console.log('\n✨ No se encontraron anomalías espurias. La serie temporal está perfectamente limpia.')
+      console.log(
+        '\n✨ No se encontraron anomalías espurias. La serie temporal está perfectamente limpia.',
+      )
     }
   } catch (err) {
     console.error('❌ Error durante la desduplicación y alineación:', err)

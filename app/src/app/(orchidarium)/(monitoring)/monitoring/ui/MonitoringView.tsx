@@ -273,6 +273,20 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     },
   )
 
+  // ----- MQTT & Heartbeat -----
+  const statusTopic =
+    zone === ZoneType.EXTERIOR
+      ? `PristinoPlant/Actuator_Controller/status`
+      : `PristinoPlant/Weather_Station/${zone}/status`
+
+  const { messages: mqttMessages } = useMqttStore()
+  const initialData = initialHeartbeats[statusTopic]
+  const { connectionState } = useDeviceHeartbeat(
+    statusTopic,
+    initialData?.timestamp || null,
+    initialData?.status || 'unknown',
+  )
+
   // Revalidación Reactiva Dirigida por Eventos MQTT (/readings)
   const readingsTopic = `PristinoPlant/Weather_Station/${zone}/readings`
   const lastReadingsMsg = mqttMessages[readingsTopic]
@@ -366,21 +380,6 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     }
   }, [physicalRainData, inferredRainData])
 
-  // ----- MQTT & Heartbeat -----
-
-  const statusTopic =
-    zone === ZoneType.EXTERIOR
-      ? `PristinoPlant/Actuator_Controller/status`
-      : `PristinoPlant/Weather_Station/${zone}/status`
-
-  const { messages: mqttMessages } = useMqttStore()
-  const initialData = initialHeartbeats[statusTopic]
-  const { connectionState } = useDeviceHeartbeat(
-    statusTopic,
-    initialData?.timestamp || null,
-    initialData?.status || 'unknown',
-  )
-
   // Determinamos si estamos esperando datos iniciales
   const isSWRBusy = isCardStatusLoading
 
@@ -392,10 +391,10 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     // Si el dispositivo está offline o en modo sleep, no tiene sentido mostrar "Cargando..." infinitamente
     if (connectionState === 'offline' || connectionState === 'sleep') return false
 
-    const readingsTopic = `PristinoPlant/Weather_Station/${zone}/readings`
+    const topic = `PristinoPlant/Weather_Station/${zone}/readings`
 
     // Si llega un mensaje MQTT, dejamos de cargar
-    if (mqttMessages[readingsTopic]) return false
+    if (mqttMessages[topic]) return false
 
     // Solo mostramos loading si SWR está en su carga inicial Y no tenemos datos previos
     return isSWRBusy

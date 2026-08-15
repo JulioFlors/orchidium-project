@@ -937,6 +937,9 @@ async def mqtt_processor_task():
                         if action == b"on":
                             if DEBUG: print(f"    └─ Bh1750: {Colors.GREEN}ON{Colors.RESET}")
                             IS_SAMPLING_LUX = True
+                            if bh1750_sensor is None:
+                                if DEBUG: print(f"    └─ ⚠️ BH1750 no inicializado. Reintentando setup_bh1750_sync()...")
+                                setup_bh1750_sync()
                             illuminance_wake_event.set()
                         elif action == b"off":
                             if DEBUG: print(f"    └─ Bh1750: {Colors.RED}OFF{Colors.RESET}")

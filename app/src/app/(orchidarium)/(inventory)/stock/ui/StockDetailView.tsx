@@ -39,8 +39,6 @@ interface Variant {
   id: string
   size: PotSize
   price: number
-  quantity: number
-  available: boolean
 }
 
 interface SpeciesDetail {
@@ -112,12 +110,7 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
     setIsVariantModalOpen(true)
   }
 
-  function handleSaveVariant(formValues: {
-    size: PotSize
-    price: number
-    quantity: number
-    available: boolean
-  }) {
+  function handleSaveVariant(formValues: { size: PotSize; price: number }) {
     startTransition(async () => {
       const result = await upsertVariant({
         id: editingVariant?.id,

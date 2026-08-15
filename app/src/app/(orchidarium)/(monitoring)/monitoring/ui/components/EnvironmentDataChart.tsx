@@ -17,6 +17,8 @@ import {
 } from 'recharts'
 import { clsx } from 'clsx'
 
+import { FilterSliceBar } from '@/components'
+
 interface EnvironmentDataChartProps {
   data: Record<string, number | string | boolean | undefined>[]
   className?: string
@@ -140,6 +142,16 @@ function formatTooltipHeader(timeVal: string | number | Date, hasHour: boolean):
   } catch {
     return ''
   }
+}
+
+function formatSelectedDate(ymd: string): string {
+  const parts = ymd.split('-')
+
+  if (parts.length !== 3) return ymd
+  const [year, month, day] = parts
+  const shortYear = year.slice(-2)
+
+  return `${day}/${month}/${shortYear}`
 }
 
 function cleanTimeStr(val: unknown): string {
@@ -1561,32 +1573,43 @@ export function EnvironmentDataChart({
     return r
   }
 
-  const formatSelectedDate = (ymd: string) => {
-    const parts = ymd.split('-')
-
-    if (parts.length !== 3) return ymd
-    const [year, month, day] = parts
-    const shortYear = year.slice(-2)
-
-    return `${day}/${month}/${shortYear}`
-  }
-
-  const handleButtonClick = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    const inputEl = document.getElementById(`date-picker-${dataKey}`) as HTMLInputElement | null
-
-    if (inputEl) {
-      try {
-        inputEl.showPicker()
-      } catch {
-        inputEl.click()
-      }
-    }
-  }
-
   const rangeOptions =
     allowedRanges ||
     (dataKey === 'illuminance' ? ['8-16h', '5-19h', '30d', 'all'] : ['24h', '1D', '30d', 'all'])
+
+  const filterGroups = useMemo(
+    () => [
+      {
+        id: 'ranges',
+        options: rangeOptions.map((r) => ({
+          id: r,
+          label: getRangeLabel(r),
+        })),
+        value: range,
+        onChange: (val: string) => onRangeChange(val),
+        ariaLabel: `Opciones de rango para ${title}`,
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rangeOptions, range, title],
+  )
+
+  const datePickerConfig = useMemo(
+    () => ({
+      value: range,
+      onChange: (val?: string) => {
+        if (val) {
+          onRangeChange(val)
+        }
+      },
+      minDate: dateRange?.minDate || '2026-05-25',
+      maxDate: dateRange?.maxDate,
+      placeholder: 'Fecha',
+      ariaLabel: `Seleccionar fecha para ${title}`,
+      customColor: color,
+    }),
+    [range, dateRange, title, color, onRangeChange],
+  )
 
   return (
     <div
@@ -1620,64 +1643,14 @@ export function EnvironmentDataChart({
           </div>
         </div>
 
-        <div className="bg-hover-overlay tds-sm:w-auto tds-sm:inline-flex flex w-full rounded-md p-1">
-          {rangeOptions.map((r) => (
-            <button
-              key={r}
-              className={clsx(
-                'focus-visible:outline-accessibility mx-px cursor-pointer rounded-md px-3 py-1 text-xs font-semibold uppercase outline-transparent focus-visible:outline-2 focus-visible:-outline-offset-2',
-                'tds-sm:flex-none flex-1 text-center',
-                range === r
-                  ? 'bg-surface text-primary shadow-sm'
-                  : 'text-secondary hover:text-primary',
-              )}
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                onRangeChange(r)
-              }}
-            >
-              {getRangeLabel(r)}
-            </button>
-          ))}
-
-          <div className="relative mx-px flex items-center">
-            <button
-              className={clsx(
-                'focus-visible:outline-accessibility mx-px cursor-pointer rounded-md px-3 py-1 text-xs font-semibold uppercase outline-transparent transition-colors duration-150 focus-visible:outline-2 focus-visible:-outline-offset-2',
-                'tds-sm:flex-none flex min-h-6 flex-1 items-center justify-center gap-1.5 text-center',
-                /^\d{4}-\d{2}-\d{2}$/.test(range)
-                  ? 'bg-surface text-primary shadow-sm'
-                  : 'text-secondary hover:text-primary hover:[--icon-color:white]',
-              )}
-              style={{ '--param-color': color } as React.CSSProperties}
-              type="button"
-              onClick={handleButtonClick}
-            >
-              <Calendar
-                className="h-4 w-4 transition-colors duration-150"
-                strokeWidth={2.3}
-                style={{ color: 'var(--icon-color, var(--param-color))' } as React.CSSProperties}
-              />
-              {/^\d{4}-\d{2}-\d{2}$/.test(range) && <span>{formatSelectedDate(range)}</span>}
-            </button>
-            <input
-              className="pointer-events-none absolute h-0 w-0 opacity-0"
-              id={`date-picker-${dataKey}`}
-              max={dateRange?.maxDate}
-              min={dateRange?.minDate || '2026-05-25'}
-              type="date"
-              value={/^\d{4}-\d{2}-\d{2}$/.test(range) ? range : ''}
-              onChange={(e) => {
-                const val = e.target.value
-
-                if (val) {
-                  onRangeChange(val)
-                }
-              }}
-            />
-          </div>
-        </div>
+        <FilterSliceBar
+          activeVariant="glow"
+          ariaLabel={`Selector de rango para gráfica ${title}`}
+          className="tds-sm:w-auto w-full"
+          customColor={color}
+          datePicker={datePickerConfig}
+          groups={filterGroups}
+        />
       </div>
 
       <div className="w-full">

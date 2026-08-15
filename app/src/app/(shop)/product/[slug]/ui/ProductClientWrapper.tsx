@@ -4,7 +4,13 @@ import { useState } from 'react'
 
 import { Species, ProductVariant } from '@/interfaces'
 // Observa qué limpia es la importación ahora gracias a los barriles:
-import { MobileSlideshow, Slideshow, AddToCart } from '@/components'
+import {
+  MobileSlideshow,
+  Slideshow,
+  AddToCart,
+  isProductAvailable,
+  isVariantAvailable,
+} from '@/components'
 
 interface Props {
   product: Species
@@ -14,12 +20,12 @@ export function ProductClientWrapper({ product }: Props) {
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | undefined>()
 
   // Lógica: ¿Hay stock global?
-  const hasGlobalStock = product.variants.some((v) => v.available && v.quantity > 0)
+  const hasGlobalStock = isProductAvailable(product)
 
   // Lógica: ¿El slideshow debe verse disponible?
   // Si hay variante seleccionada, manda el stock de esa. Si no, manda el global.
   const isSlideshowAvailable = selectedVariant
-    ? selectedVariant.available && selectedVariant.quantity > 0
+    ? isVariantAvailable(selectedVariant)
     : hasGlobalStock
 
   return (

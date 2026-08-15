@@ -205,7 +205,7 @@ export function FilterSliceBar({
     >
       {/* Botón Flotante Izquierdo */}
       {canScrollLeft && (
-        <div className="bg-gradient-to-r from-surface via-surface/90 to-transparent absolute left-0 z-20 flex h-full items-center pr-4 pl-0.5 pointer-events-none">
+        <div className="bg-linear-to-r from-surface via-surface/90 to-transparent absolute left-0 z-20 flex h-full items-center pr-4 pl-0.5 pointer-events-none">
           <button
             aria-label="Desplazar a la izquierda"
             className="bg-surface border-input-outline hover:bg-hover-overlay text-primary pointer-events-auto flex size-7 cursor-pointer items-center justify-center rounded-full border shadow-xs focus:outline-none"
@@ -329,7 +329,7 @@ export function FilterSliceBar({
 
       {/* Botón Flotante Derecho */}
       {canScrollRight && (
-        <div className="bg-gradient-to-l from-surface via-surface/90 to-transparent absolute right-0 z-20 flex h-full items-center pr-0.5 pl-4 pointer-events-none">
+        <div className="bg-linear-to-l from-surface via-surface/90 to-transparent absolute right-0 z-20 flex h-full items-center pr-0.5 pl-4 pointer-events-none">
           <button
             aria-label="Desplazar a la derecha"
             className="bg-surface border-input-outline hover:bg-hover-overlay text-primary pointer-events-auto flex size-7 cursor-pointer items-center justify-center rounded-full border shadow-xs focus:outline-none"

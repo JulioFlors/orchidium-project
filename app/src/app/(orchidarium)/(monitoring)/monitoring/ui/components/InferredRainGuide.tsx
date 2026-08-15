@@ -159,10 +159,8 @@ export function InferredRainGuide() {
               </span>
             </div>
             <p className="leading-relaxed">
-              Las reglas se evalúan en secuencia estricta de prioridad física (1ª ☀️ Recuperación
-              Solar &rarr; 2ª 🌤️ Recuperación Progresiva &rarr; 3ª 🌡️ Variación Térmica &rarr; 4ª ☁️
-              Cese por Estancamiento). Las tres primeras aplican solo durante el día [7:00 am - 6:00
-              pm]; la última aplica las 24 h.
+              Las tres primeras reglas aplican solo durante el día [7:00 am - 6:00 pm]; la última
+              aplica las 24 h.
             </p>
 
             <ul className="mt-1 flex flex-col gap-2 leading-relaxed">
@@ -200,11 +198,13 @@ export function InferredRainGuide() {
               </li>
               <li>
                 <span className="text-primary font-semibold">
-                  🛡️ Inspección Multiamplia (20 min):
+                  🛡️ Protección Deslizante (20 min):
                 </span>{' '}
-                Evita la rigidez de lotes fijos analizando continuamente las muestras de los últimos
-                20 minutos de forma deslizante. Permite detectar el primer tramo estabilizado y
-                desbloquear el cese sin arrastrar caídas térmicas antiguas.
+                Evalúa continuamente sub-ventanas deslizantes de 10 min dentro de los últimos 20
+                minutos de muestras (B0 + B1) para determinar con exactitud temporal el momento
+                preciso de cese por Variación Térmica o Estancamiento, asegurando que las
+                evaluaciones correspondan estrictamente al período posterior al inicio del evento
+                activo.
               </li>
             </ul>
           </div>

@@ -6,7 +6,9 @@ import clsx from 'clsx'
 export function isVariantAvailable(variant?: ProductVariant): boolean {
   if (!variant) return false
 
-  return Boolean(variant.available && variant.quantity > 0 && variant.price > 0)
+  const qty = variant.quantity ?? 0
+
+  return Boolean(variant.available && qty > 0 && variant.price > 0)
 }
 
 /** Evalúa si una especie posee al menos una variante comercial con stock disponible para la venta */

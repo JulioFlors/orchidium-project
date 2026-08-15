@@ -10,8 +10,6 @@ interface Variant {
   id: string
   size: PotSize
   price: number
-  quantity?: number
-  available?: boolean
 }
 
 interface VariantFormModalProps {
@@ -20,12 +18,7 @@ interface VariantFormModalProps {
   editingVariant: Variant | null
   targetSpecies: { id: string; name: string; variants?: Array<{ size: PotSize }> } | null
   isPending: boolean
-  onSave: (formValues: {
-    size: PotSize
-    price: number
-    quantity?: number
-    available?: boolean
-  }) => void
+  onSave: (formValues: { size: PotSize; price: number }) => void
   potSizes: PotSize[]
   potSizeLabels: Record<PotSize, string>
 }
@@ -85,8 +78,6 @@ export function VariantFormModal({
     onSave({
       size,
       price: validPrice,
-      quantity: 0,
-      available: true,
     })
   }
 

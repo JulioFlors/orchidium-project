@@ -391,9 +391,11 @@ class CommandSequencer {
   }
 }
 
-export const irrigationRetryManager = new CommandSequencer('Nodo Actuador')
+export const actuatorManager = new CommandSequencer('Nodo Actuador')
 
-export const systemRetryManager = new CommandSequencer('Nodo Actuador')
+export const irrigationRetryManager = actuatorManager
+
+export const systemRetryManager = actuatorManager
 
 export const emaManager = new CommandSequencer('Nodo EMA')
 
@@ -421,14 +423,7 @@ export function executeSequence(
   const remainingMinutes = Math.round((durationSeconds / 60) * 10) / 10
   const finalOriginalMin = originalDurationMin || remainingMinutes
 
-  irrigationRetryManager.track(
-    ACTUATOR_TOPIC,
-    message,
-    scheduledAt,
-    finalOriginalMin,
-    false,
-    onFailure,
-  )
+  actuatorManager.track(ACTUATOR_TOPIC, message, scheduledAt, finalOriginalMin, false, onFailure)
 
   Logger.mqtt(
     `Despachando Circuito: ${purpose} (${remainingMinutes} min / ${durationSec}s) [Task: ${taskId.slice(0, 8)}]`,
@@ -448,10 +443,10 @@ export function stopSequence(purpose: TaskPurpose, taskId: string) {
 
   const message = JSON.stringify(payload)
 
-  irrigationRetryManager.track(ACTUATOR_TOPIC, message, new Date())
+  actuatorManager.track(ACTUATOR_TOPIC, message, new Date())
 
   // Limpiamos reintentos de ON si existían para esta tarea
-  irrigationRetryManager.confirmByTaskId(taskId)
+  actuatorManager.confirmByTaskId(taskId)
 
   Logger.mqtt(
     `Enviando PARADA (OFF) para: ${purpose} [Task: ${taskId.slice(0, 8)}]`,
@@ -467,13 +462,7 @@ export function executeSystemCommand(
   isPersistent: boolean = false,
   topic: string = SYSTEM_CMD_TOPIC,
 ) {
-  let targetManager: CommandSequencer
-
-  if (topic === EMA_CMD_TOPIC) {
-    targetManager = emaManager
-  } else {
-    targetManager = isPersistent ? systemRetryManager : irrigationRetryManager
-  }
+  const targetManager: CommandSequencer = topic === EMA_CMD_TOPIC ? emaManager : actuatorManager
 
   // Para comandos no persistentes, verificamos si el nodo está online
   if (targetManager.connectionState === 'offline' && !isPersistent) {

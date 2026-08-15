@@ -37,7 +37,7 @@ export async function getSpecies() {
           orderBy: { position: 'asc' },
         },
         variants: {
-          select: { id: true, size: true, price: true, quantity: true, available: true },
+          select: { id: true, size: true, price: true },
           orderBy: { size: 'asc' },
         },
         plants: {
@@ -86,7 +86,7 @@ export async function getSpeciesById(identifier: string) {
           orderBy: { position: 'asc' },
         },
         variants: {
-          select: { id: true, size: true, price: true, quantity: true, available: true },
+          select: { id: true, size: true, price: true },
           orderBy: { size: 'asc' },
         },
         plants: {

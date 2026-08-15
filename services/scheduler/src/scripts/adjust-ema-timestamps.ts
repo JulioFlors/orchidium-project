@@ -11,14 +11,17 @@ function rowTimeToDate(rawTime: unknown): Date {
 
 async function main() {
   const args = process.argv.slice(2)
-  const targetZone = args[0] && !args[0].startsWith('--') && isNaN(Number(args[0])) ? args[0] : 'EXTERIOR'
+  const targetZone =
+    args[0] && !args[0].startsWith('--') && isNaN(Number(args[0])) ? args[0] : 'EXTERIOR'
   const shiftHoursArg = args.find((a) => !isNaN(Number(a)))
   const shiftHours = shiftHoursArg ? Number(shiftHoursArg) : 4 // Por defecto desplazar +4 horas
   const runWrite = args.includes('--write')
 
   console.log('==================================================')
   console.log(`AJUSTADOR DE TIMESTAMPS DEL NODO EMA (${targetZone})`)
-  console.log(`Configuración: Zona = ${targetZone} | Desplazamiento = ${shiftHours} horas | Modo escritura = ${runWrite}`)
+  console.log(
+    `Configuración: Zona = ${targetZone} | Desplazamiento = ${shiftHours} horas | Modo escritura = ${runWrite}`,
+  )
   console.log('==================================================')
 
   try {
