@@ -382,7 +382,6 @@ function flushBootLog(nodeSource: string) {
   } else {
     // Sincronización para el Actuador Exterior
     resetSamplingState()
-    sendCaracasTimeToActuator()
     syncNodeSampling(undefined, true, 'actuator')
 
     // Al reconectarse o reiniciarse el nodo, asumimos que se inicializa en INTERVAL_NORMAL.
@@ -500,6 +499,7 @@ function setupMqttHandlers() {
           if (message === 'online') {
             actuatorManager.setStabilizing()
             isSystemReady = false
+            sendCaracasTimeToActuator()
           }
 
           const prev = bootAccumulators.get('Weather Station Exterior')
@@ -521,6 +521,7 @@ function setupMqttHandlers() {
           }
 
           // Para reboot
+          sendCaracasTimeToActuator()
           if (!isFreshSession && actuatorManager.connectionState === 'online') {
             lastFirmwareHeartbeat = Date.now()
           }
@@ -1942,7 +1943,10 @@ async function initScheduler() {
 
   setInterval(() => {
     DropsSensorManager.checkRainOrphanTimeout().catch((err: Error | unknown) =>
-      Logger.error('Error en watchdog de lluvia huérfana:', err),
+      Logger.error('Error en watchdog de lluvia huérfana física:', err),
+    )
+    RainManager.checkInferedRainOrphanTimeout().catch((err: Error | unknown) =>
+      Logger.error('Error en watchdog de lluvia huérfana inferida:', err),
     )
   }, 60_000)
   setInterval(checkSensorsHealth, 60_000)

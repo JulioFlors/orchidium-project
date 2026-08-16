@@ -516,6 +516,46 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
     const hasLux = luxBuffer.length >= 5 || !isSolar
 
     if (tempBuffer.length >= 5 && humBuffer.length >= 5 && hasLux) {
+      // 🛡️ Protección de Secuencia de Batches: Si hay una lluvia activa y la telemetría se interrumpe por > 11 min
+      if (isTelemetryRainActive && tempBatches.length > 0) {
+        const timeGapMs = timestampMs - tempBatches[0].timestamp
+
+        if (timeGapMs > 11 * 60 * 1000) {
+          const lastValidTs = tempBatches[0].timestamp
+          const gapMin = Math.round(timeGapMs / 60000)
+          const endSampleT = tempBatches[0]?.samples[tempBatches[0].samples.length - 1]
+          const endSampleH = humBatches[0]?.samples[humBatches[0].samples.length - 1]
+          const endSampleL = luxBatches[0]?.samples[luxBatches[0].samples.length - 1]
+
+          await closeVirtualEvent(
+            new Date(lastValidTs),
+            'EMA_OFFLINE',
+            `Ema Desconectado: pérdida de telemetría exterior durante lluvia activa (sin datos en ${gapMin} min). Cese automático por desconexión.`,
+            {
+              temp: endSampleT ? endSampleT.value : (tempBatches[0]?.min ?? null),
+              hum: endSampleH ? endSampleH.value : (humBatches[0]?.max ?? null),
+              lux: endSampleL ? endSampleL.value : (luxBatches[0]?.min ?? null),
+            },
+            {
+              type: 'EMA_OFFLINE',
+            },
+          )
+
+          isTelemetryRainActive = false
+          rainStartedAt = null
+          lastRainClosedAt = timestampMs
+          maxHumInRain = null
+          baselineVarTemp = null
+          baselineVarHum = null
+          createdCount++
+
+          // Limpiar las colas de batches para reiniciar la sincronización con el nuevo flujo de datos
+          tempBatches.length = 0
+          humBatches.length = 0
+          luxBatches.length = 0
+        }
+      }
+
       if (luxBuffer.length < 5) {
         luxBuffer = Array(5).fill({ value: 0, timestamp: timestampMs })
       }

@@ -144,6 +144,9 @@ wifi_reset_event = asyncio.Event()
 climate_wake_event = asyncio.Event()
 bh1750_wake_event = asyncio.Event()
 
+# Evento asíncrono para confirmar la sincronización horaria RTC inicial
+rtc_synced_event = asyncio.Event()
+
 # Candado asíncrono para evitar colisiones en el socket SSL
 mqtt_lock = asyncio.Lock()
 
@@ -614,8 +617,6 @@ def setup_bh1750_sync():
                 bh1750_sensor = BH1750(bus=i2c_bus, addr=addr)
                 sleep_ms(200)
                 lux_test = round(bh1750_sensor.get_auto_luminance(), 1)
-                if lux_test is not None:
-                    illuminance_Batch.append(lux_test)
                 if DEBUG:
                     print(f"    ├─ ✅ {Colors.GREEN}Conectado{Colors.RESET} [{label}]")
                     print(f"    └─ 📊 Valor: {Colors.YELLOW}{lux_test} lux{Colors.RESET}")
@@ -694,8 +695,6 @@ async def setup_sensors(force_hard_reset=False):
             temp, hum = dht_sensor.temperature(), dht_sensor.humidity()
             if -10 <= temp <= 60 and 0 <= hum <= 100:
                 dht_boot_ok = True
-                temperature_Batch.append(round(temp, 1))
-                humidity_Batch.append(round(hum, 1))
                 if DEBUG:
                     print(f"    ├─ ✅ {Colors.GREEN}Conectado{Colors.RESET}")
                     print(f"    ├─ 📊 Valor: {Colors.YELLOW}{temp:.1f} °C{Colors.RESET}")
@@ -738,8 +737,6 @@ async def setup_sensors(force_hard_reset=False):
                 dht_sensor.measure()
                 temp, hum = dht_sensor.temperature(), dht_sensor.humidity()
                 if -10 <= temp <= 60 and 0 <= hum <= 100:
-                    temperature_Batch.append(round(temp, 1))
-                    humidity_Batch.append(round(hum, 1))
                     dht_boot_ok = True
                     if DEBUG:
                         print(f"    ├─ ✅ {Colors.GREEN}Recuperado tras Hard Reset (Intento {attempt}){Colors.RESET}")
@@ -922,6 +919,11 @@ async def mqtt_processor_task():
                         if "time" in data:
                             t = data["time"]
                             RTC().datetime(t)
+                            # Limpiar buffers de cualquier muestra residual
+                            temperature_Batch.clear()
+                            humidity_Batch.clear()
+                            illuminance_Batch.clear()
+                            rtc_synced_event.set()
                             if DEBUG: print(f"    └─ RTC Sincronizado: {t}")
                     except Exception as e:
                         if DEBUG: print(f"    └─ ❌ Error sincronizando RTC: {e}")
@@ -1509,12 +1511,29 @@ async def mqtt_connector_task(client_id):
                 # Publicamos el estado actual de las auditorías (OFF)
                 await publish_audit_state()
 
-                # 📡 2. Señalizamos el estado al Scheduler.
+                # 📡 2. Suscripción inmediata a tópicos de control (QoS=1) para no perder sincronización horaria
                 try:
-                    global IS_BOOT_STATUS
                     async with mqtt_lock:
                         if client and getattr(client, 'sock', None):
-                            if IS_BOOT_STATUS:
+                            client.subscribe(MQTT_TOPIC_CMD, qos=1)
+                    await asyncio.sleep_ms(300)
+
+                    async with mqtt_lock:
+                        if client and getattr(client, 'sock', None):
+                            client.subscribe(MQTT_TOPIC_IRRIGATION_CMD, qos=1)
+                    await asyncio.sleep_ms(300)
+                except Exception as sub_err:
+                    if DEBUG: print(f"⚠️ Error en suscripciones: {sub_err}")
+                    raise sub_err
+
+                # 📡 3. Señalizamos el estado al Scheduler.
+                global IS_BOOT_STATUS
+                from machine import RTC
+                is_cold_boot = (IS_BOOT_STATUS or RTC().datetime()[0] < 2026)
+                try:
+                    async with mqtt_lock:
+                        if client and getattr(client, 'sock', None):
+                            if is_cold_boot:
                                 client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=1)
                                 IS_BOOT_STATUS = False
                                 if DEBUG: print(f"\n📡  NODO {Colors.GREEN}Online{Colors.RESET}", end="\n")
@@ -1525,12 +1544,38 @@ async def mqtt_connector_task(client_id):
                     if DEBUG: print(f"⚠️ Fallo publicando estado: {_e}")
                 await asyncio.sleep_ms(500)
 
-                # 📡 3. Métricas Ambientales (Batches): Vaciamos los RingBuffers DESPUÉS del /boot.
-                # Estos batches confirmarán la presencia de los sensores activos.
+                # 📡 4. Sincronización RTC y Métricas Iniciales
+                if is_cold_boot:
+                    # En cold boot, esperamos a que el Scheduler envíe la sincronización horaria
+                    try:
+                        await asyncio.wait_for(rtc_synced_event.wait(), 30)
+                    except asyncio.TimeoutError:
+                        if DEBUG: print("⚠️ Timeout (30s) esperando sincronización RTC.")
+
+                    # Tras sincronizar RTC (o timeout), tomamos lectura fresca para inicializar telemetrías con timestamp 2026
+                    if dht_sensor is not None:
+                        try:
+                            clean_dht_line()
+                            await asyncio.sleep_ms(500)
+                            dht_sensor.measure()
+                            t_val, h_val = dht_sensor.temperature(), dht_sensor.humidity()
+                            if -10 <= t_val <= 60 and 0 <= h_val <= 100:
+                                temperature_Batch.append(round(t_val, 1))
+                                humidity_Batch.append(round(h_val, 1))
+                        except Exception: pass
+
+                    if bh1750_sensor is not None:
+                        try:
+                            l_val = round(bh1750_sensor.get_auto_luminance(), 1)
+                            if l_val is not None:
+                                illuminance_Batch.append(l_val)
+                        except Exception: pass
+
+                # Vaciamos los RingBuffers hacia el Scheduler
                 await flush_telemetry_batches_async()
                 await asyncio.sleep_ms(500)
 
-                # 📡 4. Estado de Lluvia: Lectura fresca y publicación del estado actual de lluvia
+                # 📡 5. Estado de Lluvia: Lectura fresca y publicación del estado actual de lluvia
                 if rain_sensor_analog is not None:
                     try:
                         raw = await fetch_rain_raw()
@@ -1556,22 +1601,6 @@ async def mqtt_connector_task(client_id):
                     except Exception as pub_err:
                         if DEBUG: print(f"⚠️ Error sincronización inicial lluvia: {pub_err}")
                     await asyncio.sleep_ms(500)
-
-                # 📡 5. Suscripción diferida a tópicos de control (QoS=1 para seguridad de órdenes)
-                try:
-                    async with mqtt_lock:
-                        if client and getattr(client, 'sock', None):
-                            client.subscribe(MQTT_TOPIC_CMD, qos=1)
-                    await asyncio.sleep_ms(500)
-
-                    async with mqtt_lock:
-                        if client and getattr(client, 'sock', None):
-                            client.subscribe(MQTT_TOPIC_IRRIGATION_CMD, qos=1)
-                    await asyncio.sleep_ms(500)
-
-                except Exception as sub_err:
-                    if DEBUG: print(f"⚠️ Error en suscripciones: {sub_err}")
-                    raise sub_err
 
                 # 📡 6. Notifica que MQTT está listo para las tareas de telemetría periódicas
                 mqtt_connected_event.set()

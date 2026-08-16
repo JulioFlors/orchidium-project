@@ -40,12 +40,17 @@ const tempBatches: BatchSummary[] = []
 const humBatches: BatchSummary[] = []
 const luxBatches: BatchSummary[] = []
 
+const INFERED_RAIN_TIMEOUT_MS = 11 * 60 * 1000 // 11 minutos (10m período normal + 1m de tolerancia)
+let lastBatchReceivedAt = 0
+
 let rainEventMutex = Promise.resolve()
 
 // Helper para empujar métricas a las colas de batches deslizantes (10 min de ventana por lote)
 function pushBatchMetrics(queue: BatchSummary[], values: number[], isLux = false) {
   if (values.length === 0) return
   const now = Date.now()
+
+  lastBatchReceivedAt = now
 
   const samples = values.map((val, idx) => ({
     value: val,
@@ -92,6 +97,11 @@ function pushBatchMetrics(queue: BatchSummary[], values: number[], isLux = false
 
       max = high5.reduce((sum, val) => sum + val, 0) / high5.length
     }
+
+    const samples = values.map((val, idx) => ({
+      value: val,
+      timestamp: now - (values.length - 1 - idx) * 60000,
+    }))
 
     queue.unshift({ min, max, timestamp: now, samples })
     if (queue.length > 6) queue.pop()
@@ -189,9 +199,54 @@ export function pushClimateBatch(
   humValues: number[],
   luxValues: number[],
 ): void {
+  lastBatchReceivedAt = Date.now()
   if (tempValues.length > 0) pushBatchMetrics(tempBatches, tempValues)
   if (humValues.length > 0) pushBatchMetrics(humBatches, humValues)
   if (luxValues.length > 0) pushBatchMetrics(luxBatches, luxValues, true)
+}
+
+/**
+ * Watchdog estricto de 11 minutos para eventos de lluvia inferida huérfanos por desconexión o falta de telemetría exterior.
+ */
+export async function checkInferedRainOrphanTimeout(): Promise<void> {
+  if (!inferedRainActive) return
+  if (lastBatchReceivedAt === 0) return
+
+  const elapsed = Date.now() - lastBatchReceivedAt
+
+  if (elapsed > INFERED_RAIN_TIMEOUT_MS) {
+    const elapsedMinutes = Math.round(elapsed / 60000)
+
+    Logger.rain(
+      `Evento inferido huérfano detectado. Sin telemetría de Estación Exterior en ${elapsedMinutes}min. Finalizando por desconexión.`,
+    )
+    inferedRainActive = false
+    inferedRainOverridden = true
+    maxHumInRain = null
+    inferedBaselineVarTemp = null
+    inferedBaselineVarHum = null
+
+    // El fin del evento corresponde al timestamp de la última telemetría válida recibida
+    const endTimestamp = new Date(lastBatchReceivedAt)
+
+    const endSampleT = tempBatches[0]?.samples[tempBatches[0].samples.length - 1]
+    const endSampleH = humBatches[0]?.samples[humBatches[0].samples.length - 1]
+    const endSampleL = luxBatches[0]?.samples[luxBatches[0].samples.length - 1]
+
+    await closeRainEvent(
+      'EMA_OFFLINE',
+      endTimestamp,
+      `Ema Desconectado: pérdida de telemetría exterior durante lluvia activa (sin datos en ${elapsedMinutes} min). Cese automático por desconexión.`,
+      {
+        temp: endSampleT ? endSampleT.value : (tempBatches[0]?.min ?? null),
+        hum: endSampleH ? endSampleH.value : (humBatches[0]?.max ?? null),
+        lux: endSampleL ? endSampleL.value : (luxBatches[0]?.min ?? null),
+      },
+      {
+        type: 'EMA_OFFLINE',
+      },
+    )
+  }
 }
 
 /**
@@ -335,6 +390,7 @@ export async function hydrateState(): Promise<void> {
       tempBatches.splice(0, tempBatches.length, ...newTempBatches)
       humBatches.splice(0, humBatches.length, ...newHumBatches)
       luxBatches.splice(0, luxBatches.length, ...newLuxBatches)
+      lastBatchReceivedAt = newTempBatches[0].timestamp
     }
 
     Logger.info('Motor de Inferencia Meteorológica: Hidratado')

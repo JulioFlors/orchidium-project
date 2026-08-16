@@ -274,6 +274,13 @@ async function processEnvironmentPacket(
           unixTimestamp += 946684800
         }
 
+        // 🛡️ Filtro de consistencia: Si el lote está sincronizado (backtrackingOffset === 0)
+        // pero una muestra individual proviene de una época antigua (< 2025), se descarta
+        // para evitar proyectar fechas inválidas hacia el futuro en InfluxDB.
+        if (backtrackingOffset === 0 && unixTimestamp < 1735689600) {
+          continue
+        }
+
         // 🛡️ Aplicación de Backtracking
         // Si el tiempo era basura, le sumamos el offset para traerlo al "presente"
         // manteniendo la distancia relativa entre las muestras del batch.
