@@ -460,8 +460,33 @@ function setupMqttHandlers() {
       // Se actualizará lastFirmwareHeartbeat al final de este handler.
 
       if (topic === 'PristinoPlant/System/Scheduler/Sync') {
-        await scheduleManager.syncAutomationSchedules(runTask)
-        await dosingScheduleManager.syncDosingSchedules()
+        let action = 'SYNC_ALL'
+
+        try {
+          const data = JSON.parse(message) as { action?: string }
+
+          if (data?.action) {
+            action = data.action
+          }
+        } catch {
+          // Payload no JSON o texto plano: comportamiento retrocompatible
+        }
+
+        if (
+          action === 'SYNC_ALL' ||
+          action === 'SYNC_SCHEDULES' ||
+          action === 'SYNC_AUTOMATION_SCHEDULES'
+        ) {
+          await scheduleManager.syncAutomationSchedules(runTask)
+        }
+
+        if (
+          action === 'SYNC_ALL' ||
+          action === 'SYNC_SCHEDULES' ||
+          action === 'SYNC_DOSING_SCHEDULES'
+        ) {
+          await dosingScheduleManager.syncDosingSchedules()
+        }
 
         return
       }
@@ -1379,19 +1404,6 @@ async function checkEmaHeartbeat() {
       'Watchdog: Sin señales de vida durante 70 minutos (Offline)',
     )
 
-    // Evaluar si es una Desconexión Solitaria (Nodo Actuador sigue ONLINE) para notificar batería agotada
-    const isActuatorOnline = actuatorManager.connectionState === 'online'
-
-    if (isActuatorOnline && !hadSolitaryBatteryOffline) {
-      hadSolitaryBatteryOffline = true
-      const durationMs = emaOnlineTimestamp > 0 ? Date.now() - emaOnlineTimestamp : 0
-      const durationText = durationMs > 0 ? formatDurationDHMS(durationMs) : 'Desconocida'
-
-      await sendTelegramAlert(
-        `⚠️ *Alerta BATERÍA del Nodo EMA Agotada*\n⚡ *Duración*: ${durationText}`,
-      )
-    }
-
     // Publicar estado offline en canal de status
     mqttClient.publish('PristinoPlant/Weather_Station/ZONA_A/status', 'offline', {
       retain: true,
@@ -1778,10 +1790,6 @@ async function handleEmaSync(statusToSave: DeviceStatus) {
 
   await saveDeviceLog('Weather_Station_ZONA_A', statusToSave, notes)
 
-  if (hadSolitaryBatteryOffline) {
-    hadSolitaryBatteryOffline = false
-    await sendTelegramAlert('🔋 *Nodo EMA Operativo*')
-  }
   emaOnlineTimestamp = Date.now()
 
   if (!hasAccumulator) {

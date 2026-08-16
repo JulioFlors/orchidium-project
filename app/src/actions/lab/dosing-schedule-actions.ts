@@ -11,7 +11,7 @@ import { sendMqttCommand } from '@/lib/server'
 async function notifySchedulerSync() {
   try {
     await sendMqttCommand('PristinoPlant/System/Scheduler/Sync', {
-      action: 'SYNC_SCHEDULES',
+      action: 'SYNC_DOSING_SCHEDULES',
       timestamp: Date.now(),
     })
   } catch {

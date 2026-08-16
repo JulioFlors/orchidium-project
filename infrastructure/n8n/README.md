@@ -83,11 +83,12 @@ Supervisa continuamente el estado de conectividad del **Nodo EMA** (Estación Me
      ```
 
 3. **Caso C: Restablecimiento Operativo**
-   - Condición: Nodo EMA pasa de un `OFFLINE` previo confirmado a `ONLINE` o `SLEEP`.
+   - Condición: Nodo EMA pasa a `ONLINE` o `SLEEP` (evento reciente en $\le 60$s) habiendo estado previamente en un `OFFLINE` **real y confirmado de $\ge 10$ minutos**.
    - Mensaje:
      ```text
 
      *Nodo EMA* Operativo.
      ```
+
 
 

@@ -38,11 +38,11 @@ const stats = {
 const inferredEventsForComparison: { startedAt: Date; endedAt: Date }[] = []
 
 /**
- * 🛡️ PARCHE DE TELEMETRÍA CORRUPTA (12/08/2026):
- * Omitir el procesamiento del 12 de Agosto de 2026 debido al desfase horaria
- * y duplicación de datos registrados en esa fecha para la estación EMA EXTERIOR.
+ * 🛡️ PARCHE DE TELEMETRÍA CORRUPTA:
+ * Omitir el procesamiento del 12 y 15 de Agosto de 2026 debido a telemetría corrupta
+ * o datos no confiables de la estación EMA EXTERIOR.
  */
-function isAugust12_2026(date: Date): boolean {
+function isCorruptTelemetryDate(date: Date): boolean {
   try {
     const caracasStr = new Intl.DateTimeFormat('en-US', {
       timeZone: 'America/Caracas',
@@ -52,7 +52,7 @@ function isAugust12_2026(date: Date): boolean {
     }).format(date)
     const [m, d, y] = caracasStr.split('/')
 
-    return y === '2026' && m === '08' && d === '12'
+    return y === '2026' && m === '08' && (d === '12' || d === '15')
   } catch {
     return false
   }
@@ -384,10 +384,7 @@ async function rebuildPhysicalRain(startTime: Date, endTime: Date) {
     if (nextMs > endMs) nextMs = endMs
     const blockEnd = new Date(nextMs)
 
-    if (isAugust12_2026(blockStart)) {
-      Logger.warn(
-        `⚠️ PARCHE (12/08/2026): Omitiendo reconstrucción de lluvia física para ${blockStart.toISOString()} debido a telemetría corrupta de EMA EXTERIOR.`,
-      )
+    if (isCorruptTelemetryDate(blockStart)) {
       startMs = nextMs
       continue
     }
@@ -1342,10 +1339,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
     if (nextMs > endMs) nextMs = endMs
     const blockEnd = new Date(nextMs)
 
-    if (isAugust12_2026(blockStart)) {
-      Logger.warn(
-        `⚠️ PARCHE (12/08/2026): Omitiendo reconstrucción de lluvia inferida para ${blockStart.toISOString()} debido a telemetría corrupta de EMA EXTERIOR.`,
-      )
+    if (isCorruptTelemetryDate(blockStart)) {
       startMs = nextMs
       continue
     }
