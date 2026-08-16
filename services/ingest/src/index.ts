@@ -286,12 +286,6 @@ async function processEnvironmentPacket(
         // manteniendo la distancia relativa entre las muestras del batch.
         unixTimestamp += backtrackingOffset
 
-        // Si no se requirió backtracking y proviene de Weather_Station,
-        // el timestamp está en hora local Caracas (UTC-4). Sumamos 4 horas (14400s) para llevar a UTC.
-        if (backtrackingOffset === 0 && source === 'Weather_Station') {
-          unixTimestamp += 4 * 3600
-        }
-
         const point = Point.measurement('environment_metrics')
           .setTag('source', source)
           .setTag('zone', zone)
