@@ -394,7 +394,6 @@ function flushBootLog(nodeSource: string) {
     checkAndSleepEma()
   } else {
     // Sincronización para el Actuador Exterior
-    sendCaracasTimeToActuator()
     resetSamplingState()
     syncNodeSampling(undefined, true, 'actuator')
 
@@ -539,29 +538,25 @@ function setupMqttHandlers() {
           if (message === 'online') {
             actuatorManager.setStabilizing()
             isSystemReady = false
-            sendCaracasTimeToActuator()
-          }
-
-          const prev = bootAccumulators.get('Weather Station Exterior')
-
-          if (prev?.timer) clearTimeout(prev.timer)
-          bootAccumulators.set('Weather Station Exterior', {
-            nodeName: 'Weather Station Exterior',
-            lux: null,
-            temp: null,
-            hum: null,
-            bootAt: Date.now(),
-            timer: setTimeout(() => flushBootLog('Weather Station Exterior'), 30000), // Preservado a 30s
-          })
-
-          if (message === 'online') {
             await handleNodeSync('online', previousHeartbeat)
+            sendCaracasTimeToActuator()
+
+            const prev = bootAccumulators.get('Weather Station Exterior')
+
+            if (prev?.timer) clearTimeout(prev.timer)
+            bootAccumulators.set('Weather Station Exterior', {
+              nodeName: 'Weather Station Exterior',
+              lux: null,
+              temp: null,
+              hum: null,
+              bootAt: Date.now(),
+              timer: setTimeout(() => flushBootLog('Weather Station Exterior'), 30000), // Preservado a 30s
+            })
 
             return
           }
 
           // Para reboot
-          sendCaracasTimeToActuator()
           if (actuatorManager.connectionState === 'online') {
             lastFirmwareHeartbeat = Date.now()
           }
@@ -577,6 +572,20 @@ function setupMqttHandlers() {
           } else {
             await handleNodeSync('reboot', previousHeartbeat)
           }
+
+          sendCaracasTimeToActuator()
+
+          const prev = bootAccumulators.get('Weather Station Exterior')
+
+          if (prev?.timer) clearTimeout(prev.timer)
+          bootAccumulators.set('Weather Station Exterior', {
+            nodeName: 'Weather Station Exterior',
+            lux: null,
+            temp: null,
+            hum: null,
+            bootAt: Date.now(),
+            timer: setTimeout(() => flushBootLog('Weather Station Exterior'), 30000),
+          })
         } else if (
           (message === 'lwt_disconnect' || message === 'offline') &&
           irrigationRetryManager.connectionState !== 'offline'
@@ -925,9 +934,17 @@ function setupMqttHandlers() {
             }
           } else {
             if (isActuator) {
-              actuatorManager.confirmByTaskId(message)
+              const res = actuatorManager.confirmByTaskId(message)
+
+              if (!res && message.startsWith('{"time"')) {
+                Logger.ack('Nodo Actuador confirmó ACK para la sincronización horaria (RTC)')
+              }
             } else {
-              emaManager.confirm(message)
+              const res = emaManager.confirm(message)
+
+              if (!res && message.startsWith('{"time"')) {
+                Logger.ack('Nodo EMA confirmó ACK para la sincronización horaria (RTC)')
+              }
               if (message.startsWith('audit_')) {
                 lastEmaAuditAckAt = Date.now()
               }
@@ -935,9 +952,17 @@ function setupMqttHandlers() {
           }
         } catch {
           if (isActuator) {
-            actuatorManager.confirmByTaskId(message)
+            const res = actuatorManager.confirmByTaskId(message)
+
+            if (!res && message.startsWith('{"time"')) {
+              Logger.ack('Nodo Actuador confirmó ACK para la sincronización horaria (RTC)')
+            }
           } else {
-            emaManager.confirm(message)
+            const res = emaManager.confirm(message)
+
+            if (!res && message.startsWith('{"time"')) {
+              Logger.ack('Nodo EMA confirmó ACK para la sincronización horaria (RTC)')
+            }
             if (message && message.startsWith('audit_')) {
               lastEmaAuditAckAt = Date.now()
             }

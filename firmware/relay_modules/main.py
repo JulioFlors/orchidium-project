@@ -17,7 +17,7 @@ from micropython import const
 
 # ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
-DEBUG = False
+DEBUG = True
 
 # ---- Configuración MQTT (const() para ahorro de RAM) ----
 # El broker esperará ~1.5x este valor antes de desconectar al cliente.
@@ -652,8 +652,6 @@ def setup_bh1750_sync():
                 bh1750_sensor = BH1750(bus=i2c_bus, addr=addr)
                 sleep_ms(200)
                 lux_test = round(bh1750_sensor.get_auto_luminance(), 1)
-                if lux_test is not None:
-                    illuminance_Batch.append(lux_test)
                 if DEBUG:
                     print(f"    ├─ ✅ {Colors.GREEN}Conectado{Colors.RESET} [{label}]")
                     print(f"    └─ 📊 Valor: {Colors.YELLOW}{lux_test} lux{Colors.RESET}")
@@ -732,8 +730,6 @@ async def setup_sensors(force_hard_reset=False):
             temp, hum = dht_sensor.temperature(), dht_sensor.humidity()
             if -10 <= temp <= 60 and 0 <= hum <= 100:
                 dht_boot_ok = True
-                temperature_Batch.append(round(temp, 1))
-                humidity_Batch.append(round(hum, 1))
                 if DEBUG:
                     print(f"    ├─ ✅ {Colors.GREEN}Conectado{Colors.RESET}")
                     print(f"    ├─ 📊 Valor: {Colors.YELLOW}{temp:.1f} °C{Colors.RESET}")
@@ -1619,11 +1615,41 @@ async def mqtt_connector_task(client_id):
                     if DEBUG: print(f"⚠️ Fallo publicando estado: {_e}")
                 await asyncio.sleep_ms(500)
 
-                # 📡 4. Telemetría Inicial (Batches): Vaciamos los RingBuffers con las lecturas de setup_sensors
+                # 📡 4. Barrera de Sincronización RTC: Si es cold boot, esperamos a que el Scheduler fije la hora
+                if is_cold_boot:
+                    try:
+                        await asyncio.wait_for(rtc_synced_event.wait(), 30)
+                        if DEBUG: print(f"⏰ Reloj RTC sincronizado por el Scheduler.")
+                    except asyncio.TimeoutError:
+                        if DEBUG: print("⚠️ Timeout (30s) esperando sincronización RTC.")
+
+                    # 📡 5. Lecturas Frescas Iniciales: Muestreamos con el reloj ya en hora exacta (>= 2026)
+                    if dht_sensor is not None:
+                        try:
+                            clean_dht_line()
+                            await asyncio.sleep_ms(500)
+                            dht_sensor.measure()
+                            t_val = round(dht_sensor.temperature(), 1)
+                            h_val = round(dht_sensor.humidity(), 1)
+                            if -10 <= t_val <= 60 and 0 <= h_val <= 100:
+                                temperature_Batch.append(t_val)
+                                humidity_Batch.append(h_val)
+                        except Exception as e_dht:
+                            if DEBUG: print(f"⚠️ Error lectura DHT22 post-RTC: {e_dht}")
+
+                    if bh1750_sensor is not None:
+                        try:
+                            lux_val = round(bh1750_sensor.get_auto_luminance(), 1)
+                            if lux_val is not None:
+                                illuminance_Batch.append(lux_val)
+                        except Exception as e_lux:
+                            if DEBUG: print(f"⚠️ Error lectura BH1750 post-RTC: {e_lux}")
+
+                # 📡 6. Telemetría Inicial (Batches): Vaciamos los RingBuffers hacia el Scheduler
                 await flush_telemetry_batches_async()
                 await asyncio.sleep_ms(500)
 
-                # 📡 5. Estado de Lluvia: Publicación del estado actual obtenido en setup_sensors
+                # 📡 7. Estado de Lluvia: Publicación del estado actual con timestamp sincronizado
                 if rain_sensor_analog is not None:
                     try:
                         raw = await fetch_rain_raw()
@@ -1650,15 +1676,7 @@ async def mqtt_connector_task(client_id):
                         if DEBUG: print(f"⚠️ Error sincronización inicial lluvia: {pub_err}")
                     await asyncio.sleep_ms(500)
 
-                # 📡 6. Barrera de Sincronización RTC: Si es cold boot, esperamos a que el Scheduler fije la hora
-                if is_cold_boot:
-                    try:
-                        await asyncio.wait_for(rtc_synced_event.wait(), 30)
-                        if DEBUG: print(f"⏰ Reloj RTC sincronizado por el Scheduler.")
-                    except asyncio.TimeoutError:
-                        if DEBUG: print("⚠️ Timeout (30s) esperando sincronización RTC.")
-
-                # 📡 7. Notifica que MQTT está listo para las tareas de telemetría periódicas
+                # 📡 8. Notifica que MQTT está listo para las tareas de telemetría periódicas
                 mqtt_connected_event.set()
 
             except (MQTTException, OSError) as e:
@@ -2301,7 +2319,7 @@ async def illuminance_monitor_task():
             dt_lux = RTC().datetime()
             is_clock_synced_lux = (dt_lux[0] >= 2026)
             is_top_of_10min_lux = is_clock_synced_lux and (dt_lux[5] % 10 == 0)
-            should_publish_lux = (is_top_of_10min_lux and (current_ts - last_lux_publish >= 500)) or (not is_clock_synced_lux and (current_ts - last_lux_publish >= 600))
+            should_publish_lux = (is_top_of_10min_lux and (current_ts - last_lux_publish >= 60)) or (not is_clock_synced_lux and (current_ts - last_lux_publish >= 600))
             if should_publish_lux:
                 if illuminance_Batch.count > 0:
                     if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
@@ -2423,7 +2441,7 @@ async def climate_monitor_task():
             dt_dht = RTC().datetime()
             is_clock_synced_dht = (dt_dht[0] >= 2026)
             is_top_of_10min_dht = is_clock_synced_dht and (dt_dht[5] % 10 == 0)
-            should_publish_dht = (is_top_of_10min_dht and (current_ts - last_dht_publish >= 500)) or (not is_clock_synced_dht and (current_ts - last_dht_publish >= 600))
+            should_publish_dht = (is_top_of_10min_dht and (current_ts - last_dht_publish >= 60)) or (not is_clock_synced_dht and (current_ts - last_dht_publish >= 600))
             if should_publish_dht:
                 has_temp = temperature_Batch.count > 0
                 has_hum  = humidity_Batch.count > 0
