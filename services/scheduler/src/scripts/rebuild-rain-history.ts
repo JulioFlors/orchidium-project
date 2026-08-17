@@ -39,7 +39,7 @@ const inferredEventsForComparison: { startedAt: Date; endedAt: Date }[] = []
 
 /**
  * 🛡️ PARCHE DE TELEMETRÍA CORRUPTA:
- * Omitir el procesamiento del 11, 12, 15 y 16 de Agosto de 2026 debido a telemetría corrupta,
+ * Omitir el procesamiento del 11, 12, 15, 16 y 17 de Agosto de 2026 debido a telemetría corrupta,
  * lecturas intercaladas/duplicadas, desfase horario o datos no confiables de la estación EMA EXTERIOR.
  */
 function isCorruptTelemetryDate(date: Date): boolean {
@@ -52,7 +52,11 @@ function isCorruptTelemetryDate(date: Date): boolean {
     }).format(date)
     const [m, d, y] = caracasStr.split('/')
 
-    return y === '2026' && m === '08' && (d === '11' || d === '12' || d === '15' || d === '16')
+    return (
+      y === '2026' &&
+      m === '08' &&
+      (d === '11' || d === '12' || d === '15' || d === '16' || d === '17')
+    )
   } catch {
     return false
   }
@@ -1119,8 +1123,8 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
                 humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
                 humBatches[0].samples[0]
 
-              const tempRecovery = currentTemp - minTempInRain
-              const humDrop = maxHumInRain - currentHum
+              const tempRecovery = currentTemp - minTempInRain!
+              const humDrop = maxHumInRain! - currentHum
 
               isTelemetryRainActive = false
               lastRainClosedAt = timestampMs
@@ -1128,7 +1132,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
               await closeVirtualEvent(
                 new Date(preciseEndMs),
                 'PROGRESSIVE_RECOVERY',
-                `🌤️ Recuperación Progresiva — Despeje solar con validación cruzada: iluminancia promedio ${currentAverageLux.toFixed(0)} lx (umbral elástico: ${Math.round(luxRecoveryThreshold).toLocaleString()} lx) + recuperación térmica +${tempRecovery.toFixed(1)}°C desde ${minTempInRain.toFixed(1)}°C (umbral >= 2.0°C) + caída de humedad -${humDrop.toFixed(1)}% HR desde ${maxHumInRain.toFixed(1)}% HR (umbral >= 3.0% HR). Cese al inicio del lote de recuperación.`,
+                `🌤️ Recuperación Progresiva — Despeje solar con validación cruzada: iluminancia promedio ${currentAverageLux.toFixed(0)} lx (umbral elástico: ${Math.round(luxRecoveryThreshold).toLocaleString()} lx) + recuperación térmica +${tempRecovery.toFixed(1)}°C desde ${minTempInRain!.toFixed(1)}°C (umbral >= 2.0°C) + caída de humedad -${humDrop.toFixed(1)}% HR desde ${maxHumInRain!.toFixed(1)}% HR (umbral >= 3.0% HR). Cese al inicio del lote de recuperación.`,
                 {
                   temp: endSampleT ? endSampleT.value : currentTemp,
                   hum: endSampleH ? endSampleH.value : currentHum,
