@@ -1607,20 +1607,32 @@ async def mqtt_connector_task(client_id):
                             if is_cold_boot:
                                 client.publish(MQTT_TOPIC_STATUS, b"online", retain=True, qos=1)
                                 IS_BOOT_STATUS = False
-                                if DEBUG: print(f"\n📡  NODO {Colors.GREEN}Online (Esperando RTC){Colors.RESET}", end="\n")
+                                if DEBUG: print(f"\n📡  NODO {Colors.GREEN}Online{Colors.RESET}", end="\n")
                             else:
                                 client.publish(MQTT_TOPIC_STATUS, b"reboot", retain=True, qos=1)
-                                if DEBUG: print(f"\n📡  NODO {Colors.GREEN}Reboot (RTC Preservado){Colors.RESET}", end="\n")
+                                if DEBUG: print(f"\n📡  NODO {Colors.GREEN}Reboot{Colors.RESET}", end="\n")
                 except Exception as _e:
                     if DEBUG: print(f"⚠️ Fallo publicando estado: {_e}")
                 await asyncio.sleep_ms(500)
 
-                # 📡 4. Barrera de Sincronización RTC: Si es cold boot, esperamos a que el Scheduler fije la hora
+                # 📡 4. Barrera de Sincronización RTC: Si es cold boot, drenamos el socket hasta recibir la hora del Scheduler
                 if is_cold_boot:
-                    try:
-                        await asyncio.wait_for(rtc_synced_event.wait(), 30)
+                    rtc_synced_event.clear()
+                    start_wait = time()
+                    while not rtc_synced_event.is_set() and (time() - start_wait < 30):
+                        try:
+                            async with mqtt_lock:
+                                if client and getattr(client, 'sock', None):
+                                    for _ in range(5):
+                                        if client.check_msg() is None:
+                                            break
+                        except Exception:
+                            pass
+                        await asyncio.sleep_ms(100)
+
+                    if rtc_synced_event.is_set():
                         if DEBUG: print(f"⏰ Reloj RTC sincronizado por el Scheduler.")
-                    except asyncio.TimeoutError:
+                    else:
                         if DEBUG: print("⚠️ Timeout (30s) esperando sincronización RTC.")
 
                     # 📡 5. Lecturas Frescas Iniciales: Muestreamos con el reloj ya en hora exacta (>= 2026)
@@ -2314,12 +2326,17 @@ async def illuminance_monitor_task():
                 await setup_sensors(force_hard_reset=True)
                 lux_read_failures = 0
 
-            # Publicar Batch en minutos en punto (00, 10, 20, 30, 40, 50 min) o cada 10 min sin RTC
+            # Publicar Batch en minutos en punto (00, 10, 20, 30, 40, 50 min), lote lleno o cada 10 min sin RTC
             from machine import RTC
             dt_lux = RTC().datetime()
             is_clock_synced_lux = (dt_lux[0] >= 2026)
             is_top_of_10min_lux = is_clock_synced_lux and (dt_lux[5] % 10 == 0)
-            should_publish_lux = (is_top_of_10min_lux and (current_ts - last_lux_publish >= 60)) or (not is_clock_synced_lux and (current_ts - last_lux_publish >= 600))
+            has_full_batch_lux = illuminance_Batch.count >= 10
+            should_publish_lux = (
+                (is_top_of_10min_lux and (current_ts - last_lux_publish >= 60)) or 
+                has_full_batch_lux or 
+                (not is_clock_synced_lux and (current_ts - last_lux_publish >= 600))
+            )
             if should_publish_lux:
                 if illuminance_Batch.count > 0:
                     if client and getattr(client, 'sock', None) and wlan and wlan.isconnected():
@@ -2353,9 +2370,8 @@ async def illuminance_monitor_task():
             if DEBUG: print(f"\n⚠️  Error en illuminance_monitor_task(): {e}")
         
         # Sincronización precisa al segundo 00 del próximo minuto
-        sec_to_next_lux = 60 - (time() % 60)
-        if sec_to_next_lux < 5:
-            sec_to_next_lux += 60
+        cur_sec_lux = time() % 60
+        sec_to_next_lux = (60 - cur_sec_lux) if cur_sec_lux > 0 else 60
         await asyncio.sleep(sec_to_next_lux)
 
 # ---- CORRUTINA: Gestión del Sensor DHT22 ----
@@ -2436,12 +2452,17 @@ async def climate_monitor_task():
                 await setup_sensors(force_hard_reset=True)
                 dht_read_failures = 0
 
-            # Publicar Batches en minutos en punto (00, 10, 20, 30, 40, 50 min) o cada 10 min sin RTC
+            # Publicar Batches en minutos en punto (00, 10, 20, 30, 40, 50 min), lote lleno o cada 10 min sin RTC
             from machine import RTC
             dt_dht = RTC().datetime()
             is_clock_synced_dht = (dt_dht[0] >= 2026)
             is_top_of_10min_dht = is_clock_synced_dht and (dt_dht[5] % 10 == 0)
-            should_publish_dht = (is_top_of_10min_dht and (current_ts - last_dht_publish >= 60)) or (not is_clock_synced_dht and (current_ts - last_dht_publish >= 600))
+            has_full_batch_dht = temperature_Batch.count >= 10 or humidity_Batch.count >= 10
+            should_publish_dht = (
+                (is_top_of_10min_dht and (current_ts - last_dht_publish >= 60)) or 
+                has_full_batch_dht or 
+                (not is_clock_synced_dht and (current_ts - last_dht_publish >= 600))
+            )
             if should_publish_dht:
                 has_temp = temperature_Batch.count > 0
                 has_hum  = humidity_Batch.count > 0
@@ -2491,9 +2512,8 @@ async def climate_monitor_task():
             if DEBUG: print(f"\n⚠️  Error en climate_monitor_task(): {e}")
         
         # Sincronización precisa al segundo 00 del próximo minuto
-        sec_to_next_dht = 60 - (time() % 60)
-        if sec_to_next_dht < 5:
-            sec_to_next_dht += 60
+        cur_sec_dht = time() % 60
+        sec_to_next_dht = (60 - cur_sec_dht) if cur_sec_dht > 0 else 60
         await asyncio.sleep(sec_to_next_dht)
 
 # ---- CORRUTINA: Sincronización y Batching de Auditorías ----
