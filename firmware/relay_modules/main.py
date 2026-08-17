@@ -993,10 +993,6 @@ async def mqtt_processor_task():
                             rtc_data["last_sync_time"] = real_epoch
                             save_rtc_buffer(rtc_data)
 
-                            # Limpiar buffers de cualquier muestra residual
-                            temperature_Batch.clear()
-                            humidity_Batch.clear()
-                            illuminance_Batch.clear()
                             rtc_synced_event.set()
                             if DEBUG: print(f"    └─ RTC Sincronizado: {t}")
                     except Exception as e:

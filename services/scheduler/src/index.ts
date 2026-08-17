@@ -394,6 +394,7 @@ function flushBootLog(nodeSource: string) {
     checkAndSleepEma()
   } else {
     // Sincronización para el Actuador Exterior
+    sendCaracasTimeToActuator()
     resetSamplingState()
     syncNodeSampling(undefined, true, 'actuator')
 
