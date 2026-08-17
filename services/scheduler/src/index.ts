@@ -50,7 +50,7 @@ let lastRainState = 'Dry' // Declaración global para evitar ReferenceError
 let lastEmaHeartbeat: number = 0
 let lastEmaAuditAckAt: number = 0
 let emaOnlineTimestamp: number = 0
-let hadSolitaryBatteryOffline: boolean = false
+const hadSolitaryBatteryOffline: boolean = false
 
 function formatDurationDHMS(durationMs: number): string {
   const totalMinutes = Math.floor(durationMs / 60000)
@@ -232,17 +232,28 @@ async function saveDeviceLog(device: string, status: DeviceStatus, notes: string
 
 // ---- Configuración de Watchdogs ----
 const ACTUATOR_HEARTBEAT_TIMEOUT_MS = 30 * 60 * 1000 // 30 minutos
-const EMA_HEARTBEAT_TIMEOUT_MS = 70 * 60 * 1000 // 70 minutos
+const EMA_HEARTBEAT_TIMEOUT_MS = 65 * 60 * 1000 // 65 minutos (1 hora + 5 min de tolerancia)
 
 // ---- Gestión de Estado Local ----
 let lastFirmwareHeartbeat: number = 0
 let isEmaSleeping = false
 let emaSleepFallbackTimer: NodeJS.Timeout | null = null
 let emaSessionStartAt: number = 0
+let emaSessionSamples = { temp: 0, hum: 0, lux: 0 }
 let lastEmaTelemetryBatchAt: number = 0
 let emaSessionSupervisionTimer: NodeJS.Timeout | null = null
 let lastSyncTimestamp: number = 0
 let lastTimeSyncSent: number = 0
+
+function hasValidEmaSessionBatches(): boolean {
+  const isRecent = emaSessionStartAt > 0 && Date.now() - emaSessionStartAt < 15 * 60 * 1000
+  const isLuxReq = isLuxSamplingActive()
+  const hasEnoughTemp = emaSessionSamples.temp >= 6
+  const hasEnoughHum = emaSessionSamples.hum >= 6
+  const hasEnoughLux = isLuxReq ? emaSessionSamples.lux >= 6 : true
+
+  return isRecent && hasEnoughTemp && hasEnoughHum && hasEnoughLux
+}
 
 function clearEmaSupervisionTimer() {
   if (emaSessionSupervisionTimer) {
@@ -509,6 +520,7 @@ function setupMqttHandlers() {
         }
 
         if (message === 'online' || message === 'reboot') {
+          lastFirmwareHeartbeat = Date.now()
           const timeSinceLastHeartbeat = Date.now() - previousHeartbeat
           const isFreshSession = previousHeartbeat === 0 || timeSinceLastHeartbeat > 15 * 60 * 1000
 
@@ -547,7 +559,7 @@ function setupMqttHandlers() {
 
           // Para reboot
           sendCaracasTimeToActuator()
-          if (!isFreshSession && actuatorManager.connectionState === 'online') {
+          if (actuatorManager.connectionState === 'online') {
             lastFirmwareHeartbeat = Date.now()
           }
 
@@ -592,6 +604,8 @@ function setupMqttHandlers() {
 
         if (message === 'reboot' || message === 'online') {
           emaSessionStartAt = Date.now()
+          emaSessionSamples = { temp: 0, hum: 0, lux: 0 }
+          isEmaSleeping = false
           clearEmaSupervisionTimer()
 
           // Supervisión de ventana de transmisión (90 segundos = 1 min 30 s)
@@ -603,27 +617,29 @@ function setupMqttHandlers() {
                 Object.values(emaAuditState.requested).some(Boolean)
 
               if (!hasActiveAudits) {
-                const hasPublishedBatch = lastEmaTelemetryBatchAt >= emaSessionStartAt
-
-                if (hasPublishedBatch) {
+                if (hasValidEmaSessionBatches()) {
                   Logger.node('SLEEP', 'Weather Station Orquideario')
                   Logger.info(
-                    '💤 Inferencia (90s): Lotes de telemetría recibidos. Marcando en SLEEP.',
+                    `💤 Inferencia (90s): Lotes completos recibidos (${emaSessionSamples.temp}T, ${emaSessionSamples.hum}H, ${emaSessionSamples.lux}L). Marcando en SLEEP.`,
                   )
                   isEmaSleeping = true
                   emaManager.setOffline()
                   await saveDeviceLog(
                     'Weather_Station_ZONA_A',
                     'SLEEP',
-                    'Suspendido tras verificación de lotes (90s)',
+                    `Suspendido tras verificación de lotes (${emaSessionSamples.temp}T, ${emaSessionSamples.hum}H, ${emaSessionSamples.lux}L)`,
                   )
                 } else {
-                  Logger.node('OFFLINE', 'Weather Station Orquideario (Sin telemetría en 90s)')
+                  Logger.node(
+                    'OFFLINE',
+                    `Weather Station Orquideario (Lotes incompletos: ${emaSessionSamples.temp}T, ${emaSessionSamples.hum}H, ${emaSessionSamples.lux}L)`,
+                  )
+                  isEmaSleeping = false
                   emaManager.setOffline()
                   await saveDeviceLog(
                     'Weather_Station_ZONA_A',
                     'OFFLINE',
-                    'Desconexión sin telemetría validada (90s)',
+                    `Desconexión con telemetría incompleta (${emaSessionSamples.temp}T, ${emaSessionSamples.hum}H, ${emaSessionSamples.lux}L)`,
                   )
                 }
               }
@@ -726,23 +742,22 @@ function setupMqttHandlers() {
             return
           }
 
-          // Evaluación de resiliencia: Si el nodo publicó lotes en esta sesión y no hay auditorías pendientes
-          const hasPublishedBatchInSession = lastEmaTelemetryBatchAt >= emaSessionStartAt
+          // Evaluación de resiliencia: Si el nodo publicó lotes completos en esta sesión y no hay auditorías pendientes
           const hasNoAudits =
             !Object.values(emaAuditState.requested).some((v) => v === true) &&
             !Object.values(emaAuditState.active).some((v) => v === true)
 
-          if (hasPublishedBatchInSession && hasNoAudits) {
+          if (hasValidEmaSessionBatches() && hasNoAudits) {
             Logger.node('SLEEP', 'Weather Station Orquideario')
             Logger.info(
-              '💤 Desconexión de red tras publicación limpia de lotes. Marcando en SLEEP.',
+              `💤 Desconexión de red tras publicación limpia de lotes (${emaSessionSamples.temp}T, ${emaSessionSamples.hum}H, ${emaSessionSamples.lux}L). Marcando en SLEEP.`,
             )
             isEmaSleeping = true
             emaManager.setOffline()
             await saveDeviceLog(
               'Weather_Station_ZONA_A',
               'SLEEP',
-              'Suspendido tras publicación exitosa de lotes',
+              `Suspendido tras publicación limpia de lotes (${emaSessionSamples.temp}T, ${emaSessionSamples.hum}H, ${emaSessionSamples.lux}L)`,
             )
 
             return
@@ -1104,6 +1119,15 @@ function setupMqttHandlers() {
             }
           }
 
+          // Lógica específica para el Nodo EMA (Weather Station Orquideario)
+          if (isEma) {
+            lastEmaHeartbeat = Date.now()
+            lastEmaTelemetryBatchAt = Date.now()
+            emaSessionSamples.temp += tempValues.length
+            emaSessionSamples.hum += humValues.length
+            emaSessionSamples.lux += luxValues.length
+          }
+
           // Lógica específica para el Nodo Exterior (Validación de Lluvia / Watchdog)
           if (!isEma) {
             // Activamos la presencia real en el Watchdog basados en los campos extraídos del lote
@@ -1133,8 +1157,6 @@ function setupMqttHandlers() {
             )
             const sanitizedLuxValues =
               caracasHourForLux < 7 || caracasHourForLux >= 18 ? luxValues.map(() => 0) : luxValues
-
-            lastEmaTelemetryBatchAt = Date.now()
 
             // Encolar los resúmenes de lote correspondientes en RainManager
             RainManager.pushClimateBatch(tempValues, humValues, sanitizedLuxValues)
@@ -1356,6 +1378,9 @@ async function initializeHeartbeatsFromPostgres() {
       const formattedDate = formatFriendlyHeartbeatDate(latestActuatorLog.timestamp)
 
       Logger.info(`Nodo Actuador: ${formattedDate} ${latestActuatorLog.status}`)
+      if (latestActuatorLog.status === 'OFFLINE') {
+        actuatorManager.setOffline()
+      }
     }
   } catch (error) {
     Logger.error('Error al inicializar latido de Actuador desde Postgres:', error)
@@ -1365,8 +1390,7 @@ async function initializeHeartbeatsFromPostgres() {
 /**
  * Watchdog de inactividad de la Estación EMA:
  * Si el nodo está registrado como online/sleep pero no hemos recibido telemetrías
- * ni estados en 30 minutos (ventana de tolerancia que cubre el ciclo de sleep de 20min),
- * lo forzamos a OFFLINE e inhabilitamos las toolcards del frontend.
+ * ni estados en 70 minutos, lo forzamos a OFFLINE e inhabilitamos las toolcards del frontend.
  */
 async function checkEmaHeartbeat() {
   if (lastEmaHeartbeat === 0) return
@@ -1378,6 +1402,8 @@ async function checkEmaHeartbeat() {
     Logger.node('OFFLINE', 'Weather Station Orquideario (Watchdog Timeout)')
     emaManager.setOffline()
     isEmaSleeping = false
+    emaSessionStartAt = 0
+    emaSessionSamples = { temp: 0, hum: 0, lux: 0 }
 
     // Sincronizar el estado de auditorías a inactivo
     const keepRequested = Date.now() - lastEmaAuditAckAt < 9 * 60 * 1000
@@ -1401,14 +1427,8 @@ async function checkEmaHeartbeat() {
     await saveDeviceLog(
       'Weather_Station_ZONA_A',
       'OFFLINE',
-      'Watchdog: Sin señales de vida durante 70 minutos (Offline)',
+      'Watchdog: Sin señales de vida durante 65 minutos (Offline)',
     )
-
-    // Publicar estado offline en canal de status
-    mqttClient.publish('PristinoPlant/Weather_Station/ZONA_A/status', 'offline', {
-      retain: true,
-      qos: 1,
-    })
   }
 }
 
@@ -1419,12 +1439,11 @@ async function checkEmaHeartbeat() {
  */
 async function checkActuatorHeartbeat() {
   if (lastFirmwareHeartbeat === 0) return
-  if (irrigationRetryManager.connectionState === 'offline') return
+  if (actuatorManager.connectionState === 'offline') return
 
   const elapsed = Date.now() - lastFirmwareHeartbeat
 
   if (elapsed > ACTUATOR_HEARTBEAT_TIMEOUT_MS) {
-    Logger.node('OFFLINE', 'Actuator_Controller (Watchdog Timeout)')
     await handleNodeOffline(
       `Watchdog: Sin señales de vida durante ${Math.round(elapsed / 60000)} minutos (Offline)`,
       'SCHEDULER',

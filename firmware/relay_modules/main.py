@@ -301,6 +301,41 @@ AUDIT_COUNTERS = {
     "hum": 0
 }
 
+# ---- Gestión del RTC RAM (Persistencia y Drift) ----
+def load_rtc_buffer():
+    from machine import RTC
+    import json
+    rtc = RTC()
+    try:
+        data = rtc.memory()
+        if data:
+            return json.loads(data.decode('utf-8'))
+    except Exception as e:
+        if DEBUG: print("⚠️ Error al cargar RTC RAM:", e)
+    # Inicialización por defecto
+    return {
+        "is_clock_synced": False,
+        "is_sampling_lux": False,
+        "drift_rate": 0.0,
+        "last_sync_time": 0,
+        "wifi_failures": 0,
+        "dht_failures": 0,
+        "lux_failures": 0
+    }
+
+def save_rtc_buffer(buffer_data):
+    from machine import RTC
+    import json
+    rtc = RTC()
+    try:
+        serialized = json.dumps(buffer_data).encode('utf-8')
+        if len(serialized) <= 2048:
+            rtc.memory(serialized)
+        else:
+            if DEBUG: print("⚠️ Buffer excede los 2048 bytes del RTC RAM")
+    except Exception as e:
+        if DEBUG: print("⚠️ Error al guardar RTC RAM:", e)
+
 # ---- Utilidades de Telemetría ----
 class RingBuffer:
     def __init__(self, size):
@@ -914,11 +949,46 @@ async def mqtt_processor_task():
                 elif msg.startswith(b'{"time"'):
                     try:
                         import json
+                        import utime
                         from machine import RTC
                         data = json.loads(msg.decode('utf-8'))
                         if "time" in data:
                             t = data["time"]
+                            # Convertir tupla horaria del scheduler a epoch real
+                            # utime.mktime recibe: (year, month, day, hour, minute, second, weekday, yearday)
+                            real_epoch = utime.mktime((t[0], t[1], t[2], t[4], t[5], t[6], t[3], 0))
+                            local_epoch = utime.time()
+
+                            # Sincronizar el reloj físico
                             RTC().datetime(t)
+
+                            # Calcular error térmico acumulado y drift
+                            rtc_data = load_rtc_buffer()
+                            if "drift_rate" not in rtc_data:
+                                rtc_data["drift_rate"] = 0.0
+                            if "last_sync_time" not in rtc_data:
+                                rtc_data["last_sync_time"] = 0
+
+                            last_sync = rtc_data["last_sync_time"]
+                            if last_sync > 0:
+                                elapsed_real = real_epoch - last_sync
+                                if elapsed_real > 260: # Ventana mínima de 5 minutos
+                                    error_sec = local_epoch - real_epoch
+                                    measured_drift_rate = error_sec / elapsed_real
+
+                                    # Filtrar valores espurios (límite +/- 10%)
+                                    if -0.1 <= measured_drift_rate <= 0.1:
+                                        old_drift = rtc_data["drift_rate"]
+                                        # EMA de 80% peso histórico, 20% peso actual
+                                        rtc_data["drift_rate"] = 0.8 * old_drift + 0.2 * measured_drift_rate
+                                        if DEBUG:
+                                            print(f"       ├─ Desviación medida: {error_sec}s en {elapsed_real}s")
+                                            print(f"       └─ drift_rate (EMA): {rtc_data['drift_rate']:.6f}")
+
+                            rtc_data["is_clock_synced"] = True
+                            rtc_data["last_sync_time"] = real_epoch
+                            save_rtc_buffer(rtc_data)
+
                             # Limpiar buffers de cualquier muestra residual
                             temperature_Batch.clear()
                             humidity_Batch.clear()
@@ -926,8 +996,7 @@ async def mqtt_processor_task():
                             rtc_synced_event.set()
                             if DEBUG: print(f"    └─ RTC Sincronizado: {t}")
                     except Exception as e:
-                        if DEBUG: print(f"    └─ ❌ Error sincronizando RTC: {e}")
-
+                        if DEBUG: print(f"    └─ ❌ Error sincronizando RTC y drift: {e}")
 
                 # 2. Control de Muestreo de Iluminancia (Día/Noche)
                 if m_low.startswith(b"lux_sampling:"):
@@ -949,6 +1018,11 @@ async def mqtt_processor_task():
                             illuminance_wake_event.clear()
                             # Al apagar, limpiamos el buffer para no arrastrar basura de 0 lux
                             illuminance_Batch.clear()
+
+                        # Persistir estado en RTC RAM
+                        rtc_data = load_rtc_buffer()
+                        rtc_data["is_sampling_lux"] = IS_SAMPLING_LUX
+                        save_rtc_buffer(rtc_data)
                         
                         del action
                     del parts
@@ -1529,7 +1603,9 @@ async def mqtt_connector_task(client_id):
                 # 📡 3. Señalizamos el estado al Scheduler.
                 global IS_BOOT_STATUS
                 from machine import RTC
-                is_cold_boot = (IS_BOOT_STATUS or RTC().datetime()[0] < 2026)
+                rtc_data = load_rtc_buffer()
+                is_clock_synced = (RTC().datetime()[0] >= 2026 or rtc_data.get("is_clock_synced", False))
+                is_cold_boot = (IS_BOOT_STATUS and not is_clock_synced)
                 try:
                     async with mqtt_lock:
                         if client and getattr(client, 'sock', None):
@@ -2278,7 +2354,11 @@ async def illuminance_monitor_task():
         except Exception as e:
             if DEBUG: print(f"\n⚠️  Error en illuminance_monitor_task(): {e}")
         
-        await asyncio.sleep(60)
+        # Sincronización precisa al segundo 00 del próximo minuto
+        sec_to_next_lux = 60 - (time() % 60)
+        if sec_to_next_lux < 5:
+            sec_to_next_lux += 60
+        await asyncio.sleep(sec_to_next_lux)
 
 # ---- CORRUTINA: Gestión del Sensor DHT22 ----
 async def climate_monitor_task():
@@ -2412,7 +2492,11 @@ async def climate_monitor_task():
         except Exception as e:
             if DEBUG: print(f"\n⚠️  Error en climate_monitor_task(): {e}")
         
-        await asyncio.sleep(60)
+        # Sincronización precisa al segundo 00 del próximo minuto
+        sec_to_next_dht = 60 - (time() % 60)
+        if sec_to_next_dht < 5:
+            sec_to_next_dht += 60
+        await asyncio.sleep(sec_to_next_dht)
 
 # ---- CORRUTINA: Sincronización y Batching de Auditorías ----
 async def unified_audit_task():

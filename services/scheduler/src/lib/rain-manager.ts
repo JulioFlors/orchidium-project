@@ -393,6 +393,27 @@ export async function hydrateState(): Promise<void> {
       lastBatchReceivedAt = newTempBatches[0].timestamp
     }
 
+    // 4. Si se recuperó un evento huérfano pero la telemetría exterior tiene más de 11 min sin datos, cerrarlo de inmediato
+    if (openVirtualRainEventId) {
+      const nowMs = Date.now()
+      const isStale = lastBatchReceivedAt === 0 || nowMs - lastBatchReceivedAt > 11 * 60 * 1000
+
+      if (isStale) {
+        const lastValidDate = lastBatchReceivedAt > 0 ? new Date(lastBatchReceivedAt) : new Date()
+
+        Logger.rain(
+          'Evento huérfano descartado en hidratación: sin telemetría exterior reciente (>11 min). Cerrando por desconexión.',
+        )
+        inferedRainActive = false
+        inferedRainOverridden = true
+        await closeRainEvent(
+          'EMA_OFFLINE',
+          lastValidDate,
+          'Ema Desconectado: pérdida de telemetría exterior detectada en el arranque del sistema.',
+        )
+      }
+    }
+
     Logger.info('Motor de Inferencia Meteorológica: Hidratado')
   } catch (err) {
     Logger.info(

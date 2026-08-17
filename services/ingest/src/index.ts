@@ -286,6 +286,13 @@ async function processEnvironmentPacket(
         // manteniendo la distancia relativa entre las muestras del batch.
         unixTimestamp += backtrackingOffset
 
+        // 🛡️ Corrección de Zona Horaria (UTC-4 / VET -> UTC)
+        // El reloj del microcontrolador opera en hora local de Caracas (UTC-4).
+        // InfluxDB almacena en UTC, por lo que sumamos 4 horas (14400s) a lotes sincronizados.
+        if (backtrackingOffset === 0 && source === 'Weather_Station') {
+          unixTimestamp += 4 * 3600
+        }
+
         const point = Point.measurement('environment_metrics')
           .setTag('source', source)
           .setTag('zone', zone)

@@ -39,8 +39,8 @@ const inferredEventsForComparison: { startedAt: Date; endedAt: Date }[] = []
 
 /**
  * 🛡️ PARCHE DE TELEMETRÍA CORRUPTA:
- * Omitir el procesamiento del 12 y 15 de Agosto de 2026 debido a telemetría corrupta
- * o datos no confiables de la estación EMA EXTERIOR.
+ * Omitir el procesamiento del 11, 12, 15 y 16 de Agosto de 2026 debido a telemetría corrupta,
+ * lecturas intercaladas/duplicadas, desfase horario o datos no confiables de la estación EMA EXTERIOR.
  */
 function isCorruptTelemetryDate(date: Date): boolean {
   try {
@@ -52,7 +52,7 @@ function isCorruptTelemetryDate(date: Date): boolean {
     }).format(date)
     const [m, d, y] = caracasStr.split('/')
 
-    return y === '2026' && m === '08' && (d === '12' || d === '15')
+    return y === '2026' && m === '08' && (d === '11' || d === '12' || d === '15' || d === '16')
   } catch {
     return false
   }
@@ -1406,7 +1406,31 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
   }
 
   if (activeVirtualEvent) {
-    await saveOpenVirtualEvent()
+    const lastValidTs = tempBatches[0]?.timestamp || currentIntervalStartMs || Date.now()
+    const timeSinceLastSample = Date.now() - lastValidTs
+
+    if (timeSinceLastSample > 11 * 60 * 1000) {
+      const gapMin = Math.round(timeSinceLastSample / 60000)
+      const endSampleT = tempBatches[0]?.samples[tempBatches[0].samples.length - 1]
+      const endSampleH = humBatches[0]?.samples[humBatches[0].samples.length - 1]
+      const endSampleL = luxBatches[0]?.samples[luxBatches[0].samples.length - 1]
+
+      await closeVirtualEvent(
+        new Date(lastValidTs),
+        'EMA_OFFLINE',
+        `Ema Desconectado: pérdida de telemetría exterior al término del historial (sin datos en ${gapMin} min). Cese automático por desconexión.`,
+        {
+          temp: endSampleT ? endSampleT.value : (tempBatches[0]?.min ?? null),
+          hum: endSampleH ? endSampleH.value : (humBatches[0]?.max ?? null),
+          lux: endSampleL ? endSampleL.value : (luxBatches[0]?.min ?? null),
+        },
+        {
+          type: 'EMA_OFFLINE',
+        },
+      )
+    } else {
+      await saveOpenVirtualEvent()
+    }
     createdCount++
   }
 
