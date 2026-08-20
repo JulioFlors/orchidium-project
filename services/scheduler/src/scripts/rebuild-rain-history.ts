@@ -1280,7 +1280,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
                 'THERMAL_VARIATION',
                 closeReasonText,
                 {
-                  temp: endSampleT ? endSampleT.value : currentTempMax,
+                  temp: endSampleT ? endSampleT.value : tempBatches[0].max,
                   hum: endSampleH ? endSampleH.value : tempBatches[0].max,
                   lux: endSampleL ? endSampleL.value : currentMinLux,
                 },

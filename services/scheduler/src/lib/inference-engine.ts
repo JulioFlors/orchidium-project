@@ -11,6 +11,14 @@ import { Logger, formatCaracasDateTime } from './logger'
 import { classifyCurrentDay } from './day-classifier'
 import { influxClient } from './influx'
 
+function formatLux(lux: number): string {
+  if (lux >= 1000) {
+    return `${(lux / 1000).toFixed(1)}k lx`
+  }
+
+  return `${Math.round(lux)} lx`
+}
+
 /**
  * Umbrales Botánicos (Orquídeas Epífitas Tropicales - Cattleya).
  *

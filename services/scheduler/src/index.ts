@@ -51,10 +51,8 @@ let isSystemReady = false // Solo true tras recibir la primera telemetría post-
 let lastRainState = 'Dry' // Declaración global para evitar ReferenceError
 let lastEmaHeartbeat: number = 0
 let lastEmaAuditAckAt: number = 0
-let emaOnlineTimestamp: number = 0
-const hadSolitaryBatteryOffline: boolean = false
 
-function formatDurationDHMS(durationMs: number): string {
+export function formatDurationDHMS(durationMs: number): string {
   const totalMinutes = Math.floor(durationMs / 60000)
   const days = Math.floor(totalMinutes / (24 * 60))
   const hours = Math.floor((totalMinutes % (24 * 60)) / 60)
@@ -69,7 +67,7 @@ function formatDurationDHMS(durationMs: number): string {
   return parts.join(' ')
 }
 
-async function sendTelegramAlert(text: string) {
+export async function sendTelegramAlert(text: string) {
   const botToken = process.env.TELEGRAM_BOT_TOKEN
   const chatId = process.env.TELEGRAM_CHAT_ID
 
@@ -242,7 +240,6 @@ let isEmaSleeping = false
 let emaSleepFallbackTimer: NodeJS.Timeout | null = null
 let emaSessionStartAt: number = 0
 let emaSessionSamples = { temp: 0, hum: 0, lux: 0 }
-let lastEmaTelemetryBatchAt: number = 0
 let emaSessionSupervisionTimer: NodeJS.Timeout | null = null
 let lastSyncTimestamp: number = 0
 let lastTimeSyncSent: number = 0
@@ -1150,7 +1147,6 @@ function setupMqttHandlers() {
           // Lógica específica para el Nodo EMA (Weather Station Orquideario)
           if (isEma) {
             lastEmaHeartbeat = Date.now()
-            lastEmaTelemetryBatchAt = Date.now()
             emaSessionSamples.temp += tempValues.length
             emaSessionSamples.hum += humValues.length
             emaSessionSamples.lux += luxValues.length
@@ -1842,8 +1838,6 @@ async function handleEmaSync(statusToSave: DeviceStatus) {
   Logger.node(statusToSave, 'Weather Station Orquideario')
 
   await saveDeviceLog('Weather_Station_ZONA_A', statusToSave, notes)
-
-  emaOnlineTimestamp = Date.now()
 
   if (!hasAccumulator) {
     emaManager.setReady()
