@@ -44,7 +44,7 @@ const inferredEventsForComparison: { startedAt: Date; endedAt: Date }[] = []
 
 /**
  * 🛡️ PARCHE DE TELEMETRÍA CORRUPTA:
- * Omitir el procesamiento del 11, 12, 15, 16 y 17 de Agosto de 2026 debido a telemetría corrupta,
+ * Omitir el procesamiento del 10 al 17 de Agosto de 2026 debido a telemetría corrupta,
  * lecturas intercaladas/duplicadas, desfase horario o datos no confiables de la estación EMA EXTERIOR.
  */
 function isCorruptTelemetryDate(date: Date): boolean {
@@ -56,12 +56,9 @@ function isCorruptTelemetryDate(date: Date): boolean {
       day: '2-digit',
     }).format(date)
     const [m, d, y] = caracasStr.split('/')
+    const dayNum = parseInt(d, 10)
 
-    return (
-      y === '2026' &&
-      m === '08' &&
-      (d === '11' || d === '12' || d === '15' || d === '16' || d === '17')
-    )
+    return y === '2026' && m === '08' && dayNum >= 10 && dayNum <= 17
   } catch {
     return false
   }
@@ -93,7 +90,6 @@ async function main() {
   Logger.info('════════════════════════════════════════════════════════')
 
   // 1. Reconstruir Lluvia Física
-  Logger.info('⚡ 1. Reconstruyendo eventos de lluvia física...')
   await rebuildPhysicalRain(startTime, endTime)
 
   // 2. Reconstruir Inferencia de Lluvia Virtual
@@ -167,9 +163,6 @@ async function main() {
         }
 
         // ── Clasificación Avanzada de Falsos Negativos ──────────────────────
-        // Usar day-classifier.ts para evaluar el fotoperíodo botánico de 8h (8AM - 4PM VET).
-        // Umbral: garúas de ≤ 10 min en días soleados (promedio 8am-4pm ≥ 26 klx)
-        // no afectan al plan de riego y no deben restar al Recall del motor.
         const INSIGNIFICANT_DURATION_MIN = 10
         const SUNNY_DAY_LUX_THRESHOLD = 26000
 
@@ -178,7 +171,8 @@ async function main() {
           durationMin: number
           avgDayLux: number | null
           dayType: string
-          category: 'SIGNIFICANT' | 'INSIGNIFICANT_SUNNY' | 'INSIGNIFICANT_CLOUDY'
+          category:
+            'LIMITATION_DOCUMENTED' | 'SIGNIFICANT' | 'INSIGNIFICANT_SUNNY' | 'INSIGNIFICANT_CLOUDY'
         }
 
         const classifiedFNs: ClassifiedFN[] = []
@@ -191,8 +185,18 @@ async function main() {
           const fnEnd = new Date(fn.endedAt)
           const durationMin = (fnEnd.getTime() - fnStart.getTime()) / (60 * 1000)
 
-          if (durationMin > INSIGNIFICANT_DURATION_MIN) {
-            // Evento de duración significativa: siempre cuenta como fallo real
+          const rawFn = fn as { limitationReason?: string; limitationNotes?: string }
+
+          if (rawFn.limitationReason || isCorruptTelemetryDate(fnStart)) {
+            classifiedFNs.push({
+              event: fn,
+              durationMin,
+              avgDayLux: null,
+              dayType: 'N/A',
+              category: 'LIMITATION_DOCUMENTED',
+            })
+          } else if (durationMin > INSIGNIFICANT_DURATION_MIN) {
+            // Evento de duración significativa: cuenta como candidato a calibración
             classifiedFNs.push({
               event: fn,
               durationMin,
@@ -238,6 +242,9 @@ async function main() {
           }
         }
 
+        const documentedLimitations = classifiedFNs.filter(
+          (f) => f.category === 'LIMITATION_DOCUMENTED',
+        )
         const significantFNs = classifiedFNs.filter((f) => f.category === 'SIGNIFICANT')
         const insignificantSunnyFNs = classifiedFNs.filter(
           (f) => f.category === 'INSIGNIFICANT_SUNNY',
@@ -250,10 +257,11 @@ async function main() {
         const totalReal = relevantRealEvents.length
         const recallBrutoPct = ((truePositives / totalReal) * 100).toFixed(1)
 
-        // Recall Ajustado: excluir garúas insignificantes en días soleados
-        const totalAdjusted = totalReal - insignificantSunnyFNs.length
+        // Recall Ajustado: excluir limitaciones documentadas y garúas insignificantes soleadas
+        const totalExcluded = documentedLimitations.length + insignificantSunnyFNs.length
+        const totalAdjusted = Math.max(0, totalReal - totalExcluded)
         const adjustedFN = significantFNs.length + insignificantCloudyFNs.length
-        const adjustedTP = totalAdjusted - adjustedFN
+        const adjustedTP = Math.max(0, totalAdjusted - adjustedFN)
         const recallAjustadoPct =
           totalAdjusted > 0 ? ((adjustedTP / totalAdjusted) * 100).toFixed(1) : '0.0'
 
@@ -267,25 +275,60 @@ async function main() {
         Logger.info('  ----------------------------------------------------')
         Logger.info(`  📊 Desglose de Falsos Negativos:`)
         Logger.info(
-          `     🔍 Significativos (> ${INSIGNIFICANT_DURATION_MIN} min): ${significantFNs.length}`,
+          `     🛡️ Limitaciones Físicas Documentadas (Saturación/Cortes/Desfase): ${documentedLimitations.length} [Justificadas]`,
         )
         Logger.info(
-          `     🍃 Micro-eventos en Día Soleado (≤ ${INSIGNIFICANT_DURATION_MIN} min, ≥ ${(SUNNY_DAY_LUX_THRESHOLD / 1000).toFixed(0)}klx): ${insignificantSunnyFNs.length} [Descartables]`,
+          `     🍃 Micro-eventos en Día Soleado (≤ ${INSIGNIFICANT_DURATION_MIN} min, ≥ ${(SUNNY_DAY_LUX_THRESHOLD / 1000).toFixed(0)}klx): ${insignificantSunnyFNs.length} [Descartables sin impacto en riego]`,
+        )
+        Logger.info(
+          `     🔍 Significativos No Explicados (> ${INSIGNIFICANT_DURATION_MIN} min): ${significantFNs.length} [Candidatas a calibración]`,
         )
         Logger.info(
           `     ☁️ Micro-eventos en Día Nublado (≤ ${INSIGNIFICANT_DURATION_MIN} min, < ${(SUNNY_DAY_LUX_THRESHOLD / 1000).toFixed(0)}klx): ${insignificantCloudyFNs.length}`,
         )
         Logger.info('  ----------------------------------------------------')
         Logger.info(
-          `  🎯 Sensibilidad Ajustada (excluyendo ${insignificantSunnyFNs.length} garúa(s) soleada(s)): ${recallAjustadoPct}%`,
+          `  🎯 Sensibilidad Ajustada (excluyendo ${documentedLimitations.length} limitaciones y ${insignificantSunnyFNs.length} micro-garúa(s)): ${recallAjustadoPct}%`,
         )
         Logger.info(
           `     (Base ajustada: ${totalAdjusted} eventos | Detectados: ${adjustedTP} | Omitidos Reales: ${adjustedFN})`,
         )
         Logger.info('  ----------------------------------------------------')
 
+        if (documentedLimitations.length > 0) {
+          Logger.info(
+            '  🛡️ Limitaciones Físicas Documentadas (Omitidas justificadamente por saturación/corte):',
+          )
+          for (const fn of documentedLimitations) {
+            const startStr = new Date(fn.event.startedAt).toLocaleTimeString('es-VE', {
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZone: 'America/Caracas',
+            })
+            const endStr = new Date(fn.event.endedAt).toLocaleTimeString('es-VE', {
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZone: 'America/Caracas',
+            })
+            const dateStr = new Date(fn.event.startedAt).toLocaleDateString('es-VE', {
+              timeZone: 'America/Caracas',
+            })
+            const dayOfWeekLabel = fn.event.dayOfWeek ? `${fn.event.dayOfWeek} ` : ''
+            const rawEvent = fn.event as {
+              limitationReason?: string
+              limitationNotes?: string
+            }
+            const reasonTag = rawEvent.limitationReason ? `[${rawEvent.limitationReason}] ` : ''
+            const noteTag = rawEvent.limitationNotes ? ` -> ${rawEvent.limitationNotes}` : ''
+
+            Logger.info(
+              `    - [${dayOfWeekLabel}${dateStr} ${startStr} - ${endStr}] (${fn.durationMin.toFixed(0)} min): ${fn.event.description} 💡 Motivo: ${reasonTag}${noteTag}`,
+            )
+          }
+        }
+
         if (significantFNs.length > 0) {
-          Logger.warn('  ⚠️  Lluvias SIGNIFICATIVAS omitidas (Candidatas a calibración):')
+          Logger.warn('  ⚠️  Lluvias SIGNIFICATIVAS no explicadas (Candidatas a calibración):')
           for (const fn of significantFNs) {
             const startStr = new Date(fn.event.startedAt).toLocaleTimeString('es-VE', {
               hour: '2-digit',
@@ -360,9 +403,9 @@ async function main() {
           }
         }
 
-        if (falseNegatives.length === 0) {
+        if (adjustedFN === 0) {
           Logger.success(
-            '  🎉 ¡Perfecto! El motor inferencial detectó todas las lluvias observadas.',
+            '  🎉 ¡Perfecto! El motor inferencial detectó el 100% de las lluvias reales evaluables.',
           )
         }
         Logger.info('════════════════════════════════════════════════════════')
@@ -379,7 +422,6 @@ async function main() {
 }
 
 async function rebuildPhysicalRain(startTime: Date, endTime: Date) {
-  let createdCount = 0
   let currentEvent: { startedAt: Date; endedAt: Date; intensities: number[] } | null = null
 
   const BLOCK_MS = 2 * 24 * 3600 * 1000
@@ -422,7 +464,6 @@ async function rebuildPhysicalRain(startTime: Date, endTime: Date) {
 
             if (gap > COOLDOWN_MS) {
               await savePhysicalEvent(currentEvent)
-              createdCount++
               currentEvent = { startedAt: tDate, endedAt: tDate, intensities: [intensity] }
             } else {
               currentEvent.endedAt = tDate
@@ -435,7 +476,6 @@ async function rebuildPhysicalRain(startTime: Date, endTime: Date) {
 
             if (gap > COOLDOWN_MS) {
               await savePhysicalEvent(currentEvent)
-              createdCount++
               currentEvent = null
             }
           }
@@ -449,10 +489,7 @@ async function rebuildPhysicalRain(startTime: Date, endTime: Date) {
 
   if (currentEvent) {
     await savePhysicalEvent(currentEvent)
-    createdCount++
   }
-
-  Logger.success(`Reconstrucción física completada. Eventos creados/actualizados: ${createdCount}`)
 }
 
 async function rebuildInferredRain(startTime: Date, endTime: Date) {

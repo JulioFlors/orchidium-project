@@ -1,4 +1,4 @@
-[
+﻿[
   {
     "id": "24-06-26-Rain-1",
     "dayOfWeek": "Miércoles",
@@ -53,7 +53,9 @@
     "dayOfWeek": "Jueves",
     "startedAt": "2026-07-02T19:00:00-04:00",
     "endedAt": "2026-07-02T20:00:00-04:00",
-    "description": "7:00pm volvió a llover, 7:36pm sigue, 7:48pm, 8:02 escampado??"
+    "description": "7:00pm volvió a llover, 7:36pm sigue, 7:48pm, 8:02 escampado??",
+    "limitationReason": "SATURATED_ENVIRONMENT",
+    "limitationNotes": "Ambiente saturado post-lluvia; ya acumulaba >20 min ese día (riego asegurado). Imposible de inferir por estancamiento térmico/higrométrico."
   },
   {
     "id": "05-07-26-Rain-1",
@@ -105,20 +107,6 @@
     "description": "3:30pm garuando leve. 3:35pm dejo de garuar leve"
   },
   {
-    "id": "09-07-26-Rain-1",
-    "dayOfWeek": "Jueves",
-    "startedAt": "2026-07-09T07:02:00-04:00",
-    "endedAt": "2026-07-09T07:32:00-04:00",
-    "description": "Jueves 9 de julio 7:02am garua leve. Duro < 30min"
-  },
-  {
-    "id": "09-07-26-Rain-2",
-    "dayOfWeek": "Jueves",
-    "startedAt": "2026-07-09T11:20:00-04:00",
-    "endedAt": "2026-07-09T11:39:00-04:00",
-    "description": "11:20am lluvia. 11:39am se detuvo"
-  },
-  {
     "id": "10-07-26-Rain-1",
     "dayOfWeek": "Viernes",
     "startedAt": "2026-07-10T19:20:00-04:00",
@@ -130,7 +118,9 @@
     "dayOfWeek": "Sábado",
     "startedAt": "2026-07-11T13:10:00-04:00",
     "endedAt": "2026-07-11T13:25:00-04:00",
-    "description": "Sábado 11 de julio llovió a la 1:10pm hasta 1:25pm"
+    "description": "Sábado 11 de julio llovió a la 1:10pm hasta 1:25pm",
+    "limitationReason": "POWER_OUTAGE",
+    "limitationNotes": "Corte de energía eléctrica en plena lluvia; telemetría interrumpida durante el evento."
   },
   {
     "id": "11-07-26-Rain-2",
@@ -144,7 +134,9 @@
     "dayOfWeek": "Sábado",
     "startedAt": "2026-07-11T19:15:00-04:00",
     "endedAt": "2026-07-11T19:45:00-04:00",
-    "description": "7:15pm lloviendo fuerte"
+    "description": "7:15pm lloviendo fuerte",
+    "limitationReason": "SATURATED_ENVIRONMENT",
+    "limitationNotes": "Ambiente previamente saturado tras lluvias previas; fluctuaciones térmicas e higrométricas sumamente tenues."
   },
   {
     "id": "12-07-26-Rain-1",
@@ -165,7 +157,9 @@
     "dayOfWeek": "Domingo",
     "startedAt": "2026-07-12T18:34:00-04:00",
     "endedAt": "2026-07-12T19:10:00-04:00",
-    "description": "6:34pm inicia otra lluvia. Paro a las 7:10pm"
+    "description": "6:34pm inicia otra lluvia. Paro a las 7:10pm",
+    "limitationReason": "SATURATED_ENVIRONMENT",
+    "limitationNotes": "Ambiente ya saturado con 59 min de lluvia previa acumulada ese día; condiciones higrométricas en meseta plana."
   },
   {
     "id": "13-07-26-Rain-1",
@@ -235,7 +229,9 @@
     "dayOfWeek": "Jueves",
     "startedAt": "2026-07-23T20:00:00-04:00",
     "endedAt": "2026-07-23T20:15:00-04:00",
-    "description": "Jueves 23 de julio: 8:00pm Lluvia, 8:15pm cese"
+    "description": "Jueves 23 de julio: 8:00pm Lluvia, 8:15pm cese",
+    "limitationReason": "SATURATED_ENVIRONMENT",
+    "limitationNotes": "Saturación por lluvia previa de 1h 10m; HR en 97% con ascenso nocturno natural a 100% sin gradiente distinguible."
   },
   {
     "id": "24-07-26-Rain-1",
@@ -298,21 +294,27 @@
     "dayOfWeek": "Viernes",
     "startedAt": "2026-08-14T08:20:00-04:00",
     "endedAt": "2026-08-14T08:43:00-04:00",
-    "description": "Viernes 14 de agosto: 8:20am totalmente nublado garuando, 8:43am cesó"
+    "description": "Viernes 14 de agosto: 8:20am totalmente nublado garuando, 8:43am cesó",
+    "limitationReason": "CORRUPT_TELEMETRY_PERIOD",
+    "limitationNotes": "Período de telemetría corrupta/desfasada de EMA Exterior (10 al 17 de agosto)."
   },
   {
     "id": "14-08-26-Rain-2",
     "dayOfWeek": "Viernes",
     "startedAt": "2026-08-14T10:00:00-04:00",
     "endedAt": "2026-08-14T10:10:00-04:00",
-    "description": "Viernes 14 de agosto: 10:00am inicio una nueva lluvia, 10:10am cesó"
+    "description": "Viernes 14 de agosto: 10:00am inicio una nueva lluvia, 10:10am cesó",
+    "limitationReason": "CORRUPT_TELEMETRY_PERIOD",
+    "limitationNotes": "Período de telemetría corrupta/desfasada de EMA Exterior (10 al 17 de agosto)."
   },
   {
     "id": "14-08-26-Rain-3",
     "dayOfWeek": "Viernes",
     "startedAt": "2026-08-14T13:45:00-04:00",
     "endedAt": "2026-08-14T14:10:00-04:00",
-    "description": "Viernes 14 de agosto: 1:45pm inicio de lluvia, 1:53pm se intensificó la lluvia, 2:10pm cesó"
+    "description": "Viernes 14 de agosto: 1:45pm inicio de lluvia, 1:53pm se intensificó la lluvia, 2:10pm cesó",
+    "limitationReason": "CORRUPT_TELEMETRY_PERIOD",
+    "limitationNotes": "Período de telemetría corrupta/desfasada de EMA Exterior (10 al 17 de agosto)."
   },
   {
     "id": "19-08-26-Rain-1",

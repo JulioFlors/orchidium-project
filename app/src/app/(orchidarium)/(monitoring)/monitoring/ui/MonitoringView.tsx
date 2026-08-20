@@ -93,6 +93,22 @@ const fetcher = async (url: string) => {
   return res.json()
 }
 
+function formatRainRangeLabel(range?: string): string {
+  if (!range || range === 'today') return 'HOY'
+  if (range === 'yesterday' || range === '1D') return '1D'
+  if (range === '7d') return '7D'
+  if (range === '30d') return '30D'
+  if (range === 'all') return 'TODO'
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(range)) {
+    const [year, month, day] = range.split('-')
+
+    return `${day}/${month}/${year.slice(-2)}`
+  }
+
+  return range.toUpperCase()
+}
+
 interface MonitoringViewProps {
   initialHeartbeats?: Record<string, { timestamp: number; status: string }>
 }
@@ -1079,17 +1095,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
                       <span className="flex h-2 w-2 animate-pulse rounded-full bg-blue-500" />
                     )}
                     <span className="font-semibold">
-                      {(() => {
-                        const r = metricRanges[zone]?.['rain_events']
-
-                        if (r === 'today') return 'HOY'
-                        if (r === 'yesterday') return '1D'
-                        if (r === '7d') return '7D'
-                        if (r === '30d') return '30D'
-                        if (r === 'all') return 'TODO'
-
-                        return 'HOY'
-                      })()}
+                      {formatRainRangeLabel(metricRanges[zone]?.['rain_events'])}
                     </span>
                     <span className="text-primary/20">|</span>
                     <span className="font-semibold">
@@ -1128,17 +1134,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
                       <span className="flex h-2 w-2 animate-pulse rounded-full bg-purple-500" />
                     )}
                     <span className="font-semibold">
-                      {(() => {
-                        const r = metricRanges[zone]?.['rain_inferred']
-
-                        if (r === 'today') return 'HOY'
-                        if (r === 'yesterday') return '1D'
-                        if (r === '7d') return '7D'
-                        if (r === '30d') return '30D'
-                        if (r === 'all') return 'TODO'
-
-                        return 'HOY'
-                      })()}
+                      {formatRainRangeLabel(metricRanges[zone]?.['rain_inferred'])}
                     </span>
                     <span className="text-primary/20">|</span>
                     <span className="font-semibold">

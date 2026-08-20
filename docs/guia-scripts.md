@@ -1,42 +1,93 @@
-# Guía de Creación de Scripts de Utilidad
+# Guía de Scripts de Utilidad y Mantenimiento
 
-Este documento detalla la estructura base y los estándares para crear scripts de TypeScript (TS) dentro del monorepo que necesiten realizar consultas a las bases de datos (PostgreSQL o InfluxDB) y ejecutarse localmente.
+Este documento detalla los scripts reutilizables disponibles en `services/scheduler/src/scripts/`, sus propósitos, parámetros y comandos de ejecución local o en el VPS.
 
-## 🚀 Estructura Base del Script
+## 🚀 Catálogo de Scripts Reutilizables
 
-los scripts deben ubicarse preferiblemente en `services/scheduler/src/scripts/` para aprovechar la infraestructura de conexión existente.
+| Script | Categoría | Propósito Principal |
+| :--- | :--- | :--- |
+| `backfill-history.ts` | Historial | Recálculo de `DailyEnvironmentStat` (DLI, VPD, balance hídrico, riesgos) en PostgreSQL desde InfluxDB. *(Utilizado en `pnpm db:seed`)* |
+| `rebuild-rain-history.ts` | Historial | Reconstrucción híbrida de eventos de lluvia física y lluvia virtual inferida desde InfluxDB hacia PostgreSQL. *(Utilizado en `pnpm db:seed`)* |
+| `backfill-rain-events.ts` | Historial | Backfill específico de eventos de lluvia física desde lecturas de sensor de gotas. |
+| `backfill-rain-intensity.ts` | Historial | Cálculo y actualización de categorías de intensidad de lluvia (`low`, `moderate`, `heavy`, `violent`). |
+| `deduplicate-rain-events.ts` | Mantenimiento | Detección y consolidación de eventos de lluvia duplicados o solapados en PostgreSQL. |
+| `sanitize-rain-events.ts` | Mantenimiento | Corrección y eliminación de eventos de lluvia huérfanos o con incongruencias temporales. |
+| `clean-db-rates.ts` | Mantenimiento | Limpieza de tasas de cambio erróneas o duplicadas en la tabla `ExchangeRate`. |
+| `adjust-ema-timestamps.ts` | Mantenimiento | Corrección de desfases en estampas de tiempo de la estación EMA en InfluxDB. |
+| `clean-and-align-today-telemetry.ts` | Mantenimiento | Limpieza de anomalías de telemetría reciente en InfluxDB. |
+| `test-bcv-scrape.ts` | Operaciones | Scraping manual bajo demanda de la tasa del BCV e inserción en PostgreSQL. |
+| `check-rates.ts` | Operaciones | Consulta rápida de las tasas de cambio registradas en PostgreSQL. |
+| `check-scheduler-activity.ts` | Operaciones | Inspección de las últimas tareas y logs de actividad del scheduler en PostgreSQL. |
+| `listen-mqtt.ts` | Diagnóstico | Monitor en tiempo real de los tópicos MQTT del broker para depuración de hardware. |
+| `test-evaluate.ts` | Diagnóstico | Disparo manual de la evaluación de la máquina de estados del motor de inferencia. |
 
-### Plantilla Recomendada
+## 💻 Comandos de Ejecución Local (Windows)
+
+Para ejecutar cualquiera de estos scripts desde la raíz del repositorio cargando las variables de entorno:
+
+```powershell
+pnpm exec dotenv -e .env -- tsx services/scheduler/src/scripts/nombre-del-script.ts
+```
+
+### Ejemplos Frecuentes
+
+#### 1. Recalcular Estadísticas Históricas Ambientales
+
+```powershell
+# Últimos 30 días (por defecto)
+pnpm exec dotenv -e .env -- tsx services/scheduler/src/scripts/backfill-history.ts
+
+# Ventana personalizada de 7 días
+$env:BACKFILL_DAYS=7; pnpm exec dotenv -e .env -- tsx services/scheduler/src/scripts/backfill-history.ts
+```
+
+#### 2. Reconstruir Historial de Lluvia
+
+```powershell
+# Reconstrucción completa
+pnpm exec dotenv -e .env -- tsx services/scheduler/src/scripts/rebuild-rain-history.ts
+
+# Modo prueba (sin escribir en Postgres)
+$env:BACKFILL_DRY_RUN="true"; pnpm exec dotenv -e .env -- tsx services/scheduler/src/scripts/rebuild-rain-history.ts
+```
+
+#### 3. Forzar Scraping de Tasa BCV
+
+```powershell
+pnpm exec dotenv -e .env -- tsx services/scheduler/src/scripts/test-bcv-scrape.ts
+```
+
+#### 4. Consultar Tasas Registradas en Base de Datos
+
+```powershell
+pnpm exec dotenv -e .env -- tsx services/scheduler/src/scripts/check-rates.ts
+```
+
+#### 5. Escuchar Mensajes MQTT en Vivo
+
+```powershell
+pnpm exec dotenv -e .env -- tsx services/scheduler/src/scripts/listen-mqtt.ts
+```
+
+## 🛠️ Plantilla para Nuevos Scripts de Utilidad
+
+Si necesitas crear una nueva herramienta reutilizable en `services/scheduler/src/scripts/`:
 
 ```typescript
+import { prisma } from '@package/database'
 import { influxClient } from '../lib/influx'
-import { prisma } from '@package/database' // Si usas Postgres
 import { Logger } from '../lib/logger'
-
-// Helper para manejar fechas de InfluxDB (Nanosegundos a Date)
-function rowTimeToDate(rawTime: unknown): Date {
-  if (rawTime instanceof Date) return rawTime
-  const s = String(rawTime)
-  return s.length > 13 ? new Date(Number(s.substring(0, 13))) : new Date(Number(s))
-}
 
 async function main() {
   Logger.info('Iniciando script de utilidad...')
 
   try {
-    // --- EJEMPLO POSTGRES ---
-    // const users = await prisma.user.findMany()
-    
-    // --- EJEMPLO INFLUXDB ---
-    // const query = `SELECT * FROM "environment_metrics" LIMIT 10`
-    // const stream = influxClient.query(query)
-    // for await (const row of stream) { ... }
-
+    // Lógica del script aquí
     Logger.success('Proceso completado con éxito.')
   } catch (err) {
     Logger.error('Error durante la ejecución:', err)
   } finally {
-    // SIEMPRE cerrar las conexiones
+    // SIEMPRE cerrar las conexiones activas
     await influxClient.close()
     await prisma.$disconnect()
   }
@@ -45,27 +96,8 @@ async function main() {
 main()
 ```
 
-## 💻 Ejecución Local (Windows)
-
-Para ejecutar estos scripts desde la raíz del proyecto cargando las variables de entorno correctamente, usa el siguiente comando:
-
-```powershell
-pnpm exec dotenv -e .env -- tsx services/scheduler/src/scripts/nombre-del-script.ts
-```
-
-### Por qué usamos este comando
-
-1. `pnpm exec dotenv -e .env`: Carga el archivo `.env` de la raíz en el proceso.
-2. `tsx`: Ejecuta el archivo TypeScript directamente sin necesidad de compilarlo manualmente.
-3. `services/scheduler/...`: Referencia la ruta completa desde la raíz.
-
 ## ⚠️ Reglas y Buenas Prácticas
 
-1. **Gestión de Conexiones**: Asegúrate de incluir el bloque `finally` para cerrar `influxClient` y `prisma`. Si no se cierran, el proceso de Node.js podría quedarse "colgado" en la terminal.
-2. **Batching (InfluxDB)**: Si realizas consultas históricas largas, recuerda que InfluxDB 3.0 Community tiene un límite de archivos Parquet (1000). Realiza consultas por lotes de 7-10 días si es necesario.
-3. **Logs**: Utiliza siempre la clase `Logger` del proyecto para mantener la consistencia estética y facilitar la depuración.
-4. **Tipado**: No uses `any`. Define interfaces para los resultados de tus consultas si son complejos.
-
----
-> [!IMPORTANT]
-> Recuerda que los cambios en la base de datos (escrituras) realizados vía script son permanentes. Valida siempre con un `console.log` del objeto antes de ejecutar un `create` o `update` masivo.
+1. **Gestión de Conexiones**: Incluir siempre el bloque `finally` para desconectar `influxClient` y `prisma`.
+2. **Logs Estándar**: Usar la clase `Logger` del proyecto para mantener el formato unificado.
+3. **TypeScript Estricto**: Prohibido el uso de `any`. Tipar interfaces para consultas o payloads.
