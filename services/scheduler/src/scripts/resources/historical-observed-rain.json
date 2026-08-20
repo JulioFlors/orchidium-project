@@ -313,5 +313,19 @@
     "startedAt": "2026-08-14T13:45:00-04:00",
     "endedAt": "2026-08-14T14:10:00-04:00",
     "description": "Viernes 14 de agosto: 1:45pm inicio de lluvia, 1:53pm se intensificó la lluvia, 2:10pm cesó"
+  },
+  {
+    "id": "19-08-26-Rain-1",
+    "dayOfWeek": "Miércoles",
+    "startedAt": "2026-08-19T16:00:00-04:00",
+    "endedAt": "2026-08-19T16:28:00-04:00",
+    "description": "Miércoles 19 de agosto: 4:00pm lluvia fuerte. 4:28pm cesó"
+  },
+  {
+    "id": "19-08-26-Rain-2",
+    "dayOfWeek": "Miércoles",
+    "startedAt": "2026-08-19T23:18:00-04:00",
+    "endedAt": "2026-08-19T23:30:00-04:00",
+    "description": "Miércoles 19 de agosto: 11:18pm lluvia. 11:30pm cesó"
   }
 ]
