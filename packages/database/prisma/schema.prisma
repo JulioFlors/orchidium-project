@@ -93,6 +93,12 @@ model Species {
   glowColor   String?
   stockRequests StockNotificationRequest[]
 
+  // Benchmark Histórico de Floración (Patrimonio Botánico de la Especie)
+  floweringDurationDays  Int?
+  floweringFrequencyYear Int?
+  floweringMonths        Int[]                      @default([])
+  floweringRecordsCount  Int                        @default(0)
+
   @@index([genusId])
 }
 

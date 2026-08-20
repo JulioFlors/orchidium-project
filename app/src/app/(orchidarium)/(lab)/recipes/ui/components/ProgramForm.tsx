@@ -21,6 +21,7 @@ import {
 } from '@/components'
 import { useFormDraftStore } from '@/store'
 import { useToastStore } from '@/store/toast/toast.store'
+import { VALIDATION_LIMITS } from '@/config'
 
 const cycleSchema = z.object({
   agrochemicalId: z.string().min(1, 'Debe seleccionar un insumo'),
@@ -30,13 +31,21 @@ const cycleSchema = z.object({
 const programSchema = z
   .object({
     purposeType: z.enum(['fertilization', 'phytosanitary']),
-    name: z.string().min(3, 'El nombre debe tener al menos 3 caracteres'),
+    name: z
+      .string()
+      .trim()
+      .min(3, 'El nombre debe tener al menos 3 caracteres')
+      .max(
+        VALIDATION_LIMITS.PROGRAM_NAME_MAX,
+        `El nombre no puede exceder ${VALIDATION_LIMITS.PROGRAM_NAME_MAX} caracteres`,
+      ),
     frequency: z
       .number({ message: 'Debe ingresar un número válido' })
       .int('Debe ser un número entero')
       .min(1, 'El intervalo debe ser al menos 1'),
     cycles: z.array(cycleSchema).min(1, 'Debe agregar al menos un paso al programa'),
   })
+
   .superRefine((data, ctx) => {
     if (data.purposeType === 'fertilization') {
       if (data.frequency > 4) {
@@ -276,12 +285,18 @@ export function ProgramForm({
     >
       <form className="flex flex-col gap-6" onSubmit={handleSubmit(onSubmit)}>
         {/* 1. Propósito (SelectDropdown, w-full, placeholder "Seleccionar") */}
-        <FormField htmlFor="purposeType" label="Propósito">
+        <FormField
+          required
+          error={errors.purposeType?.message}
+          htmlFor="purposeType"
+          label="Propósito"
+        >
           <Controller
             control={control}
             name="purposeType"
             render={({ field: f }) => (
               <SelectDropdown
+                error={errors.purposeType?.message}
                 options={PURPOSE_OPTIONS}
                 placeholder="Seleccionar"
                 value={f.value}
@@ -296,17 +311,20 @@ export function ProgramForm({
         </FormField>
 
         {/* 2. Nombre (w-full, sin placeholder) */}
-        <FormField htmlFor="name" label="Nombre">
-          <Input error={errors.name?.message} id="name" type="text" {...register('name')} />
-          {errors.name && (
-            <span className="mt-1 text-[11px] font-medium tracking-wide text-red-500">
-              {errors.name.message}
-            </span>
-          )}
+        <FormField required error={errors.name?.message} htmlFor="name" label="Nombre">
+          <Input
+            error={errors.name?.message}
+            id="name"
+            maxLength={VALIDATION_LIMITS.PROGRAM_NAME_MAX}
+            type="text"
+            {...register('name')}
+          />
         </FormField>
 
         {/* 3. Intervalo Dinámico (Semanal 1-4 vs Mensual 2-12) */}
         <FormField
+          required
+          error={errors.frequency?.message}
           htmlFor="frequency"
           label={
             currentPurposeType === 'fertilization'
@@ -317,6 +335,7 @@ export function ProgramForm({
           <Input
             error={errors.frequency?.message}
             id="frequency"
+            maxLength={2}
             placeholder=""
             type="text"
             {...register('frequency', {
@@ -353,11 +372,7 @@ export function ProgramForm({
               },
             })}
           />
-          {errors.frequency ? (
-            <span className="mt-1 text-[11px] font-medium tracking-wide text-red-500">
-              {errors.frequency.message}
-            </span>
-          ) : (
+          {!errors.frequency && (
             <span className="text-secondary mt-0.5 text-[11px] opacity-50">
               {currentPurposeType === 'fertilization'
                 ? 'Indica cada cuántas semanas se repetirá la aplicación del ciclo.'
@@ -425,12 +440,18 @@ export function ProgramForm({
                     {stepMenuItems.length > 0 && <ActionMenu items={stepMenuItems} />}
                   </div>
 
-                  <FormField htmlFor={`cycles.${index}.agrochemicalId`} label="Insumo">
+                  <FormField
+                    required
+                    error={stepError}
+                    htmlFor={`cycles.${index}.agrochemicalId`}
+                    label="Insumo"
+                  >
                     <Controller
                       control={control}
                       name={`cycles.${index}.agrochemicalId`}
                       render={({ field: fieldProps }) => (
                         <SelectDropdown
+                          error={stepError}
                           options={agroOptions}
                           placeholder="Seleccionar"
                           value={fieldProps.value}
@@ -438,11 +459,6 @@ export function ProgramForm({
                         />
                       )}
                     />
-                    {stepError && (
-                      <span className="mt-1 text-[11px] font-medium tracking-wide text-red-500">
-                        {stepError}
-                      </span>
-                    )}
                   </FormField>
                 </div>
               )

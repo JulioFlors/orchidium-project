@@ -17,7 +17,7 @@ from micropython import const
 
 # ---- Debug mode ----
 # Desactivar en Producción. Desactiva logs de desarrollo.
-DEBUG = True
+DEBUG = False
 
 # ---- Configuración MQTT (const() para ahorro de RAM) ----
 # El broker esperará ~1.5x este valor antes de desconectar al cliente.
@@ -1631,9 +1631,9 @@ async def mqtt_connector_task(client_id):
                         await asyncio.sleep_ms(100)
 
                     if rtc_synced_event.is_set():
-                        if DEBUG: print(f"⏰ Reloj RTC sincronizado por el Scheduler.")
+                        if DEBUG: print(f"\n⏰  Reloj RTC {Colors.GREEN}Sincronizado{Colors.RESET}")
                     else:
-                        if DEBUG: print("⚠️ Timeout (30s) esperando sincronización RTC.")
+                        if DEBUG: print(f"\n⚠️  Reloj RTC {Colors.YELLOW}Desincronizado{Colors.RESET}")
 
                     # 📡 5. Lecturas Frescas Iniciales: Muestreamos con el reloj ya en hora exacta (>= 2026)
                     if dht_sensor is not None:

@@ -7,6 +7,7 @@ import { MdInfo } from 'react-icons/md'
 
 import { Button, Modal, FormField, Input, SelectDropdown } from '@/components'
 import { useFormDraftStore } from '@/store'
+import { VALIDATION_LIMITS } from '@/config'
 
 interface Genus {
   id: string
@@ -35,6 +36,7 @@ export function GenusFormModal({
 }: GenusFormModalProps) {
   const [genusFormName, setGenusFormName] = useState('')
   const [genusFormType, setGenusFormType] = useState<PlantType>('ORCHID')
+  const [nameError, setNameError] = useState<string | null>(null)
 
   const { getDraft, setDraft } = useFormDraftStore()
 
@@ -46,6 +48,7 @@ export function GenusFormModal({
     setPrevEditingGenus(editingGenus)
 
     if (isOpen) {
+      setNameError(null)
       if (editingGenus) {
         setGenusFormName(editingGenus.name)
         setGenusFormType(editingGenus.type)
@@ -79,7 +82,16 @@ export function GenusFormModal({
   }, [genusFormName, genusFormType, isOpen, editingGenus, setDraft])
 
   const handleSubmit = () => {
-    onSave(genusFormName, genusFormType)
+    const clean = genusFormName.trim()
+
+    if (!clean || clean.length < 2) {
+      setNameError('El nombre del género es obligatorio (mínimo 2 caracteres)')
+
+      return
+    }
+
+    setNameError(null)
+    onSave(clean, genusFormType)
   }
 
   return (
@@ -92,13 +104,23 @@ export function GenusFormModal({
       <div className="flex flex-col gap-4">
         {editingGenus ? (
           <div className="flex flex-col gap-3">
-            <FormField htmlFor="genusName" label="Nombre del Género">
+            <FormField
+              required
+              error={nameError ?? undefined}
+              htmlFor="genusName"
+              label="Nombre del Género"
+            >
               <Input
+                error={!!nameError}
                 id="genusName"
+                maxLength={VALIDATION_LIMITS.GENUS_NAME_MAX}
                 placeholder=""
                 type="text"
                 value={genusFormName}
-                onChange={(e) => setGenusFormName(e.target.value)}
+                onChange={(e) => {
+                  setGenusFormName(e.target.value)
+                  if (nameError) setNameError(null)
+                }}
               />
             </FormField>
             <div className="text-secondary flex items-center gap-1.5 rounded-lg bg-zinc-50 p-3 text-xs dark:bg-zinc-900/50">
@@ -120,19 +142,29 @@ export function GenusFormModal({
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <FormField htmlFor="create-genus-name" label="Nombre del Género">
+              <FormField
+                required
+                error={nameError ?? undefined}
+                htmlFor="create-genus-name"
+                label="Nombre del Género"
+              >
                 <Input
+                  error={!!nameError}
                   id="create-genus-name"
+                  maxLength={VALIDATION_LIMITS.GENUS_NAME_MAX}
                   placeholder=""
                   type="text"
                   value={genusFormName}
-                  onChange={(e) => setGenusFormName(e.target.value)}
+                  onChange={(e) => {
+                    setGenusFormName(e.target.value)
+                    if (nameError) setNameError(null)
+                  }}
                 />
               </FormField>
             </div>
 
             <div className="sm:col-span-2">
-              <FormField htmlFor="create-genus-type" label="Tipo de Planta">
+              <FormField required htmlFor="create-genus-type" label="Tipo de Planta">
                 <SelectDropdown
                   id="create-genus-type"
                   options={Object.entries(plantTypeLabels).map(([value, label]) => ({

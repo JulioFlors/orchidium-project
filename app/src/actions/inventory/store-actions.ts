@@ -22,11 +22,16 @@ export async function getStoreData() {
         glowColor: true,
         genus: { select: { id: true, name: true, type: true } },
         variants: {
-          select: { id: true },
+          select: { id: true, size: true, price: true },
+          orderBy: { size: 'asc' },
         },
         images: {
           select: { id: true, url: true },
           orderBy: { position: 'asc' },
+        },
+        plants: {
+          where: { status: 'AVAILABLE' },
+          select: { currentSize: true },
         },
         _count: {
           select: { plants: true },
@@ -34,7 +39,24 @@ export async function getStoreData() {
       },
     })
 
-    return { ok: true, species }
+    const formattedSpecies = species.map((specie) => {
+      const updatedVariants = specie.variants.map((v) => {
+        const qty = specie.plants.filter((p) => p.currentSize === v.size).length
+
+        return {
+          ...v,
+          quantity: qty,
+          available: qty > 0 && v.price > 0,
+        }
+      })
+
+      return {
+        ...specie,
+        variants: updatedVariants,
+      }
+    })
+
+    return { ok: true, species: formattedSpecies }
   } catch (err) {
     Logger.error('[Store] Error al obtener datos de tienda:', err)
 

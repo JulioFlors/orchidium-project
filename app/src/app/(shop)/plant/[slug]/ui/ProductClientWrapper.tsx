@@ -69,7 +69,14 @@ export function ProductClientWrapper({ product }: Props) {
         )}
 
         {/* Sección de Floración y Estacionalidad por Especie */}
-        <SpeciesFloweringSection speciesSlug={product.slug} />
+        <SpeciesFloweringSection
+          initialData={{
+            avgFloweringDurationDays: product.floweringDurationDays,
+            lastYearFloweringCount: product.floweringFrequencyYear,
+            floweringMonths: product.floweringMonths,
+          }}
+          speciesSlug={product.slug}
+        />
       </div>
     </div>
   )

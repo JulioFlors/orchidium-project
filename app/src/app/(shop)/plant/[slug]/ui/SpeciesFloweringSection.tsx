@@ -10,6 +10,11 @@ interface Props {
   speciesSlug: string
   className?: string
   fullWidth?: boolean
+  initialData?: {
+    avgFloweringDurationDays?: number | null
+    lastYearFloweringCount?: number | null
+    floweringMonths?: number[]
+  }
 }
 
 interface AnalyticsData {
@@ -35,19 +40,53 @@ const MONTH_NAMES = [
   'Dic',
 ]
 
-export function SpeciesFloweringSection({ speciesSlug, className, fullWidth = false }: Props) {
-  const [data, setData] = useState<AnalyticsData | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+export function SpeciesFloweringSection({
+  speciesSlug,
+  className,
+  fullWidth = false,
+  initialData,
+}: Props) {
+  const [data, setData] = useState<AnalyticsData | null>(() => {
+    if (
+      initialData &&
+      (initialData.avgFloweringDurationDays ||
+        initialData.lastYearFloweringCount ||
+        (initialData.floweringMonths && initialData.floweringMonths.length > 0))
+    ) {
+      const dist: Record<number, number> = {}
+
+      for (let i = 1; i <= 12; i++) dist[i] = 0
+      for (const m of initialData.floweringMonths || []) {
+        if (m >= 1 && m <= 12) dist[m] = 1
+      }
+
+      return {
+        speciesName: '',
+        totalFloweringEvents: (initialData.floweringMonths || []).length,
+        lastYearFloweringCount: initialData.lastYearFloweringCount || 0,
+        avgFloweringDurationDays: initialData.avgFloweringDurationDays
+          ? Math.ceil(initialData.avgFloweringDurationDays)
+          : 0,
+        monthlyFloweringDistribution: dist,
+      }
+    }
+
+    return null
+  })
+
+  const [isLoading, setIsLoading] = useState(() => !data)
 
   useEffect(() => {
-    getSpeciesFloweringAnalytics(speciesSlug)
-      .then((res) => {
-        if (res.success && res.data) {
-          setData(res.data)
-        }
-      })
-      .finally(() => setIsLoading(false))
-  }, [speciesSlug])
+    if (!initialData) {
+      getSpeciesFloweringAnalytics(speciesSlug)
+        .then((res) => {
+          if (res.success && res.data) {
+            setData(res.data as AnalyticsData)
+          }
+        })
+        .finally(() => setIsLoading(false))
+    }
+  }, [speciesSlug, initialData])
 
   // Obtener únicamente los meses que presentan actividad registrada (conteo > 0)
   const activeMonthsData = useMemo(() => {

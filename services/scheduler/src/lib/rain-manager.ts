@@ -220,11 +220,7 @@ export async function checkInferedRainOrphanTimeout(): Promise<void> {
     Logger.rain(
       `Evento inferido huérfano detectado. Sin telemetría de Estación Exterior en ${elapsedMinutes}min. Finalizando por desconexión.`,
     )
-    inferedRainActive = false
-    inferedRainOverridden = true
-    maxHumInRain = null
-    inferedBaselineVarTemp = null
-    inferedBaselineVarHum = null
+    resetRainInferenceState()
 
     // El fin del evento corresponde al timestamp de la última telemetría válida recibida
     const endTimestamp = new Date(lastBatchReceivedAt)
@@ -250,19 +246,43 @@ export async function checkInferedRainOrphanTimeout(): Promise<void> {
 }
 
 /**
- * Determina si una marca de tiempo corresponde al horario diurno de Caracas (7:00 AM a 6:00 PM VET).
+ * Retorna la hora del día en zona horaria de Caracas (0-23).
  */
-export function isDaytime(timestampMs: number): boolean {
+export function getCaracasHour(timestampMs: number): number {
   const date = new Date(timestampMs)
-  const caracasHour = parseInt(
+
+  return parseInt(
     new Intl.DateTimeFormat('en-US', {
       timeZone: 'America/Caracas',
       hour: '2-digit',
       hour12: false,
     }).format(date),
   )
+}
+
+/**
+ * Determina si una marca de tiempo corresponde al horario diurno de Caracas (7:00 AM a 6:00 PM VET).
+ */
+export function isDaytime(timestampMs: number): boolean {
+  const caracasHour = getCaracasHour(timestampMs)
 
   return caracasHour >= 7 && caracasHour < 18
+}
+
+/**
+ * Resetea completamente las variables de estado y baselines de lluvia inferida.
+ */
+function resetRainInferenceState(): void {
+  inferedRainActive = false
+  inferedRainOverridden = true
+  minTempInRain = null
+  minLuxInRain = null
+  maxHumInRain = null
+  inferedBaselineTemp = null
+  inferedBaselineHum = null
+  inferedBaselineLux = null
+  inferedBaselineVarTemp = null
+  inferedBaselineVarHum = null
 }
 
 /**
@@ -678,14 +698,25 @@ export async function evaluateClimateInference(): Promise<void> {
     let calculatedBaselineLux: number | null = null
     let triggerType: string | null = null
 
-    // Paso 1 — Diurno: 10 min previos a B0 / Noche: ventana de 30 min (B1-B3)
+    // Aislamiento Temporal Estricto por Regla de Inferencia:
+    // Un lote B[k] solo es válido si su timestamp es posterior al cese del evento previo.
+    const isB1Clean =
+      lastInferedRainClosedAt === null || tempBatches[1].timestamp >= lastInferedRainClosedAt
+    const isB2Clean =
+      lastInferedRainClosedAt === null ||
+      (tempBatches.length >= 3 && tempBatches[2].timestamp >= lastInferedRainClosedAt)
+    const isB3Clean =
+      lastInferedRainClosedAt === null ||
+      (tempBatches.length >= 4 && tempBatches[3].timestamp >= lastInferedRainClosedAt)
+
+    // Paso 1 — Diurno: 10 min previos a B0 (Requiere B1 limpio >= 20 min tras cese)
     const baseTemp1 = tempBatches[1].max
     const baseHum1 = humBatches[1].min
     const baseLux1 = luxBatches[1].max
     const dTemp1 = currentMinTemp - baseTemp1
     const dHum1 = currentMaxHum - baseHum1
 
-    if (isDay) {
+    if (isDay && isB1Clean) {
       let luxCondition = false
       let tempDropThreshold = -1.5
       let humRobust = 12.0
@@ -764,8 +795,8 @@ export async function evaluateClimateInference(): Promise<void> {
           }
         }
       }
-    } else {
-      // NOCHE - Regla Unificada de Gradiente Dinámico
+    } else if (!isDay && isB3Clean) {
+      // NOCHE - Regla Unificada de Gradiente Dinámico (Requiere calma B1-B3 limpia >= 40 min tras cese)
       if (tempBatches.length >= 4 && humBatches.length >= 4) {
         // Calma previa (Lotes 1, 2, 3)
         const maxTempPre = Math.max(tempBatches[1].max, tempBatches[2].max, tempBatches[3].max)
@@ -818,8 +849,15 @@ export async function evaluateClimateInference(): Promise<void> {
       }
     }
 
-    // Paso 2 — Diurno: 20 min previos a B0 (Solo día, saltado en noche)
-    if (!triggered && isDay) {
+    // Paso 2 — Diurno: 20 min previos a B0 (Requiere B2 limpio >= 30 min tras cese)
+    if (
+      !triggered &&
+      isDay &&
+      isB2Clean &&
+      tempBatches.length >= 3 &&
+      humBatches.length >= 3 &&
+      luxBatches.length >= 3
+    ) {
       const baseTemp2 = tempBatches[2].max
       const baseHum2 = humBatches[2].min
       const baseLux2 = luxBatches[2].max
@@ -901,10 +939,11 @@ export async function evaluateClimateInference(): Promise<void> {
       }
     }
 
-    // Paso 3 — Diurno: 30 min previos a B0 (Solo día, saltado en noche)
+    // Paso 3 — Diurno: 30 min previos a B0 (Requiere B3 limpio >= 40 min tras cese)
     if (
       !triggered &&
       isDay &&
+      isB3Clean &&
       tempBatches.length >= 4 &&
       humBatches.length >= 4 &&
       luxBatches.length >= 4
@@ -998,7 +1037,7 @@ export async function evaluateClimateInference(): Promise<void> {
       inferedBaselineTemp = calculatedBaselineTemp ?? tempBatches[0].max
       inferedBaselineHum = calculatedBaselineHum ?? humBatches[0].min
 
-      if (tempBatches.length >= 4 && humBatches.length >= 4) {
+      if (isB3Clean && tempBatches.length >= 4 && humBatches.length >= 4) {
         const varTemp1 = tempBatches[1].max - tempBatches[1].min
         const varTemp2 = tempBatches[2].max - tempBatches[2].min
         const varTemp3 = tempBatches[3].max - tempBatches[3].min
@@ -1169,11 +1208,7 @@ export async function evaluateClimateInference(): Promise<void> {
           Logger.rain(
             `☀️ Recuperación Solar — Sol pleno sostenido: las ${solarSampleCount} muestras de la sub-ventana >= 26k lux (mín: ${minSampleLux.toFixed(0)} lx).`,
           )
-          inferedRainActive = false
-          inferedRainOverridden = true
-          maxHumInRain = null
-          inferedBaselineVarTemp = null
-          inferedBaselineVarHum = null
+          resetRainInferenceState()
 
           await closeRainEvent(
             'SOLAR_RECOVERY',
@@ -1228,11 +1263,7 @@ export async function evaluateClimateInference(): Promise<void> {
             Logger.rain(
               `🌤️ Recuperación Progresiva — Lux promedio: ${currentAverageLux.toFixed(0)} lx (umbral: ${luxRecoveryThreshold.toFixed(0)} lx), +${tempRecovery.toFixed(1)}°C, -${humDrop.toFixed(1)}% HR.`,
             )
-            inferedRainActive = false
-            inferedRainOverridden = true
-            maxHumInRain = null
-            inferedBaselineVarTemp = null
-            inferedBaselineVarHum = null
+            resetRainInferenceState()
 
             await closeRainEvent(
               'PROGRESSIVE_RECOVERY',
@@ -1255,10 +1286,12 @@ export async function evaluateClimateInference(): Promise<void> {
 
         // 4. ☁️ Variación Térmica (Diurna, evaluada al final para dar prioridad a las reglas solares)
         if (!closedByRecovery && minTempInRain !== null) {
-          const currentTemp = tempBatches[0].min
+          const currentTempMax = tempBatches[0].max
+          const caracasHour = getCaracasHour(tempBatches[0].timestamp)
+          const isAfternoonOrNight = caracasHour >= 16 || caracasHour < 7
           const isSaturated = humBatches[0].max >= 96.0
-          const minRecoveryRequired = isSaturated ? 1.2 : 0.6
-          const tempRecovery = currentTemp - minTempInRain
+          const minRecoveryRequired = !isAfternoonOrNight && isSaturated ? 1.2 : 0.6
+          const tempRecovery = currentTempMax - minTempInRain
 
           if (tempRecovery >= minRecoveryRequired) {
             closedByRecovery = true
@@ -1294,26 +1327,24 @@ export async function evaluateClimateInference(): Promise<void> {
             Logger.rain(
               `Cierre por Variación Térmica: Temp subió +${tempRecovery.toFixed(2)}°C desde el mínimo (${minTempInRain.toFixed(1)}°C).`,
             )
-            inferedRainActive = false
-            inferedRainOverridden = true
-            maxHumInRain = null
-            inferedBaselineVarTemp = null
-            inferedBaselineVarHum = null
+            const minTempBeforeReset = minTempInRain
 
-            const closeReasonText = `🌡️ Cese de Lluvia Intermitente (Variación Térmica): la temperatura se recuperó +${tempRecovery.toFixed(2)}°C (Temp: ${currentTemp.toFixed(1)}°C vs mínimo en lluvia: ${minTempInRain.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}% HR, Lux: ${currentMinLux.toFixed(0)} lx)`
+            resetRainInferenceState()
+
+            const closeReasonText = `🌡️ Cese de Lluvia Intermitente (Variación Térmica): la temperatura se recuperó +${tempRecovery.toFixed(2)}°C (Temp máx lote: ${currentTempMax.toFixed(1)}°C vs mínimo en lluvia: ${minTempBeforeReset.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}% HR, Lux: ${currentMinLux.toFixed(0)} lx)`
 
             await closeRainEvent(
               'THERMAL_VARIATION',
               new Date(preciseEndMs),
               closeReasonText,
               {
-                temp: endSampleT ? endSampleT.value : currentTemp,
+                temp: endSampleT ? endSampleT.value : currentTempMax,
                 hum: endSampleH ? endSampleH.value : tempBatches[0].max,
                 lux: endSampleL ? endSampleL.value : currentMinLux,
               },
               {
                 type: 'THERMAL_VARIATION',
-                minTemp: minTempInRain,
+                minTemp: minTempBeforeReset,
                 tempRecovery,
               },
             )
@@ -1402,11 +1433,7 @@ export async function evaluateClimateInference(): Promise<void> {
             Logger.rain(
               `☁️ Cese por Estancamiento: HR±${diffHum.toFixed(1)}% <= ${humCeseThreshold.toFixed(1)}%, Temp±${diffTemp.toFixed(1)}°C <= ${tempCeseThreshold.toFixed(1)}°C (últimos 10 min). Categoría: ${typeLabel}.`,
             )
-            inferedRainActive = false
-            inferedRainOverridden = true
-            maxHumInRain = null
-            inferedBaselineVarTemp = null
-            inferedBaselineVarHum = null
+            resetRainInferenceState()
 
             await closeRainEvent(
               'STAGNANT',

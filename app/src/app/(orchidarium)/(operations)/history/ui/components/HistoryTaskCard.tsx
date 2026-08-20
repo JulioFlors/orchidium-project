@@ -17,7 +17,7 @@ import { LuRadioTower } from 'react-icons/lu'
 import { HiOutlineCog } from 'react-icons/hi'
 import { TaskPurpose, TaskStatus, TaskSource, ZoneType } from '@package/database/enums'
 
-import { Badge, StatusCircleIcon, ZoneBadges } from '@/components'
+import { Badge, StatusCircleIcon, ZoneTags } from '@/components'
 import { formatTime12h } from '@/utils'
 import {
   TaskPurposeLabels,
@@ -145,7 +145,7 @@ export function HistoryTaskCard({
                 </span>
               </div>
 
-              <ZoneBadges zones={task.zones} />
+              <ZoneTags zones={task.zones} />
             </div>
           </div>
 

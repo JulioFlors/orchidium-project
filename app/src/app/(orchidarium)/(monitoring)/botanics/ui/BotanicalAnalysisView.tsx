@@ -174,7 +174,7 @@ export function BotanicalAnalysisView() {
     fetcher,
     {
       refreshInterval: 60000 * 60, // Refrescar cada hora, no cambia a menudo
-      revalidateOnFocus: false,
+      revalidateOnFocus: true,
     },
   )
 
@@ -191,7 +191,7 @@ export function BotanicalAnalysisView() {
       : null,
     fetcher,
     {
-      revalidateOnFocus: false,
+      revalidateOnFocus: true,
     },
   )
 

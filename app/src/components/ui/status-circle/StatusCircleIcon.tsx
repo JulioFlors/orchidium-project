@@ -161,7 +161,7 @@ export function StatusCircleIcon({
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center justify-center rounded-full border shadow-xs transition-all duration-300',
+        'isolate flex shrink-0 items-center justify-center rounded-full border shadow-xs transition-all duration-300',
         sizeClasses[size],
         // Bases por variante
         variant === 'canvas' && 'bg-canvas border-input-outline',
@@ -189,7 +189,7 @@ export function StatusCircleIcon({
     >
       <div
         className={cn(
-          'relative z-9 flex size-full items-center justify-center leading-none transition-colors duration-300',
+          'flex size-full items-center justify-center leading-none transition-colors duration-300',
           isGlow && 'text-(--_glow-border-hover)',
         )}
       >

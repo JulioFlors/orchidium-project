@@ -40,6 +40,12 @@ export interface Species {
 
   variants: ProductVariant[]
   isFlowering?: boolean
+
+  // Benchmark de Floración de Referencia
+  floweringDurationDays?: number | null
+  floweringFrequencyYear?: number | null
+  floweringMonths?: number[]
+  floweringRecordsCount?: number
 }
 
 export interface CartProduct {

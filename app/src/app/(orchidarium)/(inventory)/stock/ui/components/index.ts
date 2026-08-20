@@ -11,3 +11,7 @@ export * from './StockPlantModal'
 export * from './FloweringEventModal'
 
 export * from './ProductVariantCard'
+
+export * from './FloweringRecordCard'
+
+export * from './FloweringAnalyticsSection'

@@ -160,11 +160,11 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     }
   }
 
-  // Cadencia de refresco alineada a la frecuencia real de ingesta por hardware:
-  // EMA Exterior envía lotes cada 10 minutos (600,000 ms).
-  // EMA Interior / ZONA_A envía lotes cada 60 minutos (1,800,000 ms).
+  // Cadencia de refresco de respaldo (Safety Net) cuando no hay conexión MQTT:
+  // EMA Exterior envía lotes cada 10 minutos -> Polling de respaldo cada 2 min (120,000 ms).
+  // EMA Interior / ZONA_A envía lotes cada 60 minutos -> Polling de respaldo cada 5 min (300,000 ms).
   const isExterior = zone === ZoneType.EXTERIOR
-  const baseBatchInterval = isExterior ? 600000 : 1800000
+  const baseBatchInterval = isExterior ? 120000 : 300000
 
   // 1. Consulta para "Current Status" / Tarjetas (Rango estricto de precarga <= 30 min)
   const cardRange = '30m'
@@ -179,7 +179,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     {
       refreshInterval: baseBatchInterval,
       dedupingInterval: 10000,
-      revalidateOnFocus: false,
+      revalidateOnFocus: true,
       errorRetryCount: 3,
       errorRetryInterval: 5000,
     },
@@ -204,7 +204,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     {
       refreshInterval: chartRefreshInterval,
       dedupingInterval: 10000,
-      revalidateOnFocus: false,
+      revalidateOnFocus: true,
       errorRetryCount: 3,
       errorRetryInterval: 5000,
     },
@@ -237,9 +237,9 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
       : null,
     fetcher,
     {
-      refreshInterval: isRainStaticRange(physicalRainRange) ? 0 : 600000,
+      refreshInterval: isRainStaticRange(physicalRainRange) ? 0 : 120000,
       dedupingInterval: 10000,
-      revalidateOnFocus: false,
+      revalidateOnFocus: true,
       errorRetryCount: 3,
       errorRetryInterval: 5000,
     },
@@ -265,9 +265,9 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
       : null,
     fetcher,
     {
-      refreshInterval: isRainStaticRange(inferredRainRange) ? 0 : 600000,
+      refreshInterval: isRainStaticRange(inferredRainRange) ? 0 : 120000,
       dedupingInterval: 10000,
-      revalidateOnFocus: false,
+      revalidateOnFocus: true,
       errorRetryCount: 3,
       errorRetryInterval: 5000,
     },
@@ -279,7 +279,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
       ? `PristinoPlant/Actuator_Controller/status`
       : `PristinoPlant/Weather_Station/${zone}/status`
 
-  const { messages: mqttMessages } = useMqttStore()
+  const { messages: mqttMessages, subscribe, unsubscribe } = useMqttStore()
   const initialData = initialHeartbeats[statusTopic]
   const { connectionState } = useDeviceHeartbeat(
     statusTopic,
@@ -287,8 +287,25 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     initialData?.status || 'unknown',
   )
 
-  // Revalidación Reactiva Dirigida por Eventos MQTT (/readings)
+  // Suscripción Explícita a Tópicos MQTT de Lecturas y Estados
   const readingsTopic = `PristinoPlant/Weather_Station/${zone}/readings`
+  const rainTopic = `PristinoPlant/Weather_Station/${ZoneType.EXTERIOR}/rain/state`
+
+  useEffect(() => {
+    subscribe(readingsTopic)
+    if (zone === ZoneType.EXTERIOR) {
+      subscribe(rainTopic)
+    }
+
+    return () => {
+      unsubscribe(readingsTopic)
+      if (zone === ZoneType.EXTERIOR) {
+        unsubscribe(rainTopic)
+      }
+    }
+  }, [subscribe, unsubscribe, zone, readingsTopic, rainTopic])
+
+  // Revalidación Reactiva Dirigida por Eventos MQTT (/readings)
   const lastReadingsMsg = mqttMessages[readingsTopic]
 
   useEffect(() => {
@@ -345,7 +362,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     const isPhysicalActive = physicalRainData?.isActive || false
     const isInferredActive = inferredRainData?.isInferredActive || false
 
-    const nowTs = new Date().getTime()
+    const nowTs = now
 
     const physicalDuration = physicalEvents.reduce((acc, ev) => {
       const isAct = !ev.endedAt
@@ -378,7 +395,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
         events: inferredEvents,
       },
     }
-  }, [physicalRainData, inferredRainData])
+  }, [physicalRainData, inferredRainData, now])
 
   // Determinamos si estamos esperando datos iniciales
   const isSWRBusy = isCardStatusLoading
@@ -630,11 +647,9 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               .map((ev: RainEvent) => {
                 const startDate = new Date(ev.time)
                 const isAct = !ev.endedAt
-                const durSec = isAct
-                  ? Math.round((Date.now() - startDate.getTime()) / 1000)
-                  : ev.duration
+                const durSec = isAct ? Math.round((now - startDate.getTime()) / 1000) : ev.duration
                 const endDate = isAct
-                  ? new Date()
+                  ? new Date(now)
                   : new Date(startDate.getTime() + ev.duration * 1000)
 
                 return {
@@ -662,11 +677,9 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               .map((ev: RainEvent) => {
                 const startDate = new Date(ev.time)
                 const isAct = !ev.endedAt
-                const durSec = isAct
-                  ? Math.round((Date.now() - startDate.getTime()) / 1000)
-                  : ev.duration
+                const durSec = isAct ? Math.round((now - startDate.getTime()) / 1000) : ev.duration
                 const endDate = isAct
-                  ? new Date()
+                  ? new Date(now)
                   : new Date(startDate.getTime() + ev.duration * 1000)
 
                 return {

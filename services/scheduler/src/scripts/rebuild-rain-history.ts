@@ -5,7 +5,12 @@ import { prisma, ZoneType } from '@package/database'
 
 import { influxClient } from '../lib/influx'
 import { Logger } from '../lib/logger'
-import { isDaytime, getHumGradientMetrics, getTempGradientMetrics } from '../lib/rain-manager'
+import {
+  isDaytime,
+  getCaracasHour,
+  getHumGradientMetrics,
+  getTempGradientMetrics,
+} from '../lib/rain-manager'
 import { classifyCurrentDay, DayClassification } from '../lib/day-classifier'
 
 const ENV_BACKFILL_DAYS = process.env.BACKFILL_DAYS
@@ -586,10 +591,18 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
     }
 
     if (tempBatches.length < 4 || humBatches.length < 4) return
-
     const currentMinTemp = tempBatches[0].min
     const currentMaxHum = humBatches[0].max
     const currentMinLux = luxBatches[0].min
+
+    // Aislamiento Temporal Estricto por Regla de Inferencia:
+    const isB1Clean = lastRainClosedAt === null || tempBatches[1].timestamp >= lastRainClosedAt
+    const isB2Clean =
+      lastRainClosedAt === null ||
+      (tempBatches.length >= 3 && tempBatches[2].timestamp >= lastRainClosedAt)
+    const isB3Clean =
+      lastRainClosedAt === null ||
+      (tempBatches.length >= 4 && tempBatches[3].timestamp >= lastRainClosedAt)
 
     const isDay = isDaytime(timestampMs)
 
@@ -614,7 +627,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
       let tempDeltaHum = 0
       let dropPct = 0
 
-      if (isDay) {
+      if (isDay && isB1Clean) {
         // Guarda de seguridad: durante el día exigimos un baseLux1 válido (lote 1 de lux con lecturas > 0)
         if (luxBatches.length < 2 || luxBatches[1].max === 0) {
           return
@@ -703,7 +716,13 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
           }
         }
 
-        if (!triggered) {
+        if (
+          !triggered &&
+          isB2Clean &&
+          tempBatches.length >= 3 &&
+          humBatches.length >= 3 &&
+          luxBatches.length >= 3
+        ) {
           const baseTemp2 = tempBatches[2].max
           const baseHum2 = humBatches[2].min
           const baseLux2 = luxBatches[2].max
@@ -788,6 +807,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
           if (
             !triggered &&
+            isB3Clean &&
             tempBatches.length >= 4 &&
             humBatches.length >= 4 &&
             luxBatches.length >= 4
@@ -873,7 +893,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
             }
           }
         }
-      } else {
+      } else if (!isDay && isB3Clean) {
         // --- REGLAS NOCTURNAS (Fórmula B Calibrada + Filtro de Rocío) ---
         // Calma previa (Lotes 1, 2, 3)
         const maxTempPre = Math.max(tempBatches[1].max, tempBatches[2].max, tempBatches[3].max)
@@ -934,7 +954,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
         baselineHum = calculatedBaselineHum ?? humBatches[0].min
         baselineAgeMinutes = calculatedBaselineAgeMinutes
 
-        if (tempBatches.length >= 4 && humBatches.length >= 4) {
+        if (isB3Clean && tempBatches.length >= 4 && humBatches.length >= 4) {
           const varTemp1 = tempBatches[1].max - tempBatches[1].min
           const varTemp2 = tempBatches[2].max - tempBatches[2].min
           const varTemp3 = tempBatches[3].max - tempBatches[3].min
@@ -1085,7 +1105,12 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
                   luxMax: solarMaxLux,
                 },
               )
+              minTempInRain = null
+              minLuxInRain = null
               maxHumInRain = null
+              baselineTemp = null
+              baselineHum = null
+              baselineLux = null
               baselineVarTemp = null
               baselineVarHum = null
               createdCount++
@@ -1145,7 +1170,12 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
                   humVar: humDrop,
                 },
               )
+              minTempInRain = null
+              minLuxInRain = null
               maxHumInRain = null
+              baselineTemp = null
+              baselineHum = null
+              baselineLux = null
               baselineVarTemp = null
               baselineVarHum = null
               createdCount++
@@ -1154,10 +1184,12 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
 
           // 4. ☁️ Cese por Variación Térmica Diurna
           if (!closedByRecovery && minTempInRain !== null) {
-            const currentTemp = tempBatches[0].min
+            const currentTempMax = tempBatches[0].max
+            const caracasHour = getCaracasHour(timestampMs)
+            const isAfternoonOrNight = caracasHour >= 16 || caracasHour < 7
             const isSaturated = humBatches[0].max >= 96.0
-            const minRecoveryRequired = isSaturated ? 1.2 : 0.6
-            const tempRecovery = currentTemp - minTempInRain
+            const minRecoveryRequired = !isAfternoonOrNight && isSaturated ? 1.2 : 0.6
+            const tempRecovery = currentTempMax - minTempInRain
 
             if (tempRecovery >= minRecoveryRequired) {
               closedByRecovery = true
@@ -1192,26 +1224,34 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
               isTelemetryRainActive = false
               lastRainClosedAt = timestampMs
 
-              const closeReasonText = `🌡️ Cese de Lluvia Intermitente (Variación Térmica): la temperatura se recuperó +${tempRecovery.toFixed(2)}°C (Temp: ${currentTemp.toFixed(1)}°C vs mínimo en lluvia: ${minTempInRain.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}% HR, Lux: ${currentMinLux.toFixed(0)} lx)`
+              const minTempBeforeReset = minTempInRain
+
+              minTempInRain = null
+              minLuxInRain = null
+              maxHumInRain = null
+              baselineTemp = null
+              baselineHum = null
+              baselineLux = null
+              baselineVarTemp = null
+              baselineVarHum = null
+
+              const closeReasonText = `🌡️ Cese de Lluvia Intermitente (Variación Térmica): la temperatura se recuperó +${tempRecovery.toFixed(2)}°C (Temp máx lote: ${currentTempMax.toFixed(1)}°C vs mínimo en lluvia: ${minTempBeforeReset.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}% HR, Lux: ${currentMinLux.toFixed(0)} lx)`
 
               await closeVirtualEvent(
                 new Date(preciseEndMs),
                 'THERMAL_VARIATION',
                 closeReasonText,
                 {
-                  temp: endSampleT ? endSampleT.value : currentTemp,
+                  temp: endSampleT ? endSampleT.value : currentTempMax,
                   hum: endSampleH ? endSampleH.value : tempBatches[0].max,
                   lux: endSampleL ? endSampleL.value : currentMinLux,
                 },
                 {
                   type: 'THERMAL_VARIATION',
-                  minTemp: minTempInRain,
+                  minTemp: minTempBeforeReset,
                   tempRecovery,
                 },
               )
-              maxHumInRain = null
-              baselineVarTemp = null
-              baselineVarHum = null
               createdCount++
             }
           }
@@ -1323,7 +1363,12 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
                 }
               }
 
+              minTempInRain = null
+              minLuxInRain = null
               maxHumInRain = null
+              baselineTemp = null
+              baselineHum = null
+              baselineLux = null
               baselineVarTemp = null
               baselineVarHum = null
               createdCount++

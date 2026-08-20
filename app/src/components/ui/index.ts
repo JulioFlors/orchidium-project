@@ -88,6 +88,6 @@ export * from './toast/Toast'
 
 export * from './selector-group/SelectorGroup'
 
-export * from './zone-badges/ZoneBadges'
+export * from './zone-tags/ZoneTags'
 
 export * from './filter-slice-bar'

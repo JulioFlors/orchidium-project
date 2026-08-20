@@ -12,6 +12,7 @@ import * as z from 'zod'
 import { createAgrochemical, updateAgrochemical } from '@/actions'
 import { FormField, Button, SelectDropdown, Input, Textarea, Modal, ActionMenu } from '@/components'
 import { useFormDraftStore, useToastStore } from '@/store'
+import { VALIDATION_LIMITS } from '@/config'
 
 const mixIngredientSchema = z.object({
   ingredientId: z.string().min(1, 'Debes seleccionar un insumo'),
@@ -26,8 +27,22 @@ const mixIngredientSchema = z.object({
 
 const agrochemicalSchema = z
   .object({
-    name: z.string().min(3, 'El nombre debe tener al menos 3 caracteres'),
-    description: z.string().min(5, 'La descripción es obligatoria'),
+    name: z
+      .string()
+      .trim()
+      .min(3, 'El nombre debe tener al menos 3 caracteres')
+      .max(
+        VALIDATION_LIMITS.SUPPLY_NAME_MAX,
+        `El nombre no puede exceder ${VALIDATION_LIMITS.SUPPLY_NAME_MAX} caracteres`,
+      ),
+    description: z
+      .string()
+      .trim()
+      .min(5, 'La descripción es obligatoria (mínimo 5 caracteres)')
+      .max(
+        VALIDATION_LIMITS.LONG_DESC_MAX,
+        `La descripción no puede exceder ${VALIDATION_LIMITS.LONG_DESC_MAX} caracteres`,
+      ),
     type: z.nativeEnum(AgrochemicalType, { message: 'Debes seleccionar un tipo' }),
     purpose: z
       .nativeEnum(AgrochemicalPurpose, { message: 'Debes seleccionar un propósito' })
@@ -37,6 +52,7 @@ const agrochemicalSchema = z
     dosageUnit: z.enum(['ML_L', 'G_L'] as const).optional(),
     mixIngredients: z.array(mixIngredientSchema).optional(),
   })
+
   .refine(
     (data) => {
       if (!data.isMix) {
@@ -372,13 +388,14 @@ export function AgrochemicalForm({
         </FormField>
 
         {/* 2. Tipo (Fertilizante / Fitosanitario) */}
-        <FormField htmlFor="type" label="Tipo">
+        <FormField required error={errors.type?.message} htmlFor="type" label="Tipo">
           <Controller
             control={control}
             name="type"
             render={({ field }) => (
               <SelectDropdown
                 disabled={!!initialData}
+                error={errors.type?.message}
                 options={[
                   { label: 'Fertilizante', value: AgrochemicalType.FERTILIZANTE },
                   { label: 'Fitosanitario', value: AgrochemicalType.FITOSANITARIO },
@@ -392,21 +409,17 @@ export function AgrochemicalForm({
               />
             )}
           />
-          {errors.type && (
-            <span className="mt-1 text-[11px] font-medium tracking-wide text-red-500">
-              {errors.type.message}
-            </span>
-          )}
         </FormField>
 
         {/* 3. Propósito (Solo para Insumos Simples) */}
         {!isMix && (
-          <FormField htmlFor="purpose" label="Propósito">
+          <FormField required error={errors.purpose?.message} htmlFor="purpose" label="Propósito">
             <Controller
               control={control}
               name="purpose"
               render={({ field }) => (
                 <SelectDropdown
+                  error={errors.purpose?.message}
                   options={purposeOptions}
                   placeholder="Seleccionar"
                   value={field.value}
@@ -414,36 +427,32 @@ export function AgrochemicalForm({
                 />
               )}
             />
-            {errors.purpose && (
-              <span className="mt-1 text-[11px] font-medium tracking-wide text-red-500">
-                {errors.purpose.message}
-              </span>
-            )}
           </FormField>
         )}
 
         {/* 4. Nombre (Solo visible para Insumos Simples, ya que en Mezcla se muestra e infiere en el bloque de composición) */}
         {!isMix && (
-          <FormField htmlFor="name" label="Nombre">
+          <FormField required error={errors.name?.message} htmlFor="name" label="Nombre">
             <Input
               error={errors.name?.message}
               id="name"
+              maxLength={VALIDATION_LIMITS.SUPPLY_NAME_MAX}
               placeholder=""
               type="text"
               {...register('name')}
             />
-            {errors.name && (
-              <span className="mt-1 text-[11px] font-medium tracking-wide text-red-500">
-                {errors.name.message}
-              </span>
-            )}
           </FormField>
         )}
 
         {/* 5. Dosificación ESTRUCTURADA para Producto Simple */}
         {!isMix ? (
           <div className="grid grid-cols-1 gap-4 tds-xs:grid-cols-2">
-            <FormField htmlFor="dosageValue" label="Cantidad">
+            <FormField
+              required
+              error={errors.dosageValue?.message}
+              htmlFor="dosageValue"
+              label="Cantidad"
+            >
               <Input
                 error={errors.dosageValue?.message}
                 id="dosageValue"
@@ -458,19 +467,20 @@ export function AgrochemicalForm({
                   },
                 })}
               />
-              {errors.dosageValue && (
-                <span className="mt-1 text-[11px] font-medium tracking-wide text-red-500">
-                  {errors.dosageValue.message}
-                </span>
-              )}
             </FormField>
 
-            <FormField htmlFor="dosageUnit" label="Unidad">
+            <FormField
+              required
+              error={errors.dosageUnit?.message}
+              htmlFor="dosageUnit"
+              label="Unidad"
+            >
               <Controller
                 control={control}
                 name="dosageUnit"
                 render={({ field }) => (
                   <SelectDropdown
+                    error={errors.dosageUnit?.message}
                     options={[
                       { label: 'mL/L', value: 'ML_L' },
                       { label: 'g/L', value: 'G_L' },
@@ -481,11 +491,6 @@ export function AgrochemicalForm({
                   />
                 )}
               />
-              {errors.dosageUnit && (
-                <span className="mt-1 text-[11px] font-medium tracking-wide text-red-500">
-                  {errors.dosageUnit.message}
-                </span>
-              )}
             </FormField>
           </div>
         ) : (
@@ -509,6 +514,8 @@ export function AgrochemicalForm({
                 <div className="flex items-end justify-between gap-2">
                   <div className="flex-1">
                     <FormField
+                      required
+                      error={errors.mixIngredients?.[idx]?.ingredientId?.message}
                       htmlFor={`mixIngredients.${idx}.ingredientId`}
                       label={`Insumo ${idx + 1}`}
                     >
@@ -517,6 +524,7 @@ export function AgrochemicalForm({
                         name={`mixIngredients.${idx}.ingredientId`}
                         render={({ field: f }) => (
                           <SelectDropdown
+                            error={errors.mixIngredients?.[idx]?.ingredientId?.message}
                             options={getFilteredAgroOptions(idx)}
                             placeholder="Seleccionar"
                             value={f.value}
@@ -545,8 +553,14 @@ export function AgrochemicalForm({
 
                 {/* FILA 2: DOSIS Y UNIDAD (MISMO ANCHO 50/50 QUE COLAPSA SOLO EN <= tds-xs) */}
                 <div className="grid grid-cols-1 gap-4 tds-xs:grid-cols-2">
-                  <FormField htmlFor={`mixIngredients.${idx}.dosageValue`} label="Dosis">
+                  <FormField
+                    required
+                    error={errors.mixIngredients?.[idx]?.dosageValue?.message}
+                    htmlFor={`mixIngredients.${idx}.dosageValue`}
+                    label="Dosis"
+                  >
                     <Input
+                      error={errors.mixIngredients?.[idx]?.dosageValue?.message}
                       maxLength={2}
                       placeholder=""
                       type="text"
@@ -560,12 +574,18 @@ export function AgrochemicalForm({
                     />
                   </FormField>
 
-                  <FormField htmlFor={`mixIngredients.${idx}.dosageUnit`} label="Unidad">
+                  <FormField
+                    required
+                    error={errors.mixIngredients?.[idx]?.dosageUnit?.message}
+                    htmlFor={`mixIngredients.${idx}.dosageUnit`}
+                    label="Unidad"
+                  >
                     <Controller
                       control={control}
                       name={`mixIngredients.${idx}.dosageUnit`}
                       render={({ field: f }) => (
                         <SelectDropdown
+                          error={errors.mixIngredients?.[idx]?.dosageUnit?.message}
                           options={[
                             { label: 'mL/L', value: 'ML_L' },
                             { label: 'g/L', value: 'G_L' },
@@ -598,7 +618,7 @@ export function AgrochemicalForm({
             </div>
 
             {errors.mixIngredients && (
-              <span className="mt-1 text-center text-[11px] font-medium tracking-wide text-red-500">
+              <span className="fade-in mt-1 text-center text-[11px] font-medium tracking-wide text-red-800/75 dark:text-red-400/75">
                 {errors.mixIngredients.message}
               </span>
             )}
@@ -606,10 +626,16 @@ export function AgrochemicalForm({
         )}
 
         {/* 7. Notas */}
-        <FormField htmlFor="description" label="Notas / Instrucciones">
+        <FormField
+          required
+          error={errors.description?.message}
+          htmlFor="description"
+          label="Notas / Instrucciones"
+        >
           <Textarea
             error={errors.description?.message}
             id="description"
+            maxLength={VALIDATION_LIMITS.LONG_DESC_MAX}
             placeholder=""
             {...register('description')}
           />

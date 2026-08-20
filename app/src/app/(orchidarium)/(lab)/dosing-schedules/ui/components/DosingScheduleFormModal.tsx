@@ -282,23 +282,19 @@ export function DosingScheduleFormModal({ isOpen, onClose, onSuccess, initialDat
         onSubmit={handleSubmit(onSubmit)}
       >
         {/* 1. Nombre */}
-        <FormField htmlFor="name" label="Nombre">
+        <FormField required error={errors.name?.message} htmlFor="name" label="Nombre">
           <Input
             error={errors.name?.message}
             id="name"
+            maxLength={50}
             placeholder=""
             type="text"
             {...register('name')}
           />
-          {errors.name && (
-            <span className="text-[11px] font-medium tracking-wide text-red-500">
-              {errors.name.message}
-            </span>
-          )}
         </FormField>
 
         {/* 2. Tarea */}
-        <FormField htmlFor="purpose" label="Tarea">
+        <FormField required error={errors.purpose?.message} htmlFor="purpose" label="Tarea">
           <PlannerCircuitSelect
             allowedPurposes={['FERTIGATION', 'FUMIGATION']}
             control={control}
@@ -309,7 +305,12 @@ export function DosingScheduleFormModal({ isOpen, onClose, onSuccess, initialDat
 
         {/* 3. Programa */}
         {currentPurpose === 'FERTIGATION' && (
-          <FormField htmlFor="fertilizationProgramId" label="Programa de Fertilización">
+          <FormField
+            required
+            error={errors.fertilizationProgramId?.message}
+            htmlFor="fertilizationProgramId"
+            label="Programa de Fertilización"
+          >
             <PlannerProgramSelect
               control={control}
               error={errors.fertilizationProgramId?.message}
@@ -320,7 +321,12 @@ export function DosingScheduleFormModal({ isOpen, onClose, onSuccess, initialDat
         )}
 
         {currentPurpose === 'FUMIGATION' && (
-          <FormField htmlFor="phytosanitaryProgramId" label="Programa de Control Fitosanitario">
+          <FormField
+            required
+            error={errors.phytosanitaryProgramId?.message}
+            htmlFor="phytosanitaryProgramId"
+            label="Programa de Control Fitosanitario"
+          >
             <PlannerProgramSelect
               control={control}
               error={errors.phytosanitaryProgramId?.message}
@@ -331,7 +337,7 @@ export function DosingScheduleFormModal({ isOpen, onClose, onSuccess, initialDat
         )}
 
         {/* 4. Hora de Aplicación */}
-        <FormField htmlFor="time" label="Hora de Aplicación">
+        <FormField required error={errors.time?.message} htmlFor="time" label="Hora de Aplicación">
           <Input
             className="cursor-pointer dark:scheme-dark"
             error={errors.time?.message}
@@ -347,20 +353,15 @@ export function DosingScheduleFormModal({ isOpen, onClose, onSuccess, initialDat
               }
             }}
           />
-          {errors.time && (
-            <span className="text-[11px] font-medium tracking-wide text-red-500">
-              {errors.time.message}
-            </span>
-          )}
         </FormField>
 
         {/* 5. Zonas Múltiples */}
-        <FormField htmlFor="zones" label="Zonas">
+        <FormField required error={errors.zones?.message} htmlFor="zones" label="Zonas">
           <PlannerMultiZoneSelect control={control} error={errors.zones?.message} name="zones" />
         </FormField>
 
         {/* 6. Días de Ejecución */}
-        <FormField htmlFor="days" label="Días de Ejecución">
+        <FormField required error={errors.days?.message} htmlFor="days" label="Días de Ejecución">
           <PlannerDaysSelector control={control} error={errors.days?.message} name="days" />
         </FormField>
 

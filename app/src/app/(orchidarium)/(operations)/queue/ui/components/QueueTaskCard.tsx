@@ -9,7 +9,7 @@ import { useSWRConfig } from 'swr'
 
 import { TaskStatusBadge } from './TaskStatusBadge'
 
-import { StatusCircleIcon, ActionMenu, ActionMenuItem, Button, ZoneBadges } from '@/components/ui'
+import { StatusCircleIcon, ActionMenu, ActionMenuItem, Button, ZoneTags } from '@/components/ui'
 import { formatTime12h } from '@/utils'
 import { useToast } from '@/hooks'
 import { TaskPurpose, ZoneType, TaskPurposeLabels } from '@/config/mappings'
@@ -203,7 +203,7 @@ export function QueueTaskCard({ task, onCancel, icon, colorClassName }: QueueTas
               </div>
 
               {/* Zonas */}
-              <ZoneBadges zones={task.zones} />
+              <ZoneTags zones={task.zones} />
             </div>
 
             {/* Acciones */}

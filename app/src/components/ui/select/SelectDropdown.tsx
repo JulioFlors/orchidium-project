@@ -274,7 +274,7 @@ export function SelectDropdown({
           disabled
             ? 'bg-hover-overlay/50 text-secondary border-divider cursor-not-allowed'
             : 'bg-surface text-primary hover:outline-input-outline-hover focus:outline-primary cursor-pointer',
-          error && 'outline-1! -outline-offset-1! outline-red-500!',
+          error && 'outline-1! -outline-offset-1! outline-red-800/75! dark:outline-red-400/75!',
           buttonClassName,
         )}
         disabled={disabled}

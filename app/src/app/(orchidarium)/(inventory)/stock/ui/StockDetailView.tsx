@@ -2,7 +2,7 @@
 
 import type { PotSize, PlantStatus, ZoneType } from '@package/database/enums'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import { IoAddOutline } from 'react-icons/io5'
 
 import {
@@ -14,9 +14,10 @@ import {
   FloweringEventModal,
   FloweringFormValues,
   ProductVariantCard,
+  FloweringAnalyticsSection,
+  FloweringRecord,
 } from './components'
 
-import { SpeciesFloweringSection } from '@/app/(shop)/plant/[slug]/ui/SpeciesFloweringSection'
 import { Heading, Button, Modal } from '@/components'
 import {
   PotSizeLabels as POT_SIZE_LABELS,
@@ -32,7 +33,9 @@ import {
   createBatchPlants,
   createFloweringEvent,
   closeFloweringEvent,
+  getSpeciesFloweringAnalytics,
 } from '@/actions'
+import { SpeciesFloweringAnalyticsData } from '@/interfaces'
 import { useToastStore } from '@/store/toast/toast.store'
 
 interface Variant {
@@ -81,6 +84,95 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
   // Filtro activo en el Gemelo Digital
   const [selectedZoneFilter, setSelectedZoneFilter] = useState<string | null>(null)
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string | null>(null)
+
+  // 1. Determinar el mejor ejemplar físico activo (Champion Plant)
+  const championPlant = useMemo(() => {
+    const plantsWithFlowering = species.plants.filter(
+      (p) => p.FloweringEvent && p.FloweringEvent.length > 0,
+    )
+
+    if (plantsWithFlowering.length === 0) return null
+
+    const oneYearAgo = new Date()
+
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+
+    const evaluated = plantsWithFlowering.map((p) => {
+      const events = p.FloweringEvent || []
+      const lastYearCount = events.filter((e) => new Date(e.startDate) >= oneYearAgo).length
+      const closedEvents = events.filter((e) => e.endDate)
+
+      let totalDays = 0
+
+      for (const ce of closedEvents) {
+        const ms = new Date(ce.endDate!).getTime() - new Date(ce.startDate).getTime()
+
+        totalDays += Math.max(1, Math.round(ms / (1000 * 60 * 60 * 24)))
+      }
+
+      const avgDur = closedEvents.length > 0 ? Math.ceil(totalDays / closedEvents.length) : 0
+      const mostRecentDate = events[0] ? new Date(events[0].startDate).getTime() : 0
+
+      return {
+        plant: p,
+        lastYearCount,
+        avgDur,
+        totalEvents: events.length,
+        mostRecentDate,
+      }
+    })
+
+    evaluated.sort((a, b) => {
+      if (b.lastYearCount !== a.lastYearCount) return b.lastYearCount - a.lastYearCount
+      if (b.avgDur !== a.avgDur) return b.avgDur - a.avgDur
+      if (b.totalEvents !== a.totalEvents) return b.totalEvents - a.totalEvents
+
+      return b.mostRecentDate - a.mostRecentDate
+    })
+
+    return evaluated[0]?.plant || null
+  }, [species.plants])
+
+  // Estado del Ejemplar Seleccionado para Análisis de Floración (inicializa con el Champion)
+  const [selectedPlantId, setSelectedPlantId] = useState<string | null>(
+    () => championPlant?.id || null,
+  )
+
+  // Estado de la Analítica de Floración
+  const [analytics, setAnalytics] = useState<SpeciesFloweringAnalyticsData | null>(null)
+
+  useEffect(() => {
+    if (species.slug) {
+      getSpeciesFloweringAnalytics(species.slug).then((res) => {
+        if (res.success && res.data) {
+          setAnalytics(res.data as SpeciesFloweringAnalyticsData)
+        }
+      })
+    }
+  }, [species.slug])
+
+  // Selección interactiva de ejemplar con scroll suave hacia la ficha inferior
+  function handleSelectPlantForFlowering(plant: PlantInstance) {
+    setSelectedPlantId((prev) => (prev === plant.id ? null : plant.id))
+    setTimeout(() => {
+      document.getElementById('flowering-analytics-section')?.scrollIntoView({ behavior: 'smooth' })
+    }, 50)
+  }
+
+  const selectedPlant = useMemo(
+    () => (selectedPlantId ? species.plants.find((p) => p.id === selectedPlantId) || null : null),
+    [species.plants, selectedPlantId],
+  )
+
+  function handleCloseFloweringFromRecord(record: FloweringRecord) {
+    const target = species.plants.find((p) => p.FloweringEvent?.some((e) => e.id === record.id))
+
+    if (target) {
+      handleOpenFlowering(target)
+    } else if (selectedPlant) {
+      handleOpenFlowering(selectedPlant)
+    }
+  }
 
   // Estados de los Modales
   const [isVariantModalOpen, setIsVariantModalOpen] = useState(false)
@@ -377,6 +469,12 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
         addToast('Evento de floración registrado correctamente.', 'success')
       }
 
+      getSpeciesFloweringAnalytics(species.slug).then((res) => {
+        if (res.success && res.data) {
+          setAnalytics(res.data as SpeciesFloweringAnalyticsData)
+        }
+      })
+
       setIsFloweringModalOpen(false)
       setFloweringTargetPlant(null)
     })
@@ -592,14 +690,7 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
         </div>
       </div>
 
-      {/* Sección de Analítica de Floración de la Especie */}
-      {species.slug && (
-        <div className="w-full">
-          <SpeciesFloweringSection fullWidth speciesSlug={species.slug} />
-        </div>
-      )}
-
-      {/* Sección Inferior: Ejemplares Físicos */}
+      {/* Sección de Ejemplares Físicos */}
       <div className="bg-canvas border-input-outline flex flex-col gap-6 rounded-xl border p-6">
         <div className="flex items-center justify-between border-b border-zinc-100 pb-4 dark:border-zinc-800/50">
           <h2 className="text-primary text-xl font-extrabold tracking-tight">Ejemplares</h2>
@@ -613,21 +704,34 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 tds-sm:grid-cols-3 tds-lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 tds-lg:grid-cols-3 tds-xl:grid-cols-4 gap-4">
             {filteredPlants.map((plant) => (
               <PlantInstanceCard
                 key={plant.id}
+                isSelected={selectedPlantId === plant.id}
                 plant={plant}
                 potSizeLabels={POT_SIZE_LABELS}
                 zoneLabels={ZONE_LABELS}
                 onDelete={handleDeletePlant}
                 onEdit={openEditPlant}
                 onFlowering={handleOpenFlowering}
+                onSelectFlowering={handleSelectPlantForFlowering}
               />
             ))}
           </div>
         )}
       </div>
+
+      {/* Sección Inferior: Ciclo de Floración e Historial de Registros */}
+      <FloweringAnalyticsSection
+        analytics={analytics}
+        championPlant={championPlant}
+        selectedPlant={selectedPlant}
+        speciesName={species.name}
+        onClearSelection={() => setSelectedPlantId(null)}
+        onCloseFloweringRecord={handleCloseFloweringFromRecord}
+        onOpenFloweringModal={handleOpenFlowering}
+      />
 
       {/* Modales */}
       <VariantFormModal
@@ -722,7 +826,7 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
               Volver
             </Button>
             <Button isLoading={isPending} variant="destructive" onClick={handleConfirmDeletePlant}>
-              Eliminar Planta
+              Eliminar
             </Button>
           </div>
         </div>

@@ -1,45 +1,64 @@
 'use client'
 
-import type { SelectOption } from '@/components/ui/select/SelectDropdown'
+import type { ZoneType, Severity } from '@package/database'
 
-import { useState, useEffect } from 'react'
 import { Bug } from 'lucide-react'
 import { motion } from 'motion/react'
+import { useState, useEffect } from 'react'
 
-import { Modal, SelectDropdown, Button, Input } from '@/components/ui'
-import { registerPestSighting, getPestCatalog } from '@/actions'
-import { useToastStore } from '@/store/toast/toast.store'
-import { ZoneType, ZoneTypeLabels, Severity, SeverityLabels } from '@/config/mappings'
-
-interface Pest {
-  id: string
-  name: string
-}
+import { getPestCatalog, registerPestSighting } from '@/actions/operations/biological-actions'
+import {
+  Modal,
+  Button,
+  Input,
+  SelectDropdown,
+  type SelectOption,
+  FormField,
+  Textarea,
+} from '@/components'
+import { ZoneTypeLabels } from '@/config/mappings'
+import { VALIDATION_LIMITS } from '@/config'
+import { useToastStore } from '@/store'
 
 interface PestSightingModalProps {
   isOpen: boolean
   onClose: () => void
 }
 
-const ZONE_OPTIONS: SelectOption[] = Object.values(ZoneType).map((z) => ({
-  label: ZoneTypeLabels[z],
-  value: z,
-}))
+const ZONE_OPTIONS: SelectOption[] = [
+  { label: ZoneTypeLabels.ZONA_A, value: 'ZONA_A' },
+  { label: ZoneTypeLabels.ZONA_B, value: 'ZONA_B' },
+  { label: ZoneTypeLabels.ZONA_C, value: 'ZONA_C' },
+  { label: ZoneTypeLabels.ZONA_D, value: 'ZONA_D' },
+  { label: ZoneTypeLabels.EXTERIOR, value: 'EXTERIOR' },
+]
 
-const SEVERITY_OPTIONS: SelectOption[] = Object.values(Severity).map((s) => ({
-  label: SeverityLabels[s],
-  value: s,
-}))
+const SEVERITY_OPTIONS: SelectOption[] = [
+  { label: 'Baja (Pocos ejemplares / Leve)', value: 'LOW' },
+  { label: 'Media (Presencia notable)', value: 'MEDIUM' },
+  { label: 'Alta (Foco infeccioso grave)', value: 'HIGH' },
+  { label: 'Crítica (Cuarentena inmediata)', value: 'CRITICAL' },
+]
 
 export function PestSightingModal({ isOpen, onClose }: PestSightingModalProps) {
-  const [pests, setPests] = useState<Pest[]>([])
-  const [selectedPestId, setSelectedPestId] = useState<string | undefined>()
+  const [pests, setPests] = useState<{ id: string; name: string }[]>([])
+  const [selectedPestId, setSelectedPestId] = useState<string | undefined>(undefined)
   const [customPestName, setCustomPestName] = useState('')
-  const [zone, setZone] = useState<string>(ZoneType.ZONA_A)
-  const [severity, setSeverity] = useState<string>('LOW')
+  const [zone, setZone] = useState<ZoneType>('ZONA_A')
+  const [severity, setSeverity] = useState<Severity>('LOW')
   const [notes, setNotes] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [pestError, setPestError] = useState<string | null>(null)
   const { addToast } = useToastStore()
+
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen)
+
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen)
+    if (isOpen) {
+      setPestError(null)
+    }
+  }
 
   useEffect(() => {
     if (isOpen) {
@@ -52,20 +71,27 @@ export function PestSightingModal({ isOpen, onClose }: PestSightingModalProps) {
   }, [isOpen])
 
   const handleSubmit = async () => {
-    if (!selectedPestId && !customPestName) {
-      addToast('Por favor selecciona una plaga o escribe el nombre.', 'error')
+    if (!selectedPestId) {
+      setPestError('Por favor selecciona una plaga de la lista o elige Otra.')
 
       return
     }
 
+    if (selectedPestId === 'other' && !customPestName.trim()) {
+      setPestError('Debes escribir el nombre de la plaga o síntoma.')
+
+      return
+    }
+
+    setPestError(null)
     setIsSubmitting(true)
     try {
       const res = await registerPestSighting({
-        pestId: selectedPestId,
-        pestName: selectedPestId === 'other' ? customPestName : undefined,
-        zone: zone as ZoneType,
-        severity: severity as Severity,
-        notes,
+        pestId: selectedPestId === 'other' ? undefined : selectedPestId,
+        pestName: selectedPestId === 'other' ? customPestName.trim() : undefined,
+        zone,
+        severity,
+        notes: notes.trim() ? notes.trim() : undefined,
       })
 
       if (res.success) {
@@ -75,6 +101,7 @@ export function PestSightingModal({ isOpen, onClose }: PestSightingModalProps) {
         setSelectedPestId(undefined)
         setCustomPestName('')
         setNotes('')
+        setPestError(null)
       } else {
         addToast(res.error || 'Error al registrar avistamiento', 'error')
       }
@@ -98,19 +125,24 @@ export function PestSightingModal({ isOpen, onClose }: PestSightingModalProps) {
       title="Reportar Avistamiento de Plaga"
       onClose={onClose}
     >
-      <div className="flex flex-col gap-6">
-        <div className="space-y-2">
-          {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-          <label className="text-secondary text-sm font-medium">
-            Identificación de la Plaga
-            <SelectDropdown
-              id="pest-select"
-              options={pestOptions}
-              placeholder="Selecciona una plaga..."
-              value={selectedPestId}
-              onChange={(val) => setSelectedPestId(val as string)}
-            />
-          </label>
+      <div className="flex flex-col gap-5">
+        <FormField
+          required
+          error={pestError ?? undefined}
+          htmlFor="pest-select"
+          label="Identificación de la Plaga"
+        >
+          <SelectDropdown
+            error={!!pestError}
+            id="pest-select"
+            options={pestOptions}
+            placeholder="Selecciona una plaga..."
+            value={selectedPestId}
+            onChange={(val) => {
+              setSelectedPestId(val as string)
+              setPestError(null)
+            }}
+          />
           {selectedPestId === 'other' && (
             <motion.div
               animate={{ height: 'auto', opacity: 1 }}
@@ -118,54 +150,49 @@ export function PestSightingModal({ isOpen, onClose }: PestSightingModalProps) {
               initial={{ height: 0, opacity: 0 }}
             >
               <Input
+                error={pestError && !customPestName.trim() ? 'El nombre es obligatorio' : undefined}
                 id="custom-pest-name"
+                maxLength={VALIDATION_LIMITS.TITLE_NAME_MAX}
                 placeholder="Nombre de la plaga o síntoma..."
                 value={customPestName}
-                onChange={(e) => setCustomPestName(e.target.value)}
+                onChange={(e) => {
+                  setCustomPestName(e.target.value)
+                  setPestError(null)
+                }}
               />
             </motion.div>
           )}
-        </div>
+        </FormField>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-            <label className="text-secondary text-sm font-medium">
-              Zona
-              <SelectDropdown
-                id="zone-select"
-                options={ZONE_OPTIONS}
-                value={zone}
-                onChange={(val) => setZone(val as string)}
-              />
-            </label>
-          </div>
-          <div className="space-y-2">
-            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-            <label className="text-secondary text-sm font-medium">
-              Severidad
-              <SelectDropdown
-                id="severity-select"
-                options={SEVERITY_OPTIONS}
-                value={severity}
-                onChange={(val) => setSeverity(val as string)}
-              />
-            </label>
-          </div>
+          <FormField required htmlFor="zone-select" label="Zona">
+            <SelectDropdown
+              id="zone-select"
+              options={ZONE_OPTIONS}
+              value={zone}
+              onChange={(val) => setZone(val as ZoneType)}
+            />
+          </FormField>
+
+          <FormField required htmlFor="severity-select" label="Severidad">
+            <SelectDropdown
+              id="severity-select"
+              options={SEVERITY_OPTIONS}
+              value={severity}
+              onChange={(val) => setSeverity(val as Severity)}
+            />
+          </FormField>
         </div>
 
-        <div className="space-y-2">
-          <label className="text-secondary text-sm font-medium">
-            Notas / Observaciones
-            <textarea
-              className="bg-surface border-input-outline focus:outline-primary mt-2 min-h-[100px] w-full resize-none rounded-md border p-3 text-sm transition-all"
-              id="sighting-notes"
-              placeholder="Describe la ubicación exacta, el grado de infestación o cualquier detalle relevante..."
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-            />
-          </label>
-        </div>
+        <FormField htmlFor="sighting-notes" label="Notas / Observaciones">
+          <Textarea
+            id="sighting-notes"
+            maxLength={VALIDATION_LIMITS.OBSERVATION_MAX}
+            placeholder="Describe la ubicación exacta, el grado de infestación o cualquier detalle relevante..."
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+          />
+        </FormField>
 
         <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
           <Button disabled={isSubmitting} variant="ghost" onClick={onClose}>

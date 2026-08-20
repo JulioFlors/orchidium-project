@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react'
 
 import { Button, Modal, FormField, Input, SelectDropdown, Textarea } from '@/components'
 import { useFormDraftStore } from '@/store'
+import { VALIDATION_LIMITS } from '@/config'
 
 interface Genus {
   id: string
@@ -34,6 +35,11 @@ export function SpeciesFormModal({
   const [selectedPlantType, setSelectedPlantType] = useState<PlantType | ''>('')
   const [speciesFormGenusId, setSpeciesFormGenusId] = useState('')
   const [speciesFormDescription, setSpeciesFormDescription] = useState('')
+  const [errors, setErrors] = useState<{
+    type?: string
+    genus?: string
+    name?: string
+  }>({})
 
   const { getDraft, setDraft } = useFormDraftStore()
 
@@ -43,6 +49,7 @@ export function SpeciesFormModal({
     setPrevIsOpen(isOpen)
 
     if (isOpen) {
+      setErrors({})
       const draft = getDraft('catalog-species-form') as
         | {
             name: string
@@ -88,13 +95,76 @@ export function SpeciesFormModal({
   function handlePlantTypeChange(type: PlantType | '') {
     setSelectedPlantType(type)
     setSpeciesFormGenusId('')
+    setSpeciesFormName('')
+    setErrors((prev) => ({ ...prev, type: undefined, genus: undefined }))
+  }
+
+  function handleGenusChange(genusId: string) {
+    setSpeciesFormGenusId(genusId)
+    setErrors((prev) => ({ ...prev, genus: undefined }))
+
+    const genusObj = generaList.find((g) => g.id === genusId)
+
+    if (!genusObj) return
+
+    const genusCapitalized =
+      genusObj.name.charAt(0).toUpperCase() + genusObj.name.slice(1).toLowerCase()
+    const prefix = `${genusCapitalized} `
+
+    if (!speciesFormName || speciesFormName.trim() === '') {
+      setSpeciesFormName(prefix)
+    } else {
+      const prevGenusObj = generaList.find((g) => g.id === speciesFormGenusId)
+
+      if (prevGenusObj) {
+        const prevPrefix = `${prevGenusObj.name.charAt(0).toUpperCase() + prevGenusObj.name.slice(1).toLowerCase()} `
+
+        if (speciesFormName.startsWith(prevPrefix)) {
+          setSpeciesFormName(speciesFormName.replace(prevPrefix, prefix))
+        } else if (speciesFormName.toLowerCase().startsWith(prevGenusObj.name.toLowerCase())) {
+          setSpeciesFormName(
+            speciesFormName.replace(new RegExp(`^${prevGenusObj.name}\\s*`, 'i'), prefix),
+          )
+        }
+      }
+    }
+  }
+
+  function handleNameChange(value: string) {
+    // Evitar dos o más espacios en blanco consecutivos
+    const sanitized = value.replace(/\s{2,}/g, ' ')
+
+    setSpeciesFormName(sanitized)
+    if (sanitized.trim()) {
+      setErrors((prev) => ({ ...prev, name: undefined }))
+    }
   }
 
   function handleSubmit() {
+    const newErrors: typeof errors = {}
+
+    if (!selectedPlantType) {
+      newErrors.type = 'Debes seleccionar un tipo de planta'
+    }
+    if (!speciesFormGenusId) {
+      newErrors.genus = 'Debes seleccionar un género'
+    }
+    const cleanName = speciesFormName.trim().replace(/\s+/g, ' ')
+
+    if (!cleanName || cleanName.length < 2) {
+      newErrors.name = 'El nombre científico es obligatorio (mínimo 2 caracteres)'
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+
+      return
+    }
+
     onSave({
-      name: speciesFormName,
+      name: cleanName,
       genusId: speciesFormGenusId,
-      description: speciesFormDescription,
+      description: speciesFormDescription.trim(),
       glowColor: 'dynamic',
     })
   }
@@ -102,22 +172,16 @@ export function SpeciesFormModal({
   return (
     <Modal isOpen={isOpen} size="lg" title="Crear Nueva Especie" onClose={onClose}>
       <div className="flex flex-col gap-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <FormField htmlFor="create-species-name" label="Nombre Científico">
-              <Input
-                id="create-species-name"
-                placeholder=""
-                type="text"
-                value={speciesFormName}
-                onChange={(e) => setSpeciesFormName(e.target.value)}
-              />
-            </FormField>
-          </div>
-
+        <div className="flex flex-col gap-4">
           <div>
-            <FormField htmlFor="create-plant-type" label="Tipo de Planta">
+            <FormField
+              required
+              error={errors.type}
+              htmlFor="create-plant-type"
+              label="Tipo de Planta"
+            >
               <SelectDropdown
+                error={!!errors.type}
                 id="create-plant-type"
                 options={Object.entries(plantTypeLabels).map(([value, label]) => ({
                   value,
@@ -131,9 +195,10 @@ export function SpeciesFormModal({
           </div>
 
           <div>
-            <FormField htmlFor="create-species-genus" label="Género">
+            <FormField required error={errors.genus} htmlFor="create-species-genus" label="Género">
               <SelectDropdown
                 emptyMessage={selectedPlantType ? 'No hay géneros disponibles' : 'Tipo de planta'}
+                error={!!errors.genus}
                 id="create-species-genus"
                 options={
                   selectedPlantType
@@ -147,16 +212,37 @@ export function SpeciesFormModal({
                 }
                 placeholder="Seleccionar género"
                 value={speciesFormGenusId}
-                onChange={(val) => setSpeciesFormGenusId(val as string)}
+                onChange={(val) => handleGenusChange(val as string)}
               />
             </FormField>
           </div>
 
-          <div className="sm:col-span-2">
+          <div>
+            <FormField
+              required
+              error={errors.name}
+              htmlFor="create-species-name"
+              label="Nombre Científico"
+            >
+              <Input
+                disabled={!speciesFormGenusId}
+                error={errors.name}
+                id="create-species-name"
+                maxLength={VALIDATION_LIMITS.SPECIES_NAME_MAX}
+                placeholder={speciesFormGenusId ? '' : 'Selecciona primero un género'}
+                type="text"
+                value={speciesFormName}
+                onChange={(e) => handleNameChange(e.target.value)}
+              />
+            </FormField>
+          </div>
+
+          <div>
             <FormField htmlFor="create-species-desc" label="Descripción">
               <Textarea
                 className="resize-none"
                 id="create-species-desc"
+                maxLength={VALIDATION_LIMITS.LONG_DESC_MAX}
                 placeholder="Detalles sobre la especie."
                 value={speciesFormDescription}
                 onChange={(e) => setSpeciesFormDescription(e.target.value)}

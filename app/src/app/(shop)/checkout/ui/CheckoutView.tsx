@@ -246,7 +246,7 @@ export function CheckoutView() {
             {deliveryType === 'SHIPPING' ? (
               <>
                 <div className="grid grid-cols-1 gap-4 pt-2 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1.5">
+                  <div className="flex flex-col gap-1.5 sm:col-span-2">
                     <label className="text-secondary text-xs font-semibold" htmlFor="shipping-name">
                       Nombre y Apellido
                     </label>
@@ -254,6 +254,7 @@ export function CheckoutView() {
                       required
                       className="border-input-outline bg-surface text-primary rounded-xl border px-3.5 py-2.5 text-xs outline-none focus:border-emerald-500"
                       id="shipping-name"
+                      maxLength={70}
                       type="text"
                       value={shippingAddress.name}
                       onChange={(e) => setShippingAddress({ name: e.target.value })}
@@ -268,6 +269,7 @@ export function CheckoutView() {
                       required
                       className="border-input-outline bg-surface text-primary rounded-xl border px-3.5 py-2.5 text-xs outline-none focus:border-emerald-500"
                       id="shipping-id"
+                      maxLength={20}
                       placeholder="Ej. V-19745523"
                       type="text"
                       value={shippingAddress.idNumber}
@@ -286,6 +288,7 @@ export function CheckoutView() {
                       required
                       className="border-input-outline bg-surface text-primary rounded-xl border px-3.5 py-2.5 text-xs outline-none focus:border-emerald-500"
                       id="shipping-address"
+                      maxLength={250}
                       placeholder="Calle, sector, edif/casa, punto de referencia"
                       type="text"
                       value={shippingAddress.address}
@@ -301,6 +304,7 @@ export function CheckoutView() {
                       required
                       className="border-input-outline bg-surface text-primary rounded-xl border px-3.5 py-2.5 text-xs outline-none focus:border-emerald-500"
                       id="shipping-city"
+                      maxLength={50}
                       placeholder="Ej. Ciudad Guayana"
                       type="text"
                       value={shippingAddress.city}
@@ -319,6 +323,7 @@ export function CheckoutView() {
                       required
                       className="border-input-outline bg-surface text-primary rounded-xl border px-3.5 py-2.5 text-xs outline-none focus:border-emerald-500"
                       id="shipping-state"
+                      maxLength={50}
                       placeholder="Ej. Bolívar"
                       type="text"
                       value={shippingAddress.state}
@@ -337,6 +342,7 @@ export function CheckoutView() {
                       required
                       className="border-input-outline bg-surface text-primary rounded-xl border px-3.5 py-2.5 text-xs outline-none focus:border-emerald-500"
                       id="shipping-phone"
+                      maxLength={30}
                       placeholder="Ej. 0414-8724205"
                       type="text"
                       value={shippingAddress.phone}
@@ -480,6 +486,7 @@ export function CheckoutView() {
                       required
                       className="border-input-outline bg-surface text-primary rounded-xl border px-3.5 py-2.5 text-xs outline-none focus:border-emerald-500"
                       id="pickup-name"
+                      maxLength={70}
                       type="text"
                       value={shippingAddress.name}
                       onChange={(e) =>
@@ -499,6 +506,7 @@ export function CheckoutView() {
                       required
                       className="border-input-outline bg-surface text-primary rounded-xl border px-3.5 py-2.5 text-xs outline-none focus:border-emerald-500"
                       id="pickup-id"
+                      maxLength={20}
                       placeholder="Ej. V-19745523"
                       type="text"
                       value={shippingAddress.idNumber}
@@ -514,6 +522,7 @@ export function CheckoutView() {
                       required
                       className="border-input-outline bg-surface text-primary rounded-xl border px-3.5 py-2.5 text-xs outline-none focus:border-emerald-500"
                       id="pickup-phone"
+                      maxLength={30}
                       placeholder="Ej. 0414-8724205"
                       type="text"
                       value={shippingAddress.phone}
@@ -566,6 +575,7 @@ export function CheckoutView() {
                     required
                     className="border-input-outline bg-surface text-primary rounded-xl border px-3.5 py-2.5 text-xs outline-none focus:border-emerald-500"
                     id="billing-name"
+                    maxLength={70}
                     type="text"
                     value={billingInfo.name}
                     onChange={(e) => setBillingInfo({ name: e.target.value })}
@@ -579,6 +589,7 @@ export function CheckoutView() {
                     required
                     className="border-input-outline bg-surface text-primary rounded-xl border px-3.5 py-2.5 text-xs outline-none focus:border-emerald-500"
                     id="billing-id"
+                    maxLength={20}
                     type="text"
                     value={billingInfo.idNumber}
                     onChange={(e) => setBillingInfo({ idNumber: e.target.value })}
@@ -592,6 +603,7 @@ export function CheckoutView() {
                     required
                     className="border-input-outline bg-surface text-primary rounded-xl border px-3.5 py-2.5 text-xs outline-none focus:border-emerald-500"
                     id="billing-address"
+                    maxLength={250}
                     type="text"
                     value={billingInfo.address}
                     onChange={(e) => setBillingInfo({ address: e.target.value })}

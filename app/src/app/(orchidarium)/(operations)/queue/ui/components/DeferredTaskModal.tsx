@@ -117,20 +117,25 @@ export function DeferredTaskModal({ isOpen, onClose, onSubmitSuccess }: Props) {
     <Modal isOpen={isOpen} size="md" title="Nueva Tarea Diferida" onClose={handleClose}>
       <form className="flex flex-col gap-5" onSubmit={handleSubmit(submitHandler)}>
         <div className="grid grid-cols-2 gap-4">
-          <FormField htmlFor="purpose" label="Circuito">
+          <FormField required error={errors.purpose?.message} htmlFor="purpose" label="Circuito">
             <PlannerCircuitSelect
               control={control}
               error={errors.purpose?.message}
               name="purpose"
             />
           </FormField>
-          <FormField htmlFor="zone" label="Zona">
+          <FormField required error={errors.zone?.message} htmlFor="zone" label="Zona">
             <PlannerZoneSelect control={control} error={errors.zone?.message} name="zone" />
           </FormField>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <FormField htmlFor="scheduledAt" label="Fecha y Hora">
+          <FormField
+            required
+            error={errors.scheduledAt?.message}
+            htmlFor="scheduledAt"
+            label="Fecha y Hora"
+          >
             <Input
               error={errors.scheduledAt?.message}
               id="scheduledAt"
@@ -141,14 +146,9 @@ export function DeferredTaskModal({ isOpen, onClose, onSubmitSuccess }: Props) {
               type="datetime-local"
               {...register('scheduledAt')}
             />
-            {errors.scheduledAt && (
-              <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-500">
-                {errors.scheduledAt.message}
-              </span>
-            )}
           </FormField>
 
-          <FormField htmlFor="duration" label="Duración">
+          <FormField required error={errors.duration?.message} htmlFor="duration" label="Duración">
             <PlannerDurationInput
               control={control}
               error={errors.duration?.message}
@@ -158,24 +158,20 @@ export function DeferredTaskModal({ isOpen, onClose, onSubmitSuccess }: Props) {
           </FormField>
         </div>
 
-        <FormField htmlFor="notes" label="Notas / Justificación">
+        <FormField error={errors.notes?.message} htmlFor="notes" label="Notas / Justificación">
           <textarea
             className={clsx(
               'focus-input mt-1.5 w-full resize-none border text-sm',
               errors.notes
-                ? 'border-red-500/50 outline -outline-offset-1 outline-red-500/50'
+                ? 'border-red-800/75 outline -outline-offset-1 outline-red-800/75 dark:border-red-400/75 dark:outline-red-400/75'
                 : 'border-input-outline',
             )}
             id="notes"
+            maxLength={200}
             placeholder=""
             rows={2}
             {...register('notes')}
           />
-          {errors.notes && (
-            <span className="fade-in mt-1 text-[11px] font-medium tracking-wide text-red-500">
-              {errors.notes.message}
-            </span>
-          )}
         </FormField>
 
         {/* Footer Actions */}

@@ -28,6 +28,7 @@ import {
 import { useToastStore } from '@/store/toast/toast.store'
 import { getImageUrl } from '@/lib'
 import { getDominantVibrantColor, useImageColor, PRESET_COLORS } from '@/hooks/useImageColor'
+import { VALIDATION_LIMITS } from '@/config'
 
 interface SpeciesImage {
   id: string
@@ -280,9 +281,14 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
       }
 
       // 3. Guardar datos de la especie
+      const payload = {
+        ...form,
+        name: form.name.trim().replace(/\s+/g, ' '),
+      }
+
       const result = initialSpecies
-        ? await updateSpecies(initialSpecies.id, form)
-        : await createSpecies(form)
+        ? await updateSpecies(initialSpecies.id, payload)
+        : await createSpecies(payload)
 
       if (!result.ok) {
         addToast(result.message ?? 'Error al guardar.', 'error')
@@ -555,9 +561,10 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
-              <FormField htmlFor="species-name" label="Nombre Científico *">
+              <FormField required htmlFor="species-name" label="Nombre Científico">
                 <Input
                   id="species-name"
+                  maxLength={VALIDATION_LIMITS.SPECIES_NAME_MAX}
                   placeholder="Ej: Cattleya trianae"
                   type="text"
                   value={form.name}
@@ -567,7 +574,7 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
             </div>
 
             <div>
-              <FormField htmlFor="plant-type" label="Tipo de Planta *">
+              <FormField required htmlFor="plant-type" label="Tipo de Planta">
                 <SelectDropdown
                   id="plant-type"
                   options={Object.entries(PLANT_TYPE_LABELS).map(([value, label]) => ({
@@ -581,7 +588,7 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
             </div>
 
             <div>
-              <FormField htmlFor="species-genus" label="Género *">
+              <FormField required htmlFor="species-genus" label="Género">
                 <SelectDropdown
                   emptyMessage="No hay géneros disponibles"
                   id="species-genus"
@@ -621,6 +628,7 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
             <Textarea
               className="min-h-35 resize-none"
               id="species-desc"
+              maxLength={VALIDATION_LIMITS.LONG_DESC_MAX}
               placeholder="Detalles sobre cuidados, origen, hábitat"
               value={form.description}
               onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}

@@ -97,7 +97,7 @@ export async function getSpeciesById(identifier: string) {
             status: true,
             location: { select: { id: true, zone: true, table: true } },
             FloweringEvent: {
-              select: { id: true, startDate: true, endDate: true },
+              select: { id: true, startDate: true, endDate: true, notes: true },
               orderBy: { startDate: 'desc' },
             },
           },
@@ -149,10 +149,11 @@ export async function createSpecies(data: {
   glowColor?: string
 }) {
   try {
-    const slug = toSlug(data.name)
+    const cleanName = data.name.trim().replace(/\s+/g, ' ')
+    const slug = toSlug(cleanName)
     const species = await prisma.species.create({
       data: {
-        name: data.name.trim(),
+        name: cleanName,
         slug,
         genusId: data.genusId,
         description: data.description?.trim() ?? null,
@@ -179,11 +180,12 @@ export async function updateSpecies(
   data: { name: string; genusId: string; description?: string; glowColor?: string },
 ) {
   try {
-    const slug = toSlug(data.name)
+    const cleanName = data.name.trim().replace(/\s+/g, ' ')
+    const slug = toSlug(cleanName)
     const species = await prisma.species.update({
       where: { id },
       data: {
-        name: data.name.trim(),
+        name: cleanName,
         slug,
         genusId: data.genusId,
         description: data.description?.trim() ?? null,

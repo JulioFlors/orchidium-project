@@ -288,24 +288,20 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
         onSubmit={handleSubmit(onSubmit)}
       >
         {/* 1. Nombre */}
-        <FormField htmlFor="name" label="Nombre">
+        <FormField required error={errors.name?.message} htmlFor="name" label="Nombre">
           <Input
             error={errors.name?.message}
             id="name"
+            maxLength={50}
             placeholder=""
             type="text"
             {...register('name')}
           />
-          {errors.name && (
-            <span className="text-[11px] font-medium tracking-wide text-red-500">
-              {errors.name.message}
-            </span>
-          )}
         </FormField>
 
         {/* 2. Tarea + Zona (1 columna en móvil) */}
         <div className="grid grid-cols-1 gap-4 tds-sm:grid-cols-2">
-          <FormField htmlFor="purpose" label="Tarea">
+          <FormField required error={errors.purpose?.message} htmlFor="purpose" label="Tarea">
             <PlannerCircuitSelect
               control={control}
               error={errors.purpose?.message}
@@ -313,14 +309,19 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
             />
           </FormField>
 
-          <FormField htmlFor="zones" label="Zona">
+          <FormField required error={errors.zones?.message} htmlFor="zones" label="Zona">
             <PlannerZoneSelect control={control} error={errors.zones?.message} name="zones" />
           </FormField>
         </div>
 
         {/* 3. Programa (solo para ferti/fito automatizado) */}
         {currentPurpose === 'FERTIGATION' && (
-          <FormField htmlFor="fertilizationProgramId" label="Programa de Fertilización">
+          <FormField
+            required
+            error={errors.fertilizationProgramId?.message}
+            htmlFor="fertilizationProgramId"
+            label="Programa de Fertilización"
+          >
             <PlannerProgramSelect
               control={control}
               error={errors.fertilizationProgramId?.message}
@@ -331,7 +332,12 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
         )}
 
         {currentPurpose === 'FUMIGATION' && (
-          <FormField htmlFor="phytosanitaryProgramId" label="Programa de Control Fitosanitario">
+          <FormField
+            required
+            error={errors.phytosanitaryProgramId?.message}
+            htmlFor="phytosanitaryProgramId"
+            label="Programa de Control Fitosanitario"
+          >
             <PlannerProgramSelect
               control={control}
               error={errors.phytosanitaryProgramId?.message}
@@ -343,7 +349,7 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
 
         {/* 4. Hora de Inicio + Duración (1 columna en móvil) */}
         <div className="grid grid-cols-1 gap-4 tds-sm:grid-cols-2">
-          <FormField htmlFor="time" label="Hora de Inicio">
+          <FormField required error={errors.time?.message} htmlFor="time" label="Hora de Inicio">
             <Input
               className="cursor-pointer dark:scheme-dark"
               error={errors.time?.message}
@@ -359,14 +365,9 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
                 }
               }}
             />
-            {errors.time && (
-              <span className="text-[11px] font-medium tracking-wide text-red-500">
-                {errors.time.message}
-              </span>
-            )}
           </FormField>
 
-          <FormField htmlFor="duration" label="Duración">
+          <FormField required error={errors.duration?.message} htmlFor="duration" label="Duración">
             <PlannerDurationInput
               control={control}
               error={errors.duration?.message}
@@ -377,7 +378,7 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
         </div>
 
         {/* 5. Días de Ejecución */}
-        <FormField htmlFor="days" label="Días de Ejecución">
+        <FormField required error={errors.days?.message} htmlFor="days" label="Días de Ejecución">
           <PlannerDaysSelector control={control} error={errors.days?.message} name="days" />
         </FormField>
 

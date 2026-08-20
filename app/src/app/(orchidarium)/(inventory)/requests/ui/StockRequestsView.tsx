@@ -97,7 +97,7 @@ export function StockRequestsView({ adminName = 'Julio' }: StockRequestsViewProp
     const senderFirstName = adminName.trim().split(' ')[0] || 'Julio'
 
     if (availableRequests.length === 0) {
-      return `Hola ${firstName}.\nMi nombre es ${senderFirstName} y soy cultivador en PristinoPlant.\n\nSeguimos trabajando en la reposición de tus plantas de interés. Te avisaremos con mucho gusto apenas tengamos nuevas existencias.`
+      return `Hola ${firstName}.\nMi nombre es ${senderFirstName} y soy cultivador en PristinoPlant.\n\nEstamos trabajando en la reposición de las plantas de tu interés.\nTe avisaremos cuando estén disponibles.`
     }
 
     const isPlural = availableRequests.length > 1

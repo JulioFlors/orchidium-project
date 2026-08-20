@@ -1,6 +1,6 @@
 'use client'
 
-import type { PlantType } from '@package/database'
+import type { PlantType, PotSize } from '@package/database/enums'
 
 import { useEffect } from 'react'
 
@@ -19,14 +19,22 @@ interface Genus {
   type: PlantType
 }
 
-interface SpeciesWithStoreData {
+interface ProductVariantData {
+  id: string
+  size: PotSize
+  price: number
+  quantity: number
+  available: boolean
+}
+
+export interface SpeciesWithStoreData {
   id: string
   name: string
   slug: string
   genus: Genus
   images: SpeciesImage[]
   glowColor?: string | null
-  variants: Array<{ id: string }>
+  variants: ProductVariantData[]
   _count: {
     plants: number
   }

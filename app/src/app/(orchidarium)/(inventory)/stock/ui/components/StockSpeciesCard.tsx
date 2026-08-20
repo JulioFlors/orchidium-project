@@ -1,6 +1,7 @@
 'use client'
 
 import type { Species as ProductSpecies } from '@/interfaces'
+import type { SpeciesWithStoreData } from '../StockView'
 
 import Link from 'next/link'
 import { PiLeafFill } from 'react-icons/pi'
@@ -9,39 +10,8 @@ import { getImageUrl } from '@/lib'
 import { useImageColor, getPresetForColorString } from '@/hooks/useImageColor'
 import { StockLabel, isProductAvailable } from '@/components'
 
-interface SpeciesImage {
-  id?: string
-  url: string
-}
-
-interface Genus {
-  id: string
-  name: string
-  type: string
-}
-
-interface Species {
-  id: string
-  name: string
-  slug: string
-  genus: Genus
-  images: SpeciesImage[]
-  glowColor?: string | null
-  variants?: Array<{
-    id?: string
-    size?: string
-    price?: number
-    available?: boolean
-    quantity?: number
-    speciesId?: string
-  }>
-  _count: {
-    plants: number
-  }
-}
-
 interface StockSpeciesCardProps {
-  species: Species
+  species: SpeciesWithStoreData
   index: number
 }
 

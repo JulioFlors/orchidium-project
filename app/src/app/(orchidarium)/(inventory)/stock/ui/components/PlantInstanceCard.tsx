@@ -2,6 +2,7 @@
 
 import type { PotSize, PlantStatus } from '@package/database/enums'
 
+import { clsx } from 'clsx'
 import { motion } from 'motion/react'
 import {
   IoCalendarOutline,
@@ -12,6 +13,7 @@ import {
 import { MdEdit, MdDelete, MdLocalFlorist } from 'react-icons/md'
 
 import { StatusCircleIcon, ActionMenu, ActionMenuItem } from '@/components'
+import { PotSizeColors as POT_SIZE_COLORS } from '@/config/mappings'
 
 interface Location {
   id: string
@@ -40,9 +42,11 @@ interface PlantInstanceCardProps {
   plant: PlantInstance
   potSizeLabels: Record<PotSize, string>
   zoneLabels: Record<string, string>
+  isSelected?: boolean
   onEdit: (plant: PlantInstance) => void
   onFlowering: (plant: PlantInstance) => void
   onDelete: (plant: PlantInstance) => void
+  onSelectFlowering?: (plant: PlantInstance) => void
 }
 
 function formatPottingDate(dateVal?: Date | string | null) {
@@ -70,9 +74,11 @@ export function PlantInstanceCard({
   plant,
   potSizeLabels,
   zoneLabels,
+  isSelected = false,
   onEdit,
   onFlowering,
   onDelete,
+  onSelectFlowering,
 }: PlantInstanceCardProps) {
   const isMother = plant.status === 'MOTHER'
   const activeFlowering = plant.FloweringEvent?.find((e) => !e.endDate)
@@ -84,18 +90,15 @@ export function PlantInstanceCard({
   const formattedDate = formatPottingDate(plant.pottingDate)
 
   const potCode = potSizeLabels[plant.currentSize] || plant.currentSize
+  const potColor = POT_SIZE_COLORS[plant.currentSize]
   const originText = plant.origin || 'Establecida'
 
-  // Determinación de glowVariant semántico
-  const glowVariant = isMother
-    ? 'red'
-    : hasActiveFlowering
-      ? 'pink'
-      : plant.status === 'AVAILABLE'
-        ? 'violet'
-        : 'green'
-
   const menuItems: ActionMenuItem[] = [
+    {
+      label: isSelected ? 'Ficha de Floración Activa' : 'Analizar Floración',
+      icon: <MdLocalFlorist className="text-fuchsia-500" />,
+      onClick: () => onSelectFlowering?.(plant),
+    },
     {
       label: 'Editar Planta',
       icon: <MdEdit />,
@@ -117,7 +120,10 @@ export function PlantInstanceCard({
   return (
     <motion.div
       animate={{ opacity: 1, y: 0 }}
-      className="bg-surface border-input-outline group focus-within:z-5 relative flex min-w-0 w-full flex-col gap-4 rounded-xl border p-4 shadow-sm transition-colors duration-200 hover:bg-hover-overlay"
+      className={clsx(
+        'bg-surface border-input-outline group focus-within:z-5 relative flex min-w-0 w-full flex-col gap-4 rounded-xl border p-4 shadow-sm transition-colors duration-200 hover:bg-hover-overlay',
+        isSelected && 'border-fuchsia-500/40 bg-fuchsia-500/[0.03] dark:border-fuchsia-400/40',
+      )}
       initial={{ opacity: 0, y: 5 }}
     >
       {/* 1. Cabecera Limpia (StatusCircleIcon + Código ID) */}
@@ -125,12 +131,16 @@ export function PlantInstanceCard({
         <div className="flex items-center gap-3 min-w-0 overflow-hidden">
           <StatusCircleIcon
             className="h-8 w-8 text-xs tds-sm:h-10 tds-sm:w-10 tds-sm:text-sm shrink-0 font-mono font-extrabold"
-            glowVariant={glowVariant}
+            colorClassName={clsx(
+              potColor?.border || 'border-input-outline',
+              potColor?.text || 'text-primary',
+              potColor?.bg || 'bg-surface',
+            )}
             icon={
               <span className="font-mono text-[10px] tds-sm:text-xs font-black">{potCode}</span>
             }
             size="md"
-            variant="glow"
+            variant="surface"
           />
           <div className="flex flex-col min-w-0 overflow-hidden text-left">
             <h3 className="text-primary truncate font-mono text-xs tds-sm:text-[15px] font-bold leading-tight">
@@ -144,6 +154,14 @@ export function PlantInstanceCard({
       <div className="border-black-and-white/5 mt-1 border-t border-dashed pt-4 min-w-0">
         <div className="flex items-center justify-between gap-3 min-w-0">
           <div className="flex flex-row flex-wrap items-center gap-x-4 gap-y-2 text-xs min-w-0 flex-1">
+            {/* Tag Activo si está seleccionada */}
+            {isSelected && (
+              <div className="text-fuchsia-600 dark:text-fuchsia-400 flex shrink-0 items-center gap-1.5 font-bold">
+                <MdLocalFlorist className="h-4 w-4 shrink-0" />
+                <span>Analizando</span>
+              </div>
+            )}
+
             {/* Madre (si aplica) */}
             {isMother && (
               <div className="text-secondary flex shrink-0 items-center gap-1.5 font-medium">

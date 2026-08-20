@@ -6,6 +6,7 @@ import { MdLocalFlorist, MdEventAvailable, MdHistory } from 'react-icons/md'
 import { PlantInstance } from './PlantInstanceCard'
 
 import { Modal, FormField, Input, Textarea, Button, Badge } from '@/components'
+import { VALIDATION_LIMITS } from '@/config'
 
 export interface FloweringFormValues {
   eventId?: string
@@ -183,6 +184,7 @@ export function FloweringEventModal({
               <Textarea
                 className="min-h-20 resize-none text-xs"
                 id="flowering-notes"
+                maxLength={VALIDATION_LIMITS.OBSERVATION_MAX}
                 placeholder="Ej. Abundante floración, 5 flores abiertas, fragancia intensa..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
@@ -267,6 +269,7 @@ export function FloweringEventModal({
               <Textarea
                 className="min-h-20 resize-none text-xs"
                 id="flowering-notes"
+                maxLength={VALIDATION_LIMITS.OBSERVATION_MAX}
                 placeholder="Ej. Primera floración del ejemplar, botón floral abierto..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}

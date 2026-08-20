@@ -10,7 +10,7 @@ import {
 } from 'react-icons/io5'
 import { RxStopwatch } from 'react-icons/rx'
 
-import { StatusCircleIcon, ActionMenu, ActionMenuItem, ZoneBadges } from '@/components'
+import { StatusCircleIcon, ActionMenu, ActionMenuItem, ZoneTags } from '@/components'
 import { TaskPurposeLabels } from '@/config/mappings'
 
 interface AutomationSchedule {
@@ -195,7 +195,7 @@ export function ScheduleCard({
             )}
 
             {/* Zonas de la rutina */}
-            <ZoneBadges zones={schedule.zones} />
+            <ZoneTags zones={schedule.zones} />
           </div>
 
           <div className="flex shrink-0">

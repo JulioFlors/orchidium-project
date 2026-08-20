@@ -5,6 +5,8 @@ import type { PotSize, PlantStatus, ZoneType } from '@package/database/enums'
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@package/database'
 
+import { syncSpeciesFloweringBenchmark } from '../operations/biological-actions'
+
 import { Logger } from '@/lib'
 
 // Auxiliar para obtener o crear la Location basada en la Zona
@@ -197,6 +199,7 @@ export async function deletePlant(id: string) {
     })
 
     if (existing) {
+      await syncSpeciesFloweringBenchmark(existing.speciesId)
       await syncVariantStock(existing.speciesId, existing.currentSize)
       revalidatePath('/stock')
       revalidatePath(`/stock/${existing.speciesId}`)
@@ -363,6 +366,8 @@ export async function createFloweringEvent(data: {
       },
     })
 
+    await syncSpeciesFloweringBenchmark(plant.speciesId)
+
     revalidatePath('/stock')
     revalidatePath(`/stock/${plant.speciesId}`)
 
@@ -410,6 +415,10 @@ export async function closeFloweringEvent(data: {
         ...(data.notes !== undefined ? { notes: data.notes } : {}),
       },
     })
+
+    if (existing.plant) {
+      await syncSpeciesFloweringBenchmark(existing.plant.speciesId)
+    }
 
     revalidatePath('/stock')
     if (existing.plant) {

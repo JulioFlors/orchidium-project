@@ -20,7 +20,7 @@ import { GiSuperMushroom, GiChemicalDrop } from 'react-icons/gi'
 import { PiSprayBottle, PiFlowerThin } from 'react-icons/pi'
 import { GrCycle } from 'react-icons/gr'
 
-import { StatusCircleIcon, ActionMenu, ActionMenuItem, Badge, ZoneBadges } from '@/components/ui'
+import { StatusCircleIcon, ActionMenu, ActionMenuItem, Badge, ZoneTags } from '@/components/ui'
 import { TaskStatusBadge } from '@/app/(orchidarium)/(operations)/queue/ui/components/TaskStatusBadge'
 import { formatTime12h } from '@/utils'
 import {
@@ -193,7 +193,7 @@ export function DosingTaskCard({
               </div>
 
               {/* Zonas Involucradas */}
-              <ZoneBadges zones={task.zones} />
+              <ZoneTags zones={task.zones} />
             </div>
 
             {/* Menú de Acciones */}
