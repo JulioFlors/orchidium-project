@@ -510,9 +510,9 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
       return isNaN(num) ? null : num
     }
 
-    // Buscamos el último valor no nulo y verificamos que no sea antiguo (> 30 min)
+    // Buscamos el último valor no nulo y verificamos que no sea antiguo (> 65 min para ZONA_A, > 30 min para EXTERIOR)
     const getLastValid = (key: string) => {
-      const STALE_THRESHOLD = 30 * 60 * 1000
+      const STALE_THRESHOLD = zone === ZoneType.ZONA_A ? 65 * 60 * 1000 : 30 * 60 * 1000
       const nowMs = now
 
       for (let i = cardStatusData.length - 1; i >= 0; i--) {
@@ -522,7 +522,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
         if (val != null) {
           const sampleTime = new Date(String(row.time)).getTime()
 
-          // Si el dato es más viejo que 30 minutos, lo consideramos caducado
+          // Si el dato es más viejo que el umbral, lo consideramos caducado
           if (nowMs - sampleTime > STALE_THRESHOLD) return null
 
           return val
@@ -544,12 +544,27 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     }
 
     if (mqttReadings) {
-      let timestamp = now ? now / 1000 : new Date(String(merged.time)).getTime() / 1000
+      let timestamp = now / 1000
 
       if (mqttReadings.time) {
         const rawTime = Number(mqttReadings.time)
 
-        timestamp = rawTime < 1000000000 ? rawTime + 946684800 : rawTime
+        // Si es timestamp de MicroPython (epoch 2000), convertir a epoch 1970
+        let unixSec = rawTime < 1000000000 ? rawTime + 946684800 : rawTime
+
+        // 🛡️ Corrección de Zona Horaria (VET / UTC-4 -> UTC)
+        // El reloj del microcontrolador opera en hora local de Caracas (UTC-4).
+        // Para convertirlo a UTC universal (igual que services/ingest), sumamos 4 horas (14400s).
+        unixSec += 4 * 3600
+
+        const nowSec = now / 1000
+
+        // Validamos que el timestamp resultante sea consistente (+-12h del tiempo actual)
+        if (Math.abs(nowSec - unixSec) < 12 * 3600) {
+          timestamp = unixSec
+        } else {
+          timestamp = nowSec
+        }
       }
 
       // Mapeo dinámico de MQTT (prioriza nombres largos)
@@ -569,7 +584,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     }
 
     return merged
-  }, [cardStatusData, mqttReadings, now])
+  }, [cardStatusData, mqttReadings, now, zone])
 
   // Normalizar datos del gráfico para que Recharts encuentre las métricas por sus nombres estándar
   const normalizedChartData = useMemo(() => {
@@ -764,8 +779,8 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
     // Tiempo desde la última actualización del dato
     const minutesSinceLastUpdate = (now ? now - lastUpdateDate.getTime() : 0) / 60000
     // "isStale" solo aplica dentro del horario donde el sensor DEBERÍA estar enviando datos
-    // Límite estricto de inactividad de 30 minutos.
-    const staleLimit = 30
+    // Límite de inactividad: 30 minutos para Exterior y 65 minutos para ZONA_A
+    const staleLimit = zone === ZoneType.ZONA_A ? 65 : 30
     const isStale = sensorIsActive && minutesSinceLastUpdate > staleLimit
 
     const luxTrend = calculateTrend('illuminance')

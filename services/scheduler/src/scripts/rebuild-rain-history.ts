@@ -4,7 +4,6 @@ import * as path from 'path'
 import { prisma, ZoneType } from '@package/database'
 
 import { influxClient } from '../lib/influx'
-import { Logger } from '../lib/logger'
 import {
   isDaytime,
   getCaracasHour,
@@ -64,6 +63,14 @@ function isCorruptTelemetryDate(date: Date): boolean {
   }
 }
 
+const log = {
+  info: (msg: string) => console.log(`📡 [ INFO ] ${msg}`),
+  warn: (msg: string) => console.log(`⚠️ [ WARN ] ${msg}`),
+  success: (msg: string) => console.log(`✅ [ DONE ] ${msg}`),
+  error: (msg: string, err?: unknown) => console.error(`❌ [ ERR  ] ${msg}`, err ?? ''),
+  blank: () => console.log(''),
+}
+
 async function main() {
   const now = new Date()
   let startTime: Date
@@ -83,34 +90,40 @@ async function main() {
     modeText = `Completo desde 25 de Mayo (${diffDays} días)`
   }
 
-  Logger.info('════════════════════════════════════════════════════════')
-  Logger.info(`  RECONSTRUCCIÓN HÍBRIDA DE HISTORIAL`)
-  Logger.info(`  Modo: ${modeText}`)
-  if (DRY_RUN) Logger.warn('  ⚠️  MODO DRY-RUN — No se escribirá en Postgres')
-  Logger.info('════════════════════════════════════════════════════════')
+  log.info('════════════════════════════════════════════════════════')
+  log.info(`  Recontrucción de los Eventos de LLuvia Inferida`)
+  log.info(`  Modo: ${modeText}`)
+  if (DRY_RUN) log.warn('  ⚠️  MODO DRY-RUN — No se escribirá en Postgres')
+  log.info('════════════════════════════════════════════════════════')
+
+  log.blank()
 
   // 1. Reconstruir Lluvia Física
   await rebuildPhysicalRain(startTime, endTime)
 
   // 2. Reconstruir Inferencia de Lluvia Virtual
-  Logger.info('🔮 2. Reconstruyendo eventos de lluvia inferida (virtual)...')
+  log.info('🔮 Reconstruyendo eventos de lluvia inferida')
   await rebuildInferredRain(startTime, endTime)
 
-  Logger.info('════════════════════════════════════════════════════════')
-  Logger.info('  REPORTE DE EFECTIVIDAD DE REGLAS (INFERENCIA)')
-  Logger.info(`  Total Eventos Inferidos: ${stats.totalInferred}`)
-  Logger.info(`  Total Vetos / Falsos Positivos Evitados: ${stats.vetos}`)
-  Logger.info('  ----------------------------------------------------')
-  Logger.info('  Distribución de Triggers de Inicio:')
+  log.blank()
+
+  log.info('════════════════════════════════════════════════════════')
+  log.info('  REPORTE DE EFECTIVIDAD DE REGLAS (INFERENCIA)')
+  log.info(`  Total Eventos Inferidos: ${stats.totalInferred}`)
+  log.info(`  Total Vetos / Falsos Positivos Evitados: ${stats.vetos}`)
+  log.info('  ----------------------------------------------------')
+  log.info('  Distribución de Triggers de Inicio:')
   for (const [type, count] of Object.entries(stats.triggers)) {
-    Logger.info(`    - ${type}: ${count}`)
+    log.info(`    - ${type}: ${count}`)
   }
-  Logger.info('  ----------------------------------------------------')
-  Logger.info('  Distribución de Reglas de Cese:')
+  log.info('  ----------------------------------------------------')
+  log.info('  Distribución de Reglas de Cese:')
   for (const [type, count] of Object.entries(stats.closes)) {
-    Logger.info(`    - ${type}: ${count}`)
+    log.info(`    - ${type}: ${count}`)
   }
-  Logger.info('════════════════════════════════════════════════════════')
+  log.info('════════════════════════════════════════════════════════')
+
+  log.blank()
 
   // 3. Contrastar con la bitácora manual de lluvias reales observadas
   try {
@@ -119,12 +132,15 @@ async function main() {
 
     if (fs.existsSync(logPath)) {
       const rawData = fs.readFileSync(logPath, 'utf8')
-      const realEvents = JSON.parse(rawData) as Array<{
+      const cleanData = rawData.replace(/^\uFEFF/, '')
+      const realEvents = JSON.parse(cleanData) as Array<{
         id: string
         dayOfWeek?: string
         startedAt: string
         endedAt: string
         description: string
+        limitationReason?: string
+        limitationNotes?: string
       }>
 
       // Filtrar eventos reales que se solapen con el período bajo análisis
@@ -185,9 +201,7 @@ async function main() {
           const fnEnd = new Date(fn.endedAt)
           const durationMin = (fnEnd.getTime() - fnStart.getTime()) / (60 * 1000)
 
-          const rawFn = fn as { limitationReason?: string; limitationNotes?: string }
-
-          if (rawFn.limitationReason || isCorruptTelemetryDate(fnStart)) {
+          if (fn.limitationReason || isCorruptTelemetryDate(fnStart)) {
             classifiedFNs.push({
               event: fn,
               durationMin,
@@ -212,7 +226,7 @@ async function main() {
 
             if (!dayClassCache.has(dayKey)) {
               try {
-                dayClass = await classifyCurrentDay(fnStart)
+                dayClass = await classifyCurrentDay(fnStart, true)
               } catch {
                 dayClass = null
               }
@@ -265,70 +279,38 @@ async function main() {
         const recallAjustadoPct =
           totalAdjusted > 0 ? ((adjustedTP / totalAdjusted) * 100).toFixed(1) : '0.0'
 
-        Logger.info('════════════════════════════════════════════════════════')
-        Logger.info('  VALIDACIÓN COMPARATIVA: BITÁCORA MANUAL DE LLUVIA')
-        Logger.info('════════════════════════════════════════════════════════')
-        Logger.info(`  Total de lluvias reales registradas en período: ${totalReal}`)
-        Logger.info(`  Verdaderos Positivos (Detectadas): ${truePositives}`)
-        Logger.info(`  Falsos Negativos (Omitidas): ${falseNegatives.length}`)
-        Logger.info(`  Sensibilidad Bruta (Recall): ${recallBrutoPct}%`)
-        Logger.info('  ----------------------------------------------------')
-        Logger.info(`  📊 Desglose de Falsos Negativos:`)
-        Logger.info(
+        log.info('════════════════════════════════════════════════════════')
+        log.info('  VALIDACIÓN COMPARATIVA: BITÁCORA MANUAL DE LLUVIA')
+        log.info('════════════════════════════════════════════════════════')
+        log.info(`  Total de lluvias reales registradas en período: ${totalReal}`)
+        log.info(`  Verdaderos Positivos (Detectadas): ${truePositives}`)
+        log.info(`  Falsos Negativos (Omitidas): ${falseNegatives.length}`)
+        log.info(`  Sensibilidad Bruta (Recall): ${recallBrutoPct}%`)
+        log.info('  ----------------------------------------------------')
+        log.info(`  📊 Desglose de Falsos Negativos:`)
+        log.info(
           `     🛡️ Limitaciones Físicas Documentadas (Saturación/Cortes/Desfase): ${documentedLimitations.length} [Justificadas]`,
         )
-        Logger.info(
+        log.info(
           `     🍃 Micro-eventos en Día Soleado (≤ ${INSIGNIFICANT_DURATION_MIN} min, ≥ ${(SUNNY_DAY_LUX_THRESHOLD / 1000).toFixed(0)}klx): ${insignificantSunnyFNs.length} [Descartables sin impacto en riego]`,
         )
-        Logger.info(
+        log.info(
           `     🔍 Significativos No Explicados (> ${INSIGNIFICANT_DURATION_MIN} min): ${significantFNs.length} [Candidatas a calibración]`,
         )
-        Logger.info(
+        log.info(
           `     ☁️ Micro-eventos en Día Nublado (≤ ${INSIGNIFICANT_DURATION_MIN} min, < ${(SUNNY_DAY_LUX_THRESHOLD / 1000).toFixed(0)}klx): ${insignificantCloudyFNs.length}`,
         )
-        Logger.info('  ----------------------------------------------------')
-        Logger.info(
+        log.info('  ----------------------------------------------------')
+        log.info(
           `  🎯 Sensibilidad Ajustada (excluyendo ${documentedLimitations.length} limitaciones y ${insignificantSunnyFNs.length} micro-garúa(s)): ${recallAjustadoPct}%`,
         )
-        Logger.info(
+        log.info(
           `     (Base ajustada: ${totalAdjusted} eventos | Detectados: ${adjustedTP} | Omitidos Reales: ${adjustedFN})`,
         )
-        Logger.info('  ----------------------------------------------------')
-
-        if (documentedLimitations.length > 0) {
-          Logger.info(
-            '  🛡️ Limitaciones Físicas Documentadas (Omitidas justificadamente por saturación/corte):',
-          )
-          for (const fn of documentedLimitations) {
-            const startStr = new Date(fn.event.startedAt).toLocaleTimeString('es-VE', {
-              hour: '2-digit',
-              minute: '2-digit',
-              timeZone: 'America/Caracas',
-            })
-            const endStr = new Date(fn.event.endedAt).toLocaleTimeString('es-VE', {
-              hour: '2-digit',
-              minute: '2-digit',
-              timeZone: 'America/Caracas',
-            })
-            const dateStr = new Date(fn.event.startedAt).toLocaleDateString('es-VE', {
-              timeZone: 'America/Caracas',
-            })
-            const dayOfWeekLabel = fn.event.dayOfWeek ? `${fn.event.dayOfWeek} ` : ''
-            const rawEvent = fn.event as {
-              limitationReason?: string
-              limitationNotes?: string
-            }
-            const reasonTag = rawEvent.limitationReason ? `[${rawEvent.limitationReason}] ` : ''
-            const noteTag = rawEvent.limitationNotes ? ` -> ${rawEvent.limitationNotes}` : ''
-
-            Logger.info(
-              `    - [${dayOfWeekLabel}${dateStr} ${startStr} - ${endStr}] (${fn.durationMin.toFixed(0)} min): ${fn.event.description} 💡 Motivo: ${reasonTag}${noteTag}`,
-            )
-          }
-        }
+        log.info('  ----------------------------------------------------')
 
         if (significantFNs.length > 0) {
-          Logger.warn('  ⚠️  Lluvias SIGNIFICATIVAS no explicadas (Candidatas a calibración):')
+          log.warn('  ⚠️  Lluvias SIGNIFICATIVAS no explicadas (Candidatas a calibración):')
           for (const fn of significantFNs) {
             const startStr = new Date(fn.event.startedAt).toLocaleTimeString('es-VE', {
               hour: '2-digit',
@@ -345,14 +327,14 @@ async function main() {
             })
             const dayOfWeekLabel = fn.event.dayOfWeek ? `${fn.event.dayOfWeek} ` : ''
 
-            Logger.warn(
+            log.warn(
               `    - [${dayOfWeekLabel}${dateStr} ${startStr} - ${endStr}] (${fn.durationMin.toFixed(0)} min): ${fn.event.description}`,
             )
           }
         }
 
         if (insignificantCloudyFNs.length > 0) {
-          Logger.warn('  ☁️ Micro-eventos omitidos en Día NUBLADO (cuentan como fallo):')
+          log.warn('  ☁️ Micro-eventos omitidos en Día NUBLADO (cuentan como fallo):')
           for (const fn of insignificantCloudyFNs) {
             const startStr = new Date(fn.event.startedAt).toLocaleTimeString('es-VE', {
               hour: '2-digit',
@@ -371,54 +353,30 @@ async function main() {
             const luxLabel =
               fn.avgDayLux !== null ? `${(fn.avgDayLux / 1000).toFixed(1)}klx prom` : 'N/A'
 
-            Logger.warn(
+            log.warn(
               `    - [${dayOfWeekLabel}${dateStr} ${startStr} - ${endStr}] (${fn.durationMin.toFixed(0)} min, ${luxLabel} [${fn.dayType}]): ${fn.event.description}`,
             )
           }
         }
 
-        if (insignificantSunnyFNs.length > 0) {
-          Logger.info('  🍃 Micro-eventos omitidos en Día SOLEADO (sin impacto en riego):')
-          for (const fn of insignificantSunnyFNs) {
-            const startStr = new Date(fn.event.startedAt).toLocaleTimeString('es-VE', {
-              hour: '2-digit',
-              minute: '2-digit',
-              timeZone: 'America/Caracas',
-            })
-            const endStr = new Date(fn.event.endedAt).toLocaleTimeString('es-VE', {
-              hour: '2-digit',
-              minute: '2-digit',
-              timeZone: 'America/Caracas',
-            })
-            const dateStr = new Date(fn.event.startedAt).toLocaleDateString('es-VE', {
-              timeZone: 'America/Caracas',
-            })
-            const dayOfWeekLabel = fn.event.dayOfWeek ? `${fn.event.dayOfWeek} ` : ''
-            const luxLabel =
-              fn.avgDayLux !== null ? `${(fn.avgDayLux / 1000).toFixed(1)}klx prom` : 'N/A'
-
-            Logger.info(
-              `    - [${dayOfWeekLabel}${dateStr} ${startStr} - ${endStr}] (${fn.durationMin.toFixed(0)} min, ${luxLabel} [${fn.dayType}]): ${fn.event.description} ✅ DESCARTADO`,
-            )
-          }
-        }
-
         if (adjustedFN === 0) {
-          Logger.success(
+          log.success(
             '  🎉 ¡Perfecto! El motor inferencial detectó el 100% de las lluvias reales evaluables.',
           )
         }
-        Logger.info('════════════════════════════════════════════════════════')
+        log.info('════════════════════════════════════════════════════════')
       }
     }
   } catch (err) {
-    Logger.error('Error al contrastar con la bitácora manual de lluvia:', err)
+    log.error('Error al contrastar con la bitácora manual de lluvia:', err)
   }
+
+  log.blank()
 
   await prisma.$disconnect()
   await influxClient.close()
 
-  Logger.success('🎉 Reconstrucción de historial finalizada con éxito.')
+  log.success('🎉 Reconstrucción de historial finalizada con éxito.')
 }
 
 async function rebuildPhysicalRain(startTime: Date, endTime: Date) {
@@ -482,7 +440,7 @@ async function rebuildPhysicalRain(startTime: Date, endTime: Date) {
         }
       }
     } catch (err) {
-      Logger.error(`Error procesando bloque de lluvia física:`, err)
+      log.error(`Error procesando bloque de lluvia física:`, err)
     }
     startMs = nextMs
   }
@@ -494,9 +452,7 @@ async function rebuildPhysicalRain(startTime: Date, endTime: Date) {
 
 async function rebuildInferredRain(startTime: Date, endTime: Date) {
   if (!DRY_RUN) {
-    Logger.info(
-      `🧹 Purgando eventos de lluvia inferida antiguos de Postgres (Rango: ${startTime.toISOString()} - ${endTime.toISOString()})...`,
-    )
+    log.info(`🧹 Limpiando eventos de lluvia inferida antiguos.`)
     const deleteResult = await prisma.rainEvent.deleteMany({
       where: {
         isInfered: true,
@@ -507,9 +463,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
       },
     })
 
-    Logger.success(
-      `🧹 Purgado completo: Se eliminaron ${deleteResult.count} eventos virtuales antiguos.`,
-    )
+    log.success(`🧹 Listo: Se eliminaron ${deleteResult.count} eventos.`)
   }
 
   let createdCount = 0
@@ -1482,7 +1436,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
         }
       }
     } catch (err) {
-      Logger.error(`Error procesando bloque de inferencia:`, err)
+      log.error(`Error procesando bloque de inferencia:`, err)
     }
 
     startMs = nextMs
@@ -1521,9 +1475,7 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
     createdCount++
   }
 
-  Logger.success(
-    `Reconstrucción de inferencia completada. Eventos virtuales creados/actualizados: ${createdCount}`,
-  )
+  log.success(`🔮  Reconstrucción completada: ${createdCount}`)
 }
 
 function rowTimeToDate(rawTime: unknown): Date {
@@ -1821,6 +1773,6 @@ async function closeVirtualEvent(
 }
 
 main().catch((err) => {
-  Logger.error('Error fatal en el script de reconstrucción híbrida de lluvia:', err)
+  log.error('Error fatal en el script de reconstrucción híbrida de lluvia:', err)
   process.exit(1)
 })

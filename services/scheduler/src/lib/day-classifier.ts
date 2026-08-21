@@ -83,7 +83,10 @@ const HEAVY_OVERCAST_LUX_THRESHOLD = 10000
  * Fuera de ese rango retorna DESCONOCIDO porque la iluminancia no es
  * representativa del estado del cielo.
  */
-export async function classifyCurrentDay(targetDate?: Date): Promise<DayClassification> {
+export async function classifyCurrentDay(
+  targetDate?: Date,
+  silent = false,
+): Promise<DayClassification> {
   const now = targetDate ? new Date(targetDate) : new Date()
   const currentCaracasHour = targetDate ? 17 : (now.getUTCHours() - 4 + 24) % 24
 
@@ -158,9 +161,11 @@ export async function classifyCurrentDay(targetDate?: Date): Promise<DayClassifi
     const minRequiredSamples = Math.max(10, Math.floor(elapsedMinutes * 0.3))
 
     if (countLux < minRequiredSamples) {
-      Logger.dayClass(
-        `Clasificación abortada: baja densidad de muestras (${countLux} muestras registradas de ${Math.round(elapsedMinutes)} min transcurridos, requerido: ${minRequiredSamples}).`,
-      )
+      if (!silent) {
+        Logger.dayClass(
+          `Clasificación abortada: baja densidad de muestras (${countLux} muestras registradas de ${Math.round(elapsedMinutes)} min transcurridos, requerido: ${minRequiredSamples}).`,
+        )
+      }
 
       return {
         type: 'DESCONOCIDO',
@@ -295,8 +300,12 @@ export async function classifyCurrentDay(targetDate?: Date): Promise<DayClassifi
       type = 'LLUVIOSO'
     }
 
-    Logger.dayClass(`Día: ${type} (Avg: ${avgLux.toFixed(0)} lx, Act: ${currentLux.toFixed(0)} lx)`)
-    Logger.dayClass(`Nublado: ${overcastMinutes} min | Nubes Grises: ${overcastHeavyMinutes} min`)
+    if (!silent) {
+      Logger.dayClass(
+        `Día: ${type} (Avg: ${avgLux.toFixed(0)} lx, Act: ${currentLux.toFixed(0)} lx)`,
+      )
+      Logger.dayClass(`Nublado: ${overcastMinutes} min | Nubes Grises: ${overcastHeavyMinutes} min`)
+    }
 
     return {
       type,
@@ -307,9 +316,11 @@ export async function classifyCurrentDay(targetDate?: Date): Promise<DayClassifi
       evaluatedAt: now,
     }
   } catch (error) {
-    Logger.dayClass(
-      `Error al clasificar el día: ${error instanceof Error ? error.message : String(error)}`,
-    )
+    if (!silent) {
+      Logger.dayClass(
+        `Error al clasificar el día: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
 
     return {
       type: 'DESCONOCIDO',
