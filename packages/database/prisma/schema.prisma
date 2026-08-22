@@ -181,6 +181,14 @@ model Plant {
 enum DosageUnit {
   ML_L
   G_L
+  CDA_L
+  CDITA_L
+  CDITA_PLANTA
+  G_PLANTA
+  ML_PLANTA
+  PORCENTAJE
+  GOTAS_L
+  CC_L
 }
 
 model Agrochemical {
@@ -189,7 +197,6 @@ model Agrochemical {
   description         String
   type                AgrochemicalType
   purpose             AgrochemicalPurpose
-  preparation         String
   dosageValue         Float?
   dosageUnit          DosageUnit?
   isMix               Boolean               @default(false)

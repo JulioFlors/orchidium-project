@@ -3,10 +3,11 @@
 import { revalidatePath } from 'next/cache'
 import {
   prisma,
-  TaskPurpose,
   TaskStatus,
-  type DosingSource,
-  type ZoneType,
+  TaskPurpose,
+  ZoneType,
+  DosingSource,
+  DosageUnit,
 } from '@package/database'
 import { Cron } from 'croner'
 
@@ -20,15 +21,22 @@ export interface DosingTaskItem {
   scheduledAt: string
   executedAt: string | null
   status: TaskStatus
-  source: DosingSource
-  notes: string | null
+  source: DosingSource | string
+  notes?: string | null
   agrochemicalId: string | null
   agrochemical?: {
     id: string
     name: string
     purpose: string
     type: string
-    preparation: string
+    dosageValue?: number | null
+    dosageUnit?: DosageUnit | null
+    isMix?: boolean
+    mixIngredients?: {
+      dosageValue: number
+      dosageUnit: DosageUnit
+      ingredient?: { name: string } | null
+    }[]
   } | null
   schedule?: {
     id: string
@@ -48,7 +56,15 @@ export async function getDosingTasks(limit = 50, offset = 0) {
     // 1. Obtener registros confirmados / agendados de la base de datos (DosingLog)
     const logs = await prisma.dosingLog.findMany({
       include: {
-        agrochemical: true,
+        agrochemical: {
+          include: {
+            mixIngredients: {
+              include: {
+                ingredient: true,
+              },
+            },
+          },
+        },
         schedule: {
           include: {
             fertilizationProgram: true,
@@ -93,7 +109,10 @@ export async function getDosingTasks(limit = 50, offset = 0) {
               name: task.agrochemical.name,
               purpose: task.agrochemical.purpose,
               type: task.agrochemical.type,
-              preparation: task.agrochemical.preparation,
+              dosageValue: task.agrochemical.dosageValue,
+              dosageUnit: task.agrochemical.dosageUnit,
+              isMix: task.agrochemical.isMix,
+              mixIngredients: task.agrochemical.mixIngredients,
             }
           : null,
         schedule: task.schedule
@@ -117,14 +136,36 @@ export async function getDosingTasks(limit = 50, offset = 0) {
         fertilizationProgram: {
           include: {
             productsCycle: {
-              include: { agrochemical: true },
+              where: { sequence: 1 },
+              include: {
+                agrochemical: {
+                  include: {
+                    mixIngredients: {
+                      include: {
+                        ingredient: true,
+                      },
+                    },
+                  },
+                },
+              },
             },
           },
         },
         phytosanitaryProgram: {
           include: {
             productsCycle: {
-              include: { agrochemical: true },
+              where: { sequence: 1 },
+              include: {
+                agrochemical: {
+                  include: {
+                    mixIngredients: {
+                      include: {
+                        ingredient: true,
+                      },
+                    },
+                  },
+                },
+              },
             },
           },
         },
@@ -139,21 +180,15 @@ export async function getDosingTasks(limit = 50, offset = 0) {
         const nextRun = cron.nextRun()
 
         if (nextRun) {
-          // Determinar el producto agroquímico del programa si aplica
-          const firstCycle =
-            schedule.fertilizationProgram?.productsCycle[0] ||
-            schedule.phytosanitaryProgram?.productsCycle[0]
+          let routineName = schedule.name
+          let agro = null
 
-          const agro = firstCycle?.agrochemical
-
-          let routineName = ''
-
-          if (schedule.fertilizationProgram?.name) {
+          if (schedule.fertilizationProgram) {
             routineName = `Programa: ${schedule.fertilizationProgram.name}`
-          } else if (schedule.phytosanitaryProgram?.name) {
+            agro = schedule.fertilizationProgram.productsCycle[0]?.agrochemical || null
+          } else if (schedule.phytosanitaryProgram) {
             routineName = `Programa: ${schedule.phytosanitaryProgram.name}`
-          } else {
-            routineName = schedule.name
+            agro = schedule.phytosanitaryProgram.productsCycle[0]?.agrochemical || null
           }
 
           // Verificar que no coincida con un DosingLog ya creado
@@ -181,7 +216,10 @@ export async function getDosingTasks(limit = 50, offset = 0) {
                     name: agro.name,
                     purpose: agro.purpose,
                     type: agro.type,
-                    preparation: agro.preparation,
+                    dosageValue: agro.dosageValue,
+                    dosageUnit: agro.dosageUnit,
+                    isMix: agro.isMix,
+                    mixIngredients: agro.mixIngredients,
                   }
                 : null,
               schedule: {

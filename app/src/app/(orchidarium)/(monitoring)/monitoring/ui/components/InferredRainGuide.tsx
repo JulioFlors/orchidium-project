@@ -159,8 +159,8 @@ export function InferredRainGuide() {
               </span>
             </div>
             <p className="leading-relaxed">
-              Las tres primeras reglas aplican solo durante el día [7:00 am - 6:00 pm]; la última
-              aplica las 24 h.
+              Las dos primeras reglas solares aplican durante el día [7:00 am - 6:00 pm]; las reglas
+              térmicas y de estancamiento aplican de forma continua las 24 horas del día.
             </p>
 
             <ul className="mt-1 flex flex-col gap-2 leading-relaxed">
@@ -181,28 +181,52 @@ export function InferredRainGuide() {
                 evento.
               </li>
               <li>
-                <span className="text-primary font-semibold">☁️ Variación Térmica:</span>{' '}
-                Recuperación de <span className="text-primary">&ge; 0.6°C</span> desde la
-                temperatura mínima del evento si la humedad relativa se encuentra &lt; 96.0% HR. Si
-                el ambiente permanece en nivel de saturación (&ge; 96.0% HR), exige una recuperación
-                de <span className="text-primary">&ge; 1.2°C</span> para prevenir falsos cierres por
-                micro-turbulencias térmicas dentro del núcleo del aguacero.
+                <span className="text-primary font-semibold">☁️ Variación Térmica (24/7):</span>{' '}
+                Cierra inmediatamente al detectar recuperación de temperatura desde el punto más
+                frío del evento (<span className="text-primary">minTempInRain</span>) evaluando la
+                ventana deslizante de 20 min (B0 + B1) con tres escalones según la hora:
+                <ul className="mt-0.5 list-disc pl-4">
+                  <li>
+                    <span className="text-primary font-semibold">
+                      ☀️ Día Central [7:00 am - 4:00 pm]:
+                    </span>{' '}
+                    Recuperación <span className="text-primary">&ge; 0.6°C</span> (si HR &lt; 96.0%)
+                    o <span className="text-primary">&ge; 1.2°C</span> si el aire permanece saturado
+                    (&ge; 96.0% HR) para prevenir falsos cierres por micro-claros dentro de la
+                    tormenta.
+                  </li>
+                  <li>
+                    <span className="text-primary font-semibold">
+                      ⛅ Tarde [4:00 pm - 7:00 pm]:
+                    </span>{' '}
+                    Recuperación <span className="text-primary">&ge; 0.6°C</span> (en la tarde la
+                    temperatura natural no asciende; un rebote confirma cese).
+                  </li>
+                  <li>
+                    <span className="text-primary font-semibold">
+                      🌙 Noche y Madrugada [7:00 pm - 7:00 am]:
+                    </span>{' '}
+                    Recuperación <span className="text-primary">&ge; 0.4°C</span> (en saturación
+                    nocturna sin sol, un aumento de +0.4°C indica la disipación del aire frío de la
+                    lluvia).
+                  </li>
+                </ul>
               </li>
               <li>
                 <span className="text-primary font-semibold">☁️ Cese por Estancamiento:</span>{' '}
-                Cierra el evento cuando las variables climáticas se estabilizan al evaluar
-                sub-ventanas deslizantes de 10 min dentro de las muestras de los últimos 20 min. Se
-                exige que la variación neta de temperatura sea ≤ 0.4°C y que la humedad presente una
-                variación neta ≤ 1.0% HR (omitido si el ambiente alcanza 100% HR). El timestamp de
-                fin se ajusta con precisión al término de la sub-ventana estabilizada.
+                Fallback cuando el ambiente se estabiliza en meseta plana tras cesar la lluvia sin
+                recuperación térmica. Evalúa estabilidad en B0 (variación ≤ 0.4°C y ≤ 1.0% HR)
+                respaldada por la guarda térmica de los últimos 20 min (caída neta en B0 + B1 ≤
+                0.4°C). El timestamp se ajusta con precisión al término de la sub-ventana
+                estabilizada.
               </li>
               <li>
                 <span className="text-primary font-semibold">
                   🛡️ Protección Deslizante (20 min):
                 </span>{' '}
-                Evalúa continuamente sub-ventanas deslizantes de 10 min dentro de los últimos 20
-                minutos de muestras (B0 + B1) para determinar con exactitud temporal el momento
-                preciso de cese por Variación Térmica o Estancamiento, asegurando que las
+                Evalúa continuamente sub-ventanas deslizantes dentro de los últimos 20 minutos de
+                muestras (B0 + B1) para determinar con exactitud temporal el momento preciso de cese
+                por Variación Térmica, Recuperación Solar o Estancamiento, asegurando que las
                 evaluaciones correspondan estrictamente al período posterior al inicio del evento
                 activo.
               </li>

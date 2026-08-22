@@ -1,7 +1,12 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { prisma, type AgrochemicalType, type AgrochemicalPurpose } from '@package/database'
+import {
+  prisma,
+  type AgrochemicalType,
+  type AgrochemicalPurpose,
+  DosageUnit,
+} from '@package/database'
 
 import { Logger } from '@/lib'
 
@@ -26,7 +31,7 @@ export async function getAgrochemicals(options?: { includeInactive?: boolean }) 
   } catch (err) {
     Logger.error('Error al obtener agroquímicos:', err)
 
-    return { ok: false, message: 'No se pudieron cargar los insumos' }
+    return { ok: false, message: 'Error al cargar los insumos' }
   }
 }
 
@@ -35,19 +40,36 @@ export async function getAgrochemicals(options?: { includeInactive?: boolean }) 
  */
 export async function createAgrochemical(data: {
   name: string
-  description: string
+  description?: string
   type: AgrochemicalType
   purpose: AgrochemicalPurpose
-  preparation: string
   dosageValue?: number | null
-  dosageUnit?: 'ML_L' | 'G_L' | null
+  dosageUnit?: DosageUnit | null
   isMix?: boolean
-  mixIngredients?: { ingredientId: string; dosageValue: number; dosageUnit: 'ML_L' | 'G_L' }[]
+  mixIngredients?: { ingredientId: string; dosageValue?: number; dosageUnit?: DosageUnit }[]
 }) {
   try {
+    const finalDescription = data.description || ''
+
     // --- CASO 1: CREACIÓN O REACTIVACIÓN DE MEZCLA ---
     if (data.isMix && data.mixIngredients && data.mixIngredients.length > 0) {
-      const newIngredientIds = [...data.mixIngredients.map((i) => i.ingredientId)].sort()
+      const ingredientIds = data.mixIngredients.map((i) => i.ingredientId)
+      const dbIngredients = await prisma.agrochemical.findMany({
+        where: { id: { in: ingredientIds } },
+      })
+      const dbMap = new Map(dbIngredients.map((ing) => [ing.id, ing]))
+
+      const resolvedIngredients = data.mixIngredients.map((item) => {
+        const dbIng = dbMap.get(item.ingredientId)
+
+        return {
+          ingredientId: item.ingredientId,
+          dosageValue: item.dosageValue ?? dbIng?.dosageValue ?? 1,
+          dosageUnit: item.dosageUnit ?? dbIng?.dosageUnit ?? DosageUnit.ML_L,
+        }
+      })
+
+      const newIngredientIds = [...resolvedIngredients.map((i) => i.ingredientId)].sort()
 
       // Buscar todas las mezclas del mismo tipo en la base de datos (activas e inactivas)
       const existingMixes = await prisma.agrochemical.findMany({
@@ -73,7 +95,7 @@ export async function createAgrochemical(data: {
         if (matchingMix.isActive) {
           return {
             ok: false,
-            message: `Ya existe una mezcla activa con estos mismos insumos ("${matchingMix.name}"). Puedes editar sus dosis directamente desde su tarjeta.`,
+            message: `Ya existe una mezcla activa con estos mismos insumos ("${matchingMix.name}").`,
           }
         }
 
@@ -89,12 +111,11 @@ export async function createAgrochemical(data: {
             where: { id: matchingMix.id },
             data: {
               name: data.name,
-              description: data.description,
+              description: finalDescription,
               purpose: data.purpose,
-              preparation: data.preparation,
               isActive: true,
               mixIngredients: {
-                create: data.mixIngredients!.map((item) => ({
+                create: resolvedIngredients.map((item) => ({
                   ingredientId: item.ingredientId,
                   dosageValue: item.dosageValue,
                   dosageUnit: item.dosageUnit,
@@ -119,6 +140,38 @@ export async function createAgrochemical(data: {
           message: `Mezcla "${data.name}" reactivada y actualizada con éxito.`,
         }
       }
+
+      // Mezcla nueva
+      const agrochemical = await prisma.agrochemical.create({
+        data: {
+          name: data.name,
+          description: finalDescription,
+          type: data.type,
+          purpose: data.purpose,
+          dosageValue: null,
+          dosageUnit: null,
+          isMix: true,
+          isActive: true,
+          mixIngredients: {
+            create: resolvedIngredients.map((item) => ({
+              ingredientId: item.ingredientId,
+              dosageValue: item.dosageValue,
+              dosageUnit: item.dosageUnit,
+            })),
+          },
+        },
+        include: {
+          mixIngredients: {
+            include: {
+              ingredient: true,
+            },
+          },
+        },
+      })
+
+      revalidatePath('/supplies')
+
+      return { ok: true, agrochemical }
     }
 
     // --- CASO 2: CREACIÓN O REACTIVACIÓN DE INSUMO SIMPLE ---
@@ -140,8 +193,7 @@ export async function createAgrochemical(data: {
           const reactivatedSimple = await prisma.agrochemical.update({
             where: { id: existingSimple.id },
             data: {
-              description: data.description,
-              preparation: data.preparation,
+              description: finalDescription,
               dosageValue: data.dosageValue || null,
               dosageUnit: data.dosageUnit || null,
               isActive: true,
@@ -164,28 +216,17 @@ export async function createAgrochemical(data: {
       }
     }
 
-    // --- CASO 3: INSUMO TOTALMENTE NUEVO ---
+    // --- CASO 3: INSUMO SIMPLE TOTALMENTE NUEVO ---
     const agrochemical = await prisma.agrochemical.create({
       data: {
         name: data.name,
-        description: data.description,
+        description: finalDescription,
         type: data.type,
         purpose: data.purpose,
-        preparation: data.preparation,
         dosageValue: data.dosageValue || null,
         dosageUnit: data.dosageUnit || null,
         isMix: data.isMix || false,
         isActive: true,
-        mixIngredients:
-          data.isMix && data.mixIngredients && data.mixIngredients.length > 0
-            ? {
-                create: data.mixIngredients.map((item) => ({
-                  ingredientId: item.ingredientId,
-                  dosageValue: item.dosageValue,
-                  dosageUnit: item.dosageUnit,
-                })),
-              }
-            : undefined,
       },
       include: {
         mixIngredients: {
@@ -213,17 +254,38 @@ export async function updateAgrochemical(
   id: string,
   data: {
     name: string
-    description: string
+    description?: string
     type: AgrochemicalType
     purpose: AgrochemicalPurpose
-    preparation: string
     dosageValue?: number | null
-    dosageUnit?: 'ML_L' | 'G_L' | null
+    dosageUnit?: DosageUnit | null
     isMix?: boolean
-    mixIngredients?: { ingredientId: string; dosageValue: number; dosageUnit: 'ML_L' | 'G_L' }[]
+    mixIngredients?: { ingredientId: string; dosageValue?: number; dosageUnit?: DosageUnit }[]
   },
 ) {
   try {
+    const finalDescription = data.description || ''
+
+    let resolvedIngredients = data.mixIngredients
+
+    if (data.isMix && data.mixIngredients && data.mixIngredients.length > 0) {
+      const ingredientIds = data.mixIngredients.map((i) => i.ingredientId)
+      const dbIngredients = await prisma.agrochemical.findMany({
+        where: { id: { in: ingredientIds } },
+      })
+      const dbMap = new Map(dbIngredients.map((ing) => [ing.id, ing]))
+
+      resolvedIngredients = data.mixIngredients.map((item) => {
+        const dbIng = dbMap.get(item.ingredientId)
+
+        return {
+          ingredientId: item.ingredientId,
+          dosageValue: item.dosageValue ?? dbIng?.dosageValue ?? 1,
+          dosageUnit: item.dosageUnit ?? dbIng?.dosageUnit ?? DosageUnit.ML_L,
+        }
+      })
+    }
+
     const agrochemical = await prisma.$transaction(async (tx) => {
       // 1. Limpiar ingredientes existentes de la mezcla si existían
       await tx.agrochemicalMixItem.deleteMany({
@@ -235,20 +297,19 @@ export async function updateAgrochemical(
         where: { id },
         data: {
           name: data.name,
-          description: data.description,
+          description: finalDescription,
           type: data.type,
           purpose: data.purpose,
-          preparation: data.preparation,
           dosageValue: data.dosageValue || null,
           dosageUnit: data.dosageUnit || null,
           isMix: data.isMix || false,
           mixIngredients:
-            data.isMix && data.mixIngredients && data.mixIngredients.length > 0
+            data.isMix && resolvedIngredients && resolvedIngredients.length > 0
               ? {
-                  create: data.mixIngredients.map((item) => ({
+                  create: resolvedIngredients.map((item) => ({
                     ingredientId: item.ingredientId,
-                    dosageValue: item.dosageValue,
-                    dosageUnit: item.dosageUnit,
+                    dosageValue: item.dosageValue!,
+                    dosageUnit: item.dosageUnit!,
                   })),
                 }
               : undefined,

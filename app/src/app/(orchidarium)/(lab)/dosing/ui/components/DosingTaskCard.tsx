@@ -27,7 +27,8 @@ import {
   AgrochemicalPurposeLabels,
   AgrochemicalPurposeStyles,
   type AgrochemicalPurpose,
-} from '@/config/mappings'
+  formatAgrochemicalDosage,
+} from '@/config'
 
 const PURPOSE_ICONS: Record<string, React.ReactNode> = {
   DESARROLLO: <PiSprayBottle />,
@@ -106,7 +107,7 @@ export function DosingTaskCard({
   ]
 
   const productName = task.agrochemical?.name || 'Insumo no especificado'
-  const preparation = task.agrochemical?.preparation || 'Sin especificación de dosis'
+  const preparation = formatAgrochemicalDosage(task.agrochemical) || 'Sin especificación de dosis'
   const routineName = task.routineName || 'Aplicación Manual Independiente'
 
   return (

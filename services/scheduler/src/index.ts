@@ -1068,9 +1068,9 @@ function setupMqttHandlers() {
           let temp: number | null = null
           let hum: number | null = null
 
-          const tempValues: number[] = []
-          const humValues: number[] = []
-          const luxValues: number[] = []
+          const tempSamples: RainManager.Sample[] = []
+          const humSamples: RainManager.Sample[] = []
+          const luxSamples: RainManager.Sample[] = []
 
           let hasTemp = false
           let hasHum = false
@@ -1078,15 +1078,41 @@ function setupMqttHandlers() {
 
           // Caso A: Formato Batch unificado emitido por flush_telemetry_batches_async()
           if (data.data && Array.isArray(data.data)) {
-            for (const entry of data.data) {
-              const metrics = entry[1]
+            const batch = data.data
+            const lastEntry = batch[batch.length - 1]
+            let lastNodeUnix = 0
+
+            if (Array.isArray(lastEntry) && lastEntry.length === 2) {
+              lastNodeUnix = Number(lastEntry[0])
+            } else {
+              lastNodeUnix = Math.floor(Date.now() / 1000)
+            }
+
+            if (lastNodeUnix < 1000000000) lastNodeUnix += 946684800 // MicroPython epoch 2000 -> Unix 1970
+
+            const serverNow = Math.floor(Date.now() / 1000)
+            const backtrackingOffset = lastNodeUnix < 1735689600 ? serverNow - lastNodeUnix : 0
+
+            for (const entry of batch) {
+              let unixTimestamp: number
+              let metrics: { temperature?: number; humidity?: number; illuminance?: number }
+
+              if (Array.isArray(entry) && entry.length === 2) {
+                unixTimestamp = Number(entry[0])
+                metrics = entry[1]
+              } else {
+                continue
+              }
+
+              if (unixTimestamp < 1000000000) unixTimestamp += 946684800
+              const sampleTimestampMs = (unixTimestamp + backtrackingOffset) * 1000
 
               if (metrics.temperature !== undefined && metrics.temperature !== null) {
                 const tVal = Number(metrics.temperature)
 
                 if (tVal > 5.0 && tVal < 55.0) {
                   // Filtro de ruido
-                  tempValues.push(tVal)
+                  tempSamples.push({ value: tVal, timestamp: sampleTimestampMs })
                   temp = tVal
                   hasTemp = true
                 }
@@ -1096,7 +1122,7 @@ function setupMqttHandlers() {
 
                 if (hVal > 10.0 && hVal <= 100.0) {
                   // Filtro de ruido
-                  humValues.push(hVal)
+                  humSamples.push({ value: hVal, timestamp: sampleTimestampMs })
                   hum = hVal
                   hasHum = true
                 }
@@ -1105,7 +1131,7 @@ function setupMqttHandlers() {
                 const lVal = Number(metrics.illuminance)
 
                 if (lVal >= 0) {
-                  luxValues.push(lVal)
+                  luxSamples.push({ value: lVal, timestamp: sampleTimestampMs })
                   lux = lVal
                   hasLux = true
                 }
@@ -1113,12 +1139,14 @@ function setupMqttHandlers() {
             }
           } else {
             // Caso B: Fallback para mantener compatibilidad con mensajes planos directos (Legacy / Otros Nodos)
+            const nowMs = Date.now()
+
             if (data.temperature !== undefined && data.temperature !== null) {
               const tVal = Number(data.temperature)
 
               if (tVal > 5.0 && tVal < 55.0) {
                 // Filtro de ruido
-                tempValues.push(tVal)
+                tempSamples.push({ value: tVal, timestamp: nowMs })
                 temp = tVal
                 hasTemp = true
               }
@@ -1128,7 +1156,7 @@ function setupMqttHandlers() {
 
               if (hVal > 10.0 && hVal <= 100.0) {
                 // Filtro de ruido
-                humValues.push(hVal)
+                humSamples.push({ value: hVal, timestamp: nowMs })
                 hum = hVal
                 hasHum = true
               }
@@ -1137,7 +1165,7 @@ function setupMqttHandlers() {
               const lVal = Number(data.illuminance)
 
               if (lVal >= 0) {
-                luxValues.push(lVal)
+                luxSamples.push({ value: lVal, timestamp: nowMs })
                 lux = lVal
                 hasLux = true
               }
@@ -1147,9 +1175,9 @@ function setupMqttHandlers() {
           // Lógica específica para el Nodo EMA (Weather Station Orquideario)
           if (isEma) {
             lastEmaHeartbeat = Date.now()
-            emaSessionSamples.temp += tempValues.length
-            emaSessionSamples.hum += humValues.length
-            emaSessionSamples.lux += luxValues.length
+            emaSessionSamples.temp += tempSamples.length
+            emaSessionSamples.hum += humSamples.length
+            emaSessionSamples.lux += luxSamples.length
           }
 
           // Lógica específica para el Nodo Exterior (Validación de Lluvia / Watchdog)
@@ -1179,11 +1207,13 @@ function setupMqttHandlers() {
                 hour12: false,
               }).format(nowForLux),
             )
-            const sanitizedLuxValues =
-              caracasHourForLux < 7 || caracasHourForLux >= 18 ? luxValues.map(() => 0) : luxValues
+            const isNightLux = caracasHourForLux < 7 || caracasHourForLux >= 18
+            const sanitizedLuxSamples: RainManager.Sample[] = isNightLux
+              ? luxSamples.map((s) => ({ value: 0, timestamp: s.timestamp }))
+              : luxSamples
 
             // Encolar los resúmenes de lote correspondientes en RainManager
-            RainManager.pushClimateBatch(tempValues, humValues, sanitizedLuxValues)
+            RainManager.pushClimateBatch(tempSamples, humSamples, sanitizedLuxSamples)
 
             if (hasLux && lux !== null) {
               const now = new Date()

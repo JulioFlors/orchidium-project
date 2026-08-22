@@ -7,6 +7,7 @@ import {
   TableType,
   AgrochemicalType,
   AgrochemicalPurpose,
+  DosageUnit,
   TaskStatus,
   TaskPurpose,
   TaskSource,
@@ -20,6 +21,7 @@ export {
   TableType,
   AgrochemicalType,
   AgrochemicalPurpose,
+  DosageUnit,
   TaskStatus,
   Role,
   TaskPurpose,
@@ -181,6 +183,71 @@ export const AgrochemicalPurposeLabels: Record<AgrochemicalPurpose, string> = {
   [AgrochemicalPurpose.BACTERICIDA]: 'Bactericida',
   [AgrochemicalPurpose.FUNGICIDA]: 'Fungicida',
   [AgrochemicalPurpose.INSECTICIDA]: 'Insecticida',
+}
+
+export const DosageUnitLabels: Record<DosageUnit, string> = {
+  [DosageUnit.ML_L]: 'mL/L',
+  [DosageUnit.G_L]: 'g/L',
+  [DosageUnit.CDA_L]: 'cda/L',
+  [DosageUnit.CDITA_L]: 'cdita/L',
+  [DosageUnit.CDITA_PLANTA]: 'cdita/planta',
+  [DosageUnit.G_PLANTA]: 'g/planta',
+  [DosageUnit.ML_PLANTA]: 'mL/planta',
+  [DosageUnit.PORCENTAJE]: '%',
+  [DosageUnit.GOTAS_L]: 'gotas/L',
+  [DosageUnit.CC_L]: 'cc/L',
+}
+
+export const DOSAGE_UNIT_OPTIONS = [
+  { label: 'mL/L (Mililitros por Litro)', value: DosageUnit.ML_L },
+  { label: 'g/L (Gramos por Litro)', value: DosageUnit.G_L },
+  { label: 'cda/L (Cucharada por Litro)', value: DosageUnit.CDA_L },
+  { label: 'cdita/L (Cucharadita por Litro)', value: DosageUnit.CDITA_L },
+  { label: 'cdita/planta (Cucharadita por Planta)', value: DosageUnit.CDITA_PLANTA },
+  { label: 'g/planta (Gramos por Planta)', value: DosageUnit.G_PLANTA },
+  { label: 'mL/planta (Mililitros por Planta)', value: DosageUnit.ML_PLANTA },
+  { label: '% (Porcentaje de Dilución)', value: DosageUnit.PORCENTAJE },
+  { label: 'gotas/L (Gotas por Litro)', value: DosageUnit.GOTAS_L },
+  { label: 'cc/L (Centímetros Cúbicos por Litro)', value: DosageUnit.CC_L },
+]
+
+export function formatDosage(value?: number | null, unit?: DosageUnit | string | null): string {
+  if (value == null || !unit) return ''
+
+  const unitLabel = (unit in DosageUnitLabels ? DosageUnitLabels[unit as DosageUnit] : unit) || unit
+
+  return `${value} ${unitLabel}`
+}
+
+export function formatAgrochemicalDosage(
+  agro?: {
+    dosageValue?: number | null
+    dosageUnit?: DosageUnit | string | null
+    isMix?: boolean
+    mixIngredients?: {
+      dosageValue: number
+      dosageUnit: DosageUnit | string
+      ingredient?: { name: string } | null
+    }[]
+  } | null,
+): string {
+  if (!agro) return ''
+
+  if (agro.isMix && agro.mixIngredients && agro.mixIngredients.length > 0) {
+    return agro.mixIngredients
+      .map((item) => {
+        const name = item.ingredient?.name || 'Insumo'
+        const unit =
+          (item.dosageUnit in DosageUnitLabels
+            ? DosageUnitLabels[item.dosageUnit as DosageUnit]
+            : item.dosageUnit) || item.dosageUnit
+
+        return `${name} (${item.dosageValue} ${unit})`
+      })
+      .join(' + ')
+  }
+
+  return formatDosage(agro.dosageValue, agro.dosageUnit)
 }
 
 export const TaskStatusLabels: Record<TaskStatus, string> = {

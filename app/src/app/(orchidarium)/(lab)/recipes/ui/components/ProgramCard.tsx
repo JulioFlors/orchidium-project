@@ -14,6 +14,7 @@ import {
 } from 'react-icons/io5'
 
 import { StatusCircleIcon, ActionMenu, ActionMenuItem } from '@/components'
+import { formatAgrochemicalDosage } from '@/config'
 
 export interface ProgramCycle {
   id: string
@@ -117,7 +118,8 @@ export function ProgramCard({ program, type, onEdit, onDelete }: ProgramCardProp
                 {pc.agrochemical.name}
               </span>
               <span className="text-secondary shrink-0 text-[10px] underline decoration-dotted opacity-40">
-                {pc.agrochemical.preparation}
+                {formatAgrochemicalDosage(pc.agrochemical) ||
+                  (pc.agrochemical.isMix ? 'Mezcla' : '')}
               </span>
             </div>
           ))}

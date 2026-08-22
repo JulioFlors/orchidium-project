@@ -21,7 +21,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT n.id AS notif_id, n.type, n.title, n.description, n.\"taskId\", t.purpose, t.zones, t.\"scheduledAt\", s.name AS schedule_name, a.name AS agrochemical_name, a.preparation FROM \"Notification\" n JOIN \"TaskLog\" t ON n.\"taskId\" = t.id LEFT JOIN \"AutomationSchedule\" s ON t.\"scheduleId\" = s.id LEFT JOIN \"Agrochemical\" a ON t.\"agrochemicalId\" = a.id WHERE n.type = 'AGROCHEMICAL_CONFIRM' AND n.\"readAt\" IS NULL ORDER BY n.\"createdAt\" ASC LIMIT 5;"
+        "query": "SELECT n.id AS notif_id, n.type, n.title, n.description, n.\"taskId\", t.purpose, t.zones, t.\"scheduledAt\", s.name AS schedule_name, a.name AS agrochemical_name, CASE WHEN a.\"dosageValue\" IS NOT NULL AND a.\"dosageUnit\" IS NOT NULL THEN (a.\"dosageValue\"::text || ' ' || a.\"dosageUnit\"::text) ELSE '' END AS preparation FROM \"Notification\" n JOIN \"TaskLog\" t ON n.\"taskId\" = t.id LEFT JOIN \"AutomationSchedule\" s ON t.\"scheduleId\" = s.id LEFT JOIN \"Agrochemical\" a ON t.\"agrochemicalId\" = a.id WHERE n.type = 'AGROCHEMICAL_CONFIRM' AND n.\"readAt\" IS NULL ORDER BY n.\"createdAt\" ASC LIMIT 5;"
       },
       "id": "agronotif-0002-query-hw",
       "name": "Consultar Confirmaciones HW Pendientes",

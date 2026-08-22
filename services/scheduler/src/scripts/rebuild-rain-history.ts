@@ -1182,70 +1182,89 @@ async function rebuildInferredRain(startTime: Date, endTime: Date) {
               createdCount++
             }
           }
+        }
 
-          // 4. ☁️ Cese por Variación Térmica Diurna
-          if (!closedByRecovery && minTempInRain !== null && minTempInRainTimestamp !== null) {
-            const caracasHour = getCaracasHour(timestampMs)
-            const isAfternoonOrNight = caracasHour >= 16 || caracasHour < 7
-            const isSaturated = humBatches[0].max >= 96.0
-            const minRecoveryRequired = !isAfternoonOrNight && isSaturated ? 1.2 : 0.6
+        // 4. ☁️ Cese por Variación Térmica (24/7 — Día, Tarde y Noche)
+        if (!closedByRecovery && minTempInRain !== null && minTempInRainTimestamp !== null) {
+          const caracasHour = getCaracasHour(timestampMs)
+          const isSaturated = humBatches[0].max >= 96.0
 
-            // Solo evaluar muestras que ocurrieron ESTRICTAMENTE DESPUÉS de haber tocado el mínimo de temperatura
-            const recoverySamples = tempBatches[0].samples.filter(
-              (s) => s.timestamp > minTempInRainTimestamp! && s.timestamp >= rainStartedAt!,
+          let minRecoveryRequired: number
+
+          if (caracasHour >= 7 && caracasHour < 16) {
+            // ☀️ Diurno Central [7:00 am - 4:00 pm VET]
+            minRecoveryRequired = isSaturated ? 1.2 : 0.6
+          } else if (caracasHour >= 16 && caracasHour < 19) {
+            // ⛅ Tarde / Atardecer [4:00 pm - 7:00 pm VET]
+            minRecoveryRequired = 0.6
+          } else {
+            // 🌙 Noche y Madrugada [7:00 pm - 7:00 am VET]
+            minRecoveryRequired = 0.4
+          }
+
+          // 🛡️ Protección Deslizante (20 min): Combinar muestras de B0 + B1 ordenadas cronológicamente
+          const combinedTempSamples: Sample[] = []
+
+          if (tempBatches.length >= 1) combinedTempSamples.push(...tempBatches[0].samples)
+          if (tempBatches.length >= 2) combinedTempSamples.push(...tempBatches[1].samples)
+          combinedTempSamples.sort((a, b) => a.timestamp - b.timestamp)
+
+          // Solo evaluar muestras que ocurrieron ESTRICTAMENTE DESPUÉS de haber tocado el mínimo de temperatura
+          // y posteriores al inicio del evento de lluvia
+          const recoverySamples = combinedTempSamples.filter(
+            (s) => s.timestamp > minTempInRainTimestamp! && s.timestamp >= rainStartedAt!,
+          )
+
+          const matchingEndSample = recoverySamples.find(
+            (s) => s.value >= minTempInRain! + minRecoveryRequired,
+          )
+
+          if (matchingEndSample) {
+            closedByRecovery = true
+            const preciseEndMs = matchingEndSample.timestamp
+            const tempRecovery = matchingEndSample.value - minTempInRain!
+
+            const endSampleT = matchingEndSample
+            const endSampleH =
+              humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
+              humBatches[0].samples[humBatches[0].samples.length - 1]
+            const endSampleL =
+              luxBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
+              luxBatches[0].samples[luxBatches[0].samples.length - 1]
+
+            isTelemetryRainActive = false
+            lastRainClosedAt = timestampMs
+
+            const minTempBeforeReset = minTempInRain
+
+            minTempInRain = null
+            minTempInRainTimestamp = null
+            minLuxInRain = null
+            maxHumInRain = null
+            baselineTemp = null
+            baselineHum = null
+            baselineLux = null
+            baselineVarTemp = null
+            baselineVarHum = null
+
+            const closeReasonText = `🌡️ Cese de Lluvia Intermitente (Variación Térmica): la temperatura se recuperó +${tempRecovery.toFixed(2)}°C (Temp: ${endSampleT.value.toFixed(1)}°C vs mínimo en lluvia: ${minTempBeforeReset.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}% HR, Lux: ${currentMinLux.toFixed(0)} lx)`
+
+            await closeVirtualEvent(
+              new Date(preciseEndMs),
+              'THERMAL_VARIATION',
+              closeReasonText,
+              {
+                temp: endSampleT ? endSampleT.value : tempBatches[0].max,
+                hum: endSampleH ? endSampleH.value : tempBatches[0].max,
+                lux: endSampleL ? endSampleL.value : currentMinLux,
+              },
+              {
+                type: 'THERMAL_VARIATION',
+                minTemp: minTempBeforeReset,
+                tempRecovery,
+              },
             )
-
-            const matchingEndSample = recoverySamples.find(
-              (s) => s.value >= minTempInRain! + minRecoveryRequired,
-            )
-
-            if (matchingEndSample) {
-              closedByRecovery = true
-              const preciseEndMs = matchingEndSample.timestamp
-              const tempRecovery = matchingEndSample.value - minTempInRain!
-
-              const endSampleT = matchingEndSample
-              const endSampleH =
-                humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-                humBatches[0].samples[humBatches[0].samples.length - 1]
-              const endSampleL =
-                luxBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-                luxBatches[0].samples[luxBatches[0].samples.length - 1]
-
-              isTelemetryRainActive = false
-              lastRainClosedAt = timestampMs
-
-              const minTempBeforeReset = minTempInRain
-
-              minTempInRain = null
-              minTempInRainTimestamp = null
-              minLuxInRain = null
-              maxHumInRain = null
-              baselineTemp = null
-              baselineHum = null
-              baselineLux = null
-              baselineVarTemp = null
-              baselineVarHum = null
-
-              const closeReasonText = `🌡️ Cese de Lluvia Intermitente (Variación Térmica): la temperatura se recuperó +${tempRecovery.toFixed(2)}°C (Temp: ${endSampleT.value.toFixed(1)}°C vs mínimo en lluvia: ${minTempBeforeReset.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}% HR, Lux: ${currentMinLux.toFixed(0)} lx)`
-
-              await closeVirtualEvent(
-                new Date(preciseEndMs),
-                'THERMAL_VARIATION',
-                closeReasonText,
-                {
-                  temp: endSampleT ? endSampleT.value : tempBatches[0].max,
-                  hum: endSampleH ? endSampleH.value : tempBatches[0].max,
-                  lux: endSampleL ? endSampleL.value : currentMinLux,
-                },
-                {
-                  type: 'THERMAL_VARIATION',
-                  minTemp: minTempBeforeReset,
-                  tempRecovery,
-                },
-              )
-              createdCount++
-            }
+            createdCount++
           }
         }
 

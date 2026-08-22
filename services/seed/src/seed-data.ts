@@ -1,41 +1,35 @@
-// ---- Enums ----
-type RoleType = 'USER' | 'ADMIN'
+import {
+  type Role,
+  type ZoneType,
+  type TableType,
+  type PlantType,
+  type PotSize,
+  type PlantStatus,
+  type TaskPurpose,
+  type AgrochemicalType,
+  type AgrochemicalPurpose,
+  type DosageUnit,
+} from '@package/database'
 
-type ZoneType = 'ZONA_A' | 'ZONA_B' | 'ZONA_C' | 'ZONA_D'
-type TableType = 'MESA_1' | 'MESA_2' | 'MESA_3' | 'MESA_4' | 'MESA_5' | 'MESA_6'
-type PlantType = 'ORCHID' | 'ADENIUM_OBESUM' | 'CACTUS' | 'SUCCULENT' | 'BROMELIAD'
-type PotSize = 'NRO_5' | 'NRO_7' | 'NRO_10' | 'NRO_14'
-type TaskPurpose = 'IRRIGATION' | 'FERTIGATION' | 'FUMIGATION' | 'HUMIDIFICATION' | 'SOIL_WETTING'
-
-type AgrochemicalType = 'FERTILIZANTE' | 'FITOSANITARIO'
-type AgrochemicalPurpose =
-  | 'DESARROLLO'
-  | 'FLORACION'
-  | 'MANTENIMIENTO'
-  | 'ACARICIDA'
-  | 'BACTERICIDA'
-  | 'FUNGICIDA'
-  | 'INSECTICIDA'
-
-// ---- Interfaces ----
-interface SeedUser {
+// ---- Interfaces del Seed Data ----
+export interface SeedUser {
   name: string
   email: string
   password: string
-  role: RoleType
+  role: Role
 }
 
-interface SeedGenus {
+export interface SeedGenus {
   name: string
   type: PlantType
 }
 
-interface SeedVariant {
+export interface SeedVariant {
   size: PotSize
   price: number
 }
 
-interface SeedSpecies {
+export interface SeedSpecies {
   name: string
   slug: string
   genus: { name: string }
@@ -45,22 +39,26 @@ interface SeedSpecies {
   isFeatured?: boolean
 }
 
-interface SeedPlant {
-  pottingDate?: Date
-  currentSize: PotSize
-  species: { name: string }
-  location?: {
-    zone: ZoneType
-    table: TableType
-  }
+export interface SeedPlantLocation {
+  zone: ZoneType
+  table: TableType
 }
 
-interface SeedAgrochemical {
+export interface SeedPlant {
+  species: { name: string }
+  currentSize: PotSize
+  pottingDate?: Date
+  status?: PlantStatus
+  location?: SeedPlantLocation
+}
+
+export interface SeedAgrochemical {
   name: string
   description: string
   type: AgrochemicalType
   purpose: AgrochemicalPurpose
-  preparation: string
+  dosageValue: number
+  dosageUnit: DosageUnit
 }
 
 // ---- Rutinas de RIEGO ----
@@ -69,7 +67,7 @@ export interface SeedFertilizationCycle {
   agrochemical: { name: string }
 }
 
-interface SeedFertilizationProgram {
+export interface SeedFertilizationProgram {
   name: string
   weeklyFrequency: number
   productsCycle: SeedFertilizationCycle[]
@@ -80,14 +78,14 @@ export interface SeedPhytosanitaryCycle {
   agrochemical: { name: string }
 }
 
-interface SeedPhytosanitaryProgram {
+export interface SeedPhytosanitaryProgram {
   name: string
   monthlyFrequency: number
   productsCycle: SeedPhytosanitaryCycle[]
 }
 
 // ---- Automatización de las Rutinas ----
-interface SeedAutomationSchedule {
+export interface SeedAutomationSchedule {
   id?: string
   name: string
   description?: string
@@ -96,13 +94,12 @@ interface SeedAutomationSchedule {
   durationMinutes: number
   zones: ZoneType[]
   isEnabled: boolean
-  // Opcionales para vincular
   fertilizationProgramName?: string
   phytosanitaryProgramName?: string
 }
 
 // ---- Estructura del SeedData ----
-interface SeedData {
+export interface SeedData {
   users: SeedUser[]
   genus: SeedGenus[]
   species: SeedSpecies[]
@@ -652,7 +649,8 @@ export const initialData: SeedData = {
         'Fertilizante Granular de liberación lenta. Formulacion 15-9-12 + microelementos. Aplicar cada 4 meses.',
       type: 'FERTILIZANTE',
       purpose: 'DESARROLLO',
-      preparation: '1/4 cdita por planta',
+      dosageValue: 0.25,
+      dosageUnit: 'CDITA_PLANTA',
     },
     {
       name: 'Solucat 25-5-5',
@@ -660,7 +658,8 @@ export const initialData: SeedData = {
         'Fertilizante NPK cristalino rico en nitrógeno con microelementos, adecuado como complemento al abonado o para aplicar en las fases de crecimiento vegetativo dónde se consume nitrógeno.',
       type: 'FERTILIZANTE',
       purpose: 'DESARROLLO',
-      preparation: '1 g/L',
+      dosageValue: 1,
+      dosageUnit: 'G_L',
     },
     {
       name: 'Nitrifort M935',
@@ -668,14 +667,16 @@ export const initialData: SeedData = {
         'Promueve el crecimiento y desarrollo de hojas verdes, esencial para la fotosíntesis.',
       type: 'FERTILIZANTE',
       purpose: 'DESARROLLO',
-      preparation: '2 ml/L',
+      dosageValue: 2,
+      dosageUnit: 'ML_L',
     },
     {
       name: 'Bio-Fert 72',
       description: 'Vigorizante y estimulador de nuevos brotes vegetativos.',
       type: 'FERTILIZANTE',
       purpose: 'DESARROLLO',
-      preparation: '1 g/L',
+      dosageValue: 1,
+      dosageUnit: 'G_L',
     },
     {
       name: 'Razormin',
@@ -683,7 +684,8 @@ export const initialData: SeedData = {
         'Bioestimulante y enraizante. Favorece la absorción de nutrientes. Aplicar cada 21 dias.',
       type: 'FERTILIZANTE',
       purpose: 'DESARROLLO',
-      preparation: '1 ml/L',
+      dosageValue: 1,
+      dosageUnit: 'ML_L',
     },
     {
       name: 'Melaza',
@@ -691,7 +693,8 @@ export const initialData: SeedData = {
         'Promueve el desarrollo radicular, optimiza la capacidad de intercambio catiónico del sustrato e Intensifica la actividad microbiológica del sustrato. Aplicar cada semana (se mezcla con otros fertilizantes).',
       type: 'FERTILIZANTE',
       purpose: 'DESARROLLO',
-      preparation: '1 cda/L',
+      dosageValue: 1,
+      dosageUnit: 'CDA_L',
     },
     {
       name: 'Dalgin',
@@ -699,28 +702,32 @@ export const initialData: SeedData = {
         'Aporta vitalidad y energía al cultivo, especialmente durante el desarrollo vegetativo, y activa la clorofila y procesos fotosintéticos. Aplicar cada mes.',
       type: 'FERTILIZANTE',
       purpose: 'DESARROLLO',
-      preparation: '1 ml/L',
+      dosageValue: 1,
+      dosageUnit: 'ML_L',
     },
     {
       name: 'Triple 20-20-20',
       description: 'El fósforo fortalece las raíces, mejora la floración.',
       type: 'FERTILIZANTE',
       purpose: 'MANTENIMIENTO',
-      preparation: '1 g/L',
+      dosageValue: 1,
+      dosageUnit: 'G_L',
     },
     {
       name: 'Triple 19-19-19',
       description: 'El fósforo fortalece las raíces, mejora la floración.',
       type: 'FERTILIZANTE',
       purpose: 'MANTENIMIENTO',
-      preparation: '1 g/L',
+      dosageValue: 1,
+      dosageUnit: 'G_L',
     },
     {
       name: 'Solucat 10-52-10',
       description: 'El fósforo fortalece las raíces, mejora la floración.',
       type: 'FERTILIZANTE',
       purpose: 'FLORACION',
-      preparation: '1 g/L',
+      dosageValue: 1,
+      dosageUnit: 'G_L',
     },
     {
       name: 'Calcio + Boro',
@@ -728,7 +735,8 @@ export const initialData: SeedData = {
         'Aumenta la turgencia de las plantas, el desarrollo de las flores y la calidad de las flores. Aplicar cada semana.',
       type: 'FERTILIZANTE',
       purpose: 'FLORACION',
-      preparation: '2 ml/L',
+      dosageValue: 2,
+      dosageUnit: 'ML_L',
     },
     {
       name: 'Curtail',
@@ -736,7 +744,8 @@ export const initialData: SeedData = {
         'Actúa por contacto e ingestión contra un amplio espectro de plagas masticadoras, minadoras y perforadoras, tanto larvas, ninfas y adultos.',
       type: 'FITOSANITARIO',
       purpose: 'INSECTICIDA',
-      preparation: '3 ml/L',
+      dosageValue: 3,
+      dosageUnit: 'ML_L',
     },
     {
       name: 'ABAC',
@@ -744,7 +753,8 @@ export const initialData: SeedData = {
         'insecticida por ingestión y por contacto, el insecto queda inmovilizado poco después de ingerir el producto, deja de alimentarse y acaba muriendo, sin destruir la planta.',
       type: 'FITOSANITARIO',
       purpose: 'ACARICIDA',
-      preparation: '3 ml/L',
+      dosageValue: 3,
+      dosageUnit: 'ML_L',
     },
     {
       name: 'Sulphor-NF',
@@ -752,7 +762,8 @@ export const initialData: SeedData = {
         'Posee un alto contenido de azufre siendo también un compuesto nitrogenado que favorece el crecimiento y fortalece los cultivos contra condiciones adversas como: stress, plagas y enfermedades por su triple acción (fungicida, acaricida y nutricional).',
       type: 'FITOSANITARIO',
       purpose: 'ACARICIDA',
-      preparation: '3 ml/L',
+      dosageValue: 3,
+      dosageUnit: 'ML_L',
     },
     {
       name: 'Kasumin',
@@ -760,7 +771,8 @@ export const initialData: SeedData = {
         'Fungicida – bactericida de origen biológico, con acción sistémico con actividad preventiva y curativa.',
       type: 'FITOSANITARIO',
       purpose: 'FUNGICIDA',
-      preparation: '5 ml/L',
+      dosageValue: 5,
+      dosageUnit: 'ML_L',
     },
     {
       name: 'Vitavax-200F',
@@ -768,7 +780,8 @@ export const initialData: SeedData = {
         'Se puede aplicar a la semilla para prevenir las enfermedades provocadas por microorganismos que pueden ser transmitidos en las semillas o encontrarse en el suelo, protegiendo las semillas durante su almacenaje, germinación y a las plántulas en sus primeros días de desarrollo.',
       type: 'FITOSANITARIO',
       purpose: 'FUNGICIDA',
-      preparation: '10 ml/L',
+      dosageValue: 10,
+      dosageUnit: 'ML_L',
     },
     {
       name: 'Mancozeb',
@@ -776,21 +789,24 @@ export const initialData: SeedData = {
         'Presenta un amplio espectro antifúngico frente a hongos endoparásitos causantes de enfermedades foliares.',
       type: 'FITOSANITARIO',
       purpose: 'FUNGICIDA',
-      preparation: '5 g/L',
+      dosageValue: 5,
+      dosageUnit: 'G_L',
     },
     {
       name: 'Bitter 97',
       description: 'De acción sistémica, preventiva y curativa.',
       type: 'FITOSANITARIO',
       purpose: 'FUNGICIDA',
-      preparation: '5 ml/L',
+      dosageValue: 5,
+      dosageUnit: 'ML_L',
     },
     {
       name: 'Agua Oxigenada',
       description: '12h x 7dias.',
       type: 'FITOSANITARIO',
       purpose: 'FUNGICIDA',
-      preparation: '50:50',
+      dosageValue: 50,
+      dosageUnit: 'PORCENTAJE',
     },
   ],
   fertilizationPrograms: [

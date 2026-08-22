@@ -2,7 +2,6 @@
 
 import type { AgrochemicalWithMix } from './AgrochemicalCard'
 
-import { AgrochemicalType, AgrochemicalPurpose } from '@package/database/enums'
 import React, { useTransition, useEffect, useRef } from 'react'
 import { useForm, useWatch, Controller, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -12,17 +11,43 @@ import * as z from 'zod'
 import { createAgrochemical, updateAgrochemical } from '@/actions'
 import { FormField, Button, SelectDropdown, Input, Textarea, Modal, ActionMenu } from '@/components'
 import { useFormDraftStore, useToastStore } from '@/store'
-import { VALIDATION_LIMITS } from '@/config'
+import {
+  VALIDATION_LIMITS,
+  AgrochemicalType,
+  AgrochemicalPurpose,
+  DosageUnit,
+  DosageUnitLabels,
+  DOSAGE_UNIT_OPTIONS,
+} from '@/config'
+
+/**
+ * Extrae la dosificación estructurada y formateada de un insumo simple.
+ */
+export function extractAgrochemicalDosage(agro?: AgrochemicalWithMix | null): {
+  dosageValue: number | null
+  dosageUnit: DosageUnit | null
+  displayValue: string
+  displayUnit: string
+} {
+  if (!agro) {
+    return { dosageValue: null, dosageUnit: null, displayValue: '', displayUnit: '' }
+  }
+
+  const val = agro.dosageValue != null ? Number(agro.dosageValue) : null
+  const unit = (agro.dosageUnit as DosageUnit) || null
+  const displayVal = val != null ? String(val) : ''
+  const displayUnit = unit ? DosageUnitLabels[unit] || unit : ''
+
+  return {
+    dosageValue: val,
+    dosageUnit: unit,
+    displayValue: displayVal,
+    displayUnit: displayUnit,
+  }
+}
 
 const mixIngredientSchema = z.object({
   ingredientId: z.string().min(1, 'Debes seleccionar un insumo'),
-  dosageValue: z
-    .string()
-    .min(1, 'Ingresa cantidad')
-    .regex(/^[1-9][0-9]?$/, 'Ingresa un entero válido del 1 al 99'),
-  dosageUnit: z.enum(['ML_L', 'G_L'] as const, {
-    message: 'Seleccionar',
-  }),
 })
 
 const agrochemicalSchema = z
@@ -30,29 +55,56 @@ const agrochemicalSchema = z
     name: z
       .string()
       .trim()
-      .min(3, 'El nombre debe tener al menos 3 caracteres')
       .max(
         VALIDATION_LIMITS.SUPPLY_NAME_MAX,
         `El nombre no puede exceder ${VALIDATION_LIMITS.SUPPLY_NAME_MAX} caracteres`,
-      ),
+      )
+      .optional()
+      .or(z.literal('')),
     description: z
       .string()
       .trim()
-      .min(5, 'La descripción es obligatoria (mínimo 5 caracteres)')
       .max(
         VALIDATION_LIMITS.LONG_DESC_MAX,
         `La descripción no puede exceder ${VALIDATION_LIMITS.LONG_DESC_MAX} caracteres`,
-      ),
+      )
+      .optional()
+      .or(z.literal('')),
     type: z.nativeEnum(AgrochemicalType, { message: 'Debes seleccionar un tipo' }),
     purpose: z
       .nativeEnum(AgrochemicalPurpose, { message: 'Debes seleccionar un propósito' })
       .optional(),
     isMix: z.boolean(),
     dosageValue: z.string().optional(),
-    dosageUnit: z.enum(['ML_L', 'G_L'] as const).optional(),
+    dosageUnit: z.nativeEnum(DosageUnit, { message: 'Debes seleccionar la unidad' }).optional(),
     mixIngredients: z.array(mixIngredientSchema).optional(),
   })
+  .refine(
+    (data) => {
+      if (!data.isMix) {
+        return !!data.name && data.name.trim().length >= 3
+      }
 
+      return true
+    },
+    {
+      message: 'El nombre debe tener al menos 3 caracteres',
+      path: ['name'],
+    },
+  )
+  .refine(
+    (data) => {
+      if (!data.isMix) {
+        return !!data.description && data.description.trim().length >= 5
+      }
+
+      return true
+    },
+    {
+      message: 'La descripción es obligatoria (mínimo 5 caracteres)',
+      path: ['description'],
+    },
+  )
   .refine(
     (data) => {
       if (!data.isMix) {
@@ -69,13 +121,16 @@ const agrochemicalSchema = z
   .refine(
     (data) => {
       if (!data.isMix) {
-        return !!data.dosageValue && /^[1-9][0-9]?$/.test(data.dosageValue)
+        if (!data.dosageValue) return false
+        const num = parseFloat(data.dosageValue)
+
+        return !isNaN(num) && num > 0 && num <= 1000 && /^\d+(\.\d{1,2})?$/.test(data.dosageValue)
       }
 
       return true
     },
     {
-      message: 'Ingresa una cantidad entera válida del 1 al 99',
+      message: 'Ingresa una cantidad válida mayor a 0 (ej. 1, 2.5, 0.25)',
       path: ['dosageValue'],
     },
   )
@@ -95,13 +150,17 @@ const agrochemicalSchema = z
   .refine(
     (data) => {
       if (data.isMix) {
-        return !!data.mixIngredients && data.mixIngredients.length >= 2
+        return (
+          !!data.mixIngredients &&
+          data.mixIngredients.length >= 2 &&
+          data.mixIngredients.every((item) => !!item.ingredientId)
+        )
       }
 
       return true
     },
     {
-      message: 'Una mezcla compuesta debe incluir al menos 2 insumos',
+      message: 'Una mezcla compuesta debe incluir al menos 2 insumos válidos',
       path: ['mixIngredients'],
     },
   )
@@ -160,7 +219,7 @@ export function AgrochemicalForm({
       isMix: false,
       dosageValue: '',
       dosageUnit: undefined,
-      mixIngredients: [],
+      mixIngredients: [{ ingredientId: '' }, { ingredientId: '' }],
     },
   })
 
@@ -182,17 +241,15 @@ export function AgrochemicalForm({
       if (initialData) {
         reset({
           name: initialData.name,
-          description: initialData.description,
+          description: initialData.description || '',
           type: initialData.type,
           purpose: initialData.purpose,
           isMix: initialData.isMix || false,
-          dosageValue: initialData.dosageValue ? String(initialData.dosageValue) : '',
-          dosageUnit: (initialData.dosageUnit as 'ML_L' | 'G_L') || undefined,
+          dosageValue: initialData.dosageValue != null ? String(initialData.dosageValue) : '',
+          dosageUnit: initialData.dosageUnit || undefined,
           mixIngredients: initialData.mixIngredients
             ? initialData.mixIngredients.map((m) => ({
                 ingredientId: m.ingredientId,
-                dosageValue: String(m.dosageValue),
-                dosageUnit: m.dosageUnit,
               }))
             : [],
         })
@@ -208,10 +265,7 @@ export function AgrochemicalForm({
             isMix: false,
             dosageValue: '',
             dosageUnit: undefined,
-            mixIngredients: [
-              { ingredientId: '', dosageValue: '', dosageUnit: 'ML_L' },
-              { ingredientId: '', dosageValue: '', dosageUnit: 'ML_L' },
-            ],
+            mixIngredients: [{ ingredientId: '' }, { ingredientId: '' }],
           },
         )
       }
@@ -274,6 +328,8 @@ export function AgrochemicalForm({
   // Insumos disponibles para mezclas filtrados por fila para evitar duplicados
   const getFilteredAgroOptions = React.useCallback(
     (currentIndex: number) => {
+      if (!selectedType) return []
+
       const selectedOtherIds = new Set(
         (watchedIngredients || [])
           .filter((_, i) => i !== currentIndex)
@@ -286,7 +342,7 @@ export function AgrochemicalForm({
           (a) =>
             !a.isMix &&
             a.id !== initialData?.id &&
-            (!selectedType || a.type === selectedType) &&
+            a.type === selectedType &&
             !selectedOtherIds.has(a.id),
         )
         .map((a) => ({ label: a.name, value: a.id }))
@@ -296,23 +352,6 @@ export function AgrochemicalForm({
 
   const onSubmit = (values: FormValues) => {
     startTransition(async () => {
-      let prepText = ''
-
-      if (values.isMix && values.mixIngredients && values.mixIngredients.length > 0) {
-        prepText = values.mixIngredients
-          .map((item) => {
-            const agro = availableAgrochemicals.find((a) => a.id === item.ingredientId)
-            const unitLabel = item.dosageUnit === 'ML_L' ? 'mL/L' : 'g/L'
-
-            return `${agro?.name || 'Insumo'} (${item.dosageValue} ${unitLabel})`
-          })
-          .join(' + ')
-      } else {
-        const unitLabel = values.dosageUnit === 'ML_L' ? 'mL/L' : 'g/L'
-
-        prepText = `${values.dosageValue} ${unitLabel}`
-      }
-
       const finalPurpose: AgrochemicalPurpose = values.isMix
         ? availableAgrochemicals.find((a) => a.id === values.mixIngredients?.[0]?.ingredientId)
             ?.purpose ||
@@ -322,20 +361,24 @@ export function AgrochemicalForm({
         : values.purpose || AgrochemicalPurpose.DESARROLLO
 
       const payload = {
-        name: values.name,
-        description: values.description,
+        name: values.isMix ? watchedName || values.name || '' : values.name || '',
+        description: values.isMix ? '' : values.description || '',
         type: values.type,
         purpose: finalPurpose,
-        preparation: prepText,
         dosageValue: values.isMix ? null : Number(values.dosageValue),
         dosageUnit: values.isMix ? null : values.dosageUnit,
         isMix: values.isMix,
         mixIngredients: values.isMix
-          ? values.mixIngredients?.map((i) => ({
-              ingredientId: i.ingredientId,
-              dosageValue: Number(i.dosageValue),
-              dosageUnit: i.dosageUnit,
-            }))
+          ? values.mixIngredients?.map((i) => {
+              const agro = availableAgrochemicals.find((a) => a.id === i.ingredientId)
+              const { dosageValue, dosageUnit } = extractAgrochemicalDosage(agro)
+
+              return {
+                ingredientId: i.ingredientId,
+                dosageValue: dosageValue ?? 1,
+                dosageUnit: dosageUnit || DosageUnit.ML_L,
+              }
+            })
           : undefined,
       }
 
@@ -405,6 +448,10 @@ export function AgrochemicalForm({
                 onChange={(val) => {
                   field.onChange(val)
                   setValue('purpose', '' as AgrochemicalPurpose)
+                  if (isMix) {
+                    setValue('mixIngredients', [{ ingredientId: '' }, { ingredientId: '' }])
+                    setValue('name', '')
+                  }
                 }}
               />
             )}
@@ -456,14 +503,16 @@ export function AgrochemicalForm({
               <Input
                 error={errors.dosageValue?.message}
                 id="dosageValue"
-                maxLength={2}
-                placeholder=""
+                placeholder="ej. 1, 2.5, 0.25"
                 type="text"
                 {...register('dosageValue', {
                   onChange: (e) => {
-                    const cleaned = e.target.value.replace(/[^0-9]/g, '').slice(0, 2)
+                    const cleaned = e.target.value.replace(/[^0-9.]/g, '')
+                    const parts = cleaned.split('.')
+                    const formatted =
+                      parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : cleaned
 
-                    setValue('dosageValue', cleaned)
+                    setValue('dosageValue', formatted)
                   },
                 })}
               />
@@ -481,10 +530,7 @@ export function AgrochemicalForm({
                 render={({ field }) => (
                   <SelectDropdown
                     error={errors.dosageUnit?.message}
-                    options={[
-                      { label: 'mL/L', value: 'ML_L' },
-                      { label: 'g/L', value: 'G_L' },
-                    ]}
+                    options={DOSAGE_UNIT_OPTIONS}
                     placeholder="Seleccionar"
                     value={field.value || ''}
                     onChange={field.onChange}
@@ -505,101 +551,87 @@ export function AgrochemicalForm({
               </span>
             </div>
 
-            {fields.map((field, idx) => (
-              <div
-                key={field.id}
-                className="border-input-outline/40 flex flex-col gap-3 border-b pb-4"
-              >
-                {/* FILA 1: DROPDOWN INSUMO W-FULL + ACTION MENU PARA ELIMINAR */}
-                <div className="flex items-end justify-between gap-2">
-                  <div className="flex-1">
-                    <FormField
-                      required
-                      error={errors.mixIngredients?.[idx]?.ingredientId?.message}
-                      htmlFor={`mixIngredients.${idx}.ingredientId`}
-                      label={`Insumo ${idx + 1}`}
-                    >
-                      <Controller
-                        control={control}
-                        name={`mixIngredients.${idx}.ingredientId`}
-                        render={({ field: f }) => (
-                          <SelectDropdown
-                            error={errors.mixIngredients?.[idx]?.ingredientId?.message}
-                            options={getFilteredAgroOptions(idx)}
-                            placeholder="Seleccionar"
-                            value={f.value}
-                            onChange={f.onChange}
-                          />
-                        )}
+            {fields.map((field, idx) => {
+              const currentIngredientId = watchedIngredients?.[idx]?.ingredientId
+              const selectedAgro = availableAgrochemicals.find((a) => a.id === currentIngredientId)
+              const dosageInfo = extractAgrochemicalDosage(selectedAgro)
+
+              return (
+                <div
+                  key={field.id}
+                  className="border-input-outline/40 flex flex-col gap-3 border-b pb-4 last:border-b-0 last:pb-0"
+                >
+                  {/* FILA 1: DROPDOWN INSUMO W-FULL + ACTION MENU PARA ELIMINAR */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1">
+                      <FormField
+                        required
+                        error={errors.mixIngredients?.[idx]?.ingredientId?.message}
+                        htmlFor={`mixIngredients.${idx}.ingredientId`}
+                        label={`Insumo ${idx + 1}`}
+                      >
+                        <Controller
+                          control={control}
+                          name={`mixIngredients.${idx}.ingredientId`}
+                          render={({ field: f }) => (
+                            <SelectDropdown
+                              disabled={!selectedType}
+                              error={errors.mixIngredients?.[idx]?.ingredientId?.message}
+                              options={getFilteredAgroOptions(idx)}
+                              placeholder={selectedType ? 'Seleccionar' : 'Selecciona Tipo'}
+                              value={f.value}
+                              onChange={f.onChange}
+                            />
+                          )}
+                        />
+                      </FormField>
+                    </div>
+
+                    {fields.length > 2 && (
+                      <ActionMenu
+                        hoverOnly={false}
+                        items={[
+                          {
+                            icon: <IoTrashOutline className="h-4 w-4" />,
+                            label: 'Eliminar de la mezcla',
+                            variant: 'destructive',
+                            onClick: () => remove(idx),
+                          },
+                        ]}
+                        triggerClassName="mt-6"
+                      />
+                    )}
+                  </div>
+
+                  {/* FILA 2: DOSIS Y UNIDAD AUTOCOMPLETADAS NO EDITABLES */}
+                  <div className="grid grid-cols-1 gap-4 tds-xs:grid-cols-2">
+                    <FormField htmlFor={`mixIngredients.${idx}.dosageValue`} label="Dosis">
+                      <Input
+                        disabled
+                        readOnly
+                        className="bg-surface/50 opacity-80 cursor-not-allowed"
+                        id={`mixIngredients.${idx}.dosageValue`}
+                        placeholder="-"
+                        type="text"
+                        value={dosageInfo.displayValue}
+                      />
+                    </FormField>
+
+                    <FormField htmlFor={`mixIngredients.${idx}.dosageUnit`} label="Unidad">
+                      <Input
+                        disabled
+                        readOnly
+                        className="bg-surface/50 opacity-80 cursor-not-allowed"
+                        id={`mixIngredients.${idx}.dosageUnit`}
+                        placeholder="-"
+                        type="text"
+                        value={dosageInfo.displayUnit}
                       />
                     </FormField>
                   </div>
-
-                  {fields.length > 2 && (
-                    <ActionMenu
-                      hoverOnly={false}
-                      items={[
-                        {
-                          icon: <IoTrashOutline className="h-4 w-4" />,
-                          label: 'Eliminar de la mezcla',
-                          variant: 'destructive',
-                          onClick: () => remove(idx),
-                        },
-                      ]}
-                      triggerClassName="mb-1"
-                    />
-                  )}
                 </div>
-
-                {/* FILA 2: DOSIS Y UNIDAD (MISMO ANCHO 50/50 QUE COLAPSA SOLO EN <= tds-xs) */}
-                <div className="grid grid-cols-1 gap-4 tds-xs:grid-cols-2">
-                  <FormField
-                    required
-                    error={errors.mixIngredients?.[idx]?.dosageValue?.message}
-                    htmlFor={`mixIngredients.${idx}.dosageValue`}
-                    label="Dosis"
-                  >
-                    <Input
-                      error={errors.mixIngredients?.[idx]?.dosageValue?.message}
-                      maxLength={2}
-                      placeholder=""
-                      type="text"
-                      {...register(`mixIngredients.${idx}.dosageValue` as const, {
-                        onChange: (e) => {
-                          const cleaned = e.target.value.replace(/[^0-9]/g, '').slice(0, 2)
-
-                          setValue(`mixIngredients.${idx}.dosageValue`, cleaned)
-                        },
-                      })}
-                    />
-                  </FormField>
-
-                  <FormField
-                    required
-                    error={errors.mixIngredients?.[idx]?.dosageUnit?.message}
-                    htmlFor={`mixIngredients.${idx}.dosageUnit`}
-                    label="Unidad"
-                  >
-                    <Controller
-                      control={control}
-                      name={`mixIngredients.${idx}.dosageUnit`}
-                      render={({ field: f }) => (
-                        <SelectDropdown
-                          error={errors.mixIngredients?.[idx]?.dosageUnit?.message}
-                          options={[
-                            { label: 'mL/L', value: 'ML_L' },
-                            { label: 'g/L', value: 'G_L' },
-                          ]}
-                          placeholder="Seleccionar"
-                          value={f.value}
-                          onChange={f.onChange}
-                        />
-                      )}
-                    />
-                  </FormField>
-                </div>
-              </div>
-            ))}
+              )
+            })}
 
             <div className="flex justify-center pt-1">
               <Button
@@ -608,8 +640,6 @@ export function AgrochemicalForm({
                 onClick={() =>
                   append({
                     ingredientId: '',
-                    dosageValue: '',
-                    dosageUnit: 'ML_L',
                   })
                 }
               >
@@ -625,21 +655,23 @@ export function AgrochemicalForm({
           </div>
         )}
 
-        {/* 7. Notas */}
-        <FormField
-          required
-          error={errors.description?.message}
-          htmlFor="description"
-          label="Notas / Instrucciones"
-        >
-          <Textarea
+        {/* 7. Notas (Solo para Insumos Simples) */}
+        {!isMix && (
+          <FormField
+            required
             error={errors.description?.message}
-            id="description"
-            maxLength={VALIDATION_LIMITS.LONG_DESC_MAX}
-            placeholder=""
-            {...register('description')}
-          />
-        </FormField>
+            htmlFor="description"
+            label="Notas / Instrucciones"
+          >
+            <Textarea
+              error={errors.description?.message}
+              id="description"
+              maxLength={VALIDATION_LIMITS.LONG_DESC_MAX}
+              placeholder=""
+              {...register('description')}
+            />
+          </FormField>
+        )}
 
         {/* Botones de Acción Simples "Cancelar" y "Guardar" */}
         <div className="border-input-outline -mx-6 mt-2 grid grid-cols-1 gap-3 border-t px-6 pt-4 tds-sm:grid-cols-2">

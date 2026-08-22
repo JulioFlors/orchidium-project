@@ -47,66 +47,40 @@ let lastBatchReceivedAt = 0
 let rainEventMutex = Promise.resolve()
 
 // Helper para empujar métricas a las colas de batches deslizantes (10 min de ventana por lote)
-function pushBatchMetrics(queue: BatchSummary[], values: number[], isLux = false) {
-  if (values.length === 0) return
+function pushBatchMetrics(queue: BatchSummary[], input: Sample[] | number[], isLux = false) {
+  if (input.length === 0) return
   const now = Date.now()
 
   lastBatchReceivedAt = now
 
-  const samples = values.map((val, idx) => ({
-    value: val,
-    timestamp: now - (values.length - 1 - idx) * 60000,
-  }))
+  const samples: Sample[] =
+    typeof input[0] === 'number'
+      ? (input as number[]).map((val, idx) => ({
+          value: val,
+          timestamp: now - ((input as number[]).length - 1 - idx) * 60000,
+        }))
+      : (input as Sample[])
 
-  if (
-    queue.length > 0 &&
-    now - queue[0].timestamp < 10 * 60 * 1000 &&
-    queue[0].samples.length < 12
-  ) {
-    // Acumular dentro del lote de 10 min actual
-    queue[0].samples.push(...samples)
+  const values = samples.map((s) => s.value)
+  let min = Math.min(...values)
+  let max = Math.max(...values)
 
-    const allValues = queue[0].samples.map((s) => s.value)
+  if (isLux && values.length > 0) {
+    const sortedAsc = [...values].sort((a, b) => a - b)
+    const low5 = sortedAsc.slice(0, Math.min(5, sortedAsc.length))
 
-    if (isLux) {
-      const sortedAsc = [...allValues].sort((a, b) => a - b)
-      const low5 = sortedAsc.slice(0, Math.min(5, sortedAsc.length))
+    min = low5.reduce((sum, val) => sum + val, 0) / low5.length
 
-      queue[0].min = low5.reduce((sum, val) => sum + val, 0) / low5.length
+    const sortedDesc = [...values].sort((a, b) => b - a)
+    const high5 = sortedDesc.slice(0, Math.min(5, sortedDesc.length))
 
-      const sortedDesc = [...allValues].sort((a, b) => b - a)
-      const high5 = sortedDesc.slice(0, Math.min(5, sortedDesc.length))
-
-      queue[0].max = high5.reduce((sum, val) => sum + val, 0) / high5.length
-    } else {
-      queue[0].min = Math.min(...allValues)
-      queue[0].max = Math.max(...allValues)
-    }
-  } else {
-    // Crear un lote nuevo (unshift) al cumplir 10 min o 12 muestras
-    let min = Math.min(...values)
-    let max = Math.max(...values)
-
-    if (isLux && values.length > 0) {
-      const sortedAsc = [...values].sort((a, b) => a - b)
-      const low5 = sortedAsc.slice(0, Math.min(5, sortedAsc.length))
-
-      min = low5.reduce((sum, val) => sum + val, 0) / low5.length
-
-      const sortedDesc = [...values].sort((a, b) => b - a)
-      const high5 = sortedDesc.slice(0, Math.min(5, sortedDesc.length))
-
-      max = high5.reduce((sum, val) => sum + val, 0) / high5.length
-    }
-
-    const samples = values.map((val, idx) => ({
-      value: val,
-      timestamp: now - (values.length - 1 - idx) * 60000,
-    }))
-
-    queue.unshift({ min, max, timestamp: now, samples })
-    if (queue.length > 6) queue.pop()
+    max = high5.reduce((sum, val) => sum + val, 0) / high5.length
   }
+
+  const batchTimestamp = samples.length > 0 ? samples[samples.length - 1].timestamp : now
+
+  queue.unshift({ min, max, timestamp: batchTimestamp, samples })
+  if (queue.length > 6) queue.pop()
 }
 
 // ---- Helpers de Protección por Gradiente (Pendiente Rápida) ----
@@ -196,9 +170,9 @@ export function getRainStatusSummary() {
  * Encola un nuevo conjunto de lecturas agrupadas del lote de 10 min de la estación exterior.
  */
 export function pushClimateBatch(
-  tempValues: number[],
-  humValues: number[],
-  luxValues: number[],
+  tempValues: Sample[] | number[],
+  humValues: Sample[] | number[],
+  luxValues: Sample[] | number[],
 ): void {
   lastBatchReceivedAt = Date.now()
   if (tempValues.length > 0) pushBatchMetrics(tempBatches, tempValues)
@@ -720,7 +694,7 @@ export async function evaluateClimateInference(): Promise<void> {
 
     if (isDay && isB1Clean) {
       let luxCondition = false
-      let tempDropThreshold = -1.5
+      let tempDropThreshold = -3.0
       let humRobust = 12.0
       let humSensitive = 12.0
       let isSensible = false
@@ -1296,61 +1270,81 @@ export async function evaluateClimateInference(): Promise<void> {
             )
           }
         }
+      }
 
-        // 4. ☁️ Variación Térmica (Diurna, evaluada al final para dar prioridad a las reglas solares)
-        if (!closedByRecovery && minTempInRain !== null && minTempInRainTimestamp !== null) {
-          const caracasHour = getCaracasHour(tempBatches[0].timestamp)
-          const isAfternoonOrNight = caracasHour >= 16 || caracasHour < 7
-          const isSaturated = humBatches[0].max >= 96.0
-          const minRecoveryRequired = !isAfternoonOrNight && isSaturated ? 1.2 : 0.6
+      // ── ☁️ Criterio de Variación Térmica (24/7 — Día, Tarde y Noche) ─────────────
+      // Orden de prioridad: evaluada tras las reglas solares diurnas
+      if (!closedByRecovery && minTempInRain !== null && minTempInRainTimestamp !== null) {
+        const caracasHour = getCaracasHour(tempBatches[0].timestamp)
+        const isSaturated = humBatches[0].max >= 96.0
 
-          // Solo evaluar muestras que ocurrieron ESTRICTAMENTE DESPUÉS de haber tocado el mínimo de temperatura
-          const recoverySamples = tempBatches[0].samples.filter(
-            (s) => s.timestamp > minTempInRainTimestamp! && s.timestamp >= inferedRainStartedAt!,
+        let minRecoveryRequired: number
+
+        if (caracasHour >= 7 && caracasHour < 16) {
+          // ☀️ Diurno Central [7:00 am - 4:00 pm VET]
+          minRecoveryRequired = isSaturated ? 1.2 : 0.6
+        } else if (caracasHour >= 16 && caracasHour < 19) {
+          // ⛅ Tarde / Atardecer [4:00 pm - 7:00 pm VET]
+          minRecoveryRequired = 0.6
+        } else {
+          // 🌙 Noche y Madrugada [7:00 pm - 7:00 am VET]
+          minRecoveryRequired = 0.4
+        }
+
+        // 🛡️ Protección Deslizante (20 min): Combinar muestras de B0 + B1 ordenadas cronológicamente
+        const combinedTempSamples: Sample[] = []
+
+        if (tempBatches.length >= 1) combinedTempSamples.push(...tempBatches[0].samples)
+        if (tempBatches.length >= 2) combinedTempSamples.push(...tempBatches[1].samples)
+        combinedTempSamples.sort((a, b) => a.timestamp - b.timestamp)
+
+        // Solo evaluar muestras que ocurrieron ESTRICTAMENTE DESPUÉS de haber tocado el mínimo de temperatura
+        // y posteriores al inicio del evento de lluvia
+        const recoverySamples = combinedTempSamples.filter(
+          (s) => s.timestamp > minTempInRainTimestamp! && s.timestamp >= inferedRainStartedAt!,
+        )
+
+        const matchingEndSample = recoverySamples.find(
+          (s) => s.value >= minTempInRain! + minRecoveryRequired,
+        )
+
+        if (matchingEndSample) {
+          closedByRecovery = true
+          const preciseEndMs = matchingEndSample.timestamp
+          const tempRecovery = matchingEndSample.value - minTempInRain!
+
+          const endSampleT = matchingEndSample
+          const endSampleH =
+            humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
+            humBatches[0].samples[humBatches[0].samples.length - 1]
+          const endSampleL =
+            luxBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
+            luxBatches[0].samples[luxBatches[0].samples.length - 1]
+
+          Logger.rain(
+            `Cierre por Variación Térmica: Temp subió +${tempRecovery.toFixed(2)}°C desde el mínimo (${minTempInRain.toFixed(1)}°C).`,
           )
+          const minTempBeforeReset = minTempInRain
 
-          const matchingEndSample = recoverySamples.find(
-            (s) => s.value >= minTempInRain! + minRecoveryRequired,
+          resetRainInferenceState()
+
+          const closeReasonText = `🌡️ Cese de Lluvia Intermitente (Variación Térmica): la temperatura se recuperó +${tempRecovery.toFixed(2)}°C (Temp: ${endSampleT.value.toFixed(1)}°C vs mínimo en lluvia: ${minTempBeforeReset.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}% HR, Lux: ${currentMinLux.toFixed(0)} lx)`
+
+          await closeRainEvent(
+            'THERMAL_VARIATION',
+            new Date(preciseEndMs),
+            closeReasonText,
+            {
+              temp: endSampleT ? endSampleT.value : tempBatches[0].max,
+              hum: endSampleH ? endSampleH.value : tempBatches[0].max,
+              lux: endSampleL ? endSampleL.value : currentMinLux,
+            },
+            {
+              type: 'THERMAL_VARIATION',
+              minTemp: minTempBeforeReset,
+              tempRecovery,
+            },
           )
-
-          if (matchingEndSample) {
-            closedByRecovery = true
-            const preciseEndMs = matchingEndSample.timestamp
-            const tempRecovery = matchingEndSample.value - minTempInRain!
-
-            const endSampleT = matchingEndSample
-            const endSampleH =
-              humBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-              humBatches[0].samples[humBatches[0].samples.length - 1]
-            const endSampleL =
-              luxBatches[0].samples.find((s) => s.timestamp === preciseEndMs) ||
-              luxBatches[0].samples[luxBatches[0].samples.length - 1]
-
-            Logger.rain(
-              `Cierre por Variación Térmica: Temp subió +${tempRecovery.toFixed(2)}°C desde el mínimo (${minTempInRain.toFixed(1)}°C).`,
-            )
-            const minTempBeforeReset = minTempInRain
-
-            resetRainInferenceState()
-
-            const closeReasonText = `🌡️ Cese de Lluvia Intermitente (Variación Térmica): la temperatura se recuperó +${tempRecovery.toFixed(2)}°C (Temp: ${endSampleT.value.toFixed(1)}°C vs mínimo en lluvia: ${minTempBeforeReset.toFixed(1)}°C, Hum: ${tempBatches[0].max.toFixed(1)}% HR, Lux: ${currentMinLux.toFixed(0)} lx)`
-
-            await closeRainEvent(
-              'THERMAL_VARIATION',
-              new Date(preciseEndMs),
-              closeReasonText,
-              {
-                temp: endSampleT ? endSampleT.value : tempBatches[0].max,
-                hum: endSampleH ? endSampleH.value : tempBatches[0].max,
-                lux: endSampleL ? endSampleL.value : currentMinLux,
-              },
-              {
-                type: 'THERMAL_VARIATION',
-                minTemp: minTempBeforeReset,
-                tempRecovery,
-              },
-            )
-          }
         }
       }
 

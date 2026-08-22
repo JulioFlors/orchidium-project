@@ -22,13 +22,16 @@ import {
   AgrochemicalPurposeLabels,
   AgrochemicalPurposeStyles,
   AgrochemicalTypeLabels,
-} from '@/config/mappings'
+  DosageUnit,
+  DosageUnitLabels,
+  formatDosage,
+} from '@/config'
 
 export interface AgrochemicalMixIngredient {
   id?: string
   ingredientId: string
   dosageValue: number
-  dosageUnit: 'ML_L' | 'G_L'
+  dosageUnit: DosageUnit
   ingredient?: Agrochemical
 }
 
@@ -156,7 +159,10 @@ export function AgrochemicalCard({ agrochemical, onEdit, onDelete }: Agrochemica
             {/* Desglose de insumos y dosificaciones individuales */}
             <div className="flex flex-col gap-1.5 pt-0.5">
               {agrochemical.mixIngredients!.map((item, idx) => {
-                const unitLabel = item.dosageUnit === 'ML_L' ? 'mL/L' : 'g/L'
+                const unitLabel =
+                  (item.dosageUnit in DosageUnitLabels
+                    ? DosageUnitLabels[item.dosageUnit]
+                    : item.dosageUnit) || item.dosageUnit
                 const ingName = item.ingredient?.name || `Insumo ${idx + 1}`
 
                 return (
@@ -196,12 +202,14 @@ export function AgrochemicalCard({ agrochemical, onEdit, onDelete }: Agrochemica
               </div>
 
               {/* Preparación / Dosis */}
-              <div className="text-primary flex shrink-0 items-center gap-1.5 whitespace-nowrap">
-                <GiChemicalDrop className="text-secondary h-4 w-4 opacity-40" />
-                <span className="font-mono text-[11px] font-bold tracking-tight">
-                  {agrochemical.preparation}
-                </span>
-              </div>
+              {agrochemical.dosageValue != null && agrochemical.dosageUnit && (
+                <div className="text-primary flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+                  <GiChemicalDrop className="text-secondary h-4 w-4 opacity-40" />
+                  <span className="font-mono text-[11px] font-bold tracking-tight">
+                    {formatDosage(agrochemical.dosageValue, agrochemical.dosageUnit)}
+                  </span>
+                </div>
+              )}
             </div>
 
             <div className="flex shrink-0 items-center">
