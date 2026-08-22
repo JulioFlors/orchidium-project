@@ -199,16 +199,16 @@ export const DosageUnitLabels: Record<DosageUnit, string> = {
 }
 
 export const DOSAGE_UNIT_OPTIONS = [
-  { label: 'mL/L (Mililitros por Litro)', value: DosageUnit.ML_L },
-  { label: 'g/L (Gramos por Litro)', value: DosageUnit.G_L },
-  { label: 'cda/L (Cucharada por Litro)', value: DosageUnit.CDA_L },
-  { label: 'cdita/L (Cucharadita por Litro)', value: DosageUnit.CDITA_L },
-  { label: 'cdita/planta (Cucharadita por Planta)', value: DosageUnit.CDITA_PLANTA },
-  { label: 'g/planta (Gramos por Planta)', value: DosageUnit.G_PLANTA },
-  { label: 'mL/planta (Mililitros por Planta)', value: DosageUnit.ML_PLANTA },
-  { label: '% (Porcentaje de Dilución)', value: DosageUnit.PORCENTAJE },
-  { label: 'gotas/L (Gotas por Litro)', value: DosageUnit.GOTAS_L },
-  { label: 'cc/L (Centímetros Cúbicos por Litro)', value: DosageUnit.CC_L },
+  { label: 'mL/L', value: DosageUnit.ML_L },
+  { label: 'g/L', value: DosageUnit.G_L },
+  { label: 'cda/L', value: DosageUnit.CDA_L },
+  { label: 'cdita/L', value: DosageUnit.CDITA_L },
+  { label: 'cdita/planta', value: DosageUnit.CDITA_PLANTA },
+  { label: 'g/planta', value: DosageUnit.G_PLANTA },
+  { label: 'mL/planta', value: DosageUnit.ML_PLANTA },
+  { label: '%', value: DosageUnit.PORCENTAJE },
+  { label: 'gotas/L', value: DosageUnit.GOTAS_L },
+  { label: 'cc/L', value: DosageUnit.CC_L },
 ]
 
 export function formatDosage(value?: number | null, unit?: DosageUnit | string | null): string {
@@ -216,7 +216,20 @@ export function formatDosage(value?: number | null, unit?: DosageUnit | string |
 
   const unitLabel = (unit in DosageUnitLabels ? DosageUnitLabels[unit as DosageUnit] : unit) || unit
 
-  return `${value} ${unitLabel}`
+  const isSpoon =
+    unit === DosageUnit.CDA_L || unit === DosageUnit.CDITA_L || unit === DosageUnit.CDITA_PLANTA
+
+  let valDisplay = String(value)
+
+  if (isSpoon) {
+    if (value === 0.5) valDisplay = '1/2'
+    else if (value === 0.25) valDisplay = '1/4'
+    else if (value === 0.75) valDisplay = '3/4'
+    else if (value === 0.125) valDisplay = '1/8'
+    else if (value === 1.5) valDisplay = '1 1/2'
+  }
+
+  return `${valDisplay} ${unitLabel}`
 }
 
 export function formatAgrochemicalDosage(

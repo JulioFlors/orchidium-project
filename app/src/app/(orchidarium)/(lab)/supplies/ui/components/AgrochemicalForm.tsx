@@ -1,7 +1,6 @@
-'use client'
-
 import type { AgrochemicalWithMix } from './AgrochemicalCard'
 
+import clsx from 'clsx'
 import React, { useTransition, useEffect, useRef } from 'react'
 import { useForm, useWatch, Controller, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -35,7 +34,21 @@ export function extractAgrochemicalDosage(agro?: AgrochemicalWithMix | null): {
 
   const val = agro.dosageValue != null ? Number(agro.dosageValue) : null
   const unit = (agro.dosageUnit as DosageUnit) || null
-  const displayVal = val != null ? String(val) : ''
+
+  let displayVal = ''
+
+  if (val != null) {
+    const isSpoon =
+      unit === DosageUnit.CDA_L || unit === DosageUnit.CDITA_L || unit === DosageUnit.CDITA_PLANTA
+
+    if (isSpoon && val === 0.5) displayVal = '1/2'
+    else if (isSpoon && val === 0.25) displayVal = '1/4'
+    else if (isSpoon && val === 0.75) displayVal = '3/4'
+    else if (isSpoon && val === 0.125) displayVal = '1/8'
+    else if (isSpoon && val === 1.5) displayVal = '1 1/2'
+    else displayVal = String(val)
+  }
+
   const displayUnit = unit ? DosageUnitLabels[unit] || unit : ''
 
   return {
@@ -44,6 +57,78 @@ export function extractAgrochemicalDosage(agro?: AgrochemicalWithMix | null): {
     displayValue: displayVal,
     displayUnit: displayUnit,
   }
+}
+
+/**
+ * Convierte un valor de dosis (número decimal o fracción como "1/2", "1/4") a número de punto flotante.
+ */
+export function parseDosageNumber(raw: string): number | null {
+  const trimmed = raw.trim()
+
+  if (!trimmed) return null
+
+  if (trimmed.includes('/')) {
+    const parts = trimmed.split('/')
+
+    if (parts.length === 2) {
+      const num = parseFloat(parts[0])
+      const den = parseFloat(parts[1])
+
+      if (!isNaN(num) && !isNaN(den) && den > 0) {
+        return Number((num / den).toFixed(3))
+      }
+    }
+  }
+
+  const parsed = parseFloat(trimmed)
+
+  return isNaN(parsed) ? null : parsed
+}
+
+/**
+ * Retorna el placeholder sugerido para la cantidad según la unidad seleccionada.
+ */
+export function getDosagePlaceholder(unit?: DosageUnit | null): string {
+  if (!unit) return 'Seleccionar'
+  if (unit === DosageUnit.PORCENTAJE) return 'ej. 10, 50, 70'
+  if (unit === DosageUnit.GOTAS_L) return 'ej. 5, 10, 20'
+  if (
+    unit === DosageUnit.CDITA_PLANTA ||
+    unit === DosageUnit.CDITA_L ||
+    unit === DosageUnit.CDA_L
+  ) {
+    return 'ej. 1, 1/2, 1/4'
+  }
+  if (unit === DosageUnit.ML_PLANTA) return 'ej. 1, 5, 10'
+
+  return 'ej. 1, 2, 5'
+}
+
+/**
+ * Limpia y normaliza el input de cantidad en base a la unidad seleccionada.
+ */
+export function cleanDosageInput(raw: string, unit?: DosageUnit | null): string {
+  if (!unit) return ''
+
+  const isSpoonUnit =
+    unit === DosageUnit.CDITA_PLANTA || unit === DosageUnit.CDITA_L || unit === DosageUnit.CDA_L
+
+  if (isSpoonUnit) {
+    const cleaned = raw.replace(/[^0-9./]/g, '')
+
+    if (cleaned.includes('/')) {
+      const parts = cleaned.split('/')
+
+      return `${parts[0].slice(0, 2)}/${parts.slice(1).join('').slice(0, 2)}`
+    }
+
+    const parts = cleaned.split('.')
+
+    return parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : cleaned
+  }
+
+  // Todas las demás unidades (mL/L, g/L, g/planta, mL/planta, %, gotas/L, cc/L) solo aceptan números enteros
+  return raw.replace(/[^0-9]/g, '').slice(0, unit === DosageUnit.PORCENTAJE ? 3 : 4)
 }
 
 const mixIngredientSchema = z.object({
@@ -79,107 +164,131 @@ const agrochemicalSchema = z
     dosageUnit: z.nativeEnum(DosageUnit, { message: 'Debes seleccionar la unidad' }).optional(),
     mixIngredients: z.array(mixIngredientSchema).optional(),
   })
-  .refine(
-    (data) => {
-      if (!data.isMix) {
-        return !!data.name && data.name.trim().length >= 3
+  .superRefine((data, ctx) => {
+    if (!data.isMix) {
+      if (!data.name || data.name.trim().length < 3) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'El nombre debe tener al menos 3 caracteres',
+          path: ['name'],
+        })
       }
 
-      return true
-    },
-    {
-      message: 'El nombre debe tener al menos 3 caracteres',
-      path: ['name'],
-    },
-  )
-  .refine(
-    (data) => {
-      if (!data.isMix) {
-        return !!data.description && data.description.trim().length >= 5
+      if (!data.description || data.description.trim().length < 5) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'La descripción es obligatoria (mínimo 5 caracteres)',
+          path: ['description'],
+        })
       }
 
-      return true
-    },
-    {
-      message: 'La descripción es obligatoria (mínimo 5 caracteres)',
-      path: ['description'],
-    },
-  )
-  .refine(
-    (data) => {
-      if (!data.isMix) {
-        return !!data.purpose
+      if (!data.purpose) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Debes seleccionar un propósito',
+          path: ['purpose'],
+        })
       }
 
-      return true
-    },
-    {
-      message: 'Debes seleccionar un propósito',
-      path: ['purpose'],
-    },
-  )
-  .refine(
-    (data) => {
-      if (!data.isMix) {
-        if (!data.dosageValue) return false
-        const num = parseFloat(data.dosageValue)
-
-        return !isNaN(num) && num > 0 && num <= 1000 && /^\d+(\.\d{1,2})?$/.test(data.dosageValue)
+      if (!data.dosageUnit) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Debes seleccionar la unidad',
+          path: ['dosageUnit'],
+        })
       }
 
-      return true
-    },
-    {
-      message: 'Ingresa una cantidad válida mayor a 0 (ej. 1, 2.5, 0.25)',
-      path: ['dosageValue'],
-    },
-  )
-  .refine(
-    (data) => {
-      if (!data.isMix) {
-        return !!data.dosageUnit
-      }
+      if (!data.dosageValue) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Debes ingresar una cantidad',
+          path: ['dosageValue'],
+        })
+      } else {
+        const isSpoonUnit =
+          data.dosageUnit === DosageUnit.CDITA_PLANTA ||
+          data.dosageUnit === DosageUnit.CDITA_L ||
+          data.dosageUnit === DosageUnit.CDA_L
 
-      return true
-    },
-    {
-      message: 'Debes seleccionar la unidad',
-      path: ['dosageUnit'],
-    },
-  )
-  .refine(
-    (data) => {
-      if (data.isMix) {
-        return (
-          !!data.mixIngredients &&
-          data.mixIngredients.length >= 2 &&
-          data.mixIngredients.every((item) => !!item.ingredientId)
-        )
-      }
+        if (isSpoonUnit) {
+          const parsedVal = parseDosageNumber(data.dosageValue)
+          const isValidFraction = /^(1\/[248]|3\/4|[1-9]\d*(\/[248])?)$/.test(
+            data.dosageValue.trim(),
+          )
+          const isValidDecimal =
+            parsedVal != null &&
+            parsedVal > 0 &&
+            parsedVal <= 20 &&
+            Math.abs((parsedVal * 1000) % 125) === 0
 
-      return true
-    },
-    {
-      message: 'Una mezcla compuesta debe incluir al menos 2 insumos válidos',
-      path: ['mixIngredients'],
-    },
-  )
-  .refine(
-    (data) => {
-      if (data.isMix && data.mixIngredients && data.mixIngredients.length > 0) {
+          if (!isValidFraction && !isValidDecimal) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: 'Ingresa una medida de repostería válida (ej. 1, 1/2, 1/4 o 0.5, 0.25)',
+              path: ['dosageValue'],
+            })
+          }
+        } else {
+          // mL/L, g/L, g/planta, mL/planta, %, gotas/L, cc/L: Solo números enteros mayores a 0
+          const isInteger = /^[1-9]\d*$/.test(data.dosageValue.trim())
+          const parsedVal = parseInt(data.dosageValue, 10)
+
+          if (!isInteger || isNaN(parsedVal) || parsedVal <= 0) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: 'Esta unidad solo acepta números enteros mayores a 0 (sin decimales)',
+              path: ['dosageValue'],
+            })
+          } else if (data.dosageUnit === DosageUnit.PORCENTAJE) {
+            if (parsedVal > 100) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'Ingresa un porcentaje entero entre 1 y 100',
+                path: ['dosageValue'],
+              })
+            }
+          } else if (data.dosageUnit === DosageUnit.GOTAS_L) {
+            if (parsedVal > 500) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'Ingresa una cantidad de gotas menor o igual a 500',
+                path: ['dosageValue'],
+              })
+            }
+          } else if (parsedVal > 1000) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: 'La cantidad no puede ser mayor a 1000',
+              path: ['dosageValue'],
+            })
+          }
+        }
+      }
+    } else {
+      if (
+        !data.mixIngredients ||
+        data.mixIngredients.length < 2 ||
+        data.mixIngredients.some((i) => !i.ingredientId)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Una mezcla compuesta debe incluir al menos 2 insumos válidos',
+          path: ['mixIngredients'],
+        })
+      } else {
         const selectedIds = data.mixIngredients.map((i) => i.ingredientId).filter(Boolean)
         const uniqueIds = new Set(selectedIds)
 
-        return uniqueIds.size === selectedIds.length
+        if (uniqueIds.size !== selectedIds.length) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'No puedes seleccionar el mismo insumo más de una vez en la mezcla',
+            path: ['mixIngredients'],
+          })
+        }
       }
-
-      return true
-    },
-    {
-      message: 'No puedes seleccionar el mismo insumo más de una vez en la mezcla',
-      path: ['mixIngredients'],
-    },
-  )
+    }
+  })
 
 type FormValues = z.infer<typeof agrochemicalSchema>
 
@@ -232,6 +341,7 @@ export function AgrochemicalForm({
   const isMix = useWatch({ control, name: 'isMix' })
   const watchedIngredients = useWatch({ control, name: 'mixIngredients' })
   const watchedName = useWatch({ control, name: 'name' })
+  const watchedUnit = useWatch({ control, name: 'dosageUnit' })
 
   // Cargar borrador de Zustand al abrir (solo si es nuevo insumo) o cargar datos iniciales en edición
   useEffect(() => {
@@ -360,12 +470,14 @@ export function AgrochemicalForm({
             : AgrochemicalPurpose.FUNGICIDA)
         : values.purpose || AgrochemicalPurpose.DESARROLLO
 
+      const parsedValue = values.dosageValue ? parseDosageNumber(values.dosageValue) : null
+
       const payload = {
         name: values.isMix ? watchedName || values.name || '' : values.name || '',
         description: values.isMix ? '' : values.description || '',
         type: values.type,
         purpose: finalPurpose,
-        dosageValue: values.isMix ? null : Number(values.dosageValue),
+        dosageValue: values.isMix ? null : parsedValue,
         dosageUnit: values.isMix ? null : values.dosageUnit,
         isMix: values.isMix,
         mixIngredients: values.isMix
@@ -431,7 +543,7 @@ export function AgrochemicalForm({
         </FormField>
 
         {/* 2. Tipo (Fertilizante / Fitosanitario) */}
-        <FormField required error={errors.type?.message} htmlFor="type" label="Tipo">
+        <FormField error={errors.type?.message} htmlFor="type" label="Tipo">
           <Controller
             control={control}
             name="type"
@@ -460,7 +572,7 @@ export function AgrochemicalForm({
 
         {/* 3. Propósito (Solo para Insumos Simples) */}
         {!isMix && (
-          <FormField required error={errors.purpose?.message} htmlFor="purpose" label="Propósito">
+          <FormField error={errors.purpose?.message} htmlFor="purpose" label="Propósito">
             <Controller
               control={control}
               name="purpose"
@@ -479,7 +591,7 @@ export function AgrochemicalForm({
 
         {/* 4. Nombre (Solo visible para Insumos Simples, ya que en Mezcla se muestra e infiere en el bloque de composición) */}
         {!isMix && (
-          <FormField required error={errors.name?.message} htmlFor="name" label="Nombre">
+          <FormField error={errors.name?.message} htmlFor="name" label="Nombre">
             <Input
               error={errors.name?.message}
               id="name"
@@ -491,39 +603,11 @@ export function AgrochemicalForm({
           </FormField>
         )}
 
-        {/* 5. Dosificación ESTRUCTURADA para Producto Simple */}
+        {/* 5. Dosificación ESTRUCTURADA para Producto Simple: Posicionada Primero Unidad y Luego Cantidad */}
         {!isMix ? (
           <div className="grid grid-cols-1 gap-4 tds-xs:grid-cols-2">
-            <FormField
-              required
-              error={errors.dosageValue?.message}
-              htmlFor="dosageValue"
-              label="Cantidad"
-            >
-              <Input
-                error={errors.dosageValue?.message}
-                id="dosageValue"
-                placeholder="ej. 1, 2.5, 0.25"
-                type="text"
-                {...register('dosageValue', {
-                  onChange: (e) => {
-                    const cleaned = e.target.value.replace(/[^0-9.]/g, '')
-                    const parts = cleaned.split('.')
-                    const formatted =
-                      parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : cleaned
-
-                    setValue('dosageValue', formatted)
-                  },
-                })}
-              />
-            </FormField>
-
-            <FormField
-              required
-              error={errors.dosageUnit?.message}
-              htmlFor="dosageUnit"
-              label="Unidad"
-            >
+            {/* 1. Selector de Unidad */}
+            <FormField error={errors.dosageUnit?.message} htmlFor="dosageUnit" label="Unidad">
               <Controller
                 control={control}
                 name="dosageUnit"
@@ -533,9 +617,37 @@ export function AgrochemicalForm({
                     options={DOSAGE_UNIT_OPTIONS}
                     placeholder="Seleccionar"
                     value={field.value || ''}
-                    onChange={field.onChange}
+                    onChange={(val) => {
+                      field.onChange(val)
+                      const currentVal = control._formValues.dosageValue
+
+                      if (currentVal) {
+                        const cleaned = cleanDosageInput(currentVal, val as DosageUnit)
+
+                        setValue('dosageValue', cleaned)
+                      }
+                    }}
                   />
                 )}
+              />
+            </FormField>
+
+            {/* 2. Input de Cantidad (Deshabilitado si no hay Unidad seleccionada) */}
+            <FormField error={errors.dosageValue?.message} htmlFor="dosageValue" label="Cantidad">
+              <Input
+                className={clsx(!watchedUnit && 'cursor-not-allowed opacity-60')}
+                disabled={!watchedUnit}
+                error={errors.dosageValue?.message}
+                id="dosageValue"
+                placeholder={getDosagePlaceholder(watchedUnit)}
+                type="text"
+                {...register('dosageValue', {
+                  onChange: (e) => {
+                    const cleaned = cleanDosageInput(e.target.value, watchedUnit)
+
+                    setValue('dosageValue', cleaned)
+                  },
+                })}
               />
             </FormField>
           </div>
@@ -547,7 +659,7 @@ export function AgrochemicalForm({
                 Mezcla
               </span>
               <span className="text-primary text-sm font-bold">
-                {watchedName || 'Seleccione insumos...'}
+                {watchedName || 'Seleccione insumos'}
               </span>
             </div>
 
@@ -565,7 +677,6 @@ export function AgrochemicalForm({
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1">
                       <FormField
-                        required
                         error={errors.mixIngredients?.[idx]?.ingredientId?.message}
                         htmlFor={`mixIngredients.${idx}.ingredientId`}
                         label={`Insumo ${idx + 1}`}
@@ -658,7 +769,6 @@ export function AgrochemicalForm({
         {/* 7. Notas (Solo para Insumos Simples) */}
         {!isMix && (
           <FormField
-            required
             error={errors.description?.message}
             htmlFor="description"
             label="Notas / Instrucciones"
