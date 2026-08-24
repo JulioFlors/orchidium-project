@@ -21,6 +21,7 @@ import {
 import { NavbarItem } from '@/interfaces'
 import { shopRoutes, adminRoutes } from '@/config'
 import { useScrollLock, useNavigationContext, useCloseDropdownOnBlur } from '@/hooks'
+import { useCartStore } from '@/store'
 
 interface Props {
   suggestions?: SearchSuggestion[]
@@ -31,6 +32,8 @@ interface Props {
 export function Header({ suggestions = [], plantsNavData = [], layoutConfig = null }: Props) {
   // ----- Hooks -----
   const { isOrchidarium, isAuthLayout, pathname } = useNavigationContext()
+  const isAddedModalOpen = useCartStore((state) => state.isAddedModalOpen)
+  const closeAddedModal = useCartStore((state) => state.closeAddedModal)
 
   // ----- States -----
   const [activeItem, setActiveItem] = useState<NavbarItem | null>(null)
@@ -133,6 +136,11 @@ export function Header({ suggestions = [], plantsNavData = [], layoutConfig = nu
   // ---- Al entrar al mainMenu, cancela cierre pendiente del subMenu -----
   // ---- Al entrar al subMenu, cancela el cierre pendiente -----
   const handleSubMenuMouseEnter = () => {
+    // Si el modal de artículo agregado está abierto, cerrarlo
+    if (isAddedModalOpen) {
+      closeAddedModal()
+    }
+
     // Cancela el cierre si se mueve del main menu al submenu
     clearCloseTimeout()
 
@@ -152,6 +160,9 @@ export function Header({ suggestions = [], plantsNavData = [], layoutConfig = nu
   }
   // ---- Al salir del Header, inicia el timeout para cerrar el subMenu -----
   const handleHeaderMouseLeave = (e: React.MouseEvent) => {
+    if (isAddedModalOpen) {
+      closeAddedModal()
+    }
     // Si sale por arriba (hacia el navegador), no cerramos
     if (e.clientY <= 0) return
     startCloseTimeout()
@@ -183,7 +194,7 @@ export function Header({ suggestions = [], plantsNavData = [], layoutConfig = nu
           'bg-canvas',
           'top-0 w-full',
           isAuthLayout ? 'tds-sm:fixed' : 'fixed',
-          isSubMenuOpen ? 'z-20' : 'z-10',
+          isSubMenuOpen || isAddedModalOpen ? 'z-20' : 'z-10',
         )}
         style={{ paddingRight: 'var(--scrollbar-width, 0.4px)' }}
         onMouseEnter={handleSubMenuMouseEnter}

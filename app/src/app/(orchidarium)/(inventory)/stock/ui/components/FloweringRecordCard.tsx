@@ -9,7 +9,7 @@ import {
 } from 'react-icons/md'
 import { IoCalendarOutline, IoTimeOutline } from 'react-icons/io5'
 
-import { StatusCircleIcon, Badge, Button } from '@/components'
+import { StatusCircleIcon, Button } from '@/components'
 
 export interface FloweringRecord {
   id: string
@@ -71,21 +71,9 @@ export function FloweringRecordCard({ record, onCloseFlowering }: FloweringRecor
           />
 
           <div className="flex flex-col min-w-0 overflow-hidden text-left">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-primary text-[14px] font-bold leading-tight truncate">
-                {isOngoing ? 'Floración en Curso' : 'Floración Completada'}
-              </span>
-              <Badge
-                className={
-                  isOngoing
-                    ? 'border-fuchsia-500/30 bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400 text-[10px]'
-                    : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px]'
-                }
-                size="sm"
-              >
-                {isOngoing ? 'Activa' : 'Finalizada'}
-              </Badge>
-            </div>
+            <span className="text-primary text-[14px] font-bold leading-tight truncate">
+              {isOngoing ? 'Floración en Curso' : 'Floración Completada'}
+            </span>
 
             <div className="text-secondary flex items-center gap-1.5 text-[11px] font-medium opacity-70 mt-0.5">
               <IoCalendarOutline className="h-3.5 w-3.5 shrink-0 opacity-60" />
@@ -101,11 +89,11 @@ export function FloweringRecordCard({ record, onCloseFlowering }: FloweringRecor
         {/* Lado Derecho: Duración / Días Transcurridos + Acción Rápida */}
         <div className="tds-sm:border-0 tds-sm:pt-0 border-black-and-white/5 flex items-center justify-between tds-sm:justify-end gap-4 border-t border-dashed pt-3">
           <div className="flex items-center gap-1.5 font-mono text-xs font-bold text-primary">
-            <IoTimeOutline className="h-4 w-4 text-fuchsia-500 shrink-0 opacity-80" />
+            <IoTimeOutline className="text-secondary h-4 w-4 shrink-0 opacity-80" />
             <span>
               {isOngoing
-                ? `${record.daysElapsed ?? 0} ${(record.daysElapsed ?? 0) === 1 ? 'día transcurrido' : 'días transcurridos'}`
-                : `${record.durationDays ?? 0} ${(record.durationDays ?? 0) === 1 ? 'día de flor' : 'días de flor'}`}
+                ? `${record.daysElapsed ?? 0} ${(record.daysElapsed ?? 0) === 1 ? 'día' : 'días'}`
+                : `${record.durationDays ?? 0} ${(record.durationDays ?? 0) === 1 ? 'día' : 'días'}`}
             </span>
           </div>
 

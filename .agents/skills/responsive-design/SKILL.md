@@ -409,7 +409,7 @@ function ProductImage({ product }) {
 function ResponsiveTable({ data, columns }) {
   return (
     <div className="w-full overflow-x-auto">
-      <table className="w-full min-w-[600px]">
+      <table className="w-full min-w-150">
         <thead>
           <tr>
             {columns.map((col) => (

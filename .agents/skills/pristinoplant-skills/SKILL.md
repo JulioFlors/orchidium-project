@@ -380,6 +380,10 @@ El procedimiento estándar de mantenimiento de series de tiempo para borrar o de
     - ✅ *Correcto:* `10:15 a. m.`, `05:30 p. m.`.
     - Usar la función utilitaria centralizada `formatTime12h(date)` o asegurar que el constructor `Intl.DateTimeFormat` esté configurado para este requerimiento específico.
 
+6. **Prohibición de Asteriscos en Labels y Validación de Formularios**:
+    - **PROHIBIDO EL USO DE ASTERISCOS (`*`)**: Queda estrictamente prohibido incluir asteriscos u otros indicadores visuales de obligatoriedad en los labels de los inputs o componentes de formulario (`FormField`, `Input`, etc.).
+    - **Validación Estricta con Zod**: La obligatoriedad y los límites de los campos deben garantizarse mediante esquemas de validación de Zod con mensajes descriptivos, claros y pedagógicos que expliquen con precisión el error cometido al usuario (ej. *"El nombre debe tener al menos 3 caracteres"*, *"El intervalo semanal no puede ser mayor a 4 semanas"*). Un asterisco no aporta información de ayuda; la retroalimentación útil y contextual de error sí lo hace.
+
 ### Paso 8: Estándares de Documentación (Markdown)
 
 Para mantener la limpieza y compatibilidad con linters (MD041, MD022, MD032, MD007, MD009):

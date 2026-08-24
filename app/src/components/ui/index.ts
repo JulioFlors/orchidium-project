@@ -54,6 +54,8 @@ export * from './radio-group/RadioGroup'
 
 export * from './search-box/SearchBox'
 
+export * from './search-box/SearchModal'
+
 export * from './select/SelectDropdown'
 
 export * from './sidebar/OrchidariumSidebar'

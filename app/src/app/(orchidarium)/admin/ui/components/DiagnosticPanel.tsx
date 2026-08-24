@@ -153,7 +153,7 @@ function ToolCard({ icon, label, colorKey, onClick, pending, active, disabled }:
   return (
     <Card
       className={clsx(
-        'group relative flex aspect-square min-h-[110px] w-full flex-col items-center justify-center gap-4 overflow-hidden p-6 transition-all duration-300 select-none',
+        'group relative flex aspect-square min-h-27.5 w-full flex-col items-center justify-center gap-4 overflow-hidden p-6 transition-all duration-300 select-none',
         !pending && !disabled ? 'cursor-pointer' : 'cursor-wait',
         active
           ? clsx(
@@ -691,7 +691,7 @@ export function AuditConsoleCard({
     return (
       <div
         className={clsx(
-          'mt-2 min-h-[300px] w-full select-none',
+          'mt-2 min-h-75 w-full select-none',
           '[&_.recharts-wrapper_*]:outline-none!',
           '[&_.recharts-surface]:outline-none!',
           '[&_.recharts-tooltip-wrapper]:outline-none!',
@@ -1094,7 +1094,7 @@ export function AuditConsoleCard({
               >
                 <IoStop size={12} />
                 {/* Custom Tooltip - Cohesión Visual Pristinoplant */}
-                <div className="animate-in fade-in slide-in-from-top-1 border-input-outline bg-surface pointer-events-none absolute -bottom-[34px] left-1/2 z-50 hidden -translate-x-1/2 rounded border px-2.5 py-1.5 text-[10px] font-bold text-white shadow-2xl group-hover:block">
+                <div className="animate-in fade-in slide-in-from-top-1 border-input-outline bg-surface pointer-events-none absolute -bottom-8.5 left-1/2 z-50 hidden -translate-x-1/2 rounded border px-2.5 py-1.5 text-[10px] font-bold text-white shadow-2xl group-hover:block">
                   <div className="border-input-outline bg-surface absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 border-t border-l" />
                   Cancelar
                 </div>
@@ -1112,7 +1112,7 @@ export function AuditConsoleCard({
                 <IoPlay className="ml-0.5" size={12} />
                 {/* Custom Tooltip - Cohesión Visual Pristinoplant */}
                 {isOnline && (
-                  <div className="animate-in fade-in slide-in-from-top-1 border-input-outline bg-surface pointer-events-none absolute -bottom-[34px] left-1/2 z-50 hidden -translate-x-1/2 rounded border px-2.5 py-1.5 text-[10px] font-bold text-white shadow-2xl group-hover:block">
+                  <div className="animate-in fade-in slide-in-from-top-1 border-input-outline bg-surface pointer-events-none absolute -bottom-8.5 left-1/2 z-50 hidden -translate-x-1/2 rounded border px-2.5 py-1.5 text-[10px] font-bold text-white shadow-2xl group-hover:block">
                     <div className="border-input-outline bg-surface absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 border-t border-l" />
                     Iniciar
                   </div>

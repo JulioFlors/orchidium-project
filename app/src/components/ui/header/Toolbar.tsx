@@ -15,6 +15,7 @@ import {
   PersonIcon,
   SearchBox,
   SearchIcon,
+  SearchModal,
   SidebarTrigger,
   ThemeToggle,
 } from '@/components'
@@ -31,6 +32,9 @@ export function Toolbar({ isOrchidarium, isAuthLayout, suggestions, closeDropdow
   const openSearchBox = useUIStore((state) => state.openSearchBox)
   const closeSearchBox = useUIStore((state) => state.closeSearchBox)
   const isSearchBoxExpanded = useUIStore((state) => state.isSearchBoxExpanded)
+  const openSearchModal = useUIStore((state) => state.openSearchModal)
+  const closeSearchModal = useUIStore((state) => state.closeSearchModal)
+  const isSearchModalOpen = useUIStore((state) => state.isSearchModalOpen)
   const searchTerm = useUIStore((state) => state.searchTerm)
   const isSidebarOpen = useUIStore((state) => state.isSidebarOpen)
 
@@ -121,16 +125,21 @@ export function Toolbar({ isOrchidarium, isAuthLayout, suggestions, closeDropdow
               aria-label="Abrir búsqueda"
               className="search-button focus-link-visible"
               type="button"
-              // TODO: Conectar con openSearchModal() cuando se implemente el modal móvil
-
               onClick={() => {
-                // console.log('Abrir Modal de Búsqueda Móvil')
+                openSearchModal()
                 closeDropdown?.()
               }}
             >
               <SearchIcon className="tds-icon" />
             </button>
           </div>
+
+          {/* ---- SearchModal Mobile ---- */}
+          <SearchModal
+            isOpen={isSearchModalOpen}
+            suggestions={suggestions}
+            onClose={closeSearchModal}
+          />
 
           {/* ---- Cart ----*/}
           <Link
@@ -141,7 +150,7 @@ export function Toolbar({ isOrchidarium, isAuthLayout, suggestions, closeDropdow
           >
             <div className="relative flex items-center justify-center">
               {totalCartItems > 0 && (
-                <span className="text-black-and-white absolute -top-1 -right-1 flex min-h-3 min-w-3 items-center justify-center rounded-full bg-action px-1 text-[8px] font-medium leading-none shadow-sm">
+                <span className="text-white absolute -top-1 -right-1 flex min-h-3 min-w-3 items-center justify-center rounded-full bg-action px-1 text-[8px] font-medium leading-none shadow-sm">
                   {totalCartItems}
                 </span>
               )}

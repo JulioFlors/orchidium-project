@@ -100,11 +100,18 @@ export function SuppliesView({ agrochemicals }: Props) {
       </section>
 
       <AgrochemicalForm
+        key={selectedAgrochemical ? `edit-${selectedAgrochemical.id}` : 'new'}
         availableAgrochemicals={agrochemicals}
         initialData={selectedAgrochemical}
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSuccess={() => setIsModalOpen(false)}
+        onClose={() => {
+          setIsModalOpen(false)
+          setSelectedAgrochemical(null)
+        }}
+        onSuccess={() => {
+          setIsModalOpen(false)
+          setSelectedAgrochemical(null)
+        }}
       />
 
       <Modal

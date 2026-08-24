@@ -198,6 +198,7 @@ export function DosingSchedulesView() {
       {/* Modal para Crear / Editar Rutina */}
       {isFormModalOpen && (
         <DosingScheduleFormModal
+          key={editingSchedule ? `edit-${editingSchedule.id}` : 'new'}
           initialData={
             editingSchedule
               ? {
@@ -212,8 +213,15 @@ export function DosingSchedulesView() {
               : null
           }
           isOpen={isFormModalOpen}
-          onClose={() => setIsFormModalOpen(false)}
-          onSuccess={() => mutate()}
+          onClose={() => {
+            setIsFormModalOpen(false)
+            setEditingSchedule(null)
+          }}
+          onSuccess={() => {
+            setIsFormModalOpen(false)
+            setEditingSchedule(null)
+            mutate()
+          }}
         />
       )}
 

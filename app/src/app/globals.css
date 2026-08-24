@@ -223,6 +223,7 @@
   .no-scrollbar::-webkit-scrollbar {
     display: none;
   }
+
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
@@ -748,7 +749,7 @@
   .cart-header {
     @apply text-primary font-semibold antialiased transition-all duration-300 ease-in-out;
     @apply text-[22px] leading-7 pt-7 pb-6;
-    @apply border-b border-neutral-200;
+    @apply border-b border-input-outline/60;
     @apply tds-sm:leading-9;
     @apply tds-lg:border-none tds-lg:text-[26px] tds-lg:pb-2;
   }
@@ -762,7 +763,7 @@
 
   .order-summary {
     @apply tds-lg:bg-canvas tds-lg:h-fit tds-lg:max-w-108 tds-lg:ml-auto tds-lg:p-8 tds-lg:rounded tds-lg:border-none tds-lg:shadow-tesla tds-lg:mt-0;
-    @apply border-secondary border-t pt-8 mt-8;
+    @apply border-t border-primary/40 pt-8 mt-8;
   }
 
   .checkout-button {

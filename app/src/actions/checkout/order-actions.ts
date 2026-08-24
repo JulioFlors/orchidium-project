@@ -117,8 +117,17 @@ export async function getOrderById(orderId: string) {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: {
-        items: true,
+        items: {
+          include: {
+            plant: {
+              include: {
+                location: true,
+              },
+            },
+          },
+        },
         user: { select: { id: true, name: true, email: true } },
+        saleRecord: true,
       },
     })
 
@@ -129,6 +138,56 @@ export async function getOrderById(orderId: string) {
     return { ok: true, order }
   } catch (error) {
     return { ok: false, message: 'Error al recuperar la orden.', error }
+  }
+}
+
+export async function getAvailablePlantsForOrderItem(orderItemId: string) {
+  try {
+    const orderItem = await prisma.orderItem.findUnique({
+      where: { id: orderItemId },
+    })
+
+    if (!orderItem) return { ok: false, message: 'Ítem no encontrado.', plants: [] }
+
+    // Buscar especie por nombre
+    const species = await prisma.species.findFirst({
+      where: { name: orderItem.speciesName },
+    })
+
+    if (!species) return { ok: false, message: 'Especie no encontrada.', plants: [] }
+
+    const plants = await prisma.plant.findMany({
+      where: {
+        speciesId: species.id,
+        currentSize: orderItem.size,
+        OR: [{ status: 'AVAILABLE' }, ...(orderItem.plantId ? [{ id: orderItem.plantId }] : [])],
+      },
+      include: {
+        location: true,
+      },
+      orderBy: { createdAt: 'asc' },
+    })
+
+    return { ok: true, plants }
+  } catch (error) {
+    return { ok: false, message: 'Error al obtener plantas disponibles.', plants: [], error }
+  }
+}
+
+export async function updateOrderStatus(orderId: string, status: OrderStatus) {
+  try {
+    const order = await prisma.order.update({
+      where: { id: orderId },
+      data: { status },
+    })
+
+    revalidatePath('/orders')
+    revalidatePath(`/orders/${orderId}`)
+    revalidatePath('/admin/orders')
+
+    return { ok: true, order }
+  } catch (error) {
+    return { ok: false, message: 'Error al actualizar el estado de la orden.', error }
   }
 }
 
@@ -197,6 +256,7 @@ export async function assignPlantToOrderItem(orderItemId: string, plantId: strin
       })
     })
 
+    revalidatePath('/orders')
     revalidatePath('/admin/orders')
     revalidatePath('/stock')
 
@@ -243,6 +303,9 @@ export async function confirmOrderPayment(orderId: string, adminUserId?: string)
       })
     })
 
+    revalidatePath('/orders')
+    revalidatePath(`/orders/${orderId}`)
+    revalidatePath('/sales')
     revalidatePath('/admin/orders')
     revalidatePath('/account/orders')
     revalidatePath('/stock')
@@ -278,6 +341,8 @@ export async function cancelOrder(orderId: string) {
       }
     })
 
+    revalidatePath('/orders')
+    revalidatePath(`/orders/${orderId}`)
     revalidatePath('/admin/orders')
     revalidatePath('/account/orders')
     revalidatePath('/stock')

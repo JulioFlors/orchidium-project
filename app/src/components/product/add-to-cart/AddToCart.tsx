@@ -2,7 +2,7 @@
 
 import type { Species, ProductVariant } from '@/interfaces'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 
 import {
@@ -28,8 +28,20 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
   // Estado local para este formulario
   const [quantity, setQuantity] = useState<number>(1)
   const [posted, setPosted] = useState(false)
+  const [isAdded, setIsAdded] = useState(false)
+  const addedTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
   const { format, formatRange } = useFormatPrice()
   const addProductToCart = useCartStore((state) => state.addProductToCart)
+
+  // Limpiar temporizador al desmontar el componente
+  useEffect(() => {
+    return () => {
+      if (addedTimeoutRef.current) {
+        clearTimeout(addedTimeoutRef.current)
+      }
+    }
+  }, [])
 
   // 1. ¿Existe algo que vender en general?
   const hasGlobalStock = isProductAvailable(product)
@@ -84,6 +96,15 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
     // Reset visual post-agregado
     setQuantity(1)
     setPosted(false)
+
+    // Estado transitorio de 10 segundos "Agregado"
+    setIsAdded(true)
+    if (addedTimeoutRef.current) {
+      clearTimeout(addedTimeoutRef.current)
+    }
+    addedTimeoutRef.current = setTimeout(() => {
+      setIsAdded(false)
+    }, 10000)
   }
 
   // Helper: ¿La variante seleccionada tiene stock?
@@ -106,6 +127,10 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
             onVariantSelected(variant) // Notificamos al padre
             setQuantity(1) // Reset cantidad al cambiar tamaño
             setPosted(false) // Limpiamos aviso previo
+            setIsAdded(false) // Reset estado transitorio
+            if (addedTimeoutRef.current) {
+              clearTimeout(addedTimeoutRef.current)
+            }
           }}
         />
       )}
@@ -145,19 +170,23 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
               <div className="fade-in">
                 <StockNotificationWhatsapp
                   productName={`${product.name} (${selectedVariant.size})`}
+                  selectedVariant={selectedVariant}
                   size={selectedVariant.size}
                   speciesId={product.id}
                   variantId={selectedVariant.id}
+                  variants={product.variants}
+                  onVariantChange={onVariantSelected}
                 />
               </div>
             ) : (
               // CASO: Disponible para comprar
               <Button
                 className="tds-sm:w-[320px] tds-lg:w-full tds-xl:w-[320px] w-full"
+                disabled={isAdded}
                 type="button"
                 onClick={addToCart}
               >
-                Agregar al carrito
+                {isAdded ? 'Agregado' : 'Agregar al carrito'}
               </Button>
             )}
           </div>
@@ -169,9 +198,12 @@ export function AddToCart({ product, selectedVariant, onVariantSelected }: Props
           <div className="fade-in">
             <StockNotificationWhatsapp
               productName={`${product.name} ${selectedVariant ? `(${selectedVariant.size})` : ''}`}
+              selectedVariant={selectedVariant}
               size={selectedVariant?.size}
               speciesId={product.id}
               variantId={selectedVariant?.id}
+              variants={product.variants}
+              onVariantChange={onVariantSelected}
             />
           </div>
         </div>

@@ -99,3 +99,26 @@ export async function registerSinglePlantSale(
     return { ok: false, message: 'Error al registrar venta de la planta.', error }
   }
 }
+
+export async function getSalesRecords() {
+  try {
+    const sales = await prisma.saleRecord.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        order: {
+          include: {
+            user: { select: { id: true, name: true, email: true } },
+            items: true,
+          },
+        },
+        createdBy: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+    })
+
+    return { ok: true, sales }
+  } catch (error) {
+    return { ok: false, message: 'Error al obtener registros de ventas.', sales: [], error }
+  }
+}

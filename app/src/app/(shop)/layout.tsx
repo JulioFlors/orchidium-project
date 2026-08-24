@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 import { headers } from 'next/headers'
 
 import { auth } from '@/lib/server'
-import { Footer, Sidebar, AdaptiveHeader } from '@/components'
+import { Footer, Sidebar, AdaptiveHeader, AddedToCartModal } from '@/components'
 import { Logger } from '@/lib'
 import {
   getPlantsNavigation,
@@ -57,6 +57,8 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
       />
 
       <Sidebar session={session} suggestions={suggestions || []} />
+
+      <AddedToCartModal />
 
       <main className="tds-sm:mx-9 tds-xl:mx-12 mx-6 mt-14 grow">{children}</main>
 

@@ -32,12 +32,49 @@ export async function requestStockNotification(input: RequestStockNotificationIn
     const cleanName = userName.trim()
     const cleanPhone = phoneNumber.trim()
 
+    // 1. Obtener la especie y sus variantes asociadas
+    const species = await prisma.species.findUnique({
+      where: { id: speciesId },
+      include: { variants: true },
+    })
+
+    if (!species) {
+      return { ok: false, error: 'La planta solicitada no fue encontrada.' }
+    }
+
+    let resolvedVariantId = variantId || null
+    let resolvedSize: PotSize | null = size || null
+
+    // Si la especie tiene variantes registradas, validar que se seleccione una variante obligatoriamente
+    if (species.variants.length > 0) {
+      if (!resolvedVariantId && !resolvedSize) {
+        return { ok: false, error: 'Debe seleccionar una variante o tamaño de la planta.' }
+      }
+
+      if (resolvedVariantId) {
+        const found = species.variants.find((v) => v.id === resolvedVariantId)
+
+        if (found) {
+          resolvedSize = found.size
+        }
+      } else if (resolvedSize) {
+        const found = species.variants.find((v) => v.size === resolvedSize)
+
+        if (found) {
+          resolvedVariantId = found.id
+        }
+      }
+    } else {
+      resolvedVariantId = null
+      resolvedSize = null
+    }
+
     // Búsqueda para upsert por teléfono + especie + tamaño
     const existing = await prisma.stockNotificationRequest.findFirst({
       where: {
         phoneNumber: cleanPhone,
         speciesId: speciesId,
-        size: size || null,
+        size: resolvedSize,
       },
     })
 
@@ -46,7 +83,7 @@ export async function requestStockNotification(input: RequestStockNotificationIn
         where: { id: existing.id },
         data: {
           userName: cleanName,
-          variantId: variantId || null,
+          variantId: resolvedVariantId,
           status: 'PENDING',
           updatedAt: new Date(),
         },
@@ -54,7 +91,7 @@ export async function requestStockNotification(input: RequestStockNotificationIn
       Logger.info('[SNAT] Solicitud de notificación de stock actualizada', {
         phone: cleanPhone,
         speciesId,
-        size,
+        size: resolvedSize,
       })
     } else {
       await prisma.stockNotificationRequest.create({
@@ -62,15 +99,15 @@ export async function requestStockNotification(input: RequestStockNotificationIn
           userName: cleanName,
           phoneNumber: cleanPhone,
           speciesId: speciesId,
-          variantId: variantId || null,
-          size: size || null,
+          variantId: resolvedVariantId,
+          size: resolvedSize,
           status: 'PENDING',
         },
       })
       Logger.info('[SNAT] Nueva solicitud de notificación de stock registrada', {
         phone: cleanPhone,
         speciesId,
-        size,
+        size: resolvedSize,
       })
     }
 

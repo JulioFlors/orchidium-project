@@ -7,12 +7,25 @@ import clsx from 'clsx'
 
 import { Backdrop } from '@/components/ui/backdrop/Backdrop'
 
-// ---- Constantes de Animación Unificadas ----
+// ---- Constantes de Animación Unificadas (easeOut fluido) ----
 const MODAL_ANIMATION = {
-  initial: { opacity: 0, scale: 0.95, y: 10 },
-  animate: { opacity: 1, scale: 1, y: 0 },
-  exit: { opacity: 0, scale: 0.95, y: 10 },
-  transition: { type: 'spring' as const, damping: 25, stiffness: 300 },
+  initial: { y: '60%', opacity: 0 },
+  animate: {
+    y: 0,
+    opacity: 1,
+    transition: {
+      y: { duration: 0.4, ease: [0.4, 0, 0.2, 1] },
+      opacity: { duration: 0.25, ease: 'easeOut', delay: 0.05 },
+    },
+  },
+  exit: {
+    y: '60%',
+    opacity: 0,
+    transition: {
+      y: { duration: 0.35, ease: [0.4, 0, 1, 1] },
+      opacity: { duration: 0.2, ease: 'easeIn' },
+    },
+  },
 }
 
 // ---- Selectores para elementos enfocables ----
@@ -25,12 +38,12 @@ const FOCUSABLE_SELECTORS = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(', ')
 
-// ---- Tamaños del modal ----
+// ---- Tamaños del modal (Aplicados en Desktop >= tds-sm) ----
 const SIZE_MAP = {
-  sm: 'max-w-sm md:w-[384px]',
-  md: 'max-w-md md:w-[448px]',
-  lg: 'max-w-lg md:w-[512px]',
-  xl: 'max-w-xl md:w-[576px]',
+  sm: 'tds-sm:max-w-sm tds-sm:w-[384px]',
+  md: 'tds-sm:max-w-md tds-sm:w-[448px]',
+  lg: 'tds-sm:max-w-lg tds-sm:w-[512px]',
+  xl: 'tds-sm:max-w-xl tds-sm:w-[576px]',
 } as const
 
 // ---- Props ----
@@ -45,7 +58,7 @@ interface ModalProps {
   subtitle?: ReactNode
   /** Icono decorativo junto al título */
   icon?: ReactNode
-  /** Tamaño del contenedor */
+  /** Tamaño del contenedor en desktop */
   size?: keyof typeof SIZE_MAP
   /** Contenido del cuerpo del modal */
   children: ReactNode
@@ -58,11 +71,13 @@ interface ModalProps {
 }
 
 /**
- * Componente Modal estandarizado con:
+ * Componente Modal estandarizado con doble layout responsivo:
+ * - Desktop (> tds-sm): Centrado en pantalla con margen, bordes redondeados completos (rounded-2xl) y ancho según `size`.
+ * - Mobile (<= tds-sm): Full-Width anclado al fondo (w-full inset-x-0 bottom-0), altura auto-adaptativa (h-auto) con tope máximo (max-h-[calc(100dvh-3.5rem)]), esquinas superiores redondeadas (rounded-t-3xl), esquinas inferiores rectas (rounded-b-none) y borde superior sutil (border-t border-input-outline/40).
  * - Focus Trapping (Tab/Shift+Tab ciclan dentro del modal)
- * - Backdrop con blur de 2px y bloqueo de scroll
- * - Cierre con Escape
- * - Animaciones spring unificadas
+ * - Backdrop con blur y bloqueo de scroll
+ * - Cierre accesible con Escape y tap en el Backdrop
+ * - Animación fluida con curva Material easeOut
  * - Accesibilidad ARIA (role="dialog", aria-modal, aria-labelledby)
  */
 export function Modal({
@@ -144,7 +159,7 @@ export function Modal({
       if (focusable.length > 0) {
         focusable[0].focus()
       }
-    }, 50) // Esperar a que la animación inicie
+    }, 50)
 
     return () => {
       clearTimeout(timer)
@@ -168,13 +183,23 @@ export function Modal({
   }, [isOpen, handleKeyDown])
 
   return (
-    <Backdrop blur="backdrop-blur-[2px]" className="p-4" visible={isOpen} onClick={onClose}>
+    <Backdrop
+      blur="backdrop-blur-[2px]"
+      className="flex flex-col justify-end p-0 tds-sm:items-center tds-sm:justify-center tds-sm:p-4"
+      visible={isOpen}
+      zIndex="z-60"
+      onClick={onClose}
+    >
       <motion.div
         ref={modalRef}
         aria-labelledby="modal-title"
         aria-modal="true"
         className={clsx(
-          'bg-surface border-input-outline relative z-10 w-full isolate rounded-2xl border shadow-xl',
+          'bg-surface border-input-outline relative z-10 flex w-full flex-col isolate shadow-xl',
+          // Mobile (<= tds-sm): Full-Width anclado al fondo, h-auto (se adapta al contenido) con tope máximo, rounded-t-3xl, border-t border-input-outline/40
+          'h-auto max-h-[calc(100dvh-3.5rem)] rounded-t-3xl rounded-b-none border-t border-input-outline/40 border-x-0 border-b-0',
+          // Desktop (> tds-sm): Centrado, h-auto max-h-[85vh], rounded-2xl, border completo
+          'tds-sm:h-auto tds-sm:max-h-[85vh] tds-sm:rounded-2xl tds-sm:border',
           SIZE_MAP[size],
           className,
         )}
@@ -183,7 +208,7 @@ export function Modal({
         {...MODAL_ANIMATION}
       >
         {/* ---- Header ---- */}
-        <div className="border-input-outline flex items-center justify-between border-b px-6 py-4">
+        <div className="border-input-outline flex shrink-0 items-center justify-between border-b px-6 py-4">
           <div className="flex min-w-0 flex-1 items-center gap-2 pr-10">
             {icon && <span className="text-secondary shrink-0">{icon}</span>}
             <div className="min-w-0">
@@ -205,12 +230,15 @@ export function Modal({
 
         {/* ---- Body ---- */}
         <div
-          className={clsx('group relative flex min-h-0 flex-col', !footer && 'rounded-b-[inherit]')}
+          className={clsx(
+            'group relative flex min-h-0 flex-1 flex-col',
+            !footer && 'rounded-b-[inherit]',
+          )}
         >
           <div
             aria-label="Contenido del modal"
             className={clsx(
-              'peer relative max-h-[70vh] overflow-y-auto p-6 outline-none focus:outline-none focus-visible:outline-none',
+              'peer relative w-full flex-1 overflow-y-auto p-6 outline-none focus:outline-none focus-visible:outline-none tds-sm:max-h-[70vh]',
               !footer && 'rounded-b-[inherit]',
               bodyClassName,
             )}
@@ -222,7 +250,7 @@ export function Modal({
 
         {/* ---- Footer (opcional) ---- */}
         {footer && (
-          <div className="border-input-outline flex justify-end gap-3 border-t px-6 py-4">
+          <div className="border-input-outline flex shrink-0 justify-end gap-3 border-t px-6 py-4">
             {footer}
           </div>
         )}

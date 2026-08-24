@@ -56,7 +56,12 @@ export function Backdrop({
             onClick={onClick}
           >
             {/* Contenedor del Body Interceptado para evitar Bubbling al Overlay */}
-            <div onClick={(e) => e.stopPropagation()}>{children}</div>
+            <div
+              className="tds-sm:w-auto flex w-full justify-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {children}
+            </div>
           </motion.div>
         </>
       )}

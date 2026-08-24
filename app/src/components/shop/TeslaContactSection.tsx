@@ -57,7 +57,7 @@ export function TeslaContactSection() {
 
   return (
     <section
-      className="bg-surface dark:bg-canvas relative flex w-full flex-col justify-center overflow-hidden px-5 pt-[54px] pb-[16px]"
+      className="bg-surface dark:bg-canvas relative flex w-full flex-col justify-center overflow-hidden px-5 pt-13.5 pb-4"
       id="contact"
     >
       {/* Bento Grid Principal */}
@@ -65,7 +65,7 @@ export function TeslaContactSection() {
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           {/* ================= CARD 1: WHATSAPP (2/3 columnas) ================= */}
           <motion.div
-            className="bg-canvas dark:bg-surface border-input-outline/25 dark:border-input-outline/10 group relative flex h-[360px] flex-col justify-between overflow-hidden rounded-3xl border p-8 transition-all duration-300 hover:border-emerald-500/30 hover:shadow-lg md:col-span-2"
+            className="bg-canvas dark:bg-surface border-input-outline/25 dark:border-input-outline/10 group relative flex h-90 flex-col justify-between overflow-hidden rounded-3xl border p-8 transition-all duration-300 hover:border-emerald-500/30 hover:shadow-lg md:col-span-2"
             initial={{ opacity: 0, y: 20 }}
             style={dotPatternStyle}
             transition={{ duration: 0.5, delay: 0.1 }}
@@ -107,7 +107,7 @@ export function TeslaContactSection() {
 
               {/* Visual Celular de Chat Derecha */}
               <div className="relative z-10 hidden h-full w-64 items-end justify-center overflow-hidden md:flex">
-                <div className="flex h-[220px] w-[220px] rotate-[-3deg] flex-col gap-2 rounded-2xl border border-white/10 bg-zinc-950/90 p-3 shadow-2xl transition-all duration-500 group-hover:rotate-0">
+                <div className="flex h-55 w-55 -rotate-3 flex-col gap-2 rounded-2xl border border-white/10 bg-zinc-950/90 p-3 shadow-2xl transition-all duration-500 group-hover:rotate-0">
                   {/* Header Chat */}
                   <div className="flex items-center gap-2 border-b border-white/5 pb-2">
                     <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
@@ -139,7 +139,7 @@ export function TeslaContactSection() {
 
           {/* ================= CARD 2: CORREO ELECTRÓNICO (1/3 columnas) ================= */}
           <motion.div
-            className="bg-canvas dark:bg-surface border-input-outline/25 dark:border-input-outline/10 group relative flex h-[360px] flex-col justify-between overflow-hidden rounded-3xl border p-8 transition-all duration-300 hover:border-purple-500/30 hover:shadow-lg md:col-span-1"
+            className="bg-canvas dark:bg-surface border-input-outline/25 dark:border-input-outline/10 group relative flex h-90 flex-col justify-between overflow-hidden rounded-3xl border p-8 transition-all duration-300 hover:border-purple-500/30 hover:shadow-lg md:col-span-1"
             initial={{ opacity: 0, y: 20 }}
             style={dotPatternStyle}
             transition={{ duration: 0.5, delay: 0.2 }}
@@ -209,7 +209,7 @@ export function TeslaContactSection() {
 
           {/* ================= CARD 3: UBICACIÓN (2/3 columnas) ================= */}
           <motion.div
-            className="bg-canvas dark:bg-surface border-input-outline/25 dark:border-input-outline/10 group relative flex h-[360px] flex-col justify-between overflow-hidden rounded-3xl border p-8 transition-all duration-300 hover:border-sky-500/30 hover:shadow-lg md:col-span-2"
+            className="bg-canvas dark:bg-surface border-input-outline/25 dark:border-input-outline/10 group relative flex h-90 flex-col justify-between overflow-hidden rounded-3xl border p-8 transition-all duration-300 hover:border-sky-500/30 hover:shadow-lg md:col-span-2"
             initial={{ opacity: 0, y: 20 }}
             style={dotPatternStyle}
             transition={{ duration: 0.5, delay: 0.3 }}
@@ -272,7 +272,7 @@ export function TeslaContactSection() {
 
           {/* ================= CARD 4: HORARIO DE ATENCIÓN (1/3 columnas) ================= */}
           <motion.div
-            className="bg-canvas dark:bg-surface border-input-outline/25 dark:border-input-outline/10 group relative flex h-[360px] flex-col justify-between overflow-hidden rounded-3xl border p-8 transition-all duration-300 hover:border-amber-500/30 hover:shadow-lg md:col-span-1"
+            className="bg-canvas dark:bg-surface border-input-outline/25 dark:border-input-outline/10 group relative flex h-90 flex-col justify-between overflow-hidden rounded-3xl border p-8 transition-all duration-300 hover:border-amber-500/30 hover:shadow-lg md:col-span-1"
             initial={{ opacity: 0, y: 20 }}
             style={dotPatternStyle}
             transition={{ duration: 0.5, delay: 0.4 }}

@@ -1,5 +1,5 @@
 {
-  "name": "PristinoBot - Atención de Comandos (/status, /dosing, /help)",
+  "name": "PristinoBot - Atención de Comandos (/status, /dosing, /help, /filter)",
   "nodes": [
     {
       "parameters": {
@@ -22,7 +22,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const item = $input.item.json;\nconst callback = item.callback_query;\nconst msg = item.message;\n\nlet eventType = 'UNKNOWN';\nlet timePreset = 'all';\nlet statusPreset = 'all';\nlet chatId = null;\nlet messageId = null;\nlet fromUser = 'Usuario';\nlet callbackData = '';\n\nif (callback) {\n  chatId = callback.message?.chat?.id;\n  messageId = callback.message?.message_id;\n  fromUser = callback.from?.first_name || 'Usuario';\n  callbackData = callback.data || '';\n\n  if (callbackData.startsWith('dosing_time:')) {\n    eventType = 'DOSING_STATUS_MENU';\n    timePreset = callbackData.replace('dosing_time:', '');\n  } else if (callbackData.startsWith('dosing_query:')) {\n    eventType = 'DOSING_QUERY';\n    const parts = callbackData.replace('dosing_query:', '').split(':');\n    timePreset = parts[0] || 'all';\n    statusPreset = parts[1] || 'all';\n  } else if (callbackData.startsWith('agro_hw_confirm:')) {\n    eventType = 'AGRO_HW_CONFIRM';\n  } else if (callbackData.startsWith('agro_hw_cancel:')) {\n    eventType = 'AGRO_HW_CANCEL';\n  } else if (callbackData.startsWith('agro_hw_postpone:')) {\n    eventType = 'AGRO_HW_POSTPONE';\n  } else if (callbackData.startsWith('agro_man_complete:')) {\n    eventType = 'AGRO_MAN_COMPLETE';\n  } else if (callbackData.startsWith('agro_man_cancel:')) {\n    eventType = 'AGRO_MAN_CANCEL';\n  } else if (callbackData.startsWith('agro_man_read:')) {\n    eventType = 'AGRO_MAN_READ';\n  }\n} else if (msg && msg.text) {\n  chatId = msg.chat?.id;\n  messageId = msg.message_id;\n  fromUser = msg.from?.first_name || 'Usuario';\n  const text = msg.text.trim();\n\n  if (text.startsWith('/status')) {\n    eventType = 'STATUS';\n  } else if (text.startsWith('/dosing')) {\n    eventType = 'DOSING_TIME_MENU';\n  } else if (text.startsWith('/complete') || text.startsWith('/completar')) {\n    eventType = 'COMPLETE_MENU';\n  } else if (text.startsWith('/help') || text.startsWith('/start')) {\n    eventType = 'HELP';\n  }\n}\n\nreturn [{\n  json: {\n    eventType,\n    chatId,\n    messageId,\n    fromUser,\n    callbackData,\n    timePreset,\n    statusPreset\n  }\n}];"
+        "jsCode": "const item = $input.item.json;\nconst callback = item.callback_query;\nconst msg = item.message;\n\nlet eventType = 'UNKNOWN';\nlet timePreset = 'all';\nlet statusPreset = 'all';\nlet chatId = null;\nlet messageId = null;\nlet fromUser = 'Usuario';\nlet callbackData = '';\n\nif (callback) {\n  chatId = callback.message?.chat?.id;\n  messageId = callback.message?.message_id;\n  fromUser = callback.from?.username ? `@${callback.from.username}` : (callback.from?.first_name || 'Usuario');\n  callbackData = callback.data || '';\n\n  if (callbackData.startsWith('dosing_time:')) {\n    eventType = 'DOSING_STATUS_MENU';\n    timePreset = callbackData.replace('dosing_time:', '');\n  } else if (callbackData.startsWith('dosing_query:')) {\n    eventType = 'DOSING_QUERY';\n    const parts = callbackData.replace('dosing_query:', '').split(':');\n    timePreset = parts[0] || 'all';\n    statusPreset = parts[1] || 'all';\n  }\n} else if (msg && msg.text) {\n  chatId = msg.chat?.id;\n  messageId = msg.message_id;\n  fromUser = msg.from?.username ? `@${msg.from.username}` : (msg.from?.first_name || 'Usuario');\n  const text = msg.text.trim();\n\n  if (text.startsWith('/status')) {\n    eventType = 'STATUS';\n  } else if (text.startsWith('/dosing')) {\n    eventType = 'DOSING_TIME_MENU';\n  } else if (text.startsWith('/filter') || text.startsWith('/filtro')) {\n    eventType = 'FILTER';\n  } else if (text.startsWith('/help') || text.startsWith('/start')) {\n    eventType = 'HELP';\n  }\n}\n\nreturn [{\n  json: {\n    eventType,\n    chatId,\n    messageId,\n    fromUser,\n    callbackData,\n    timePreset,\n    statusPreset\n  }\n}];"
       },
       "id": "3c4d5e6f-0002-4000-8000-000000000002",
       "name": "Parsear Evento",
@@ -130,27 +130,7 @@
                       "type": "string",
                       "operation": "equals"
                     },
-                    "rightValue": "COMPLETE_MENU"
-                  }
-                ],
-                "combinator": "and"
-              }
-            },
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "leftValue": "",
-                  "typeValidation": "strict"
-                },
-                "conditions": [
-                  {
-                    "leftValue": "={{ $json.eventType }}",
-                    "operator": {
-                      "type": "string",
-                      "operation": "startsWith"
-                    },
-                    "rightValue": "AGRO_"
+                    "rightValue": "FILTER"
                   }
                 ],
                 "combinator": "and"
@@ -204,7 +184,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const chatId = $('Parsear Evento').first().json.chatId;\nconst items = $input.all();\nconst ema = items.find(i => i.json.name === 'Weather_Station_ZONA_A')?.json || {};\nconst actuador = items.find(i => i.json.name === 'Actuator_Controller')?.json || {};\n\nconst formatStatus = (s) => {\n  if (!s) return 'Offline';\n  const upper = String(s).toUpperCase();\n  if (upper === 'ONLINE' || upper === 'REBOOT') return 'Online';\n  if (upper === 'SLEEP') return 'Sleep';\n  return 'Offline';\n};\n\nconst replyText = `*Estado de Infraestructura*\\n\\n` +\n  `Nodo EMA: ${formatStatus(ema.status)}\\n` +\n  `Nodo Actuador: ${formatStatus(actuador.status)}`;\n\nreturn [{ json: { chatId, replyText } }];"
+        "jsCode": "const chatId = $('Parsear Evento').first().json.chatId;\nconst items = $input.all();\nconst ema = items.find(i => i.json.name === 'Weather_Station_ZONA_A')?.json || {};\nconst actuador = items.find(i => i.json.name === 'Actuator_Controller')?.json || {};\n\nconst formatStatus = (s) => {\n  if (!s) return 'Offline';\n  const upper = String(s).toUpperCase();\n  if (upper === 'ONLINE' || upper === 'REBOOT') return 'Online';\n  if (upper === 'SLEEP') return 'Sleep';\n  return 'Offline';\n};\n\nconst replyText = `\\u200B\\n*Estado de Infraestructura*\\n\\n` +\n  `Nodo EMA: ${formatStatus(ema.status)}\\n` +\n  `Nodo Actuador: ${formatStatus(actuador.status)}`;\n\nreturn [{ json: { chatId, replyText } }];"
       },
       "id": "3c4d5e6f-0005-4000-8000-000000000005",
       "name": "Formatear Respuesta Status",
@@ -380,7 +360,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "=WITH actual_logs AS (SELECT m.id, m.status::text AS status, m.\"scheduledAt\", m.zones, COALESCE(a.name, 'Aplicación Manual') AS \"agrochemicalName\", COALESCE(CASE WHEN a.\"dosageValue\" IS NOT NULL AND a.\"dosageUnit\" IS NOT NULL THEN (a.\"dosageValue\"::text || ' ' || a.\"dosageUnit\"::text) ELSE '' END, '') AS preparation FROM \"DosingLog\" m LEFT JOIN \"Agrochemical\" a ON m.\"agrochemicalId\" = a.id), routine_schedules AS (SELECT s.id, 'PENDING' AS status, NOW() + INTERVAL '7 days' AS \"scheduledAt\", s.zones, COALESCE(fa.name, pa.name, s.name) AS \"agrochemicalName\", COALESCE(CASE WHEN fa.\"dosageValue\" IS NOT NULL AND fa.\"dosageUnit\" IS NOT NULL THEN (fa.\"dosageValue\"::text || ' ' || fa.\"dosageUnit\"::text) WHEN pa.\"dosageValue\" IS NOT NULL AND pa.\"dosageUnit\" IS NOT NULL THEN (pa.\"dosageValue\"::text || ' ' || pa.\"dosageUnit\"::text) ELSE '' END, '') AS preparation FROM \"DosingSchedule\" s LEFT JOIN \"FertilizationProgram\" fp ON s.\"fertilizationProgramId\" = fp.id LEFT JOIN \"FertilizationCycle\" fc ON fc.\"programId\" = fp.id AND fc.sequence = 1 LEFT JOIN \"Agrochemical\" fa ON fc.\"agrochemicalId\" = fa.id LEFT JOIN \"PhytosanitaryProgram\" pp ON s.\"phytosanitaryProgramId\" = pp.id LEFT JOIN \"PhytosanitaryCycle\" pc ON pc.\"programId\" = pp.id AND pc.sequence = 1 LEFT JOIN \"Agrochemical\" pa ON pc.\"agrochemicalId\" = pa.id WHERE s.\"isEnabled\" = true AND NOT EXISTS (SELECT 1 FROM \"DosingLog\" ml WHERE ml.\"scheduleId\" = s.id AND ml.status = 'PENDING')), all_tasks AS (SELECT * FROM actual_logs UNION ALL SELECT * FROM routine_schedules) SELECT * FROM all_tasks WHERE ('{{ $json.statusPreset }}' = 'all' OR status = '{{ $json.statusPreset }}') AND ('{{ $json.timePreset }}' = 'all' OR ('{{ $json.timePreset }}' = 'today' AND \"scheduledAt\" >= CURRENT_DATE AND \"scheduledAt\" < CURRENT_DATE + INTERVAL '1 day') OR ('{{ $json.timePreset }}' = 'week' AND \"scheduledAt\" >= date_trunc('week', CURRENT_DATE) AND \"scheduledAt\" < date_trunc('week', CURRENT_DATE) + INTERVAL '1 week') OR ('{{ $json.timePreset }}' = 'next-week' AND \"scheduledAt\" >= date_trunc('week', CURRENT_DATE) + INTERVAL '1 week' AND \"scheduledAt\" < date_trunc('week', CURRENT_DATE) + INTERVAL '2 weeks') OR ('{{ $json.timePreset }}' = 'month' AND \"scheduledAt\" >= date_trunc('month', CURRENT_DATE) AND \"scheduledAt\" < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month') OR ('{{ $json.timePreset }}' = 'next-month' AND \"scheduledAt\" >= date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' AND \"scheduledAt\" < date_trunc('month', CURRENT_DATE) + INTERVAL '2 months')) ORDER BY \"scheduledAt\" DESC LIMIT 10;"
+        "query": "=WITH actual_logs AS (SELECT m.id, m.status::text AS status, m.\"scheduledAt\", m.zones, COALESCE(a.name, 'Aplicación Manual') AS \"agrochemicalName\", COALESCE(a.preparation, '') AS preparation FROM \"DosingLog\" m LEFT JOIN \"Agrochemical\" a ON m.\"agrochemicalId\" = a.id), routine_schedules AS (SELECT s.id, 'PENDING' AS status, NOW() + INTERVAL '7 days' AS \"scheduledAt\", s.zones, COALESCE(fa.name, pa.name, s.name) AS \"agrochemicalName\", COALESCE(fa.preparation, pa.preparation, '') AS preparation FROM \"DosingSchedule\" s LEFT JOIN \"FertilizationProgram\" fp ON s.\"fertilizationProgramId\" = fp.id LEFT JOIN \"FertilizationCycle\" fc ON fc.\"programId\" = fp.id AND fc.sequence = 1 LEFT JOIN \"Agrochemical\" fa ON fc.\"agrochemicalId\" = fa.id LEFT JOIN \"PhytosanitaryProgram\" pp ON s.\"phytosanitaryProgramId\" = pp.id LEFT JOIN \"PhytosanitaryCycle\" pc ON pc.\"programId\" = pp.id AND pc.sequence = 1 LEFT JOIN \"Agrochemical\" pa ON pc.\"agrochemicalId\" = pa.id WHERE s.\"isEnabled\" = true AND NOT EXISTS (SELECT 1 FROM \"DosingLog\" ml WHERE ml.\"scheduleId\" = s.id AND ml.status = 'PENDING')), all_tasks AS (SELECT * FROM actual_logs UNION ALL SELECT * FROM routine_schedules) SELECT * FROM all_tasks WHERE ('{{ $json.statusPreset }}' = 'all' OR status = '{{ $json.statusPreset }}') AND ('{{ $json.timePreset }}' = 'all' OR ('{{ $json.timePreset }}' = 'today' AND \"scheduledAt\" >= CURRENT_DATE AND \"scheduledAt\" < CURRENT_DATE + INTERVAL '1 day') OR ('{{ $json.timePreset }}' = 'week' AND \"scheduledAt\" >= date_trunc('week', CURRENT_DATE) AND \"scheduledAt\" < date_trunc('week', CURRENT_DATE) + INTERVAL '1 week') OR ('{{ $json.timePreset }}' = 'next-week' AND \"scheduledAt\" >= date_trunc('week', CURRENT_DATE) + INTERVAL '1 week' AND \"scheduledAt\" < date_trunc('week', CURRENT_DATE) + INTERVAL '2 weeks') OR ('{{ $json.timePreset }}' = 'month' AND \"scheduledAt\" >= date_trunc('month', CURRENT_DATE) AND \"scheduledAt\" < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month') OR ('{{ $json.timePreset }}' = 'next-month' AND \"scheduledAt\" >= date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' AND \"scheduledAt\" < date_trunc('month', CURRENT_DATE) + INTERVAL '2 months')) ORDER BY \"scheduledAt\" DESC LIMIT 10;"
       },
       "settings": {
         "alwaysOutputData": true
@@ -432,8 +412,46 @@
     },
     {
       "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO \"FilterCleaningLog\" (id, \"cleanedAt\", \"nextDueAt\", notes, \"confirmedBy\", source, \"createdAt\") VALUES (gen_random_uuid(), NOW(), NOW() + INTERVAL '2 days', 'Comando /filter Telegram', '{{ $json.fromUser }}', 'TELEGRAM_BOT', NOW()); UPDATE \"Notification\" SET \"readAt\" = NOW(), status = 'READ' WHERE type = 'MAINTENANCE_REMINDER';"
+      },
+      "id": "3c4d5e6f-0013-4000-8000-000000000013",
+      "name": "Registrar Limpieza Filtro en BD",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [950, 700],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-pristinoplant",
+          "name": "Postgres PristinoPlant"
+        }
+      }
+    },
+    {
+      "parameters": {
         "chatId": "={{ $json.chatId }}",
-        "text": "*PristinoBot*\n\n/status - Estado de infraestructura\n/dosing - Tareas de dosificación\n/complete - Marcar tareas manuales completadas\n/help - Lista de comandos",
+        "text": "=\\u200B\n*Mantenimiento de Filtro Registrado*\n\nLimpieza registrada con éxito por {{ $json.fromUser }}.\nPróxima limpieza programada en 48 horas.",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "3c4d5e6f-0014-4000-8000-000000000014",
+      "name": "Responder Telegram (Filter)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1180, 700],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-pristinoplant",
+          "name": "Telegram PristinoBot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "*PristinoBot*\n\n/status - Estado de infraestructura\n/dosing - Tareas de dosificación\n/filter - Registrar limpieza de filtro\n/help - Lista de comandos",
         "additionalFields": {
           "appendAttribution": false,
           "parse_mode": "Markdown"
@@ -443,7 +461,7 @@
       "name": "Responder Telegram (Help)",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [950, 700],
+      "position": [950, 850],
       "credentials": {
         "telegramApi": {
           "id": "telegram-pristinoplant",
@@ -507,6 +525,13 @@
         ],
         [
           {
+            "node": "Registrar Limpieza Filtro en BD",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Responder Telegram (Help)",
             "type": "main",
             "index": 0
@@ -552,6 +577,17 @@
         [
           {
             "node": "Editar Mensaje Telegram (Dosing Filtered)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Limpieza Filtro en BD": {
+      "main": [
+        [
+          {
+            "node": "Responder Telegram (Filter)",
             "type": "main",
             "index": 0
           }

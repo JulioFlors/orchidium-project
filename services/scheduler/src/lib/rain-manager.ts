@@ -47,7 +47,12 @@ let lastBatchReceivedAt = 0
 let rainEventMutex = Promise.resolve()
 
 // Helper para empujar métricas a las colas de batches deslizantes (10 min de ventana por lote)
-function pushBatchMetrics(queue: BatchSummary[], input: Sample[] | number[], isLux = false) {
+function pushBatchMetrics(
+  queue: BatchSummary[],
+  input: Sample[] | number[],
+  isLux = false,
+  timestamp?: number,
+) {
   if (input.length === 0) return
   const now = Date.now()
 
@@ -61,26 +66,59 @@ function pushBatchMetrics(queue: BatchSummary[], input: Sample[] | number[], isL
         }))
       : (input as Sample[])
 
-  const values = samples.map((s) => s.value)
-  let min = Math.min(...values)
-  let max = Math.max(...values)
+  const batchTimestamp =
+    timestamp ?? (samples.length > 0 ? samples[samples.length - 1].timestamp : now)
 
-  if (isLux && values.length > 0) {
-    const sortedAsc = [...values].sort((a, b) => a - b)
-    const low5 = sortedAsc.slice(0, Math.min(5, sortedAsc.length))
+  // 🛡️ Si el lote más reciente en la cola pertenece a la misma ventana de 10 min (< 8 min de diferencia),
+  // actualizarlo / fusionarlo en vez de desplazar la cola indiscriminadamente.
+  if (queue.length > 0 && Math.abs(batchTimestamp - queue[0].timestamp) < 8 * 60 * 1000) {
+    const existingTs = new Set(queue[0].samples.map((s) => s.timestamp))
 
-    min = low5.reduce((sum, val) => sum + val, 0) / low5.length
+    for (const s of samples) {
+      if (!existingTs.has(s.timestamp)) {
+        queue[0].samples.push(s)
+      }
+    }
+    queue[0].samples.sort((a, b) => a.timestamp - b.timestamp)
 
-    const sortedDesc = [...values].sort((a, b) => b - a)
-    const high5 = sortedDesc.slice(0, Math.min(5, sortedDesc.length))
+    const allValues = queue[0].samples.map((s) => s.value)
 
-    max = high5.reduce((sum, val) => sum + val, 0) / high5.length
+    if (isLux && allValues.length > 0) {
+      const sortedAsc = [...allValues].sort((a, b) => a - b)
+      const low5 = sortedAsc.slice(0, Math.min(5, sortedAsc.length))
+
+      queue[0].min = low5.reduce((sum, val) => sum + val, 0) / low5.length
+
+      const sortedDesc = [...allValues].sort((a, b) => b - a)
+      const high5 = sortedDesc.slice(0, Math.min(5, sortedDesc.length))
+
+      queue[0].max = high5.reduce((sum, val) => sum + val, 0) / high5.length
+    } else if (allValues.length > 0) {
+      queue[0].min = Math.min(...allValues)
+      queue[0].max = Math.max(...allValues)
+    }
+    queue[0].timestamp = Math.max(queue[0].timestamp, batchTimestamp)
+  } else {
+    // Es un lote de una nueva ventana de 10 min: insertar al inicio de la cola
+    const values = samples.map((s) => s.value)
+    let min = Math.min(...values)
+    let max = Math.max(...values)
+
+    if (isLux && values.length > 0) {
+      const sortedAsc = [...values].sort((a, b) => a - b)
+      const low5 = sortedAsc.slice(0, Math.min(5, sortedAsc.length))
+
+      min = low5.reduce((sum, val) => sum + val, 0) / low5.length
+
+      const sortedDesc = [...values].sort((a, b) => b - a)
+      const high5 = sortedDesc.slice(0, Math.min(5, sortedDesc.length))
+
+      max = high5.reduce((sum, val) => sum + val, 0) / high5.length
+    }
+
+    queue.unshift({ min, max, timestamp: batchTimestamp, samples: [...samples] })
+    if (queue.length > 6) queue.pop()
   }
-
-  const batchTimestamp = samples.length > 0 ? samples[samples.length - 1].timestamp : now
-
-  queue.unshift({ min, max, timestamp: batchTimestamp, samples })
-  if (queue.length > 6) queue.pop()
 }
 
 // ---- Helpers de Protección por Gradiente (Pendiente Rápida) ----

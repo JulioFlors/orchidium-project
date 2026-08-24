@@ -241,8 +241,10 @@ export function PlannerProgramSelect<T extends FieldValues>({
   name,
   error,
   options = [],
+  isLoading = false,
 }: Omit<InputProps<T>, 'register'> & {
   options: { label: string; value: string }[]
+  isLoading?: boolean
 }) {
   if (!control) return null
 
@@ -253,10 +255,12 @@ export function PlannerProgramSelect<T extends FieldValues>({
         name={name}
         render={({ field: { value, onChange, ...rest } }) => (
           <SelectDropdown
+            disabled={isLoading}
+            emptyMessage={isLoading ? 'Cargando programas...' : 'No hay programas disponibles'}
             error={error}
             id={name}
             options={options}
-            placeholder="Seleccionar programa..."
+            placeholder={isLoading ? 'Cargando programas...' : 'Seleccionar programa...'}
             value={value}
             onChange={onChange}
             {...rest}

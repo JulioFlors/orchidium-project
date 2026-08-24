@@ -90,18 +90,18 @@ export function parseDosageNumber(raw: string): number | null {
  */
 export function getDosagePlaceholder(unit?: DosageUnit | null): string {
   if (!unit) return 'Seleccionar'
-  if (unit === DosageUnit.PORCENTAJE) return 'ej. 10, 50, 70'
-  if (unit === DosageUnit.GOTAS_L) return 'ej. 5, 10, 20'
+  if (unit === DosageUnit.PORCENTAJE) return '50'
+  if (unit === DosageUnit.GOTAS_L) return '10'
   if (
     unit === DosageUnit.CDITA_PLANTA ||
     unit === DosageUnit.CDITA_L ||
     unit === DosageUnit.CDA_L
   ) {
-    return 'ej. 1, 1/2, 1/4'
+    return '1/2'
   }
-  if (unit === DosageUnit.ML_PLANTA) return 'ej. 1, 5, 10'
+  if (unit === DosageUnit.ML_PLANTA) return '5'
 
-  return 'ej. 1, 2, 5'
+  return ''
 }
 
 /**
@@ -132,7 +132,7 @@ export function cleanDosageInput(raw: string, unit?: DosageUnit | null): string 
 }
 
 const mixIngredientSchema = z.object({
-  ingredientId: z.string().min(1, 'Debes seleccionar un insumo'),
+  ingredientId: z.string().optional().or(z.literal('')),
 })
 
 const agrochemicalSchema = z
@@ -140,10 +140,7 @@ const agrochemicalSchema = z
     name: z
       .string()
       .trim()
-      .max(
-        VALIDATION_LIMITS.SUPPLY_NAME_MAX,
-        `El nombre no puede exceder ${VALIDATION_LIMITS.SUPPLY_NAME_MAX} caracteres`,
-      )
+      .max(250, 'El nombre no puede exceder 250 caracteres')
       .optional()
       .or(z.literal('')),
     description: z
@@ -158,10 +155,14 @@ const agrochemicalSchema = z
     type: z.nativeEnum(AgrochemicalType, { message: 'Debes seleccionar un tipo' }),
     purpose: z
       .nativeEnum(AgrochemicalPurpose, { message: 'Debes seleccionar un propósito' })
-      .optional(),
+      .optional()
+      .or(z.literal('')),
     isMix: z.boolean(),
-    dosageValue: z.string().optional(),
-    dosageUnit: z.nativeEnum(DosageUnit, { message: 'Debes seleccionar la unidad' }).optional(),
+    dosageValue: z.string().optional().or(z.literal('')),
+    dosageUnit: z
+      .nativeEnum(DosageUnit, { message: 'Debes seleccionar la unidad' })
+      .optional()
+      .or(z.literal('')),
     mixIngredients: z.array(mixIngredientSchema).optional(),
   })
   .superRefine((data, ctx) => {
@@ -170,6 +171,12 @@ const agrochemicalSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: 'El nombre debe tener al menos 3 caracteres',
+          path: ['name'],
+        })
+      } else if (data.name.trim().length > VALIDATION_LIMITS.SUPPLY_NAME_MAX) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `El nombre no puede exceder ${VALIDATION_LIMITS.SUPPLY_NAME_MAX} caracteres`,
           path: ['name'],
         })
       }
@@ -275,6 +282,16 @@ const agrochemicalSchema = z
           message: 'Una mezcla compuesta debe incluir al menos 2 insumos válidos',
           path: ['mixIngredients'],
         })
+
+        data.mixIngredients?.forEach((i, idx) => {
+          if (!i.ingredientId) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: 'Debes seleccionar un insumo',
+              path: ['mixIngredients', idx, 'ingredientId'],
+            })
+          }
+        })
       } else {
         const selectedIds = data.mixIngredients.map((i) => i.ingredientId).filter(Boolean)
         const uniqueIds = new Set(selectedIds)
@@ -300,6 +317,60 @@ interface Props {
   availableAgrochemicals?: AgrochemicalWithMix[]
 }
 
+/**
+ * Convierte el valor de dosis para el input del formulario (soporta fracciones legibles para cucharas).
+ */
+export function formatDosageInputValue(val?: number | null, unit?: DosageUnit | null): string {
+  if (val == null) return ''
+
+  const isSpoon =
+    unit === DosageUnit.CDA_L || unit === DosageUnit.CDITA_L || unit === DosageUnit.CDITA_PLANTA
+
+  if (isSpoon) {
+    if (val === 0.5) return '1/2'
+    if (val === 0.25) return '1/4'
+    if (val === 0.75) return '3/4'
+    if (val === 0.125) return '1/8'
+    if (val === 1.5) return '1 1/2'
+  }
+
+  return String(val)
+}
+
+function getInitialFormValues(initialData?: AgrochemicalWithMix | null): FormValues {
+  if (initialData) {
+    const isMix = initialData.isMix || false
+    const mixIngredients =
+      isMix && initialData.mixIngredients && initialData.mixIngredients.length > 0
+        ? initialData.mixIngredients.map((m) => ({ ingredientId: m.ingredientId }))
+        : [{ ingredientId: '' }, { ingredientId: '' }]
+
+    return {
+      name: initialData.name,
+      description: initialData.description || '',
+      type: initialData.type,
+      purpose: initialData.purpose,
+      isMix,
+      dosageValue: isMix
+        ? ''
+        : formatDosageInputValue(initialData.dosageValue, initialData.dosageUnit as DosageUnit),
+      dosageUnit: isMix ? undefined : (initialData.dosageUnit as DosageUnit) || undefined,
+      mixIngredients,
+    }
+  }
+
+  return {
+    name: '',
+    description: '',
+    type: '' as AgrochemicalType,
+    purpose: '' as AgrochemicalPurpose,
+    isMix: false,
+    dosageValue: '',
+    dosageUnit: undefined,
+    mixIngredients: [{ ingredientId: '' }, { ingredientId: '' }],
+  }
+}
+
 export function AgrochemicalForm({
   isOpen,
   onClose,
@@ -309,7 +380,9 @@ export function AgrochemicalForm({
 }: Props) {
   const [isPending, startTransition] = useTransition()
   const isRestoringRef = useRef(false)
-  const draftKey = 'agrochemical-form-draft'
+  const draftKey = initialData
+    ? `agrochemical-edit-draft-${initialData.id}`
+    : 'agrochemical-new-draft'
 
   const {
     register,
@@ -317,19 +390,10 @@ export function AgrochemicalForm({
     control,
     setValue,
     reset,
-    formState: { errors },
+    formState: { errors, isDirty },
   } = useForm<FormValues>({
     resolver: zodResolver(agrochemicalSchema),
-    defaultValues: {
-      name: '',
-      description: '',
-      type: '' as AgrochemicalType,
-      purpose: '' as AgrochemicalPurpose,
-      isMix: false,
-      dosageValue: '',
-      dosageUnit: undefined,
-      mixIngredients: [{ ingredientId: '' }, { ingredientId: '' }],
-    },
+    defaultValues: getInitialFormValues(initialData),
   })
 
   const { fields, append, remove } = useFieldArray({
@@ -343,62 +407,34 @@ export function AgrochemicalForm({
   const watchedName = useWatch({ control, name: 'name' })
   const watchedUnit = useWatch({ control, name: 'dosageUnit' })
 
-  // Cargar borrador de Zustand al abrir (solo si es nuevo insumo) o cargar datos iniciales en edición
+  // Cargar borrador de Zustand al abrir (si existe borrador pendiente) o cargar datos iniciales limpios
   useEffect(() => {
     if (isOpen) {
       isRestoringRef.current = true
 
-      if (initialData) {
-        reset({
-          name: initialData.name,
-          description: initialData.description || '',
-          type: initialData.type,
-          purpose: initialData.purpose,
-          isMix: initialData.isMix || false,
-          dosageValue: initialData.dosageValue != null ? String(initialData.dosageValue) : '',
-          dosageUnit: initialData.dosageUnit || undefined,
-          mixIngredients: initialData.mixIngredients
-            ? initialData.mixIngredients.map((m) => ({
-                ingredientId: m.ingredientId,
-              }))
-            : [],
-        })
-      } else {
-        const savedDraft = useFormDraftStore.getState().getDraft(draftKey) as FormValues | undefined
+      const savedDraft = useFormDraftStore.getState().getDraft(draftKey) as FormValues | undefined
 
-        reset(
-          savedDraft ?? {
-            name: '',
-            description: '',
-            type: '' as AgrochemicalType,
-            purpose: '' as AgrochemicalPurpose,
-            isMix: false,
-            dosageValue: '',
-            dosageUnit: undefined,
-            mixIngredients: [{ ingredientId: '' }, { ingredientId: '' }],
-          },
-        )
-      }
+      reset(savedDraft ?? getInitialFormValues(initialData))
 
       requestAnimationFrame(() => {
         isRestoringRef.current = false
       })
     }
-  }, [isOpen, initialData, reset])
+  }, [isOpen, initialData, reset, draftKey])
 
-  // Persistir cambios en Zustand en tiempo real para mantener el estado del borrador
+  // Persistir cambios en Zustand SOLO cuando el usuario ha interactuado/modificado el formulario (isDirty)
   const watchedValues = useWatch({ control })
   const watchedString = JSON.stringify(watchedValues)
 
   useEffect(() => {
-    if (!isOpen || isRestoringRef.current || !!initialData) return
+    if (!isOpen || isRestoringRef.current || !isDirty) return
 
     const currentDraft = useFormDraftStore.getState().getDraft(draftKey) as FormValues | undefined
 
     if (JSON.stringify(currentDraft) !== watchedString) {
       useFormDraftStore.getState().setDraft(draftKey, JSON.parse(watchedString) as FormValues)
     }
-  }, [watchedString, isOpen, initialData])
+  }, [watchedString, isOpen, isDirty, draftKey])
 
   // Inferir automáticamente el nombre de la mezcla compuesta
   useEffect(() => {
@@ -478,19 +514,21 @@ export function AgrochemicalForm({
         type: values.type,
         purpose: finalPurpose,
         dosageValue: values.isMix ? null : parsedValue,
-        dosageUnit: values.isMix ? null : values.dosageUnit,
+        dosageUnit: values.isMix || !values.dosageUnit ? null : (values.dosageUnit as DosageUnit),
         isMix: values.isMix,
         mixIngredients: values.isMix
-          ? values.mixIngredients?.map((i) => {
-              const agro = availableAgrochemicals.find((a) => a.id === i.ingredientId)
-              const { dosageValue, dosageUnit } = extractAgrochemicalDosage(agro)
+          ? values.mixIngredients
+              ?.filter((i): i is { ingredientId: string } => !!i.ingredientId)
+              .map((i) => {
+                const agro = availableAgrochemicals.find((a) => a.id === i.ingredientId)
+                const { dosageValue, dosageUnit } = extractAgrochemicalDosage(agro)
 
-              return {
-                ingredientId: i.ingredientId,
-                dosageValue: dosageValue ?? 1,
-                dosageUnit: dosageUnit || DosageUnit.ML_L,
-              }
-            })
+                return {
+                  ingredientId: i.ingredientId,
+                  dosageValue: dosageValue ?? 1,
+                  dosageUnit: dosageUnit || DosageUnit.ML_L,
+                }
+              })
           : undefined,
       }
 
@@ -639,11 +677,16 @@ export function AgrochemicalForm({
                 disabled={!watchedUnit}
                 error={errors.dosageValue?.message}
                 id="dosageValue"
-                placeholder={getDosagePlaceholder(watchedUnit)}
+                placeholder={getDosagePlaceholder(
+                  watchedUnit ? (watchedUnit as DosageUnit) : undefined,
+                )}
                 type="text"
                 {...register('dosageValue', {
                   onChange: (e) => {
-                    const cleaned = cleanDosageInput(e.target.value, watchedUnit)
+                    const cleaned = cleanDosageInput(
+                      e.target.value,
+                      watchedUnit ? (watchedUnit as DosageUnit) : undefined,
+                    )
 
                     setValue('dosageValue', cleaned)
                   },

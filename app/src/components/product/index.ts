@@ -1,5 +1,7 @@
 export * from './add-to-cart/AddToCart'
 
+export * from './added-to-cart-modal/AddedToCartModal'
+
 export * from './product-image/ProductImage'
 
 export * from './quantity-selector/QuantityDropdown'

@@ -54,39 +54,72 @@ export async function upsertFertilizationProgram(data: {
 }) {
   try {
     const { id, name, weeklyFrequency, cycles } = data
+    const trimmedName = name.trim()
 
-    const program = await prisma.$transaction(async (tx) => {
-      // 1. Crear o actualizar el programa
-      const p = await tx.fertilizationProgram.upsert({
-        where: { id: id || 'new' },
-        update: { name, weeklyFrequency },
-        create: { name, weeklyFrequency },
+    if (id) {
+      // Actualización atómica en batch: borrar ciclos previos y actualizar datos/insertar ciclos
+      const [, program] = await prisma.$transaction([
+        prisma.fertilizationCycle.deleteMany({ where: { programId: id } }),
+        prisma.fertilizationProgram.update({
+          where: { id },
+          data: {
+            name: trimmedName,
+            weeklyFrequency,
+            productsCycle: {
+              create: cycles.map((c) => ({
+                sequence: c.sequence,
+                agrochemicalId: c.agrochemicalId,
+              })),
+            },
+          },
+          include: {
+            productsCycle: {
+              include: { agrochemical: true },
+              orderBy: { sequence: 'asc' },
+            },
+          },
+        }),
+      ])
+
+      revalidatePath('/recipes')
+
+      return { ok: true, program }
+    } else {
+      // Creación con ciclos anidados en una sola consulta
+      const program = await prisma.fertilizationProgram.create({
+        data: {
+          name: trimmedName,
+          weeklyFrequency,
+          productsCycle: {
+            create: cycles.map((c) => ({
+              sequence: c.sequence,
+              agrochemicalId: c.agrochemicalId,
+            })),
+          },
+        },
+        include: {
+          productsCycle: {
+            include: { agrochemical: true },
+            orderBy: { sequence: 'asc' },
+          },
+        },
       })
 
-      // 2. Limpiar ciclos existentes si es una actualización
-      if (id) {
-        await tx.fertilizationCycle.deleteMany({ where: { programId: p.id } })
-      }
+      revalidatePath('/recipes')
 
-      // 3. Crear los nuevos ciclos
-      if (cycles.length > 0) {
-        await tx.fertilizationCycle.createMany({
-          data: cycles.map((c) => ({
-            sequence: c.sequence,
-            agrochemicalId: c.agrochemicalId,
-            programId: p.id,
-          })),
-        })
-      }
-
-      return p
-    })
-
-    revalidatePath('/recipes')
-
-    return { ok: true, program }
-  } catch (err) {
+      return { ok: true, program }
+    }
+  } catch (err: unknown) {
     Logger.error('Error al guardar programa de fertilización:', err)
+
+    if (typeof err === 'object' && err !== null && 'code' in err) {
+      if (err.code === 'P2002') {
+        return {
+          ok: false,
+          message: 'Ya existe un plan de fertilización con este nombre. Elige un nombre diferente.',
+        }
+      }
+    }
 
     return { ok: false, message: 'Error al guardar el programa de fertilización' }
   }
@@ -103,36 +136,70 @@ export async function upsertPhytosanitaryProgram(data: {
 }) {
   try {
     const { id, name, monthlyFrequency, cycles } = data
+    const trimmedName = name.trim()
 
-    const program = await prisma.$transaction(async (tx) => {
-      const p = await tx.phytosanitaryProgram.upsert({
-        where: { id: id || 'new' },
-        update: { name, monthlyFrequency },
-        create: { name, monthlyFrequency },
+    if (id) {
+      const [, program] = await prisma.$transaction([
+        prisma.phytosanitaryCycle.deleteMany({ where: { programId: id } }),
+        prisma.phytosanitaryProgram.update({
+          where: { id },
+          data: {
+            name: trimmedName,
+            monthlyFrequency,
+            productsCycle: {
+              create: cycles.map((c) => ({
+                sequence: c.sequence,
+                agrochemicalId: c.agrochemicalId,
+              })),
+            },
+          },
+          include: {
+            productsCycle: {
+              include: { agrochemical: true },
+              orderBy: { sequence: 'asc' },
+            },
+          },
+        }),
+      ])
+
+      revalidatePath('/recipes')
+
+      return { ok: true, program }
+    } else {
+      const program = await prisma.phytosanitaryProgram.create({
+        data: {
+          name: trimmedName,
+          monthlyFrequency,
+          productsCycle: {
+            create: cycles.map((c) => ({
+              sequence: c.sequence,
+              agrochemicalId: c.agrochemicalId,
+            })),
+          },
+        },
+        include: {
+          productsCycle: {
+            include: { agrochemical: true },
+            orderBy: { sequence: 'asc' },
+          },
+        },
       })
 
-      if (id) {
-        await tx.phytosanitaryCycle.deleteMany({ where: { programId: p.id } })
-      }
+      revalidatePath('/recipes')
 
-      if (cycles.length > 0) {
-        await tx.phytosanitaryCycle.createMany({
-          data: cycles.map((c) => ({
-            sequence: c.sequence,
-            agrochemicalId: c.agrochemicalId,
-            programId: p.id,
-          })),
-        })
-      }
-
-      return p
-    })
-
-    revalidatePath('/recipes')
-
-    return { ok: true, program }
-  } catch (err) {
+      return { ok: true, program }
+    }
+  } catch (err: unknown) {
     Logger.error('Error al guardar programa fitosanitario:', err)
+
+    if (typeof err === 'object' && err !== null && 'code' in err) {
+      if (err.code === 'P2002') {
+        return {
+          ok: false,
+          message: 'Ya existe un plan fitosanitario con este nombre. Elige un nombre diferente.',
+        }
+      }
+    }
 
     return { ok: false, message: 'Error al guardar el programa fitosanitario' }
   }

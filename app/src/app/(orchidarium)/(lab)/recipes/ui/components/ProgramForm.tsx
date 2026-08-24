@@ -19,8 +19,7 @@ import {
   ActionMenu,
   type ActionMenuItem,
 } from '@/components'
-import { useFormDraftStore } from '@/store'
-import { useToastStore } from '@/store/toast/toast.store'
+import { useFormDraftStore, useToastStore } from '@/store'
 import { VALIDATION_LIMITS } from '@/config'
 
 const cycleSchema = z.object({
@@ -39,7 +38,7 @@ const programSchema = z
         VALIDATION_LIMITS.PROGRAM_NAME_MAX,
         `El nombre no puede exceder ${VALIDATION_LIMITS.PROGRAM_NAME_MAX} caracteres`,
       ),
-    frequency: z
+    frequency: z.coerce
       .number({ message: 'Debe ingresar un número válido' })
       .int('Debe ser un número entero')
       .min(1, 'El intervalo debe ser al menos 1'),
@@ -87,7 +86,8 @@ const programSchema = z
     }
   })
 
-type FormValues = z.infer<typeof programSchema>
+type FormInputs = z.input<typeof programSchema>
+type FormOutputs = z.output<typeof programSchema>
 
 // Interfaces locales para los programas con sus ciclos
 export interface ProgramWithCycles {
@@ -116,6 +116,36 @@ const PURPOSE_OPTIONS = [
   { label: 'Control Fitosanitario', value: 'phytosanitary' },
 ]
 
+function getInitialProgramValues(
+  initialData?: ProgramWithCycles | null,
+  initialType: 'fertilization' | 'phytosanitary' = 'fertilization',
+): FormInputs {
+  if (initialData) {
+    return {
+      purposeType: initialType,
+      name: initialData.name,
+      frequency:
+        initialType === 'fertilization'
+          ? (initialData.weeklyFrequency ?? 1)
+          : (initialData.monthlyFrequency ?? 2),
+      cycles:
+        initialData.productsCycle && initialData.productsCycle.length > 0
+          ? initialData.productsCycle.map((pc) => ({
+              agrochemicalId: pc.agrochemicalId,
+              sequence: pc.sequence,
+            }))
+          : [{ agrochemicalId: '', sequence: 1 }],
+    }
+  }
+
+  return {
+    purposeType: initialType,
+    name: '',
+    frequency: initialType === 'fertilization' ? 1 : 2,
+    cycles: [{ agrochemicalId: '', sequence: 1 }],
+  }
+}
+
 export function ProgramForm({
   isOpen,
   onClose,
@@ -125,90 +155,32 @@ export function ProgramForm({
   availableAgrochemicals,
 }: Props) {
   const [isPending, startTransition] = useTransition()
-  const draftKey = `program-draft-${initialType}`
-  const isRestoringRef = React.useRef(false)
+  const draftKey = initialData ? `program-edit-draft-${initialData.id}` : 'program-new-draft'
+  const getDraft = useFormDraftStore((state) => state.getDraft)
+  const setDraft = useFormDraftStore((state) => state.setDraft)
+  const clearDraft = useFormDraftStore((state) => state.clearDraft)
+  const addToast = useToastStore((state) => state.addToast)
+
+  const savedDraft = getDraft(draftKey) as FormInputs | undefined
 
   const {
-    register,
     handleSubmit,
     control,
-    reset,
     setValue,
     formState: { errors },
-  } = useForm<FormValues>({
+  } = useForm<FormInputs, unknown, FormOutputs>({
     resolver: zodResolver(programSchema),
-    defaultValues: initialData
-      ? {
-          purposeType: initialType,
-          name: initialData.name,
-          frequency:
-            initialType === 'fertilization'
-              ? (initialData.weeklyFrequency ?? ('' as unknown as number))
-              : (initialData.monthlyFrequency ?? ('' as unknown as number)),
-          cycles: initialData.productsCycle.map((pc) => ({
-            agrochemicalId: pc.agrochemicalId,
-            sequence: pc.sequence,
-          })),
-        }
-      : {
-          purposeType: initialType,
-          name: '',
-          frequency: '' as unknown as number,
-          cycles: [{ agrochemicalId: '', sequence: 1 }],
-        },
+    defaultValues: savedDraft ?? getInitialProgramValues(initialData, initialType),
   })
 
-  // Cargar borrador al abrir el modal (solo para creación)
-  React.useEffect(() => {
-    if (isOpen && !initialData) {
-      const savedDraft = useFormDraftStore.getState().getDraft(draftKey) as FormValues | undefined
-
-      isRestoringRef.current = true
-      reset(
-        savedDraft ?? {
-          purposeType: initialType,
-          name: '',
-          frequency: '' as unknown as number,
-          cycles: [{ agrochemicalId: '', sequence: 1 }],
-        },
-      )
-      requestAnimationFrame(() => {
-        isRestoringRef.current = false
-      })
-    } else if (isOpen && initialData) {
-      isRestoringRef.current = true
-      reset({
-        purposeType: initialType,
-        name: initialData.name,
-        frequency:
-          initialType === 'fertilization'
-            ? (initialData.weeklyFrequency ?? ('' as unknown as number))
-            : (initialData.monthlyFrequency ?? ('' as unknown as number)),
-        cycles: initialData.productsCycle.map((pc) => ({
-          agrochemicalId: pc.agrochemicalId,
-          sequence: pc.sequence,
-        })),
-      })
-      requestAnimationFrame(() => {
-        isRestoringRef.current = false
-      })
-    }
-  }, [isOpen, initialData, reset, draftKey, initialType])
-
-  // Persistir cambios en tiempo real
+  // Persistir cambios del borrador en tiempo real en Zustand
   const watchedValues = useWatch({ control })
-  const watchedString = JSON.stringify(watchedValues)
   const currentPurposeType = watchedValues?.purposeType || initialType
 
   React.useEffect(() => {
-    if (!isOpen || isRestoringRef.current || !!initialData) return
-
-    const currentDraft = useFormDraftStore.getState().getDraft(draftKey) as FormValues | undefined
-
-    if (JSON.stringify(currentDraft) !== watchedString) {
-      useFormDraftStore.getState().setDraft(draftKey, JSON.parse(watchedString) as FormValues)
-    }
-  }, [watchedString, isOpen, draftKey, initialData])
+    if (!isOpen || !watchedValues) return
+    setDraft(draftKey, watchedValues as FormInputs)
+  }, [watchedValues, isOpen, draftKey, setDraft])
 
   const { fields, append, remove, move } = useFieldArray({
     control,
@@ -228,12 +200,12 @@ export function ProgramForm({
     })
 
     return filtered.map((a) => ({
-      label: a.isMix ? `${a.name} (Mezcla)` : a.name,
+      label: a.name,
       value: a.id,
     }))
   }, [availableAgrochemicals, currentPurposeType])
 
-  const onSubmit = (values: FormValues) => {
+  const onSubmit = (values: FormOutputs) => {
     startTransition(async () => {
       const formattedCycles = values.cycles.map((c, index) => ({
         ...c,
@@ -241,37 +213,26 @@ export function ProgramForm({
       }))
 
       const isFert = values.purposeType === 'fertilization'
-      const payload = {
-        id: initialData?.id,
-        name: values.name.trim(),
-        [isFert ? 'weeklyFrequency' : 'monthlyFrequency']: values.frequency,
-        cycles: formattedCycles,
-      }
 
       const result = isFert
-        ? await upsertFertilizationProgram(
-            payload as {
-              id?: string
-              name: string
-              weeklyFrequency: number
-              cycles: { sequence: number; agrochemicalId: string }[]
-            },
-          )
-        : await upsertPhytosanitaryProgram(
-            payload as {
-              id?: string
-              name: string
-              monthlyFrequency: number
-              cycles: { sequence: number; agrochemicalId: string }[]
-            },
-          )
+        ? await upsertFertilizationProgram({
+            id: initialData?.id,
+            name: values.name.trim(),
+            weeklyFrequency: values.frequency,
+            cycles: formattedCycles,
+          })
+        : await upsertPhytosanitaryProgram({
+            id: initialData?.id,
+            name: values.name.trim(),
+            monthlyFrequency: values.frequency,
+            cycles: formattedCycles,
+          })
 
       if (result.ok) {
-        useFormDraftStore.getState().clearDraft(draftKey)
+        clearDraft(draftKey)
         onSuccess()
-        onClose()
       } else {
-        useToastStore.getState().addToast(result.message || 'Error al guardar el programa', 'error')
+        addToast(result.message || 'Error al guardar el programa', 'error')
       }
     })
   }
@@ -285,12 +246,7 @@ export function ProgramForm({
     >
       <form className="flex flex-col gap-6" onSubmit={handleSubmit(onSubmit)}>
         {/* 1. Propósito (SelectDropdown, w-full, placeholder "Seleccionar") */}
-        <FormField
-          required
-          error={errors.purposeType?.message}
-          htmlFor="purposeType"
-          label="Propósito"
-        >
+        <FormField error={errors.purposeType?.message} htmlFor="purposeType" label="Propósito">
           <Controller
             control={control}
             name="purposeType"
@@ -302,28 +258,35 @@ export function ProgramForm({
                 value={f.value}
                 onChange={(val) => {
                   f.onChange(val)
-                  // Limpiar frecuencia si cambia de tipo para obligar a introducir el intervalo adecuado
-                  setValue('frequency', '' as unknown as number)
+                  setValue('frequency', val === 'fertilization' ? 1 : 2)
                 }}
               />
             )}
           />
         </FormField>
 
-        {/* 2. Nombre (w-full, sin placeholder) */}
-        <FormField required error={errors.name?.message} htmlFor="name" label="Nombre">
-          <Input
-            error={errors.name?.message}
-            id="name"
-            maxLength={VALIDATION_LIMITS.PROGRAM_NAME_MAX}
-            type="text"
-            {...register('name')}
+        {/* 2. Nombre (Controlado mediante Controller para garantizar sincronización con RHF y Zustand) */}
+        <FormField error={errors.name?.message} htmlFor="name" label="Nombre">
+          <Controller
+            control={control}
+            name="name"
+            render={({ field: f }) => (
+              <Input
+                autoComplete="off"
+                error={errors.name?.message}
+                id="name"
+                maxLength={VALIDATION_LIMITS.PROGRAM_NAME_MAX}
+                placeholder=""
+                type="text"
+                value={f.value != null ? String(f.value) : ''}
+                onChange={f.onChange}
+              />
+            )}
           />
         </FormField>
 
         {/* 3. Intervalo Dinámico (Semanal 1-4 vs Mensual 2-12) */}
         <FormField
-          required
           error={errors.frequency?.message}
           htmlFor="frequency"
           label={
@@ -332,45 +295,26 @@ export function ProgramForm({
               : 'Intervalo Mensual (2 a 12 meses)'
           }
         >
-          <Input
-            error={errors.frequency?.message}
-            id="frequency"
-            maxLength={2}
-            placeholder=""
-            type="text"
-            {...register('frequency', {
-              onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
-                const raw = e.target.value.replace(/[^0-9]/g, '')
+          <Controller
+            control={control}
+            name="frequency"
+            render={({ field: f }) => (
+              <Input
+                autoComplete="off"
+                error={errors.frequency?.message}
+                id="frequency"
+                inputMode="numeric"
+                maxLength={2}
+                placeholder=""
+                type="text"
+                value={f.value != null ? String(f.value) : ''}
+                onChange={(e) => {
+                  const cleaned = e.target.value.replace(/[^0-9]/g, '')
 
-                // Si queda vacío o escribe 0 inicial, dejar vacío
-                if (!raw || raw === '0') {
-                  setValue('frequency', '' as unknown as number)
-
-                  return
-                }
-
-                const num = parseInt(raw, 10)
-
-                if (currentPurposeType === 'fertilization') {
-                  // Solo permitir dígitos 1 al 4
-                  if (num >= 1 && num <= 4) {
-                    setValue('frequency', num)
-                  } else {
-                    setValue('frequency', 4)
-                  }
-                } else {
-                  // Fitosanitarios: rango 2 a 12
-                  // Permitir '1' temporalmente solo para escribir 10, 11, 12
-                  if (raw === '1') {
-                    setValue('frequency', 1)
-                  } else if (num > 12) {
-                    setValue('frequency', 12)
-                  } else {
-                    setValue('frequency', num)
-                  }
-                }
-              },
-            })}
+                  f.onChange(cleaned)
+                }}
+              />
+            )}
           />
           {!errors.frequency && (
             <span className="text-secondary mt-0.5 text-[11px] opacity-50">

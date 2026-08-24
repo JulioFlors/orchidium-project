@@ -17,6 +17,8 @@ export interface CartProduct {
 
 interface CartState {
   cart: CartProduct[]
+  lastAddedItem: CartProduct | null
+  isAddedModalOpen: boolean
 
   getTotalItems: () => number
   getSummaryInformation: () => {
@@ -27,6 +29,8 @@ interface CartState {
   }
 
   addProductToCart: (product: CartProduct) => void
+  openAddedModal: (product?: CartProduct) => void
+  closeAddedModal: () => void
   updateProductQuantity: (variantId: string, quantity: number) => void
   removeProduct: (variantId: string) => void
   clearCart: () => void
@@ -36,6 +40,19 @@ export const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
       cart: [],
+      lastAddedItem: null,
+      isAddedModalOpen: false,
+
+      openAddedModal: (product?: CartProduct) => {
+        set((state) => ({
+          isAddedModalOpen: true,
+          lastAddedItem: product ?? state.lastAddedItem,
+        }))
+      },
+
+      closeAddedModal: () => {
+        set({ isAddedModalOpen: false })
+      },
 
       getTotalItems: () => {
         const { cart } = get()
@@ -63,7 +80,11 @@ export const useCartStore = create<CartState>()(
         const existing = cart.find((item) => item.variantId === product.variantId)
 
         if (!existing) {
-          set({ cart: [...cart, product] })
+          set({
+            cart: [...cart, product],
+            lastAddedItem: product,
+            isAddedModalOpen: true,
+          })
 
           return
         }
@@ -78,7 +99,11 @@ export const useCartStore = create<CartState>()(
           return item
         })
 
-        set({ cart: updatedCart })
+        set({
+          cart: updatedCart,
+          lastAddedItem: product,
+          isAddedModalOpen: true,
+        })
       },
 
       updateProductQuantity: (variantId: string, quantity: number) => {
@@ -109,6 +134,7 @@ export const useCartStore = create<CartState>()(
     }),
     {
       name: 'pristinoplant-cart-store',
+      partialize: (state) => ({ cart: state.cart }),
     },
   ),
 )

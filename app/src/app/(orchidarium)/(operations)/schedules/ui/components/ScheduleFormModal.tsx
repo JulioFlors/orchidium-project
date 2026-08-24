@@ -112,12 +112,17 @@ interface Props {
 }
 
 export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: Props) {
+  const draftKey = initialData
+    ? `schedule-edit-draft-${initialData.id}`
+    : 'schedule-new-draft-hardware'
+  const isRestoringRef = React.useRef(false)
+
   const {
     control,
     handleSubmit,
     reset,
     register,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, isDirty },
     setError,
   } = useForm<z.input<typeof programSchema>>({
     resolver: zodResolver(programSchema),
@@ -133,9 +138,6 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
     },
   })
 
-  const draftKey = 'schedule-form-draft-hardware'
-  const isRestoringRef = React.useRef(false)
-
   const currentPurpose = useWatch({ control, name: 'purpose' })
 
   // Estado para programas de laboratorio
@@ -143,24 +145,30 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
     fertilization: { label: string; value: string }[]
     phytosanitary: { label: string; value: string }[]
   }>({ fertilization: [], phytosanitary: [] })
+  const [isLoadingPrograms, setIsLoadingPrograms] = useState(false)
 
   // Cargar programas al abrir el modal
   useEffect(() => {
     async function fetchPrograms() {
       if (!isOpen) return
-      const res = await getPrograms()
+      setIsLoadingPrograms(true)
+      try {
+        const res = await getPrograms()
 
-      if (res.ok) {
-        setPrograms({
-          fertilization: (res.fertilizationPrograms || []).map((p) => ({
-            label: p.name,
-            value: p.id,
-          })),
-          phytosanitary: (res.phytosanitaryPrograms || []).map((p) => ({
-            label: p.name,
-            value: p.id,
-          })),
-        })
+        if (res.ok) {
+          setPrograms({
+            fertilization: (res.fertilizationPrograms || []).map((p) => ({
+              label: p.name,
+              value: p.id,
+            })),
+            phytosanitary: (res.phytosanitaryPrograms || []).map((p) => ({
+              label: p.name,
+              value: p.id,
+            })),
+          })
+        }
+      } finally {
+        setIsLoadingPrograms(false)
       }
     }
     fetchPrograms()
@@ -169,30 +177,32 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
   // Cargar borrador/initialData al abrir
   useEffect(() => {
     if (isOpen) {
+      isRestoringRef.current = true
+
       if (initialData) {
-        isRestoringRef.current = true
-        reset({
-          id: initialData.id,
-          name: initialData.name,
-          purpose: initialData.purpose,
-          time: cronToTime(initialData.cronTrigger),
-          duration: initialData.durationMinutes || 10,
-          zones:
-            initialData.zones && initialData.zones.length > 0
-              ? (initialData.zones as ZoneType[])
-              : [ZoneType.ZONA_A],
-          fertilizationProgramId: initialData.fertilizationProgramId || '',
-          phytosanitaryProgramId: initialData.phytosanitaryProgramId || '',
-          days: cronToDays(initialData.cronTrigger),
-        })
-        requestAnimationFrame(() => {
-          isRestoringRef.current = false
-        })
+        const savedDraft = useFormDraftStore.getState().getDraft(draftKey) as
+          ProgramFormInputs | undefined
+
+        reset(
+          savedDraft ?? {
+            id: initialData.id,
+            name: initialData.name,
+            purpose: initialData.purpose,
+            time: cronToTime(initialData.cronTrigger),
+            duration: initialData.durationMinutes || 10,
+            zones:
+              initialData.zones && initialData.zones.length > 0
+                ? (initialData.zones as ZoneType[])
+                : [ZoneType.ZONA_A],
+            fertilizationProgramId: initialData.fertilizationProgramId || '',
+            phytosanitaryProgramId: initialData.phytosanitaryProgramId || '',
+            days: cronToDays(initialData.cronTrigger),
+          },
+        )
       } else {
         const savedDraft = useFormDraftStore.getState().getDraft(draftKey) as
-          z.input<typeof programSchema> | undefined
+          ProgramFormInputs | undefined
 
-        isRestoringRef.current = true
         reset(
           savedDraft ?? {
             id: undefined,
@@ -206,29 +216,30 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
             days: [],
           },
         )
-        requestAnimationFrame(() => {
-          isRestoringRef.current = false
-        })
       }
-    }
-  }, [isOpen, initialData, reset])
 
-  // Persistir cambios del formulario de rutina
+      requestAnimationFrame(() => {
+        isRestoringRef.current = false
+      })
+    }
+  }, [isOpen, initialData, reset, draftKey])
+
+  // Persistir cambios del formulario de rutina SOLO cuando el formulario ha sido modificado activamente (isDirty)
   const watchedValues = useWatch({ control })
   const watchedString = JSON.stringify(watchedValues)
 
   useEffect(() => {
-    if (!isOpen || isRestoringRef.current || !!initialData) return
+    if (!isOpen || isRestoringRef.current || !isDirty) return
 
     const currentDraft = useFormDraftStore.getState().getDraft(draftKey) as
-      z.input<typeof programSchema> | undefined
+      ProgramFormInputs | undefined
 
     if (JSON.stringify(currentDraft) !== watchedString) {
       useFormDraftStore
         .getState()
         .setDraft(draftKey, JSON.parse(watchedString) as ProgramFormInputs)
     }
-  }, [watchedString, isOpen, initialData])
+  }, [watchedString, isOpen, isDirty, draftKey])
 
   const onSubmit = async (data: z.input<typeof programSchema>) => {
     try {
@@ -317,7 +328,6 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
         {/* 3. Programa (solo para ferti/fito automatizado) */}
         {currentPurpose === 'FERTIGATION' && (
           <FormField
-            required
             error={errors.fertilizationProgramId?.message}
             htmlFor="fertilizationProgramId"
             label="Programa de Fertilización"
@@ -325,6 +335,7 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
             <PlannerProgramSelect
               control={control}
               error={errors.fertilizationProgramId?.message}
+              isLoading={isLoadingPrograms}
               name="fertilizationProgramId"
               options={programs.fertilization}
             />
@@ -333,7 +344,6 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
 
         {currentPurpose === 'FUMIGATION' && (
           <FormField
-            required
             error={errors.phytosanitaryProgramId?.message}
             htmlFor="phytosanitaryProgramId"
             label="Programa de Control Fitosanitario"
@@ -341,6 +351,7 @@ export function ScheduleFormModal({ isOpen, onClose, onSuccess, initialData }: P
             <PlannerProgramSelect
               control={control}
               error={errors.phytosanitaryProgramId?.message}
+              isLoading={isLoadingPrograms}
               name="phytosanitaryProgramId"
               options={programs.phytosanitary}
             />

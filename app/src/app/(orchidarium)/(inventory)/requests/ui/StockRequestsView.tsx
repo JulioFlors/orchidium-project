@@ -107,7 +107,7 @@ export function StockRequestsView({ adminName = 'Julio' }: StockRequestsViewProp
 
     const itemsText = availableRequests
       .map((req) => {
-        const sizeText = formatSize(req.size)
+        const sizeText = formatSize(req.variant?.size || req.size)
         const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://pristinoplant.com'
         const productUrl = `${baseUrl}/plant/${req.species.slug}`
 
@@ -334,10 +334,14 @@ export function StockRequestsView({ adminName = 'Julio' }: StockRequestsViewProp
                         <div>
                           <p className="text-primary text-sm font-semibold">{req.species.name}</p>
                           <div className="flex items-center gap-2 text-xs text-zinc-500">
-                            {req.size && (
+                            {req.variant?.size || req.size ? (
                               <span className="font-medium text-zinc-700 dark:text-zinc-300">
-                                {req.size}
+                                {POT_SIZE_LABELS[req.variant?.size || req.size!] ||
+                                  req.variant?.size ||
+                                  req.size}
                               </span>
+                            ) : (
+                              <span className="italic text-zinc-400">Sin tamaño</span>
                             )}
                             <span>•</span>
                             <span>

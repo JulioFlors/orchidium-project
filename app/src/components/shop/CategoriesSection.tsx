@@ -11,25 +11,27 @@ const categories = [
     name: 'Orquídeas',
     slug: 'orchids',
     description: 'Especies exóticas de colección y cultivo de altura.',
-    image: '/plants/orchids/orchids.webp',
+    image: 'plants/orchids/orchids.webp',
   },
   {
     name: 'Rosas del Desierto',
     slug: 'adenium_obesum',
     description: 'Bonsáis naturales con floraciones espectaculares.',
-    image: '/plants/adenium_obesum/marbella_0_2000.webp',
+    image: 'plants/adenium_obesum/multiple-petals/adenium-obesum-marbella/marbella_0_2000.webp',
   },
   {
     name: 'Cactus',
     slug: 'cactus',
     description: 'Especies desérticas de bajo mantenimiento y formas únicas.',
-    image: '/plants/cactus/mammillaria-vetula-ssp-gracilis_0_2000.webp',
+    image:
+      'plants/cactus/mammillaria/mammillaria-vetula-ssp-gracilis/mammillaria-vetula-ssp-gracilis_0_2000.webp',
   },
   {
     name: 'Suculentas',
     slug: 'succulents',
     description: 'Hojas carnosas y arreglos geométricos vibrantes.',
-    image: '/plants/succulents/crassula-capitella-campfire_0_2000.webp',
+    image:
+      'plants/succulents/crassula/crassula-capitella-campfire/crassula-capitella-campfire_0_2000.webp',
   },
 ]
 
@@ -67,7 +69,7 @@ export function CategoriesSection() {
                   sizes="(max-w-768px) 100vw, 25vw"
                   src={getImageUrl(category.image)}
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                <div className="absolute inset-0 bg-linear-to-t from-black/80 via-black/30 to-transparent" />
               </div>
 
               {/* Contenido flotante con Glassmorphism */}

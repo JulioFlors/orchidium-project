@@ -115,106 +115,90 @@ export function AgrochemicalCard({ agrochemical, onEdit, onDelete }: Agrochemica
       initial={{ opacity: 0, y: 5 }}
       whileInView={{ opacity: 1, y: 0 }}
     >
-      {/* 1. CABECERA: Icono, Título completo y Subtítulo */}
-      <div className="flex items-start gap-4">
-        <StatusCircleIcon
-          className="tds-xs:flex hidden shrink-0"
-          colorClassName={purposeStyle}
-          icon={PURPOSE_ICONS[agrochemical.purpose]}
-          variant="overlay"
-        />
+      {/* 1. CABECERA: Icono, Título completo, Subtítulo y Menú de Acciones */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-1 items-start gap-4">
+          <StatusCircleIcon
+            className="tds-xs:flex hidden shrink-0"
+            colorClassName={purposeStyle}
+            icon={PURPOSE_ICONS[agrochemical.purpose]}
+            variant="overlay"
+          />
 
-        <div className="flex flex-1 flex-col gap-y-0.5 overflow-hidden text-left">
-          <h3
-            className="text-primary text-[15px] leading-tight font-bold whitespace-normal break-words antialiased"
-            title={agrochemical.name}
-          >
-            {agrochemical.name}
-          </h3>
+          <div className="flex flex-1 flex-col gap-y-0.5 overflow-hidden text-left">
+            <h3
+              className="text-primary text-[15px] leading-tight font-bold whitespace-normal break-words antialiased"
+              title={agrochemical.name}
+            >
+              {agrochemical.name}
+            </h3>
 
-          <span className="text-secondary text-[11px] font-medium opacity-60">{subtitle}</span>
+            <span className="text-secondary text-[11px] font-medium opacity-60">{subtitle}</span>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 pt-0.5">
+          <ActionMenu items={menuItems} />
         </div>
       </div>
 
-      {/* 2. CUERPO: Metadatos/Tags Técnicos y Menú de Acciones */}
+      {/* 2. CUERPO: Metadatos/Tags Técnicos */}
       <div className="border-black-and-white/5 border-t border-dashed pt-3.5">
         {isMixWithIngredients ? (
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-4">
-              {/* Clasificación Macro */}
-              <div className="text-secondary flex shrink-0 items-center gap-1.5 text-[11px] font-medium opacity-70 whitespace-nowrap">
-                {agrochemical.type === 'FERTILIZANTE' ? (
-                  <IoLeafOutline className="h-4 w-4 opacity-40" />
-                ) : (
-                  <IoShieldCheckmarkOutline className="h-4 w-4 opacity-40" />
-                )}
-                <span>{AgrochemicalTypeLabels[agrochemical.type]}</span>
-              </div>
+          /* Desglose de insumos y dosificaciones individuales agrupados en tags alineados */
+          <div className="flex flex-col gap-2.5">
+            {agrochemical.mixIngredients!.map((item, idx) => {
+              const unitLabel =
+                (item.dosageUnit in DosageUnitLabels
+                  ? DosageUnitLabels[item.dosageUnit]
+                  : item.dosageUnit) || item.dosageUnit
+              const ingName = item.ingredient?.name || `Insumo ${idx + 1}`
 
-              <div className="flex shrink-0 items-center">
-                <ActionMenu items={menuItems} />
-              </div>
-            </div>
-
-            {/* Desglose de insumos y dosificaciones individuales */}
-            <div className="flex flex-col gap-1.5 pt-0.5">
-              {agrochemical.mixIngredients!.map((item, idx) => {
-                const unitLabel =
-                  (item.dosageUnit in DosageUnitLabels
-                    ? DosageUnitLabels[item.dosageUnit]
-                    : item.dosageUnit) || item.dosageUnit
-                const ingName = item.ingredient?.name || `Insumo ${idx + 1}`
-
-                return (
-                  <div
-                    key={item.id || `${item.ingredientId}-${idx}`}
-                    className="flex items-center justify-between gap-3 overflow-hidden text-[11px]"
-                  >
-                    <div className="flex flex-1 items-center gap-2 overflow-hidden">
-                      <span className="text-secondary/50 font-mono text-[10px] font-bold">
-                        #{idx + 1}
-                      </span>
-                      <span className="text-primary truncate font-medium">{ingName}</span>
-                    </div>
-
-                    <div className="flex shrink-0 items-center gap-1">
-                      <GiChemicalDrop className="text-secondary h-3.5 w-3.5 opacity-40" />
-                      <span className="text-primary font-mono text-[11px] font-bold tracking-tight">
-                        {item.dosageValue} {unitLabel}
-                      </span>
-                    </div>
+              return (
+                <div
+                  key={item.id || `${item.ingredientId}-${idx}`}
+                  className="flex flex-row flex-wrap items-center gap-x-4 gap-y-1 text-xs"
+                >
+                  {/* Tag Insumo */}
+                  <div className="text-primary flex shrink-0 items-center gap-1.5 font-medium">
+                    <span className="text-secondary/50 font-mono text-[10px] font-bold">
+                      #{idx + 1}
+                    </span>
+                    <span className="text-primary text-[11px] font-semibold">{ingName}</span>
                   </div>
-                )
-              })}
-            </div>
+
+                  {/* Tag Dosis */}
+                  <div className="text-primary flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+                    <GiChemicalDrop className="text-secondary h-3.5 w-3.5 opacity-40" />
+                    <span className="font-mono text-[11px] font-bold tracking-tight">
+                      {item.dosageValue} {unitLabel}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         ) : (
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex flex-row flex-wrap items-center gap-x-5 gap-y-2">
-              {/* Clasificación Macro */}
-              <div className="text-secondary flex shrink-0 items-center gap-1.5 text-[11px] font-medium opacity-70 whitespace-nowrap">
-                {agrochemical.type === 'FERTILIZANTE' ? (
-                  <IoLeafOutline className="h-4 w-4 opacity-40" />
-                ) : (
-                  <IoShieldCheckmarkOutline className="h-4 w-4 opacity-40" />
-                )}
-                <span>{AgrochemicalTypeLabels[agrochemical.type]}</span>
-              </div>
-
-              {/* Preparación / Dosis */}
-              {agrochemical.dosageValue != null && agrochemical.dosageUnit && (
-                <div className="text-primary flex shrink-0 items-center gap-1.5 whitespace-nowrap">
-                  <GiChemicalDrop className="text-secondary h-4 w-4 opacity-40" />
-                  <span className="font-mono text-[11px] font-bold tracking-tight">
-                    {formatDosage(agrochemical.dosageValue, agrochemical.dosageUnit)}
-                  </span>
-                </div>
+          <div className="flex flex-row flex-wrap items-center gap-x-5 gap-y-2">
+            {/* Clasificación Macro */}
+            <div className="text-secondary flex shrink-0 items-center gap-1.5 text-[11px] font-medium opacity-70 whitespace-nowrap">
+              {agrochemical.type === 'FERTILIZANTE' ? (
+                <IoLeafOutline className="h-4 w-4 opacity-40" />
+              ) : (
+                <IoShieldCheckmarkOutline className="h-4 w-4 opacity-40" />
               )}
+              <span>{AgrochemicalTypeLabels[agrochemical.type]}</span>
             </div>
 
-            <div className="flex shrink-0 items-center">
-              <ActionMenu items={menuItems} />
-            </div>
+            {/* Preparación / Dosis */}
+            {agrochemical.dosageValue != null && agrochemical.dosageUnit && (
+              <div className="text-primary flex shrink-0 items-center gap-1.5 whitespace-nowrap">
+                <GiChemicalDrop className="text-secondary h-4 w-4 opacity-40" />
+                <span className="font-mono text-[11px] font-bold tracking-tight">
+                  {formatDosage(agrochemical.dosageValue, agrochemical.dosageUnit)}
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>

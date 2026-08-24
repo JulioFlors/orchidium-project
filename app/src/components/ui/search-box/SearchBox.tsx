@@ -86,7 +86,9 @@ const motionProps = {
 
 interface SearchBoxProps {
   isHeader?: boolean
+  isModal?: boolean
   suggestions?: SearchSuggestion[]
+  onSearchSubmit?: () => void
 }
 
 /**
@@ -99,7 +101,9 @@ interface SearchBoxProps {
  * @component
  * @param {SearchBoxProps} props - Las propiedades del componente.
  * @param {boolean} [props.isHeader=false] - Adapta su comportamiento y UI al Header y al Sidebar.
+ * @param {boolean} [props.isModal=false] - Adapta su comportamiento y UI al Modal de búsqueda móvil.
  * @param {SearchSuggestion[]} props.suggestions - Un array con los datos precargados para filtrar y mostrar como sugerencias.
+ * @param {() => void} [props.onSearchSubmit] - Callback opcional ejecutado al completar una búsqueda o seleccionar sugerencia.
  *
  * @behavior
  * - Muestra sugerencias (máximo 5) cuando el usuario escribe al menos 2 caracteres.
@@ -107,7 +111,12 @@ interface SearchBoxProps {
  * - Al hacer clic en una sugerencia, navega a la página de detalle del producto `/product/[slug]`.
  * - Utiliza el store de Zustand (`useUIStore`) para gestionar el término de búsqueda global.
  */
-export function SearchBox({ isHeader = false, suggestions = [] }: SearchBoxProps) {
+export function SearchBox({
+  isHeader = false,
+  isModal = false,
+  suggestions = [],
+  onSearchSubmit,
+}: SearchBoxProps) {
   // ----- Hooks de Next.js -----
   const router = useRouter()
 
@@ -117,8 +126,14 @@ export function SearchBox({ isHeader = false, suggestions = [] }: SearchBoxProps
   const containerRef = useRef<HTMLDivElement | null>(null)
 
   // ----- Estados globales (Zustand) -----
-  const { closeSearchBox, closeSidebar, searchTerm, setSearchTerm, isSearchBoxExpanded } =
-    useUIStore()
+  const {
+    closeSearchBox,
+    closeSidebar,
+    closeSearchModal,
+    searchTerm,
+    setSearchTerm,
+    isSearchBoxExpanded,
+  } = useUIStore()
 
   // ----- Estados locales -----
   const [isResultsVisible, setIsResultsVisible] = useState(false)
@@ -137,20 +152,20 @@ export function SearchBox({ isHeader = false, suggestions = [] }: SearchBoxProps
   // ----------------------------------------
   //  Lógica de Focus
   // ----------------------------------------
-  // Solo auto-enfocamos si estamos en el Header y se ha expandido.
+  // Auto-enfocamos si estamos en el Header y se ha expandido, o si isModal está activo.
   useEffect(() => {
-    if (isHeader && isSearchBoxExpanded) {
+    if ((isHeader && isSearchBoxExpanded) || isModal) {
+      const delay = isHeader ? 350 : 150
       const timer = setTimeout(() => {
         if (searchRef.current) {
           searchRef.current.focus()
         }
-      }, 350)
-      // 300ms de la animación + 50ms de espera adicional
+      }, delay)
       // Esperamos a que la animación termine/DOM esté listo
 
       return () => clearTimeout(timer)
     }
-  }, [isHeader, isSearchBoxExpanded])
+  }, [isHeader, isSearchBoxExpanded, isModal])
 
   // ----------------------------------------
   //  Gestiona la visibilidad
@@ -252,6 +267,8 @@ export function SearchBox({ isHeader = false, suggestions = [] }: SearchBoxProps
         setIsResultsVisible(false) // Ocultar lista de sugerencias
         //                            Cerrar el area de trabajo correspondiente
         void (isHeader ? closeSearchBox() : closeSidebar())
+        closeSearchModal()
+        onSearchSubmit?.()
       }
     }
   }
@@ -294,20 +311,34 @@ export function SearchBox({ isHeader = false, suggestions = [] }: SearchBoxProps
   //  Render (JSX)
   // ----------------------------------------
   return (
-    <div ref={containerRef} className="relative flex h-full w-full items-center" tabIndex={-1}>
+    <div
+      ref={containerRef}
+      className={clsx(
+        'relative w-full',
+        isHeader ? 'flex h-full items-center' : 'flex flex-col justify-start',
+      )}
+      tabIndex={-1}
+    >
       {/* ---- Contenedor principal del SearchBox ----*/}
       {/* ---- Contenedor del input de búsqueda ---- */}
       <div
         className={clsx(
-          'text-primary relative mb-2 flex h-full w-full items-center',
-          { 'mb-0!': isHeader }, // Elimina el margen inferior si se usa en el Header
+          'text-primary relative flex w-full items-center',
+          isHeader ? 'h-full' : 'h-10',
+          !isHeader && !isModal && 'mb-2',
         )}
       >
         <SearchIcon className="text-secondary pointer-events-none absolute left-3 h-6 w-6" />
 
         <input
           ref={searchRef}
-          className={clsx(isHeader ? 'header-searchbox' : 'sidebar-searchbox')}
+          className={clsx(
+            isHeader
+              ? 'header-searchbox'
+              : isModal
+                ? 'sidebar-searchbox ring-input-outline/40 focus:ring-input-outline ring-1'
+                : 'sidebar-searchbox',
+          )}
           placeholder="Buscar"
           role="searchbox"
           type="text"
@@ -340,7 +371,12 @@ export function SearchBox({ isHeader = false, suggestions = [] }: SearchBoxProps
             key="search-results"
             ref={resultsRef}
             className={clsx(
-              'border-input-outline bg-canvas text-black-and-white absolute top-11 left-0 z-50! w-full rounded border py-1 shadow-lg',
+              'border-input-outline bg-canvas text-black-and-white absolute left-0 z-50! w-full rounded border py-1 shadow-lg',
+              isHeader
+                ? 'top-11'
+                : isModal
+                  ? 'border-input-outline/40 top-full mt-1.5 shadow-xl'
+                  : 'top-full mt-1',
             )}
             data-testid="search-results-container"
             {...motionProps}
@@ -355,6 +391,8 @@ export function SearchBox({ isHeader = false, suggestions = [] }: SearchBoxProps
                   setIsResultsVisible(false) // Ocultar los resultados al seleccionar un resultado
                   //                            Cerrar el area de trabajo correspondiente
                   void (isHeader ? closeSearchBox() : closeSidebar())
+                  closeSearchModal()
+                  onSearchSubmit?.()
                 }}
                 onKeyDown={(e) => handleResultKeyDown(e, result.slug)}
               >

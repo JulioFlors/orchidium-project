@@ -19,8 +19,13 @@ export default async function OrderDetailPage({ params }: OrderPageProps) {
 
   const { order } = res
 
+  const formattedTotalVes = order.totalVes.toLocaleString('es-VE', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+
   const whatsappMessage = encodeURIComponent(
-    `¡Hola Pristinoplant! He realizado mi pedido #${order.orderNumber} por un total de $${order.totalUsd.toFixed(2)} (Bs. ${order.totalVes.toFixed(2)}). Adjunto mi comprobante de pago por el método ${order.paymentMethod}.`,
+    `Hola Pristinoplant\n\nHe realizado mi pedido #${order.orderNumber} por un total de $${order.totalUsd.toFixed(2)} (Bs. ${formattedTotalVes})\n\nAdjunto mi comprobante de pago por el método ${order.paymentMethod}.`,
   )
 
   const whatsappLink = `https://wa.me/584148724205?text=${whatsappMessage}`
@@ -46,23 +51,19 @@ export default async function OrderDetailPage({ params }: OrderPageProps) {
 
         {/* Instrucciones de Pago según Método */}
         <div className="flex flex-col gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-5 text-xs">
-          <h2 className="text-sm font-bold text-emerald-700 dark:text-emerald-400">
-            Instrucciones para Pago por{' '}
+          <h2 className="text-sm font-bold text-primary dark:text-emerald-400">
             {order.paymentMethod === 'PAGO_MOVIL'
               ? 'Pago Móvil'
               : order.paymentMethod === 'TRANSFERENCIA_VES'
                 ? 'Transferencia Bancaria'
-                : 'Efectivo'}
+                : 'Pago en Efectivo'}
           </h2>
           {order.paymentMethod === 'PAGO_MOVIL' && (
             <div className="text-primary flex flex-col gap-1.5 font-mono">
               <span>• Banco: Mercantil</span>
-              <span>• Cédula / RIF: 24847678</span>
+              <span>• Cédula: 24847678</span>
               <span>• Teléfono: 0414-8724205</span>
-              <span className="pt-1 font-bold text-emerald-600 dark:text-emerald-400">
-                • Monto exacto a pagar: Bs. {order.totalVes.toFixed(2)} (Tasa BCV: Bs.{' '}
-                {order.exchangeRate.toFixed(2)})
-              </span>
+              <span className="pt-1 font-bold text-primary">• Monto: Bs. {formattedTotalVes}</span>
             </div>
           )}
           {order.paymentMethod === 'TRANSFERENCIA_VES' && (
@@ -70,8 +71,12 @@ export default async function OrderDetailPage({ params }: OrderPageProps) {
               <span>• Banco: Mercantil</span>
               <span>• Cuenta Corriente: 0105 0188 1311 8817 5750</span>
               <span className="pt-1 font-bold text-emerald-600 dark:text-emerald-400">
-                • Monto exacto a pagar: Bs. {order.totalVes.toFixed(2)} (Tasa BCV: Bs.{' '}
-                {order.exchangeRate.toFixed(2)})
+                • Monto exacto a pagar: Bs. {formattedTotalVes} (Tasa BCV: Bs.{' '}
+                {order.exchangeRate.toLocaleString('es-VE', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+                )
               </span>
             </div>
           )}
@@ -128,7 +133,7 @@ export default async function OrderDetailPage({ params }: OrderPageProps) {
           <div className="text-primary flex items-center justify-between pt-2 text-sm font-bold">
             <span>Total del Pedido</span>
             <span>
-              ${order.totalUsd.toFixed(2)} (Bs. {order.totalVes.toFixed(2)})
+              ${order.totalUsd.toFixed(2)} (Bs. {formattedTotalVes})
             </span>
           </div>
         </div>

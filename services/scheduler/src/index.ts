@@ -1105,7 +1105,18 @@ function setupMqttHandlers() {
               }
 
               if (unixTimestamp < 1000000000) unixTimestamp += 946684800
-              const sampleTimestampMs = (unixTimestamp + backtrackingOffset) * 1000
+              if (backtrackingOffset === 0 && unixTimestamp < 1735689600) continue
+
+              unixTimestamp += backtrackingOffset
+
+              // 🛡️ Corrección de Zona Horaria (UTC-4 / VET -> UTC)
+              // El reloj del microcontrolador opera en hora local de Caracas (UTC-4).
+              // Al igual que en services/ingest, sumamos 4 horas (14400s) a lotes sincronizados.
+              if (backtrackingOffset === 0) {
+                unixTimestamp += 4 * 3600
+              }
+
+              const sampleTimestampMs = unixTimestamp * 1000
 
               if (metrics.temperature !== undefined && metrics.temperature !== null) {
                 const tVal = Number(metrics.temperature)

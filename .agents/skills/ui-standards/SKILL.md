@@ -27,30 +27,49 @@ El proyecto utiliza una escala estricta de apilamiento para evitar que elementos
 ## 2. Reglas para Menús Flotantes y Dropdowns
 
 ### A. Aislamiento Local vs Portales
+
 - **Menús de Tarjetas / Listas (`ActionMenu`, `DeviceStatus`)**: Deben renderizarse **localmente** con `position: absolute` y `z-5`. **PROHIBIDO** usar portales a `document.body`, ya que los portales escapan del contexto y se superponen indebidamente al Header (`z-10`) y al Backdrop (`z-15`).
 - **Selectores de Formulario (`SelectDropdown`)**: Renderizan su menú con `absolute` dentro de su contenedor relativo. Cuando `isOpen === true`, el contenedor adquiere `isOpen && 'z-50'` para flotar sobre inputs adyacentes del formulario.
 
 ### B. Rendimiento y Text Antialiasing en Chromium
+
 - Todo menú desplegable animado con Framer Motion debe incluir:
+
   ```tsx
-  className="transform-gpu antialiased [backface-visibility:hidden] ..."
+  className="transform-gpu antialiased backface-hidden ..."
   ```
+
 - Las tarjetas contenedoras deben usar transiciones atómicas como `transition-colors duration-200` y **NUNCA** `transition-all`.
 - **PROHIBIDO** usar `hover:z-2` en tarjetas hermanas: usar siempre `focus-within:z-5` para que el cursor no eleve la tarjeta adyacente sobre el menú abierto.
 
 ## 3. Estándar de Modales y Formularios
 
-### A. Estructura Canónica del Modal
+### A. Estructura Canónica y Layout Responsivo Dual del Modal
+
 - Uso obligatorio de [`Modal.tsx`](file:///c:/Dev/pristinoplant/app/src/components/ui/modal/Modal.tsx).
+- **Layout Desktop (`> tds-sm`)**:
+  - Centrado en pantalla con margen (`tds-sm:p-4`).
+  - Bordes y esquinas redondeadas completas (`tds-sm:rounded-2xl tds-sm:border tds-sm:border-input-outline`).
+  - Ancho controlado semánticamente por la prop `size` (`sm`, `md`, `lg`, `xl`).
+- **Layout Mobile (`<= tds-sm`)**:
+  - Full-Width y anclado al fondo (`w-full inset-x-0 bottom-0`).
+  - **Altura Auto-adaptativa (`h-auto`)**: El modal solo ocupa la altura requerida por su contenido. Modales o confirmaciones simples nunca deben forzar alturas fijas ni dejar áreas en blanco vacías.
+  - **Tope Máximo y Scroll en Modales Complejos**: Cuando el contenido sea extenso o complejo (formularios con múltiples campos), el modal alcanza su tope máximo (`max-h-[calc(100dvh-3.5rem)]`), manteniendo el espacio superior libre sobre el Header oscurecido por el backdrop.
+  - El Header y Footer permanecen fijos (`shrink-0`), mientras que el scroll vertical opera exclusivamente dentro del cuerpo del modal (`flex-1 min-h-0 overflow-y-auto`).
+  - Fondo `bg-surface` con backdrop desenfocado y oscurecido (`backdrop-blur-[2px]`).
+  - Esquinas superiores redondeadas (`rounded-t-3xl`), esquinas inferiores rectas (`rounded-b-none`) y borde superior sutil (`border-t border-input-outline/40 border-x-0 border-b-0`).
+- **Animación Fluida**: Curva Material `easeOut` (`[0.4, 0, 0.2, 1]`) con opacidad escalonada.
 - Trampa de foco (`focus trapping`) integrada con `Tab` y `Shift+Tab`.
-- Cierre automático con `Escape` y click en el `Backdrop`.
-- Botones de acción estandarizados en el footer: *"Cancelar"* (variante `ghost`) y *"Guardar"* (variante `primary`).
+- Cierre accesible con `Escape` y click en el `Backdrop`.
+- Botones de acción en el footer según el caso: confirmación compacta con botón único (`Sí, eliminar`) o par de acciones (*"Cancelar"* / *"Guardar"*).
 
 ### B. Persistencia de Borradores con Zustand
+
 - Los formularios de creación/edición deben sincronizar su estado con `useFormDraftStore` con una clave descriptiva (ej. `'agrochemical-form-draft'`).
 - El borrador se restaura al montar el modal y se limpia (`clearDraft`) **únicamente** tras guardar exitosamente.
 
 ### C. Validaciones con Zod y React Hook Form
+
 - Validación estricta con esquemas Zod en español.
 - **PROHIBIDO EL USO DE `any`**: Los tipos del formulario deben derivarse con `z.infer<typeof schema>`.
 - Inputs numéricos enteros (ej. cantidad 1-99) deben sanitizarse en tiempo real con `replace(/[^0-9]/g, '')` y validarse contra valores no permitidos (`0`, `00`).
@@ -74,9 +93,11 @@ Las tarjetas (`Card`) en Pristinoplant deben estructurarse de manera composable,
 
 1. **Contenedor Base**:
    - Clases estándar:
+
      ```tsx
      className="bg-surface border-input-outline group hover:bg-hover-overlay focus-within:z-5 relative flex flex-col gap-4 rounded-xl border p-4 shadow-sm transition-colors duration-200"
      ```
+
    - Uso obligatorio de `focus-within:z-5` para la elevación del `ActionMenu`.
    - **PROHIBIDO** usar `transition-all` en el contenedor de tarjetas.
 
@@ -115,5 +136,5 @@ Cuando una tarjeta representa una entidad compuesta (ej. mezcla de varios agroqu
    - Si los componentes tienen propósitos diferentes, se presentan combinados en orden con ` + ` (ej. `Insecticida + Acaricida`).
    - Si todos los componentes comparten el mismo propósito, se presenta una única vez (ej. `Desarrollo`).
 2. **Desglose en el Cuerpo (`Body`)**:
-   - La cabecera mantiene el título general de la mezcla (`Nombre A + Nombre B`).
-   - El cuerpo renderiza la clasificación macro en la fila superior y un listado vertical de cada insumo individual con su índice `#1`, `#2`, nombre del componente y dosificación en `font-mono` con icono `GiChemicalDrop`.
+   - La cabecera mantiene el título general de la mezcla (`Nombre A + Nombre B`) y ubica el menú de acciones (`ActionMenu`) en la esquina superior derecha.
+   - El cuerpo omite la etiqueta macro redundante (`Fertilizante`/`Fitosanitario`) y renderiza un listado vertical de cada insumo individual agrupado junto con su dosificación (`#1 Nombre`, `💧 Dosis Unidad`) en tags alineados en la misma fila con wrap responsivo, garantizando que siempre se identifique qué dosis corresponde a cada insumo.

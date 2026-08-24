@@ -9,6 +9,7 @@ import {
   IoLocationOutline,
   IoGitBranchOutline,
   IoFlowerOutline,
+  IoStar,
 } from 'react-icons/io5'
 import { MdEdit, MdDelete, MdLocalFlorist } from 'react-icons/md'
 
@@ -43,6 +44,7 @@ interface PlantInstanceCardProps {
   potSizeLabels: Record<PotSize, string>
   zoneLabels: Record<string, string>
   isSelected?: boolean
+  isFeatured?: boolean
   onEdit: (plant: PlantInstance) => void
   onFlowering: (plant: PlantInstance) => void
   onDelete: (plant: PlantInstance) => void
@@ -75,6 +77,7 @@ export function PlantInstanceCard({
   potSizeLabels,
   zoneLabels,
   isSelected = false,
+  isFeatured = false,
   onEdit,
   onFlowering,
   onDelete,
@@ -95,7 +98,7 @@ export function PlantInstanceCard({
 
   const menuItems: ActionMenuItem[] = [
     {
-      label: isSelected ? 'Ficha de Floración Activa' : 'Analizar Floración',
+      label: 'Ver Floración',
       icon: <MdLocalFlorist className="text-fuchsia-500" />,
       onClick: () => onSelectFlowering?.(plant),
     },
@@ -122,7 +125,11 @@ export function PlantInstanceCard({
       animate={{ opacity: 1, y: 0 }}
       className={clsx(
         'bg-surface border-input-outline group focus-within:z-5 relative flex min-w-0 w-full flex-col gap-4 rounded-xl border p-4 shadow-sm transition-colors duration-200 hover:bg-hover-overlay',
-        isSelected && 'border-fuchsia-500/40 bg-fuchsia-500/[0.03] dark:border-fuchsia-400/40',
+        isSelected &&
+          clsx(
+            potColor?.border || 'border-fuchsia-500/40',
+            potColor?.bg || 'bg-fuchsia-500/[0.03]',
+          ),
       )}
       initial={{ opacity: 0, y: 5 }}
     >
@@ -154,11 +161,11 @@ export function PlantInstanceCard({
       <div className="border-black-and-white/5 mt-1 border-t border-dashed pt-4 min-w-0">
         <div className="flex items-center justify-between gap-3 min-w-0">
           <div className="flex flex-row flex-wrap items-center gap-x-4 gap-y-2 text-xs min-w-0 flex-1">
-            {/* Tag Activo si está seleccionada */}
-            {isSelected && (
-              <div className="text-fuchsia-600 dark:text-fuchsia-400 flex shrink-0 items-center gap-1.5 font-bold">
-                <MdLocalFlorist className="h-4 w-4 shrink-0" />
-                <span>Analizando</span>
+            {/* Destacado (si aplica - mejor rendimiento de floración) */}
+            {isFeatured && (
+              <div className="flex shrink-0 items-center gap-1.5 font-semibold text-amber-600 dark:text-amber-400">
+                <IoStar className="h-4 w-4 text-amber-500 shrink-0" />
+                <span>Destacado</span>
               </div>
             )}
 

@@ -195,10 +195,16 @@ export function SchedulesView() {
 
         {/* Modal de Creación / Edición */}
         <ScheduleFormModal
+          key={editingSchedule ? `edit-${editingSchedule.id}` : 'new'}
           initialData={editingSchedule}
           isOpen={isFormModalOpen}
-          onClose={() => setIsFormModalOpen(false)}
+          onClose={() => {
+            setIsFormModalOpen(false)
+            setEditingSchedule(null)
+          }}
           onSuccess={() => {
+            setIsFormModalOpen(false)
+            setEditingSchedule(null)
             success(editingSchedule ? 'Rutina actualizada' : 'Rutina creada con éxito')
             mutate()
           }}

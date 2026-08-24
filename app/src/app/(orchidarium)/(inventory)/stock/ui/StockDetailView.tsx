@@ -133,10 +133,21 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
     return evaluated[0]?.plant || null
   }, [species.plants])
 
-  // Estado del Ejemplar Seleccionado para Análisis de Floración (inicializa con el Champion)
-  const [selectedPlantId, setSelectedPlantId] = useState<string | null>(
-    () => championPlant?.id || null,
-  )
+  // ID explícitamente seleccionado por el usuario (o null para fallback automático)
+  const [userSelectedPlantId, setUserSelectedPlantId] = useState<string | null>(null)
+
+  // Planta seleccionada calculada: prioridad usuario -> Champion -> primer ejemplar
+  const selectedPlant = useMemo(() => {
+    if (userSelectedPlantId) {
+      const found = species.plants.find((p) => p.id === userSelectedPlantId)
+
+      if (found) return found
+    }
+
+    return championPlant || species.plants[0] || null
+  }, [species.plants, userSelectedPlantId, championPlant])
+
+  const selectedPlantId = selectedPlant?.id || null
 
   // Estado de la Analítica de Floración
   const [analytics, setAnalytics] = useState<SpeciesFloweringAnalyticsData | null>(null)
@@ -153,16 +164,11 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
 
   // Selección interactiva de ejemplar con scroll suave hacia la ficha inferior
   function handleSelectPlantForFlowering(plant: PlantInstance) {
-    setSelectedPlantId((prev) => (prev === plant.id ? null : plant.id))
+    setUserSelectedPlantId(plant.id)
     setTimeout(() => {
       document.getElementById('flowering-analytics-section')?.scrollIntoView({ behavior: 'smooth' })
     }, 50)
   }
-
-  const selectedPlant = useMemo(
-    () => (selectedPlantId ? species.plants.find((p) => p.id === selectedPlantId) || null : null),
-    [species.plants, selectedPlantId],
-  )
 
   function handleCloseFloweringFromRecord(record: FloweringRecord) {
     const target = species.plants.find((p) => p.FloweringEvent?.some((e) => e.id === record.id))
@@ -708,6 +714,7 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
             {filteredPlants.map((plant) => (
               <PlantInstanceCard
                 key={plant.id}
+                isFeatured={championPlant?.id === plant.id}
                 isSelected={selectedPlantId === plant.id}
                 plant={plant}
                 potSizeLabels={POT_SIZE_LABELS}
@@ -728,7 +735,6 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
         championPlant={championPlant}
         selectedPlant={selectedPlant}
         speciesName={species.name}
-        onClearSelection={() => setSelectedPlantId(null)}
         onCloseFloweringRecord={handleCloseFloweringFromRecord}
         onOpenFloweringModal={handleOpenFlowering}
       />

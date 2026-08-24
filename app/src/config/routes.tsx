@@ -1,5 +1,6 @@
 import {
   IoCalendarOutline,
+  IoCartOutline,
   IoCloudOutline,
   IoConstructOutline,
   IoFlaskOutline,
@@ -10,6 +11,7 @@ import {
   IoListOutline,
   IoMailUnreadOutline,
   IoPricetagsOutline,
+  IoReceiptOutline,
   IoWaterOutline,
 } from 'react-icons/io5'
 
@@ -189,6 +191,26 @@ export const adminRoutes: AdminRoute[] = [
         url: '/history',
         icon: <IoListOutline />,
         description: 'Registro de ejecuciones pasadas',
+      },
+    ],
+  },
+  {
+    slug: 'orders',
+    name: 'Ventas',
+    icon: <IoCartOutline size={20} />,
+    layout: 'hybrid',
+    items: [
+      {
+        name: 'Pedidos',
+        url: '/orders',
+        icon: <IoCartOutline />,
+        description: 'Gestión y despacho de órdenes de compra',
+      },
+      {
+        name: 'Historial de Ventas',
+        url: '/sales',
+        icon: <IoReceiptOutline />,
+        description: 'Registro de ventas online y ventas directas',
       },
     ],
   },

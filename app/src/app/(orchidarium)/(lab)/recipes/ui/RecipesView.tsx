@@ -3,6 +3,7 @@
 import type { Agrochemical } from '@package/database'
 
 import React, { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { IoAddOutline } from 'react-icons/io5'
 import { MdOutlineHistoryToggleOff } from 'react-icons/md'
 
@@ -41,6 +42,7 @@ export function RecipesView({
   phytosanitaryPrograms = [],
   availableAgrochemicals = [],
 }: Props) {
+  const router = useRouter()
   const [, startTransition] = useTransition()
   const [isDeleting, setIsDeleting] = useState(false)
 
@@ -95,6 +97,7 @@ export function RecipesView({
         if (result.ok) {
           useToastStore.getState().addToast('Plan eliminado correctamente', 'success')
           setProgramToDelete(null)
+          router.refresh()
         } else {
           useToastStore.getState().addToast(result.message || 'Error al eliminar el plan', 'error')
         }
@@ -151,13 +154,19 @@ export function RecipesView({
       {/* MODAL FORMULARIO DE PROGRAMA */}
       {isModalOpen && (
         <ProgramForm
+          key={selectedProgram ? `edit-${selectedProgram.id}` : `new-${initialType}`}
           availableAgrochemicals={availableAgrochemicals}
           initialData={selectedProgram}
           initialType={initialType}
           isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
+          onClose={() => {
+            setIsModalOpen(false)
+            setSelectedProgram(null)
+          }}
           onSuccess={() => {
             setIsModalOpen(false)
+            setSelectedProgram(null)
+            router.refresh()
             useToastStore
               .getState()
               .addToast(

@@ -1,6 +1,6 @@
 'use client'
 
-import type { PotSize } from '@/interfaces'
+import type { PotSize, ProductVariant } from '@/interfaces'
 
 import { useState, FormEvent, MouseEvent } from 'react'
 import { clsx } from 'clsx'
@@ -9,25 +9,53 @@ import Link from 'next/link'
 import { Button } from '@/components'
 import { Logger } from '@/lib'
 import { requestStockNotification } from '@/actions'
+import { PotSizeLabels, PotSizeDimensions, sortVariantsByPotSizeAsc } from '@/config'
 
 interface Props {
   productName: string
   speciesId?: string
   variantId?: string
   size?: PotSize
+  variants?: ProductVariant[]
+  selectedVariant?: ProductVariant
+  onVariantChange?: (variant: ProductVariant) => void
 }
 
-export function StockNotificationWhatsapp({ productName, speciesId, variantId, size }: Props) {
+export function StockNotificationWhatsapp({
+  productName,
+  speciesId,
+  variantId,
+  size,
+  variants,
+  selectedVariant,
+  onVariantChange,
+}: Props) {
   const [isFormVisible, setIsFormVisible] = useState(false)
   const [userName, setUserName] = useState('')
   const [phoneNumber, setPhoneNumber] = useState('')
+  const [userSelectedVariantId, setUserSelectedVariantId] = useState<string | null>(null)
 
   const [userNameError, setUserNameError] = useState<string | null>(null)
   const [phoneError, setPhoneError] = useState<string | null>(null)
+  const [variantError, setVariantError] = useState<string | null>(null)
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitSuccess, setSubmitSuccess] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+
+  const hasVariants = Boolean(variants && variants.length > 0)
+  const sortedVariants = variants ? sortVariantsByPotSizeAsc(variants) : []
+
+  const activeVariantId =
+    userSelectedVariantId ??
+    selectedVariant?.id ??
+    variantId ??
+    (variants && variants.length === 1 ? variants[0].id : undefined)
+
+  const activeVariant =
+    variants?.find((v) => v.id === activeVariantId) ||
+    selectedVariant ||
+    (variants?.length === 1 ? variants[0] : undefined)
 
   const handleShowForm = (e: MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault()
@@ -36,13 +64,25 @@ export function StockNotificationWhatsapp({ productName, speciesId, variantId, s
     setSubmitError(null)
   }
 
+  const handleVariantSelect = (variant: ProductVariant) => {
+    setUserSelectedVariantId(variant.id)
+    setVariantError(null)
+    onVariantChange?.(variant)
+  }
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     let isValid = true
 
     setUserNameError(null)
     setPhoneError(null)
+    setVariantError(null)
     setSubmitError(null)
+
+    if (hasVariants && !activeVariantId) {
+      setVariantError('Es necesario seleccionar el tamaño de la planta')
+      isValid = false
+    }
 
     if (!userName.trim()) {
       setUserNameError('Se necesita un nombre')
@@ -62,13 +102,17 @@ export function StockNotificationWhatsapp({ productName, speciesId, variantId, s
 
     setIsSubmitting(true)
 
+    const finalVariant = variants?.find((v) => v.id === activeVariantId)
+    const finalVariantId = finalVariant?.id || variantId
+    const finalSize = finalVariant?.size || size
+
     Logger.info('[SNAT] Enviando datos de solicitud de notificación de stock:', {
       userName,
       phoneNumber,
       productName,
       speciesId,
-      variantId,
-      size,
+      variantId: finalVariantId,
+      size: finalSize,
     })
 
     if (!speciesId) {
@@ -83,8 +127,8 @@ export function StockNotificationWhatsapp({ productName, speciesId, variantId, s
       userName,
       phoneNumber,
       speciesId,
-      variantId,
-      size,
+      variantId: finalVariantId,
+      size: finalSize,
     })
 
     if (res.ok) {
@@ -122,6 +166,58 @@ export function StockNotificationWhatsapp({ productName, speciesId, variantId, s
       {/* Si el formulario es visible (y por ende, submitSuccess es false o irrelevante aquí), muestra el formulario */}
       {isFormVisible && (
         <form onSubmit={handleSubmit}>
+          {hasVariants && (
+            <div className="mb-4">
+              <div className="mb-2 flex items-baseline justify-between">
+                <label className="text-secondary font-semibold" htmlFor="whatsapp-notif-variant">
+                  Maceta
+                </label>
+                {activeVariant && (
+                  <span className="text-secondary fade-in text-xs font-semibold">
+                    {PotSizeDimensions[activeVariant.size]}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-wrap gap-x-4 gap-y-2" id="whatsapp-notif-variant">
+                {sortedVariants.map((variant) => {
+                  const isSelected = activeVariant?.id === variant.id
+
+                  return (
+                    <button
+                      key={variant.id}
+                      className={clsx('pot-size-btn pot-size-available', {
+                        'is-selected': isSelected,
+                        'ring-1 ring-rose-700': variantError && !isSelected,
+                      })}
+                      type="button"
+                      onClick={() => handleVariantSelect(variant)}
+                    >
+                      {PotSizeLabels[variant.size]}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {variantError && (
+                <p
+                  aria-live="polite"
+                  className={clsx(
+                    'mt-2 mb-0 text-xs leading-5 font-medium text-rose-700',
+                    'overflow-hidden transition-all duration-300 ease-in-out',
+                    {
+                      'max-h-10 opacity-100': variantError,
+                      'max-h-0 opacity-0': !variantError,
+                    },
+                  )}
+                  id="variant-error-whatsapp"
+                >
+                  {variantError}
+                </p>
+              )}
+            </div>
+          )}
+
           <div>
             <label className="text-secondary font-semibold" htmlFor="whatsapp-notif-name">
               Nombre

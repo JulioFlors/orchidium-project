@@ -31,14 +31,14 @@
       "position": [1392, 160],
       "credentials": {
         "postgres": {
-          "id": "u0KCV3BiGESIicjN",
-          "name": "Postgres account"
+          "id": "postgres-pristinoplant",
+          "name": "Postgres PristinoPlant"
         }
       }
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\n\nconst emaCurrent = data.ema_current_status || 'UNKNOWN';\nconst emaPrev = data.ema_prev_status || 'UNKNOWN';\nconst emaCurrentSeconds = data.ema_current_seconds ?? 999999;\nconst emaPrevSeconds = data.ema_prev_seconds ?? 0;\n\nconst actCurrent = data.act_current_status || 'UNKNOWN';\nconst actCurrentSeconds = data.act_current_seconds ?? 0;\n\nlet alertType = 'NONE';\nlet message = '';\n\n// 1. CASO CAÍDA PROLONGADA (Batería Agotada o Apagón):\n// El nodo EMA debe llevar en OFFLINE continuo exactamente entre 10 y 11 minutos (600 a 659 segundos).\nif (emaCurrent === 'OFFLINE' && emaCurrentSeconds >= 600 && emaCurrentSeconds < 660) {\n  if (actCurrent === 'OFFLINE' && actCurrentSeconds >= 300) {\n    alertType = 'SIN_CONEXION_WIFI';\n    message = '\\u200B\\n*Sin Conexión WiFi*\\n\\n*Nodo EMA:* OFFLINE\\n*Nodo Actuador:* OFFLINE';\n  } else {\n    alertType = 'BATERIA_AGOTADA';\n    message = '\\u200B\\n*Bateria Agotada*\\n\\n*Nodo EMA:* OFFLINE';\n  }\n}\n// 2. CASO RESTABLECIMIENTO:\n// El nodo EMA acaba de conectarse ONLINE (en los primeros 60 segundos del cambio),\n// habiendo venido de un OFFLINE REAL que duró al menos 10 minutos (>= 600 segundos).\n// NOTA CRÍTICA: SLEEP es estado rutinario de reposo, NUNCA dispara restablecimiento.\nelse if (\n  emaCurrent === 'ONLINE' &&\n  emaPrev === 'OFFLINE' &&\n  emaCurrentSeconds >= 0 &&\n  emaCurrentSeconds < 60 &&\n  emaPrevSeconds >= 600\n) {\n  alertType = 'EMA_RESTABLECIDO';\n  message = '\\u200B\\n*Nodo EMA* Operativo.';\n}\n\nif (alertType === 'NONE') {\n  return [];\n}\n\nreturn [{ json: { alertType, message } }];"
+        "jsCode": "const data = $input.first().json;\n\nconst emaCurrent = data.ema_current_status || 'UNKNOWN';\nconst emaPrev = data.ema_prev_status || 'UNKNOWN';\nconst emaCurrentSeconds = data.ema_current_seconds ?? 999999;\nconst emaPrevSeconds = data.ema_prev_seconds ?? 0;\n\nconst actCurrent = data.act_current_status || 'UNKNOWN';\nconst actCurrentSeconds = data.act_current_seconds ?? 0;\n\nlet alertType = 'NONE';\nlet message = '';\n\n// 1. CASO CAÍDA PROLONGADA (Batería Agotada o Apagón):\n// El nodo EMA debe llevar en OFFLINE continuo exactamente entre 5 y 6 minutos (300 a 360 segundos).\n// Tras el timeout del watchdog, se dispara EXACTAMENTE UNA VEZ.\nif (emaCurrent === 'OFFLINE' && emaCurrentSeconds >= 300 && emaCurrentSeconds < 360) {\n  if (actCurrent === 'OFFLINE' && actCurrentSeconds >= 300) {\n    alertType = 'SIN_CONEXION_WIFI';\n    message = '\\u200B\\n*Sin Conexión WiFi*\\n\\n*Nodo EMA:* OFFLINE\\n*Nodo Actuador:* OFFLINE';\n  } else {\n    alertType = 'BATERIA_AGOTADA';\n    message = '\\u200B\\n*Bateria Agotada*\\n\\n*Nodo EMA:* OFFLINE';\n  }\n}\n// 2. CASO RESTABLECIMIENTO:\n// El nodo EMA acaba de conectarse ONLINE (en los primeros 60 segundos del cambio),\n// habiendo venido de un OFFLINE REAL que duró al menos 10 minutos (>= 600 segundos).\n// NOTA: SLEEP es estado rutinario de reposo, nunca dispara restablecimiento.\nelse if (\n  emaCurrent === 'ONLINE' &&\n  emaPrev === 'OFFLINE' &&\n  emaCurrentSeconds >= 0 &&\n  emaCurrentSeconds < 60 &&\n  emaPrevSeconds >= 600\n) {\n  alertType = 'EMA_RESTABLECIDO';\n  message = '\\u200B\\n*Nodo EMA* Operativo.';\n}\n\nif (alertType === 'NONE') {\n  return [];\n}\n\nreturn [{ json: { alertType, message } }];"
       },
       "id": "12e3d36b-8439-4b24-a22f-0e0b676e0995",
       "name": "Evaluar Correlación",
@@ -48,7 +48,7 @@
     },
     {
       "parameters": {
-        "chatId": "=-1004373843373",
+        "chatId": "-1002482379768",
         "text": "={{ $json.message }}",
         "additionalFields": {
           "appendAttribution": false,
@@ -62,8 +62,8 @@
       "position": [1824, 160],
       "credentials": {
         "telegramApi": {
-          "id": "KQbL3ZD1kE32GDfc",
-          "name": "PristinoBot"
+          "id": "telegram-pristinoplant",
+          "name": "Telegram PristinoBot"
         }
       }
     }

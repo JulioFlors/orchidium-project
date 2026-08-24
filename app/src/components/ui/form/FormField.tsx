@@ -10,14 +10,7 @@ export interface FormFieldProps {
   className?: string
 }
 
-export function FormField({
-  label,
-  htmlFor,
-  children,
-  error,
-  required,
-  className,
-}: FormFieldProps) {
+export function FormField({ label, htmlFor, children, error, className }: FormFieldProps) {
   return (
     <div className={clsx('flex flex-col gap-1.5', className)}>
       <label
@@ -25,7 +18,6 @@ export function FormField({
         htmlFor={htmlFor}
       >
         {label}
-        {required && <span className="ml-0.5 text-red-800/75 dark:text-red-400/75">*</span>}
       </label>
       {children}
       {error && (
