@@ -370,7 +370,7 @@ export function OrderDetailAdminView({ order }: Props) {
               className="border-input-outline bg-surface text-primary"
               disabled={isPending}
               size="sm"
-              variant="outline"
+              variant="destructive"
               onClick={() => handleUpdateStatus('PAYMENT_VERIFYING')}
             >
               <PiClockBold className="mr-1 text-base text-blue-500" />
@@ -396,7 +396,7 @@ export function OrderDetailAdminView({ order }: Props) {
               className="border-red-500/30 text-red-600 hover:bg-red-500/10 dark:text-red-400"
               disabled={isPending}
               size="sm"
-              variant="outline"
+              variant="ghost"
               onClick={handleCancelOrder}
             >
               <PiXCircleBold className="mr-1 text-base" />

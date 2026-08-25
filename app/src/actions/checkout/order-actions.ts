@@ -1,6 +1,6 @@
 'use server'
 
-import type { PaymentMethod, PotSize } from '@package/database/enums'
+import type { OrderStatus, PaymentMethod, PotSize } from '@package/database/enums'
 
 import { prisma } from '@package/database'
 import { revalidatePath } from 'next/cache'

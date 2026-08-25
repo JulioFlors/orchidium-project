@@ -26,7 +26,7 @@ const MODAL_ANIMATION = {
       opacity: { duration: 0.2, ease: 'easeIn' },
     },
   },
-}
+} as const
 
 // ---- Selectores para elementos enfocables ----
 const FOCUSABLE_SELECTORS = [

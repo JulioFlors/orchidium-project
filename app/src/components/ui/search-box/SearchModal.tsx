@@ -31,7 +31,7 @@ const MODAL_ANIMATION = {
       opacity: { duration: 0.2, ease: 'easeIn' },
     },
   },
-}
+} as const
 
 const BACKDROP_ANIMATION = {
   initial: { opacity: 0 },
