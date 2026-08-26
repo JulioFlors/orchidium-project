@@ -12,22 +12,23 @@
           ]
         }
       },
-      "id": "agronotif-0001-trigger-cron",
+      "id": "1672381e-76c3-4933-8a32-21c74a8e36f9",
       "name": "Cron Poll (Cada 1 Min)",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [250, 300]
+      "position": [-224, 112]
     },
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT \n  n.id AS notif_id,\n  n.type,\n  n.title,\n  n.description,\n  n.\"taskId\",\n  n.\"dosingLogId\",\n  -- Datos de TaskLog (Hardware)\n  t.purpose AS hw_purpose,\n  t.zones AS hw_zones,\n  t.\"scheduledAt\" AS hw_scheduled_at,\n  s_hw.name AS hw_schedule_name,\n  a_hw.name AS hw_agrochemical_name,\n  a_hw.preparation AS hw_preparation,\n  -- Datos de DosingLog (Manual)\n  d.purpose AS manual_purpose,\n  d.zones AS manual_zones,\n  d.\"scheduledAt\" AS manual_scheduled_at,\n  s_d.name AS manual_schedule_name,\n  a_d.name AS manual_agrochemical_name,\n  a_d.preparation AS manual_preparation\nFROM \"Notification\" n\nLEFT JOIN \"TaskLog\" t ON n.\"taskId\" = t.id\nLEFT JOIN \"AutomationSchedule\" s_hw ON t.\"scheduleId\" = s_hw.id\nLEFT JOIN \"Agrochemical\" a_hw ON t.\"agrochemicalId\" = a_hw.id\nLEFT JOIN \"DosingLog\" d ON n.\"dosingLogId\" = d.id\nLEFT JOIN \"DosingSchedule\" s_d ON d.\"scheduleId\" = s_d.id\nLEFT JOIN \"Agrochemical\" a_d ON d.\"agrochemicalId\" = a_d.id\nWHERE n.\"readAt\" IS NULL AND n.status = 'UNREAD'\nORDER BY n.\"createdAt\" ASC\nLIMIT 10;"
+        "query": "SELECT \n  n.id AS notif_id,\n  n.type,\n  n.title,\n  n.description,\n  n.\"taskId\",\n  n.\"dosingLogId\",\n  -- Datos de TaskLog (Hardware)\n  t.purpose AS hw_purpose,\n  t.zones AS hw_zones,\n  t.\"scheduledAt\" AS hw_scheduled_at,\n  s_hw.name AS hw_schedule_name,\n  a_hw.name AS hw_agrochemical_name,\n  CASE WHEN a_hw.\"dosageValue\" IS NOT NULL AND a_hw.\"dosageUnit\" IS NOT NULL \n       THEN (a_hw.\"dosageValue\"::text || ' ' || a_hw.\"dosageUnit\"::text) \n       ELSE '' \n  END AS hw_preparation,\n  -- Datos de DosingLog (Manual)\n  d.purpose AS manual_purpose,\n  d.zones AS manual_zones,\n  d.\"scheduledAt\" AS manual_scheduled_at,\n  s_d.name AS manual_schedule_name,\n  a_d.name AS manual_agrochemical_name,\n  CASE WHEN a_d.\"dosageValue\" IS NOT NULL AND a_d.\"dosageUnit\" IS NOT NULL \n       THEN (a_d.\"dosageValue\"::text || ' ' || a_d.\"dosageUnit\"::text) \n       ELSE '' \n  END AS manual_preparation\nFROM \"Notification\" n\nLEFT JOIN \"TaskLog\" t ON n.\"taskId\" = t.id\nLEFT JOIN \"AutomationSchedule\" s_hw ON t.\"scheduleId\" = s_hw.id\nLEFT JOIN \"Agrochemical\" a_hw ON t.\"agrochemicalId\" = a_hw.id\nLEFT JOIN \"DosingLog\" d ON n.\"dosingLogId\" = d.id\nLEFT JOIN \"DosingSchedule\" s_d ON d.\"scheduleId\" = s_d.id\nLEFT JOIN \"Agrochemical\" a_d ON d.\"agrochemicalId\" = a_d.id\nWHERE n.\"readAt\" IS NULL AND n.status = 'UNREAD'::\"NotificationStatus\"\nORDER BY n.\"createdAt\" ASC\nLIMIT 10;",
+        "options": {}
       },
-      "id": "agronotif-0002-query-hw",
-      "name": "Consultar Notificaciones Pendientes",
+      "id": "9672f83e-50ba-49cd-bfa6-e2eff7c25a4f",
+      "name": "Consultar Confirmaciones HW Pendientes",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [480, 300],
+      "position": [0, 0],
       "credentials": {
         "postgres": {
           "id": "postgres-pristinoplant",
@@ -37,30 +38,32 @@
     },
     {
       "parameters": {
-        "jsCode": "const items = $input.all();\nconst ZONE_LABELS = { ZONA_A: 'Orquideario', ZONA_B: 'Jardín', ZONA_C: 'Terraza', ZONA_D: 'Ventanas', EXTERIOR: 'Exterior' };\nconst results = [];\n\nfunction formatZones(zones) {\n  if (!zones) return 'General';\n  let arr = Array.isArray(zones) ? zones : [zones];\n  if (typeof zones === 'string' && zones.startsWith('{')) {\n    arr = zones.replace(/[{}]/g, '').split(',');\n  }\n  return arr.map(z => ZONE_LABELS[z.trim()] || z.trim()).join(', ');\n}\n\nfor (const item of items) {\n  const row = item.json;\n  if (!row.notif_id) continue;\n\n  let replyText = '';\n  let keyboard = null;\n\n  // CASO 1: Mantenimiento de Filtro de Agua\n  if (row.type === 'MAINTENANCE_REMINDER') {\n    replyText = `\\u200B\\n*Mantenimiento de Filtro de Agua*\\n\\n` +\n      (row.description || 'Han transcurrido 48 horas desde la última limpieza del filtro de agua. Por favor realizar el mantenimiento antes del riego de las 11:00 AM.');\n\n    keyboard = {\n      inline_keyboard: [\n        [{ text: '✅ Filtro Limpiado', callback_data: `filter_cleaned:${row.notif_id}` }]\n      ]\n    };\n  }\n  // CASO 2: Confirmación de Tanque de Agroquímicos (Hardware)\n  else if (row.type === 'AGROCHEMICAL_CONFIRM' && row.taskId) {\n    const dateObj = row.hw_scheduled_at ? new Date(row.hw_scheduled_at) : new Date();\n    const timeStr = dateObj.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Caracas' });\n    const zonesStr = formatZones(row.hw_zones);\n\n    replyText = `\\u200B\\n*Confirmación de Tanque de Agroquímicos*\\n\\n` +\n      `Rutina: ${row.hw_schedule_name || 'Riego Agroquímico'}\\n` +\n      (row.hw_agrochemical_name ? `Producto: ${row.hw_agrochemical_name}\\n` : '') +\n      (row.hw_preparation ? `Receta: ${row.hw_preparation}\\n` : '') +\n      `Zonas: ${zonesStr}\\n` +\n      `Hora Programada: ${timeStr}\\n\\n` +\n      `¿El tanque de mezcla se encuentra preparado para la ejecución automática?`;\n\n    keyboard = {\n      inline_keyboard: [\n        [{ text: '✅ Confirmar Tanque', callback_data: `agro_hw_confirm:${row.taskId}:${row.notif_id}` }],\n        [\n          { text: '⏱️ Posponer 24h', callback_data: `agro_hw_postpone:${row.taskId}:24:${row.notif_id}` },\n          { text: '⏱️ Posponer 48h', callback_data: `agro_hw_postpone:${row.taskId}:48:${row.notif_id}` }\n        ],\n        [{ text: '❌ Cancelar', callback_data: `agro_hw_cancel:${row.taskId}:${row.notif_id}` }]\n      ]\n    };\n  }\n  // CASO 3: Recordatorio de Dosificación Manual (Laboratorio / DosingLog)\n  else if (row.type === 'AGROCHEMICAL_CONFIRM' && row.dosingLogId) {\n    const dateObj = row.manual_scheduled_at ? new Date(row.manual_scheduled_at) : new Date();\n    const timeStr = dateObj.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Caracas' });\n    const zonesStr = formatZones(row.manual_zones);\n\n    replyText = `\\u200B\\n*Dosificación Manual Programada*\\n\\n` +\n      `Rutina: ${row.manual_schedule_name || 'Dosificación Manual'}\\n` +\n      (row.manual_agrochemical_name ? `Producto: ${row.manual_agrochemical_name}\\n` : '') +\n      (row.manual_preparation ? `Receta: ${row.manual_preparation}\\n` : '') +\n      `Zonas: ${zonesStr}\\n` +\n      `Hora: ${timeStr}`;\n\n    keyboard = {\n      inline_keyboard: [\n        [{ text: '✅ Marcar como Completada', callback_data: `dosing_manual_confirm:${row.dosingLogId}:${row.notif_id}` }]\n      ]\n    };\n  }\n  // CASO 4: Notificación Genérica del Sistema\n  else {\n    replyText = `\\u200B\\n*${row.title || 'Notificación del Sistema'}*\\n\\n` +\n      (row.description || '');\n  }\n\n  results.push({\n    json: {\n      notifId: row.notif_id,\n      replyText,\n      hasKeyboard: keyboard !== null,\n      keyboard: keyboard || {}\n    }\n  });\n}\n\nreturn results;"
+        "jsCode": "const items = $input.all();\nconst ZONE_LABELS = { ZONA_A: 'Orquideario', ZONA_B: 'Jardín', ZONA_C: 'Terraza', ZONA_D: 'Ventanas', EXTERIOR: 'Exterior' };\nconst results = [];\n\nfunction formatZones(zones) {\n  if (!zones) return 'General';\n  let arr = Array.isArray(zones) ? zones : [zones];\n  if (typeof zones === 'string' && zones.startsWith('{')) {\n    arr = zones.replace(/[{}]/g, '').split(',');\n  }\n  return arr.map(z => ZONE_LABELS[z.trim()] || z.trim()).join(', ');\n}\n\nfor (const item of items) {\n  const row = item.json;\n  if (!row.notif_id) continue;\n\n  let replyText = '';\n  let rows = [];\n\n  // CASO 1: Mantenimiento de Filtro de Agua\n  if (row.type === 'MAINTENANCE_REMINDER') {\n    replyText = `\\u200B\\n*Mantenimiento de Filtro de Agua*\\n\\n` +\n      (row.description || 'Han transcurrido 48 horas desde la última limpieza del filtro de agua. Por favor realizar el mantenimiento antes del riego de las 11:00 AM.');\n\n    rows = [\n      {\n        row: {\n          buttons: [\n            {\n              text: '✅ Filtro Limpiado',\n              additionalFields: {\n                callback_data: `filter_cleaned:${row.notif_id}`\n              }\n            }\n          ]\n        }\n      }\n    ];\n  }\n  // CASO 2: Confirmación de Tanque de Agroquímicos (Hardware)\n  else if (row.type === 'AGROCHEMICAL_CONFIRM' && row.taskId) {\n    const dateObj = row.hw_scheduled_at ? new Date(row.hw_scheduled_at) : new Date();\n    const timeStr = dateObj.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Caracas' });\n    const zonesStr = formatZones(row.hw_zones);\n\n    replyText = `\\u200B\\n*Confirmación de Tanque de Agroquímicos*\\n\\n` +\n      `Rutina: ${row.hw_schedule_name || 'Riego Agroquímico'}\\n` +\n      (row.hw_agrochemical_name ? `Producto: ${row.hw_agrochemical_name}\\n` : '') +\n      (row.hw_preparation ? `Receta: ${row.hw_preparation}\\n` : '') +\n      `Zonas: ${zonesStr}\\n` +\n      `Hora Programada: ${timeStr}\\n\\n` +\n      `¿El tanque de mezcla se encuentra preparado para la ejecución automática?`;\n\n    rows = [\n      {\n        row: {\n          buttons: [\n            {\n              text: '✅ Confirmar Tanque',\n              additionalFields: {\n                callback_data: `agro_hw_confirm:${row.taskId}:${row.notif_id}`\n              }\n            }\n          ]\n        }\n      },\n      {\n        row: {\n          buttons: [\n            {\n              text: '⏱️ Posponer 24h',\n              additionalFields: {\n                callback_data: `agro_hw_postpone:${row.taskId}:24:${row.notif_id}`\n              }\n            },\n            {\n              text: '⏱️ Posponer 48h',\n              additionalFields: {\n                callback_data: `agro_hw_postpone:${row.taskId}:48:${row.notif_id}`\n              }\n            }\n          ]\n        }\n      },\n      {\n        row: {\n          buttons: [\n            {\n              text: '❌ Cancelar',\n              additionalFields: {\n                callback_data: `agro_hw_cancel:${row.taskId}:${row.notif_id}`\n              }\n            }\n          ]\n        }\n      }\n    ];\n  }\n  // CASO 3: Recordatorio de Dosificación Manual (Laboratorio / DosingLog)\n  else if (row.type === 'AGROCHEMICAL_CONFIRM' && row.dosingLogId) {\n    const dateObj = row.manual_scheduled_at ? new Date(row.manual_scheduled_at) : new Date();\n    const timeStr = dateObj.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Caracas' });\n    const zonesStr = formatZones(row.manual_zones);\n\n    replyText = `\\u200B\\n*Dosificación Manual Programada*\\n\\n` +\n      `Rutina: ${row.manual_schedule_name || 'Dosificación Manual'}\\n` +\n      (row.manual_agrochemical_name ? `Producto: ${row.manual_agrochemical_name}\\n` : '') +\n      (row.manual_preparation ? `Receta: ${row.manual_preparation}\\n` : '') +\n      `Zonas: ${zonesStr}\\n` +\n      `Hora: ${timeStr}`;\n\n    rows = [\n      {\n        row: {\n          buttons: [\n            {\n              text: '✅ Marcar como Completada',\n              additionalFields: {\n                callback_data: `dosing_manual_confirm:${row.dosingLogId}:${row.notif_id}`\n              }\n            }\n          ]\n        }\n      }\n    ];\n  }\n  // CASO 4: Notificación de Tarea de Dosificación Manual Expirada\n  else if (row.type === 'TASK_STATUS' && row.dosingLogId) {\n    const dateObj = row.manual_scheduled_at ? new Date(row.manual_scheduled_at) : new Date();\n    const timeStr = dateObj.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'America/Caracas' });\n    const zonesStr = formatZones(row.manual_zones);\n\n    replyText = `\\u200B\\n*Dosificación Manual Expirada* ⚠️\\n\\n` +\n      `Rutina: ${row.manual_schedule_name || 'Dosificación Manual'}\\n` +\n      (row.manual_agrochemical_name ? `Producto: ${row.manual_agrochemical_name}\\n` : '') +\n      (row.manual_preparation ? `Receta: ${row.manual_preparation}\\n` : '') +\n      `Zonas: ${zonesStr}\\n` +\n      `Hora Programada: ${timeStr}\\n\\n` +\n      `La tarea no fue confirmada ni completada tras 24 horas y fue marcada automáticamente como *Expirada*.`;\n  }\n  // CASO 5: Notificación Genérica del Sistema\n  else {\n    replyText = `\\u200B\\n*${row.title || 'Notificación del Sistema'}*\\n\\n` +\n      (row.description || '');\n  }\n\n  results.push({\n    json: {\n      notifId: row.notif_id,\n      replyText,\n      hasKeyboard: rows.length > 0,\n      keyboardRows: rows\n    }\n  });\n}\n\nreturn results;"
       },
-      "id": "agronotif-0003-format-hw",
-      "name": "Formatear Mensaje Push",
+      "id": "56523f7b-0763-41b9-b607-ca398b4413f9",
+      "name": "Formatear Mensaje Push HW",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [700, 300]
+      "position": [224, 0]
     },
     {
       "parameters": {
         "chatId": "-1002482379768",
         "text": "={{ $json.replyText }}",
         "replyMarkup": "={{ $json.hasKeyboard ? 'inlineKeyboard' : 'none' }}",
-        "inlineKeyboard": "={{ $json.keyboard }}",
+        "inlineKeyboard": {
+          "rows": "={{ $json.keyboardRows }}"
+        },
         "additionalFields": {
           "appendAttribution": false,
           "parse_mode": "Markdown"
         }
       },
-      "id": "agronotif-0004-send-hw-telegram",
-      "name": "Enviar Push Telegram",
+      "id": "f0605ad4-8c34-498d-b143-54743c7a1473",
+      "name": "Enviar Push Telegram HW",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [920, 300],
+      "position": [448, 0],
       "credentials": {
         "telegramApi": {
           "id": "telegram-pristinoplant",
@@ -71,13 +74,14 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE \"Notification\" SET \"readAt\" = NOW(), status = 'READ' WHERE id = '{{ $json.notifId }}';"
+        "query": "=UPDATE \"Notification\" SET \"readAt\" = NOW(), status = 'READ'::\"NotificationStatus\" WHERE id = '{{ $json.notifId }}';",
+        "options": {}
       },
-      "id": "agronotif-0005-mark-notif-read",
+      "id": "c838d544-8045-4f8e-ac17-466c6e477a14",
       "name": "Marcar Notificación Notificada",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [1140, 300],
+      "position": [672, 0],
       "credentials": {
         "postgres": {
           "id": "postgres-pristinoplant",
@@ -91,36 +95,36 @@
       "main": [
         [
           {
-            "node": "Consultar Notificaciones Pendientes",
+            "node": "Consultar Confirmaciones HW Pendientes",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Consultar Notificaciones Pendientes": {
+    "Consultar Confirmaciones HW Pendientes": {
       "main": [
         [
           {
-            "node": "Formatear Mensaje Push",
+            "node": "Formatear Mensaje Push HW",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Formatear Mensaje Push": {
+    "Formatear Mensaje Push HW": {
       "main": [
         [
           {
-            "node": "Enviar Push Telegram",
+            "node": "Enviar Push Telegram HW",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Enviar Push Telegram": {
+    "Enviar Push Telegram HW": {
       "main": [
         [
           {

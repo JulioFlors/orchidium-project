@@ -155,13 +155,14 @@ export function SearchBox({
   // Auto-enfocamos si estamos en el Header y se ha expandido, o si isModal está activo.
   useEffect(() => {
     if ((isHeader && isSearchBoxExpanded) || isModal) {
-      const delay = isHeader ? 350 : 150
+      // En móvil / modal, esperamos a que la animación de entrada (0.4s) finalice por completo
+      // antes de abrir el teclado virtual para evitar reflows y layout thrashing en pleno slide
+      const delay = isHeader ? 350 : 420
       const timer = setTimeout(() => {
         if (searchRef.current) {
-          searchRef.current.focus()
+          searchRef.current.focus({ preventScroll: true })
         }
       }, delay)
-      // Esperamos a que la animación termine/DOM esté listo
 
       return () => clearTimeout(timer)
     }

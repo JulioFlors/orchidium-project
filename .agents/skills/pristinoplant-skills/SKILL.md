@@ -470,3 +470,26 @@ Protocolo para garantizar que el servidor de producción (Ubuntu 24.04) opere de
    ```bash
    sudo sh -c 'truncate -s 0 $(docker inspect --format="{{.LogPath}}" scheduler)'
    ```
+
+### Paso 12: Estándares de Automatización y Bots con n8n
+
+1. **Webhook Maestro Único de Telegram**:
+   - Solo **un único** flujo de n8n debe tener el `telegramTrigger` activo por cada Token de Telegram Bot.
+   - Activar múltiples triggers de Telegram sobre el mismo token sobrescribe el webhook en los servidores de Telegram y silencia los flujos anteriores.
+   - Toda la lógica interactiva (comandos de texto y callbacks de botones) debe converger en el workflow maestro (`bot_comandos.json`).
+
+2. **Formato de Teclados Dinámicos Inline (`inlineKeyboard`) en n8n**:
+   - En nodos Telegram de n8n (v1.2+), cuando `replyMarkup` es `'inlineKeyboard'`, el parámetro `inlineKeyboard` debe ser un objeto `{ rows: [...] }`, donde cada elemento de `rows` es `{ row: { buttons: [ { text: "...", additionalFields: { callback_data: "..." } } ] } }`.
+   - NUNCA pasar la estructura cruda de la API de Telegram `{ inline_keyboard: [...] }` directamente al nodo Telegram de n8n, ya que provoca un fallo de validación interno (`rows is undefined`).
+
+3. **Persistencia de Contexto tras Nodos de Base de Datos**:
+   - Los nodos de PostgreSQL en n8n reemplazan el `$json` entrante con el resultado de la consulta. En operaciones `INSERT` o `UPDATE` el resultado suele ser `{}`.
+   - Para enviar mensajes de Telegram posteriores a una consulta de base de datos, siempre se deben referenciar las variables del nodo origen (ej. `$('Parsear Evento').first().json.chatId` o `$('Formatear Mensaje Push HW').item.json.notifId`) o interponer un nodo de formateo Code.
+
+4. **Zona Horaria Estricta (UTC-4 Caracas)**:
+   - Todo formateo de fecha/hora presentado en Telegram debe usar `toLocaleString('es-VE', { timeZone: 'America/Caracas', ... })`.
+   - NUNCA usar `new Date().getHours()` o `new Date().getDate()` directamente en nodos Code de n8n sin especificar la zona horaria `America/Caracas`, ya que los contenedores Docker corren en UTC y provocan un desfase de 4 horas en los reportes al usuario.
+
+5. **Escape de Comillas en Consultas SQL de n8n**:
+   - Al editar flujos o generar nodos de PostgreSQL en JSON, asegurarse de no sobre-escapar comillas dobles (evitar `\\\"` en lugar de comillas simples o dobles válidas `\"`).
+

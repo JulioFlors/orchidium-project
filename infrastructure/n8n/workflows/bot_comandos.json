@@ -1,5 +1,5 @@
 {
-  "name": "PristinoBot - Atención de Comandos (/status, /dosing, /help, /filter)",
+  "name": "PristinoBot - Interacción Completa (Comandos y Callbacks)",
   "nodes": [
     {
       "parameters": {
@@ -8,11 +8,11 @@
           "callback_query"
         ]
       },
-      "id": "3c4d5e6f-0001-4000-8000-000000000001",
+      "id": "7a482c98-0e0d-4f7c-b214-ad2488ad626e",
       "name": "Telegram Trigger (Mensajes y Callbacks)",
       "type": "n8n-nodes-base.telegramTrigger",
       "typeVersion": 1.1,
-      "position": [250, 300],
+      "position": [-672, 500],
       "credentials": {
         "telegramApi": {
           "id": "telegram-pristinoplant",
@@ -22,13 +22,13 @@
     },
     {
       "parameters": {
-        "jsCode": "const item = $input.item.json;\nconst callback = item.callback_query;\nconst msg = item.message;\n\nlet eventType = 'UNKNOWN';\nlet timePreset = 'all';\nlet statusPreset = 'all';\nlet chatId = null;\nlet messageId = null;\nlet fromUser = 'Usuario';\nlet callbackData = '';\n\nif (callback) {\n  chatId = callback.message?.chat?.id;\n  messageId = callback.message?.message_id;\n  fromUser = callback.from?.username ? `@${callback.from.username}` : (callback.from?.first_name || 'Usuario');\n  callbackData = callback.data || '';\n\n  if (callbackData.startsWith('dosing_time:')) {\n    eventType = 'DOSING_STATUS_MENU';\n    timePreset = callbackData.replace('dosing_time:', '');\n  } else if (callbackData.startsWith('dosing_query:')) {\n    eventType = 'DOSING_QUERY';\n    const parts = callbackData.replace('dosing_query:', '').split(':');\n    timePreset = parts[0] || 'all';\n    statusPreset = parts[1] || 'all';\n  }\n} else if (msg && msg.text) {\n  chatId = msg.chat?.id;\n  messageId = msg.message_id;\n  fromUser = msg.from?.username ? `@${msg.from.username}` : (msg.from?.first_name || 'Usuario');\n  const text = msg.text.trim();\n\n  if (text.startsWith('/status')) {\n    eventType = 'STATUS';\n  } else if (text.startsWith('/dosing')) {\n    eventType = 'DOSING_TIME_MENU';\n  } else if (text.startsWith('/filter') || text.startsWith('/filtro')) {\n    eventType = 'FILTER';\n  } else if (text.startsWith('/help') || text.startsWith('/start')) {\n    eventType = 'HELP';\n  }\n}\n\nreturn [{\n  json: {\n    eventType,\n    chatId,\n    messageId,\n    fromUser,\n    callbackData,\n    timePreset,\n    statusPreset\n  }\n}];"
+        "jsCode": "const item = $input.item.json;\nconst callback = item.callback_query;\nconst msg = item.message;\n\nlet eventType = 'UNKNOWN';\nlet timePreset = 'all';\nlet statusPreset = 'all';\nlet chatId = null;\nlet messageId = null;\nlet fromUser = 'Usuario';\nlet callbackData = '';\nlet commandParam = '';\nlet querySql = '';\nlet replyText = '';\n\nif (callback) {\n  chatId = callback.message?.chat?.id;\n  messageId = callback.message?.message_id;\n  fromUser = callback.from?.username ? `@${callback.from.username}` : (callback.from?.first_name || 'Usuario');\n  callbackData = callback.data || '';\n\n  if (callbackData.startsWith('dosing_time:')) {\n    eventType = 'DOSING_STATUS_MENU';\n    timePreset = callbackData.replace('dosing_time:', '');\n  } else if (callbackData.startsWith('dosing_query:')) {\n    eventType = 'DOSING_QUERY';\n    const parts = callbackData.replace('dosing_query:', '').split(':');\n    timePreset = parts[0] || 'all';\n    statusPreset = parts[1] || 'all';\n  } else if (callbackData === 'filter_cmd:clean') {\n    eventType = 'FILTER';\n  } else if (callbackData === 'filter_cmd:status') {\n    eventType = 'FILTER_STATUS';\n  } else if (callbackData === 'filter_cmd:menu') {\n    eventType = 'FILTER_MENU';\n  } else if (callbackData.startsWith('filter_cleaned:')) {\n    eventType = 'CALLBACK_ACTION';\n    const notifId = callbackData.replace('filter_cleaned:', '');\n    querySql = `INSERT INTO \"FilterCleaningLog\" (id, \"cleanedAt\", \"nextDueAt\", notes, \"confirmedBy\", source, \"createdAt\") VALUES (gen_random_uuid(), NOW(), (date_trunc('day', NOW() AT TIME ZONE 'America/Caracas') + INTERVAL '2 days' + INTERVAL '8 hours') AT TIME ZONE 'America/Caracas', 'Confirmado vía Telegram', '${fromUser}', 'TELEGRAM_BOT', NOW()); UPDATE \"Notification\" SET \"readAt\" = NOW(), status = 'READ'::\"NotificationStatus\" WHERE id = '${notifId}' OR type = 'MAINTENANCE_REMINDER';`;\n    replyText = `\\u200B\\n*Mantenimiento de Filtro de Agua Registrado*\\n\\n👤 Confirmado por: ${fromUser}\\n📅 Limpieza realizada con éxito\\n⏰ Próxima Notificación: dentro de 2 días a las 8:00 AM\\n\\nEl temporizador de mantenimiento ha sido reiniciado.`;\n  } else if (callbackData.startsWith('dosing_manual_confirm:')) {\n    eventType = 'CALLBACK_ACTION';\n    const parts = callbackData.replace('dosing_manual_confirm:', '').split(':');\n    const dosingLogId = parts[0];\n    const notifId = parts[1] || '';\n    const notifUpdate = notifId ? `UPDATE \"Notification\" SET \"readAt\" = NOW(), status = 'READ'::\"NotificationStatus\" WHERE id = '${notifId}';` : '';\n    querySql = `UPDATE \"DosingLog\" SET status = 'COMPLETED'::\"TaskStatus\", \"executedAt\" = NOW() WHERE id = '${dosingLogId}'; ${notifUpdate}`;\n    replyText = `\\u200B\\n*Dosificación Manual Completada*\\n\\nMarcada como realizada por ${fromUser}`;\n  } else if (callbackData.startsWith('agro_hw_confirm:')) {\n    eventType = 'CALLBACK_ACTION';\n    const parts = callbackData.replace('agro_hw_confirm:', '').split(':');\n    const taskId = parts[0];\n    const notifId = parts[1] || '';\n    querySql = `UPDATE \"TaskLog\" SET status = 'AUTHORIZED'::\"TaskStatus\" WHERE id = '${taskId}'; UPDATE \"Notification\" SET \"readAt\" = NOW(), status = 'READ'::\"NotificationStatus\" WHERE id = '${notifId}';`;\n    replyText = `\\u200B\\n*Tanque Confirmado y Autorizado*\\n\\nConfirmado por ${fromUser}\\nEl riego de agroquímicos se ejecutará a la hora programada.`;\n  } else if (callbackData.startsWith('agro_hw_postpone:')) {\n    eventType = 'CALLBACK_ACTION';\n    const parts = callbackData.replace('agro_hw_postpone:', '').split(':');\n    const taskId = parts[0];\n    const hours = parseInt(parts[1] || '24', 10);\n    const notifId = parts[2] || '';\n    querySql = `UPDATE \"TaskLog\" SET \"scheduledAt\" = \"scheduledAt\" + INTERVAL '${hours} hours' WHERE id = '${taskId}'; UPDATE \"Notification\" SET \"readAt\" = NOW(), status = 'READ'::\"NotificationStatus\" WHERE id = '${notifId}';`;\n    replyText = `\\u200B\\n*Riego Pospuesto ${hours} Horas*\\n\\nPospuesto por ${fromUser}`;\n  } else if (callbackData.startsWith('agro_hw_cancel:')) {\n    eventType = 'CALLBACK_ACTION';\n    const parts = callbackData.replace('agro_hw_cancel:', '').split(':');\n    const taskId = parts[0];\n    const notifId = parts[1] || '';\n    querySql = `UPDATE \"TaskLog\" SET status = 'CANCELLED'::\"TaskStatus\" WHERE id = '${taskId}'; UPDATE \"Notification\" SET \"readAt\" = NOW(), status = 'READ'::\"NotificationStatus\" WHERE id = '${notifId}';`;\n    replyText = `\\u200B\\n*Riego Cancelado*\\n\\nCancelado por ${fromUser}`;\n  } else if (callbackData.startsWith('confirm_')) {\n    eventType = 'CALLBACK_ACTION';\n    const taskId = callbackData.replace('confirm_', '');\n    querySql = `UPDATE \"DosingLog\" SET status = 'COMPLETED'::\"TaskStatus\", \"executedAt\" = NOW() WHERE id = '${taskId}';`;\n    replyText = `\\u200B\\n*Tarea Confirmada*\\n\\nRegistrada por ${fromUser}`;\n  } else if (callbackData.startsWith('cancel_')) {\n    eventType = 'CALLBACK_ACTION';\n    const taskId = callbackData.replace('cancel_', '');\n    querySql = `UPDATE \"DosingLog\" SET status = 'CANCELLED'::\"TaskStatus\" WHERE id = '${taskId}';`;\n    replyText = `\\u200B\\n*Tarea Cancelada*\\n\\nPor ${fromUser}`;\n  }\n} else if (msg && msg.text) {\n  chatId = msg.chat?.id;\n  messageId = msg.message_id;\n  fromUser = msg.from?.username ? `@${msg.from.username}` : (msg.from?.first_name || 'Usuario');\n  const text = msg.text.trim();\n  const parts = text.split(' ');\n  const cmd = parts[0].toLowerCase().split('@')[0];\n  const subCmd = (parts[1] || '').toLowerCase();\n  commandParam = parts.slice(1).join(' ').trim();\n\n  if (cmd === '/status') {\n    eventType = 'STATUS';\n  } else if (cmd === '/dosing' || cmd === '/dosificacion') {\n    eventType = 'DOSING_TIME_MENU';\n  } else if (cmd === '/complete' || cmd === '/completar') {\n    eventType = 'COMPLETE';\n  } else if (cmd === '/filterstatus' || (cmd === '/filter' && (subCmd === 'status' || subCmd === 'estado'))) {\n    eventType = 'FILTER_STATUS';\n  } else if (cmd === '/filterclean' || (cmd === '/filter' && (subCmd === 'clean' || subCmd === 'limpiar'))) {\n    eventType = 'FILTER';\n  } else if (cmd === '/filter' || cmd === '/filtro') {\n    eventType = 'FILTER_MENU';\n  } else if (cmd === '/help' || cmd === '/start') {\n    eventType = 'HELP';\n  }\n}\n\nreturn [{\n  json: {\n    eventType,\n    chatId,\n    messageId,\n    fromUser,\n    callbackData,\n    timePreset,\n    statusPreset,\n    commandParam,\n    querySql,\n    replyText\n  }\n}];"
       },
-      "id": "3c4d5e6f-0002-4000-8000-000000000002",
+      "id": "9eac7e95-c428-4115-8da4-e5170107834e",
       "name": "Parsear Evento",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [480, 300]
+      "position": [-448, 500]
     },
     {
       "parameters": {
@@ -130,7 +130,87 @@
                       "type": "string",
                       "operation": "equals"
                     },
+                    "rightValue": "COMPLETE"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.eventType }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "FILTER_MENU"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.eventType }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
                     "rightValue": "FILTER"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.eventType }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "FILTER_STATUS"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.eventType }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "CALLBACK_ACTION"
                   }
                 ],
                 "combinator": "and"
@@ -159,22 +239,22 @@
           ]
         }
       },
-      "id": "3c4d5e6f-0003-4000-8000-000000000003",
+      "id": "be7a0c57-8f41-4a34-8248-54291124c503",
       "name": "Enrutador de Comandos",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
-      "position": [700, 300]
+      "position": [-224, 500]
     },
     {
       "parameters": {
         "operation": "executeQuery",
         "query": "SELECT DISTINCT ON (device) device AS name, status, timestamp AS \"updatedAt\" FROM \"DeviceLog\" WHERE device IN ('Weather_Station_ZONA_A', 'Actuator_Controller') ORDER BY device, timestamp DESC;"
       },
-      "id": "3c4d5e6f-0004-4000-8000-000000000004",
+      "id": "4710da2d-73b8-423e-9f3b-5c2564f0d8a0",
       "name": "Consultar BD (Status)",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [950, 100],
+      "position": [64, 80],
       "credentials": {
         "postgres": {
           "id": "postgres-pristinoplant",
@@ -186,11 +266,11 @@
       "parameters": {
         "jsCode": "const chatId = $('Parsear Evento').first().json.chatId;\nconst items = $input.all();\nconst ema = items.find(i => i.json.name === 'Weather_Station_ZONA_A')?.json || {};\nconst actuador = items.find(i => i.json.name === 'Actuator_Controller')?.json || {};\n\nconst formatStatus = (s) => {\n  if (!s) return 'Offline';\n  const upper = String(s).toUpperCase();\n  if (upper === 'ONLINE' || upper === 'REBOOT') return 'Online';\n  if (upper === 'SLEEP') return 'Sleep';\n  return 'Offline';\n};\n\nconst replyText = `\\u200B\\n*Estado de Infraestructura*\\n\\n` +\n  `Nodo EMA: ${formatStatus(ema.status)}\\n` +\n  `Nodo Actuador: ${formatStatus(actuador.status)}`;\n\nreturn [{ json: { chatId, replyText } }];"
       },
-      "id": "3c4d5e6f-0005-4000-8000-000000000005",
+      "id": "91f100a4-d4aa-44c5-8b44-fdb0ddfc27d7",
       "name": "Formatear Respuesta Status",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1180, 100]
+      "position": [288, 80]
     },
     {
       "parameters": {
@@ -201,11 +281,11 @@
           "parse_mode": "Markdown"
         }
       },
-      "id": "3c4d5e6f-0006-4000-8000-000000000006",
+      "id": "ad2785dd-50e0-4c96-89e4-9438b549304b",
       "name": "Responder Telegram (Status)",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [1400, 100],
+      "position": [512, 80],
       "credentials": {
         "telegramApi": {
           "id": "telegram-pristinoplant",
@@ -285,7 +365,7 @@
       "name": "Menú Tiempo Dosificación",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [950, 250],
+      "position": [64, 220],
       "credentials": {
         "telegramApi": {
           "id": "telegram-pristinoplant",
@@ -349,7 +429,7 @@
       "name": "Menú Estado Dosificación",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [950, 400],
+      "position": [64, 360],
       "credentials": {
         "telegramApi": {
           "id": "telegram-pristinoplant",
@@ -360,7 +440,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "=WITH actual_logs AS (SELECT m.id, m.status::text AS status, m.\"scheduledAt\", m.zones, COALESCE(a.name, 'Aplicación Manual') AS \"agrochemicalName\", COALESCE(a.preparation, '') AS preparation FROM \"DosingLog\" m LEFT JOIN \"Agrochemical\" a ON m.\"agrochemicalId\" = a.id), routine_schedules AS (SELECT s.id, 'PENDING' AS status, NOW() + INTERVAL '7 days' AS \"scheduledAt\", s.zones, COALESCE(fa.name, pa.name, s.name) AS \"agrochemicalName\", COALESCE(fa.preparation, pa.preparation, '') AS preparation FROM \"DosingSchedule\" s LEFT JOIN \"FertilizationProgram\" fp ON s.\"fertilizationProgramId\" = fp.id LEFT JOIN \"FertilizationCycle\" fc ON fc.\"programId\" = fp.id AND fc.sequence = 1 LEFT JOIN \"Agrochemical\" fa ON fc.\"agrochemicalId\" = fa.id LEFT JOIN \"PhytosanitaryProgram\" pp ON s.\"phytosanitaryProgramId\" = pp.id LEFT JOIN \"PhytosanitaryCycle\" pc ON pc.\"programId\" = pp.id AND pc.sequence = 1 LEFT JOIN \"Agrochemical\" pa ON pc.\"agrochemicalId\" = pa.id WHERE s.\"isEnabled\" = true AND NOT EXISTS (SELECT 1 FROM \"DosingLog\" ml WHERE ml.\"scheduleId\" = s.id AND ml.status = 'PENDING')), all_tasks AS (SELECT * FROM actual_logs UNION ALL SELECT * FROM routine_schedules) SELECT * FROM all_tasks WHERE ('{{ $json.statusPreset }}' = 'all' OR status = '{{ $json.statusPreset }}') AND ('{{ $json.timePreset }}' = 'all' OR ('{{ $json.timePreset }}' = 'today' AND \"scheduledAt\" >= CURRENT_DATE AND \"scheduledAt\" < CURRENT_DATE + INTERVAL '1 day') OR ('{{ $json.timePreset }}' = 'week' AND \"scheduledAt\" >= date_trunc('week', CURRENT_DATE) AND \"scheduledAt\" < date_trunc('week', CURRENT_DATE) + INTERVAL '1 week') OR ('{{ $json.timePreset }}' = 'next-week' AND \"scheduledAt\" >= date_trunc('week', CURRENT_DATE) + INTERVAL '1 week' AND \"scheduledAt\" < date_trunc('week', CURRENT_DATE) + INTERVAL '2 weeks') OR ('{{ $json.timePreset }}' = 'month' AND \"scheduledAt\" >= date_trunc('month', CURRENT_DATE) AND \"scheduledAt\" < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month') OR ('{{ $json.timePreset }}' = 'next-month' AND \"scheduledAt\" >= date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' AND \"scheduledAt\" < date_trunc('month', CURRENT_DATE) + INTERVAL '2 months')) ORDER BY \"scheduledAt\" DESC LIMIT 10;"
+        "query": "=WITH actual_logs AS (\n  SELECT \n    m.id, \n    m.status::text AS status, \n    m.\"scheduledAt\", \n    m.zones, \n    COALESCE(a.name, 'Aplicación Manual') AS \"agrochemicalName\",\n    a.purpose::text AS \"agrochemicalPurpose\",\n    COALESCE(fp.name, pp.name, s.name, 'Aplicación Manual Independiente') AS \"programName\",\n    a.\"isMix\",\n    a.\"dosageValue\",\n    CASE a.\"dosageUnit\"::text \n      WHEN 'ML_L' THEN 'mL/L' \n      WHEN 'G_L' THEN 'g/L' \n      WHEN 'CDA_L' THEN 'cda/L' \n      WHEN 'CDITA_L' THEN 'cdta/L' \n      WHEN 'PORCENTAJE' THEN '%' \n      WHEN 'GOTAS_L' THEN 'gotas/L' \n      WHEN 'CC_L' THEN 'cc/L' \n      ELSE a.\"dosageUnit\"::text \n    END AS agrochemical_unit,\n    COALESCE(\n      (\n        SELECT json_agg(\n          json_build_object(\n            'name', ing.name,\n            'dosageValue', mi.\"dosageValue\",\n            'dosageUnit', CASE mi.\"dosageUnit\"::text \n              WHEN 'ML_L' THEN 'mL/L' \n              WHEN 'G_L' THEN 'g/L' \n              WHEN 'CDA_L' THEN 'cda/L' \n              WHEN 'CDITA_L' THEN 'cdta/L' \n              WHEN 'PORCENTAJE' THEN '%' \n              WHEN 'GOTAS_L' THEN 'gotas/L' \n              WHEN 'CC_L' THEN 'cc/L' \n              ELSE mi.\"dosageUnit\"::text \n            END\n          ) \n          ORDER BY mi.\"dosageValue\" DESC\n        ) \n        FROM \"AgrochemicalMixItem\" mi \n        JOIN \"Agrochemical\" ing ON mi.\"ingredientId\" = ing.id \n        WHERE mi.\"parentMixId\" = a.id\n      ),\n      '[]'::json\n    ) AS ingredients\n  FROM \"DosingLog\" m \n  LEFT JOIN \"DosingSchedule\" s ON m.\"scheduleId\" = s.id\n  LEFT JOIN \"FertilizationProgram\" fp ON s.\"fertilizationProgramId\" = fp.id\n  LEFT JOIN \"PhytosanitaryProgram\" pp ON s.\"phytosanitaryProgramId\" = pp.id\n  LEFT JOIN \"Agrochemical\" a ON m.\"agrochemicalId\" = a.id\n), \nroutine_schedules AS (\n  SELECT \n    s.id, \n    'PENDING' AS status, \n    (NOW() AT TIME ZONE 'America/Caracas' + INTERVAL '5 days')::timestamp AS \"scheduledAt\", \n    s.zones, \n    COALESCE(fa.name, pa.name, s.name) AS \"agrochemicalName\",\n    COALESCE(fa.purpose::text, pa.purpose::text, 'DESARROLLO') AS \"agrochemicalPurpose\",\n    COALESCE(fp.name, pp.name, s.name) AS \"programName\",\n    COALESCE(fa.\"isMix\", pa.\"isMix\", false) AS \"isMix\",\n    COALESCE(fa.\"dosageValue\", pa.\"dosageValue\") AS \"dosageValue\",\n    CASE COALESCE(fa.\"dosageUnit\"::text, pa.\"dosageUnit\"::text) \n      WHEN 'ML_L' THEN 'mL/L' \n      WHEN 'G_L' THEN 'g/L' \n      WHEN 'CDA_L' THEN 'cda/L' \n      WHEN 'CDITA_L' THEN 'cdta/L' \n      WHEN 'PORCENTAJE' THEN '%' \n      WHEN 'GOTAS_L' THEN 'gotas/L' \n      WHEN 'CC_L' THEN 'cc/L' \n      ELSE COALESCE(fa.\"dosageUnit\"::text, pa.\"dosageUnit\"::text) \n    END AS agrochemical_unit,\n    COALESCE(\n      (\n        SELECT json_agg(\n          json_build_object(\n            'name', ing.name,\n            'dosageValue', mi.\"dosageValue\",\n            'dosageUnit', CASE mi.\"dosageUnit\"::text \n              WHEN 'ML_L' THEN 'mL/L' \n              WHEN 'G_L' THEN 'g/L' \n              WHEN 'CDA_L' THEN 'cda/L' \n              WHEN 'CDITA_L' THEN 'cdta/L' \n              WHEN 'PORCENTAJE' THEN '%' \n              WHEN 'GOTAS_L' THEN 'gotas/L' \n              WHEN 'CC_L' THEN 'cc/L' \n              ELSE mi.\"dosageUnit\"::text \n            END\n          ) \n          ORDER BY mi.\"dosageValue\" DESC\n        ) \n        FROM \"AgrochemicalMixItem\" mi \n        JOIN \"Agrochemical\" ing ON mi.\"ingredientId\" = ing.id \n        WHERE mi.\"parentMixId\" = COALESCE(fa.id, pa.id)\n      ),\n      '[]'::json\n    ) AS ingredients \n  FROM \"DosingSchedule\" s \n  LEFT JOIN \"FertilizationProgram\" fp ON s.\"fertilizationProgramId\" = fp.id \n  LEFT JOIN \"FertilizationCycle\" fc ON fc.\"programId\" = fp.id AND fc.sequence = 1 \n  LEFT JOIN \"Agrochemical\" fa ON fc.\"agrochemicalId\" = fa.id \n  LEFT JOIN \"PhytosanitaryProgram\" pp ON s.\"phytosanitaryProgramId\" = pp.id \n  LEFT JOIN \"PhytosanitaryCycle\" pc ON pc.\"programId\" = pp.id AND pc.sequence = 1 \n  LEFT JOIN \"Agrochemical\" pa ON pc.\"agrochemicalId\" = pa.id \n  WHERE s.\"isEnabled\" = true \n    AND NOT EXISTS (\n      SELECT 1 FROM \"DosingLog\" ml \n      WHERE ml.\"scheduleId\" = s.id \n        AND ml.status IN ('PENDING'::\"TaskStatus\", 'WAITING_CONFIRMATION'::\"TaskStatus\")\n    )\n), \nall_tasks AS (\n  SELECT * FROM actual_logs \n  UNION ALL \n  SELECT * FROM routine_schedules\n) \nSELECT * FROM all_tasks \nWHERE ('{{ $json.statusPreset }}' = 'all' \n       OR ('{{ $json.statusPreset }}' = 'PENDING' AND (status = 'PENDING' OR status = 'WAITING_CONFIRMATION'))\n       OR status = '{{ $json.statusPreset }}') \n  AND ('{{ $json.timePreset }}' = 'all' \n       OR ('{{ $json.timePreset }}' = 'today' AND \"scheduledAt\" >= CURRENT_DATE AND \"scheduledAt\" < CURRENT_DATE + INTERVAL '1 day') \n       OR ('{{ $json.timePreset }}' = 'week' AND \"scheduledAt\" >= date_trunc('week', CURRENT_DATE) AND \"scheduledAt\" < date_trunc('week', CURRENT_DATE) + INTERVAL '1 week') \n       OR ('{{ $json.timePreset }}' = 'next-week' AND \"scheduledAt\" >= date_trunc('week', CURRENT_DATE) + INTERVAL '1 week' AND \"scheduledAt\" < date_trunc('week', CURRENT_DATE) + INTERVAL '2 weeks') \n       OR ('{{ $json.timePreset }}' = 'month' AND \"scheduledAt\" >= date_trunc('month', CURRENT_DATE) AND \"scheduledAt\" < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month') \n       OR ('{{ $json.timePreset }}' = 'next-month' AND \"scheduledAt\" >= date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' AND \"scheduledAt\" < date_trunc('month', CURRENT_DATE) + INTERVAL '2 months')) \nORDER BY \"scheduledAt\" DESC \nLIMIT 10;"
       },
       "settings": {
         "alwaysOutputData": true
@@ -369,7 +449,7 @@
       "name": "Consultar BD (Dosing Filtered)",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [950, 550],
+      "position": [64, 500],
       "credentials": {
         "postgres": {
           "id": "postgres-pristinoplant",
@@ -379,13 +459,13 @@
     },
     {
       "parameters": {
-        "jsCode": "const event = $('Parsear Evento').first().json;\nconst items = $input.all();\n\nconst ZONE_LABELS = {\n  ZONA_A: 'Orquideario',\n  ZONA_B: 'Jardín',\n  ZONA_C: 'Terraza',\n  ZONA_D: 'Ventanas',\n  EXTERIOR: 'Exterior'\n};\n\nconst STATUS_LABELS = {\n  PENDING: 'Pendiente',\n  COMPLETED: 'Completada',\n  CANCELLED: 'Cancelada'\n};\n\nconst timeMap = {\n  'today': 'Hoy',\n  'week': 'Esta Semana',\n  'next-week': 'Prox. Semana',\n  'month': 'Este Mes',\n  'next-month': 'Prox. Mes',\n  'all': 'Todos los Tiempos'\n};\n\nconst statusMap = {\n  'PENDING': 'Pendientes',\n  'COMPLETED': 'Completadas',\n  'CANCELLED': 'Canceladas',\n  'all': 'Todos los Estados'\n};\n\nconst timeLabel = timeMap[event.timePreset] || 'Todos los Tiempos';\nconst statusLabel = statusMap[event.statusPreset] || 'Todos los Estados';\n\nconst DAYS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];\nconst MONTHS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];\n\nfunction formatDate(dateObj) {\n  const dayName = DAYS[dateObj.getDay()];\n  const dayNum = dateObj.getDate();\n  const monthName = MONTHS[dateObj.getMonth()];\n  return `${dayName} ${dayNum} ${monthName}`;\n}\n\nfunction formatTime(dateObj) {\n  let hours = dateObj.getHours();\n  const minutes = dateObj.getMinutes().toString().padStart(2, '0');\n  const ampm = hours >= 12 ? 'pm' : 'am';\n  hours = hours % 12;\n  hours = hours ? hours : 12;\n  return `${hours}:${minutes} ${ampm}`;\n}\n\nfunction formatZones(zones) {\n  if (!zones) return 'General';\n  let zoneArray = Array.isArray(zones) ? zones : [zones];\n  if (typeof zones === 'string' && zones.startsWith('{')) {\n    zoneArray = zones.replace(/[{}]/g, '').split(',');\n  }\n  return zoneArray.map(z => ZONE_LABELS[z.trim()] || z.trim()).join(', ');\n}\n\nif (items.length === 0 || !items[0].json.id) {\n  return [{\n    json: {\n      chatId: event.chatId,\n      messageId: event.messageId,\n      replyText: `\\u200B\\n*Tareas de Dosificación*\\n${timeLabel}\\n${statusLabel}\\n\\nSin tareas registradas` \n    }\n  }];\n}\n\nlet replyText = `\\u200B\\n*Tareas de Dosificación*\\n${timeLabel}\\n${statusLabel}\\n\\n`;\nitems.forEach((item, index) => {\n  const row = item.json;\n  const agroName = row.agrochemicalName || 'Producto';\n  const statusStr = STATUS_LABELS[row.status] || row.status;\n  const zonesStr = formatZones(row.zones);\n  const dateObj = new Date(row.scheduledAt);\n  const dateStr = formatDate(dateObj);\n  const timeStr = formatTime(dateObj);\n  const prepStr = row.preparation ? row.preparation.trim() : '';\n  \n  replyText += `${index + 1}. ${agroName} - ${statusStr}\\n`;\n  if (prepStr) {\n    replyText += `   Receta: ${prepStr}\\n`;\n  }\n  replyText += `   Zonas: ${zonesStr}\\n`;\n  replyText += `   Fecha: ${dateStr}\\n`;\n  replyText += `   Hora: ${timeStr}\\n\\n`;\n});\n\nreturn [{\n  json: {\n    chatId: event.chatId,\n    messageId: event.messageId,\n    replyText: replyText.trimEnd()\n  }\n}];"
+        "jsCode": "const event = $('Parsear Evento').first().json;\nconst items = $input.all();\nconst ZONE_LABELS = { ZONA_A: 'Orquideario', ZONA_B: 'Jardín', ZONA_C: 'Terraza', ZONA_D: 'Ventanas', EXTERIOR: 'Exterior' };\nconst STATUS_LABELS = {\n  PENDING: 'Pendiente',\n  WAITING_CONFIRMATION: 'Esperando',\n  COMPLETED: 'Completada',\n  CANCELLED: 'Cancelada',\n  EXPIRED: 'Expirada',\n  AUTHORIZED: 'Autorizada'\n};\nconst timeMap = { 'today': 'Hoy', 'week': 'Esta Semana', 'next-week': 'Prox. Semana', 'month': 'Este Mes', 'next-month': 'Prox. Mes', 'all': 'Todos los Tiempos' };\nconst statusMap = { 'PENDING': 'Pendientes', 'COMPLETED': 'Completadas', 'CANCELLED': 'Canceladas', 'all': 'Todos los Estados' };\n\nconst timeLabel = timeMap[event.timePreset] || 'Todos los Tiempos';\nconst statusLabel = statusMap[event.statusPreset] || 'Todos los Estados';\n\nfunction getCaracasDateParts(d) {\n  if (!d) return { dia: 'N/A', fecha: 'N/A', hora: 'N/A' };\n  const diaRaw = d.toLocaleDateString('es-VE', { weekday: 'long', timeZone: 'America/Caracas' });\n  const dia = diaRaw.charAt(0).toUpperCase() + diaRaw.slice(1);\n  const fecha = d.toLocaleDateString('es-VE', { day: 'numeric', month: 'long', timeZone: 'America/Caracas' });\n  let horaStr = d.toLocaleTimeString('es-VE', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Caracas' });\n  const hora = horaStr.replace(/[\\.\\s]*([ap])\\.?\\s*m\\.?/i, ' $1m').toLowerCase().trim();\n  return { dia, fecha, hora };\n}\n\nfunction formatZonesVertical(zones) {\n  if (!zones) return 'Zona: General\\n';\n  let arr = Array.isArray(zones) ? zones : [zones];\n  if (typeof zones === 'string' && zones.startsWith('{')) {\n    arr = zones.replace(/[{}]/g, '').split(',');\n  }\n  return arr.map(z => `Zona: ${ZONE_LABELS[z.trim()] || z.trim()}`).join('\\n') + '\\n';\n}\n\nfunction formatDosingTaskBlock(row) {\n  const agroName = row.agrochemical_name || row.agrochemicalName || row.program_name || row.programName || row.schedule_name || 'Dosificación';\n  const statusStr = STATUS_LABELS[row.status] || row.status;\n  const dateObj = new Date(row.scheduledAt);\n  const { dia, fecha, hora } = getCaracasDateParts(dateObj);\n  const zonesStr = formatZonesVertical(row.zones);\n\n  let doseSection = '';\n  const ingredients = typeof row.ingredients === 'string' ? JSON.parse(row.ingredients) : (row.ingredients || []);\n  if (row.isMix && Array.isArray(ingredients) && ingredients.length > 0) {\n    ingredients.forEach(ing => {\n      doseSection += `Insumo: ${ing.name}\\n`;\n      if (ing.dosageValue && ing.dosageUnit) {\n        doseSection += `Dosis: (${ing.dosageValue} ${ing.dosageUnit})\\n`;\n      } else {\n        doseSection += `Dosis: Sin especificación\\n`;\n      }\n    });\n  } else {\n    const unit = row.agrochemical_unit || row.agrochemicalUnit;\n    if (row.dosageValue && unit) {\n      doseSection += `Dosis: (${row.dosageValue} ${unit})\\n`;\n    } else {\n      doseSection += `Dosis: Sin especificación\\n`;\n    }\n  }\n\n  let block = `<b>${agroName}</b>\\n`;\n  block += `Estado: ${statusStr}\\n`;\n  block += doseSection;\n  block += zonesStr;\n  block += `Hora: ${hora}\\n`;\n  block += `Día: ${dia}\\n`;\n  block += `Fecha: ${fecha}\\n\\n`;\n  return block;\n}\n\nif (items.length === 0 || !items[0].json.id) {\n  return [{\n    json: {\n      chatId: event.chatId,\n      messageId: event.messageId,\n      replyText: `<b>Tareas de Dosificación</b>\\n${timeLabel}\\n${statusLabel}\\n\\nSin tareas registradas` \n    }\n  }];\n}\n\nlet replyText = `<b>Tareas de Dosificación</b>\\n${timeLabel}\\n${statusLabel}\\n\\n`;\n\nitems.forEach((item) => {\n  replyText += formatDosingTaskBlock(item.json);\n});\n\nreturn [{\n  json: {\n    chatId: event.chatId,\n    messageId: event.messageId,\n    replyText: replyText.trimEnd()\n  }\n}];"
       },
       "id": "3c4d5e6f-0010-4000-8000-000000000010",
       "name": "Formatear Respuesta Dosing Filtered",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1180, 550]
+      "position": [288, 500]
     },
     {
       "parameters": {
@@ -395,14 +475,14 @@
         "text": "={{ $json.replyText }}",
         "additionalFields": {
           "appendAttribution": false,
-          "parse_mode": "Markdown"
+          "parse_mode": "HTML"
         }
       },
       "id": "3c4d5e6f-0011-4000-8000-000000000011",
       "name": "Editar Mensaje Telegram (Dosing Filtered)",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [1400, 550],
+      "position": [512, 500],
       "credentials": {
         "telegramApi": {
           "id": "telegram-pristinoplant",
@@ -413,13 +493,16 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO \"FilterCleaningLog\" (id, \"cleanedAt\", \"nextDueAt\", notes, \"confirmedBy\", source, \"createdAt\") VALUES (gen_random_uuid(), NOW(), NOW() + INTERVAL '2 days', 'Comando /filter Telegram', '{{ $json.fromUser }}', 'TELEGRAM_BOT', NOW()); UPDATE \"Notification\" SET \"readAt\" = NOW(), status = 'READ' WHERE type = 'MAINTENANCE_REMINDER';"
+        "query": "SELECT \n  d.id, \n  d.purpose, \n  d.zones, \n  d.\"scheduledAt\", \n  d.status, \n  s.name AS schedule_name, \n  COALESCE(fp.name, pp.name, s.name) AS program_name, \n  a.name AS agrochemical_name, \n  a.purpose::text AS agrochemical_purpose, \n  a.\"isMix\",\n  a.\"dosageValue\",\n  CASE a.\"dosageUnit\"::text \n    WHEN 'ML_L' THEN 'mL/L' \n    WHEN 'G_L' THEN 'g/L' \n    WHEN 'CDA_L' THEN 'cda/L' \n    WHEN 'CDITA_L' THEN 'cdta/L' \n    WHEN 'PORCENTAJE' THEN '%' \n    WHEN 'GOTAS_L' THEN 'gotas/L' \n    WHEN 'CC_L' THEN 'cc/L' \n    ELSE a.\"dosageUnit\"::text \n  END AS agrochemical_unit,\n  COALESCE(\n    (\n      SELECT json_agg(\n        json_build_object(\n          'name', ing.name,\n          'dosageValue', mi.\"dosageValue\",\n          'dosageUnit', CASE mi.\"dosageUnit\"::text \n            WHEN 'ML_L' THEN 'mL/L' \n            WHEN 'G_L' THEN 'g/L' \n            WHEN 'CDA_L' THEN 'cda/L' \n            WHEN 'CDITA_L' THEN 'cdta/L' \n            WHEN 'PORCENTAJE' THEN '%' \n            WHEN 'GOTAS_L' THEN 'gotas/L' \n            WHEN 'CC_L' THEN 'cc/L' \n            ELSE mi.\"dosageUnit\"::text \n          END\n        ) \n        ORDER BY mi.\"dosageValue\" DESC\n      ) \n      FROM \"AgrochemicalMixItem\" mi \n      JOIN \"Agrochemical\" ing ON mi.\"ingredientId\" = ing.id \n      WHERE mi.\"parentMixId\" = a.id\n    ),\n    '[]'::json\n  ) AS ingredients\nFROM \"DosingLog\" d \nLEFT JOIN \"DosingSchedule\" s ON d.\"scheduleId\" = s.id \nLEFT JOIN \"FertilizationProgram\" fp ON s.\"fertilizationProgramId\" = fp.id \nLEFT JOIN \"PhytosanitaryProgram\" pp ON s.\"phytosanitaryProgramId\" = pp.id \nLEFT JOIN \"Agrochemical\" a ON d.\"agrochemicalId\" = a.id \nWHERE d.status IN ('PENDING'::\"TaskStatus\", 'WAITING_CONFIRMATION'::\"TaskStatus\") \n  AND d.\"scheduledAt\" <= NOW() + INTERVAL '12 hours' \nORDER BY d.\"scheduledAt\" ASC \nLIMIT 5;"
       },
-      "id": "3c4d5e6f-0013-4000-8000-000000000013",
-      "name": "Registrar Limpieza Filtro en BD",
+      "settings": {
+        "alwaysOutputData": true
+      },
+      "id": "3c4d5e6f-0015-4000-8000-000000000015",
+      "name": "Consultar BD (Pending Dosing Tasks)",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.4,
-      "position": [950, 700],
+      "position": [64, 640],
       "credentials": {
         "postgres": {
           "id": "postgres-pristinoplant",
@@ -429,8 +512,113 @@
     },
     {
       "parameters": {
+        "jsCode": "const event = $('Parsear Evento').first().json;\nconst items = $input.all();\nconst ZONE_LABELS = { ZONA_A: 'Orquideario', ZONA_B: 'Jardín', ZONA_C: 'Terraza', ZONA_D: 'Ventanas', EXTERIOR: 'Exterior' };\nconst STATUS_LABELS = { PENDING: 'Pendiente', WAITING_CONFIRMATION: 'Esperando', COMPLETED: 'Completada', CANCELLED: 'Cancelada', EXPIRED: 'Expirada', AUTHORIZED: 'Autorizada' };\n\nfunction getCaracasDateParts(d) {\n  if (!d) return { dia: 'N/A', fecha: 'N/A', hora: 'N/A' };\n  const diaRaw = d.toLocaleDateString('es-VE', { weekday: 'long', timeZone: 'America/Caracas' });\n  const dia = diaRaw.charAt(0).toUpperCase() + diaRaw.slice(1);\n  const fecha = d.toLocaleDateString('es-VE', { day: 'numeric', month: 'long', timeZone: 'America/Caracas' });\n  let horaStr = d.toLocaleTimeString('es-VE', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Caracas' });\n  const hora = horaStr.replace(/[\\.\\s]*([ap])\\.?\\s*m\\.?/i, ' $1m').toLowerCase().trim();\n  return { dia, fecha, hora };\n}\n\nfunction formatZonesVertical(zones) {\n  if (!zones) return 'Zona: General\\n';\n  let arr = Array.isArray(zones) ? zones : [zones];\n  if (typeof zones === 'string' && zones.startsWith('{')) {\n    arr = zones.replace(/[{}]/g, '').split(',');\n  }\n  return arr.map(z => `Zona: ${ZONE_LABELS[z.trim()] || z.trim()}`).join('\\n') + '\\n';\n}\n\nfunction formatDosingTaskBlock(row) {\n  const agroName = row.agrochemical_name || row.agrochemicalName || row.program_name || row.programName || row.schedule_name || 'Dosificación';\n  const statusStr = STATUS_LABELS[row.status] || row.status;\n  const dateObj = new Date(row.scheduledAt);\n  const { dia, fecha, hora } = getCaracasDateParts(dateObj);\n  const zonesStr = formatZonesVertical(row.zones);\n\n  let doseSection = '';\n  const ingredients = typeof row.ingredients === 'string' ? JSON.parse(row.ingredients) : (row.ingredients || []);\n  if (row.isMix && Array.isArray(ingredients) && ingredients.length > 0) {\n    ingredients.forEach(ing => {\n      doseSection += `Insumo: ${ing.name}\\n`;\n      if (ing.dosageValue && ing.dosageUnit) {\n        doseSection += `Dosis: (${ing.dosageValue} ${ing.dosageUnit})\\n`;\n      } else {\n        doseSection += `Dosis: Sin especificación\\n`;\n      }\n    });\n  } else {\n    const unit = row.agrochemical_unit || row.agrochemicalUnit;\n    if (row.dosageValue && unit) {\n      doseSection += `Dosis: (${row.dosageValue} ${unit})\\n`;\n    } else {\n      doseSection += `Dosis: Sin especificación\\n`;\n    }\n  }\n\n  let block = `<b>${agroName}</b>\\n`;\n  block += `Estado: ${statusStr}\\n`;\n  block += doseSection;\n  block += zonesStr;\n  block += `Hora: ${hora}\\n`;\n  block += `Día: ${dia}\\n`;\n  block += `Fecha: ${fecha}\\n\\n`;\n  return block;\n}\n\nif (items.length === 0 || !items[0].json.id) {\n  return [{\n    json: {\n      chatId: event.chatId,\n      replyText: `<b>Dosificación Manual</b>\\n\\nNo hay tareas de dosificación manual pendientes o listas para ejecutar en este momento.`,\n      replyMarkupObj: {\n        inline_keyboard: [\n          [\n            {\n              text: '📊 Ver Tareas de Dosificación',\n              callback_data: 'dosing_time:all'\n            }\n          ]\n        ]\n      }\n    }\n  }];\n}\n\nlet replyText = `<b>Dosificación Manual</b>\\n\\nSelecciona la tarea que deseas marcar como completada:\\n\\n`;\nconst inline_keyboard = [];\n\nitems.forEach((item) => {\n  const row = item.json;\n  const agroName = row.agrochemical_name || row.program_name || row.schedule_name || 'Dosificación';\n  replyText += formatDosingTaskBlock(row);\n\n  inline_keyboard.push([\n    {\n      text: `✅ ${agroName.substring(0, 36)}`,\n      callback_data: `dosing_manual_confirm:${row.id}:`\n    }\n  ]);\n});\n\nreturn [{\n  json: {\n    chatId: event.chatId,\n    replyText: replyText.trimEnd(),\n    replyMarkupObj: {\n      inline_keyboard\n    }\n  }\n}];"
+      },
+      "id": "3c4d5e6f-0016-4000-8000-000000000016",
+      "name": "Formatear Menu Complete",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [288, 640]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot8996710021:AAEggzC0KOltYzXFlK4lOH96PrYnI82Wcx4/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { chat_id: $json.chatId, text: $json.replyText, parse_mode: 'HTML', reply_markup: $json.replyMarkupObj } }}",
+        "options": {}
+      },
+      "id": "3c4d5e6f-0017-4000-8000-000000000017",
+      "name": "Responder Telegram (Complete)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [512, 640]
+    },
+    {
+      "parameters": {
         "chatId": "={{ $json.chatId }}",
-        "text": "=\\u200B\n*Mantenimiento de Filtro Registrado*\n\nLimpieza registrada con éxito por {{ $json.fromUser }}.\nPróxima limpieza programada en 48 horas.",
+        "text": "=\\u200B\n*Mantenimiento de Filtro de Agua*\n\nSelecciona una opción:",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": [
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "🧹 Registrar Limpieza",
+                    "additionalFields": {
+                      "callback_data": "filter_cmd:clean"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "row": {
+                "buttons": [
+                  {
+                    "text": "📊 Ver Estado Actual",
+                    "additionalFields": {
+                      "callback_data": "filter_cmd:status"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "3c4d5e6f-0026-4000-8000-000000000026",
+      "name": "Menú Filtro de Agua",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [64, 780],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-pristinoplant",
+          "name": "Telegram PristinoBot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO \"FilterCleaningLog\" (id, \"cleanedAt\", \"nextDueAt\", notes, \"confirmedBy\", source, \"createdAt\") VALUES (gen_random_uuid(), NOW(), (date_trunc('day', NOW() AT TIME ZONE 'America/Caracas') + INTERVAL '2 days' + INTERVAL '8 hours') AT TIME ZONE 'America/Caracas', 'Comando /filter Telegram', '{{ $json.fromUser }}', 'TELEGRAM_BOT', NOW()); UPDATE \"Notification\" SET \"readAt\" = NOW(), status = 'READ'::\"NotificationStatus\" WHERE type = 'MAINTENANCE_REMINDER';"
+      },
+      "settings": {
+        "alwaysOutputData": true
+      },
+      "id": "3c4d5e6f-0013-4000-8000-000000000013",
+      "name": "Registrar Limpieza Filtro en BD",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [64, 920],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-pristinoplant",
+          "name": "Postgres PristinoPlant"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $('Parsear Evento').first().json;\nconst now = new Date();\n\nfunction formatDateTimeCaracas(d) {\n  if (!d) return 'N/A';\n  const str = d.toLocaleString('es-VE', {\n    timeZone: 'America/Caracas',\n    weekday: 'long',\n    day: 'numeric',\n    month: 'long',\n    hour: 'numeric',\n    minute: '2-digit',\n    hour12: true\n  });\n  return str.charAt(0).toUpperCase() + str.slice(1).replace(/\\s[ap]\\.\\s?m\\./i, m => m.includes('p') ? ' pm' : ' am');\n}\n\n// 2 días en el futuro fijado a las 8:00 AM Caracas (UTC-4 = 12:00 UTC)\nconst caracasDateStr = now.toLocaleDateString('en-CA', { timeZone: 'America/Caracas' });\nconst [year, month, day] = caracasDateStr.split('-').map(Number);\nconst nextDue = new Date(Date.UTC(year, month - 1, day + 2, 12, 0, 0));\n\nconst replyText = `\\u200B\\n*Mantenimiento de Filtro de Agua Registrado*\\n\\n` +\n  `👤 Registrado por: ${event.fromUser}\\n` +\n  `📅 Fecha de Limpieza: ${formatDateTimeCaracas(now)}\\n` +\n  `⏰ Próxima Notificación: ${formatDateTimeCaracas(nextDue)}\\n\\n` +\n  `El temporizador de mantenimiento ha sido reiniciado.`;\n\nreturn [{\n  json: {\n    chatId: event.chatId,\n    replyText\n  }\n}];"
+      },
+      "id": "3c4d5e6f-0020-4000-8000-000000000020",
+      "name": "Formatear Respuesta Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [288, 920]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.replyText }}",
         "additionalFields": {
           "appendAttribution": false,
           "parse_mode": "Markdown"
@@ -440,7 +628,101 @@
       "name": "Responder Telegram (Filter)",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [1180, 700],
+      "position": [512, 920],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-pristinoplant",
+          "name": "Telegram PristinoBot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, \"cleanedAt\", \"nextDueAt\", notes, \"confirmedBy\", source FROM \"FilterCleaningLog\" ORDER BY \"cleanedAt\" DESC LIMIT 1;"
+      },
+      "settings": {
+        "alwaysOutputData": true
+      },
+      "id": "3c4d5e6f-0021-4000-8000-000000000021",
+      "name": "Consultar BD (Filter Status)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [64, 1060],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-pristinoplant",
+          "name": "Postgres PristinoPlant"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $('Parsear Evento').first().json;\nconst items = $input.all();\n\nfunction formatDateTimeCaracas(d) {\n  if (!d) return 'N/A';\n  const str = d.toLocaleString('es-VE', {\n    timeZone: 'America/Caracas',\n    weekday: 'long',\n    day: 'numeric',\n    month: 'long',\n    hour: 'numeric',\n    minute: '2-digit',\n    hour12: true\n  });\n  return str.charAt(0).toUpperCase() + str.slice(1).replace(/\\s[ap]\\.\\s?m\\./i, m => m.includes('p') ? ' pm' : ' am');\n}\n\nif (items.length === 0 || !items[0].json.id) {\n  return [{\n    json: {\n      chatId: event.chatId,\n      replyText: `\\u200B\\n*Estado del Filtro de Agua*\\n\\nSin registros de mantenimiento previos.`\n    }\n  }];\n}\n\nconst row = items[0].json;\nconst cleanedDate = new Date(row.cleanedAt);\nconst dueDate = new Date(row.nextDueAt);\nconst now = new Date();\nconst isOverdue = now >= dueDate;\n\nconst replyText = `\\u200B\\n*Estado del Filtro de Agua*\\n\\n` +\n  `📊 Condición: ${isOverdue ? '⚠️ *Vencido (Requiere Limpieza)*' : '✅ *Al día (Operativo)*'}\\n` +\n  `👤 Última Limpieza por: ${row.confirmedBy || 'Sistema'}\\n` +\n  `📅 Fecha de Limpieza: ${formatDateTimeCaracas(cleanedDate)}\\n` +\n  `⏰ Próxima Notificación: ${formatDateTimeCaracas(dueDate)}\\n\\n` +\n  (isOverdue ? `Usa /filter para registrar la limpieza del filtro.` : `El sistema notificará automáticamente a la fecha indicada.`);\n\nreturn [{\n  json: {\n    chatId: event.chatId,\n    replyText\n  }\n}];"
+      },
+      "id": "3c4d5e6f-0022-4000-8000-000000000022",
+      "name": "Formatear Respuesta Filter Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [288, 1060]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.replyText }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "3c4d5e6f-0023-4000-8000-000000000023",
+      "name": "Responder Telegram (Filter Status)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [512, 1060],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-pristinoplant",
+          "name": "Telegram PristinoBot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.querySql }}"
+      },
+      "settings": {
+        "alwaysOutputData": true
+      },
+      "id": "3c4d5e6f-0018-4000-8000-000000000018",
+      "name": "Ejecutar Accion Callback en BD",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [64, 1200],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-pristinoplant",
+          "name": "Postgres PristinoPlant"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "editMessageText",
+        "chatId": "={{ $('Parsear Evento').first().json.chatId }}",
+        "messageId": "={{ $('Parsear Evento').first().json.messageId }}",
+        "text": "={{ $('Parsear Evento').first().json.replyText }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "3c4d5e6f-0019-4000-8000-000000000019",
+      "name": "Editar Mensaje Telegram (Callback Action)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [288, 1200],
       "credentials": {
         "telegramApi": {
           "id": "telegram-pristinoplant",
@@ -451,17 +733,17 @@
     {
       "parameters": {
         "chatId": "={{ $json.chatId }}",
-        "text": "*PristinoBot*\n\n/status - Estado de infraestructura\n/dosing - Tareas de dosificación\n/filter - Registrar limpieza de filtro\n/help - Lista de comandos",
+        "text": "*PristinoBot*\n\n/status - Consulta el estado de los nodos\n/dosing - Consulta las tareas de dosificación\n/complete - Marca como completada una tarea de dosificación manual\n/filter - Menú de mantenimiento del filtro de agua\n/filterstatus - Consulta el estado y vencimiento actual del filtro\n/help - Muestra la lista de comandos",
         "additionalFields": {
           "appendAttribution": false,
           "parse_mode": "Markdown"
         }
       },
-      "id": "3c4d5e6f-0012-4000-8000-000000000012",
+      "id": "980ab8bf-744d-48f5-bcb6-643d55df9f9d",
       "name": "Responder Telegram (Help)",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [950, 850],
+      "position": [64, 1340],
       "credentials": {
         "telegramApi": {
           "id": "telegram-pristinoplant",
@@ -525,7 +807,35 @@
         ],
         [
           {
+            "node": "Consultar BD (Pending Dosing Tasks)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Menú Filtro de Agua",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Registrar Limpieza Filtro en BD",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Consultar BD (Filter Status)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ejecutar Accion Callback en BD",
             "type": "main",
             "index": 0
           }
@@ -583,11 +893,77 @@
         ]
       ]
     },
+    "Consultar BD (Pending Dosing Tasks)": {
+      "main": [
+        [
+          {
+            "node": "Formatear Menu Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Menu Complete": {
+      "main": [
+        [
+          {
+            "node": "Responder Telegram (Complete)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Registrar Limpieza Filtro en BD": {
       "main": [
         [
           {
+            "node": "Formatear Respuesta Filter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Respuesta Filter": {
+      "main": [
+        [
+          {
             "node": "Responder Telegram (Filter)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar BD (Filter Status)": {
+      "main": [
+        [
+          {
+            "node": "Formatear Respuesta Filter Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Respuesta Filter Status": {
+      "main": [
+        [
+          {
+            "node": "Responder Telegram (Filter Status)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ejecutar Accion Callback en BD": {
+      "main": [
+        [
+          {
+            "node": "Editar Mensaje Telegram (Callback Action)",
             "type": "main",
             "index": 0
           }

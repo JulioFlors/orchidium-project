@@ -277,6 +277,16 @@ export const TaskStatusLabels: Record<TaskStatus, string> = {
   [TaskStatus.ACKNOWLEDGED]: 'Recibida',
 }
 
+/**
+ * Mapeo de estados especializado para dosificación manual de laboratorio (/dosing).
+ * En este contexto agronómico, EXPIRED representa una tarea vencida por tiempo ("Expirada"),
+ * a diferencia del hardware de riego donde representa una falla de ejecución ("Fallida").
+ */
+export const DosingTaskStatusLabels: Record<TaskStatus, string> = {
+  ...TaskStatusLabels,
+  [TaskStatus.EXPIRED]: 'Expirada',
+}
+
 export const TaskPurposeLabels: Record<TaskPurpose, string> = {
   [TaskPurpose.IRRIGATION]: 'Riego por Aspersión',
   [TaskPurpose.HUMIDIFICATION]: 'Nebulización',

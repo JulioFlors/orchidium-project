@@ -254,6 +254,83 @@ class DosingScheduleManager {
     }
   }
 
+  /**
+   * Evalúa y expira las tareas manuales de dosificación (DosingLog) que superaron las 24 horas
+   * posteriores a su hora programada sin ser completadas, canceladas o pospuestas.
+   * Genera notificación para n8n / Telegram y limpia confirmaciones pendientes.
+   */
+  async evaluateExpiredDosingTasks(): Promise<void> {
+    try {
+      const now = Date.now()
+      const twentyFourHoursAgo = new Date(now - 24 * 60 * 60000)
+
+      const expiredLogs = await prisma.dosingLog.findMany({
+        where: {
+          status: { in: [TaskStatus.WAITING_CONFIRMATION, TaskStatus.PENDING] },
+          scheduledAt: { lt: twentyFourHoursAgo },
+        },
+        include: {
+          agrochemical: { select: { name: true } },
+          schedule: { select: { name: true } },
+        },
+      })
+
+      if (expiredLogs.length === 0) return
+
+      for (const log of expiredLogs) {
+        const expirationNote =
+          '[EXPIRADA] Tarea no confirmada en 24h posteriores a su ejecución programada.'
+        const notes = log.notes ? `${log.notes}\n${expirationNote}` : expirationNote
+
+        await prisma.dosingLog.update({
+          where: { id: log.id },
+          data: {
+            status: TaskStatus.EXPIRED,
+            notes,
+          },
+        })
+
+        // 1. Marcar notificaciones previas de confirmación de esta tarea como leídas
+        await prisma.notification.updateMany({
+          where: {
+            dosingLogId: log.id,
+            status: 'UNREAD',
+          },
+          data: {
+            status: 'READ',
+            readAt: new Date(),
+          },
+        })
+
+        // 2. Crear nueva notificación para avisar a Telegram (n8n) que la tarea expiró
+        const productName = log.agrochemical?.name || 'Insumo'
+        const scheduleName = log.schedule?.name || 'Dosificación Manual'
+        const scheduledTimeStr = log.scheduledAt.toLocaleTimeString('es-VE', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+          timeZone: 'America/Caracas',
+        })
+
+        await prisma.notification.create({
+          data: {
+            type: 'TASK_STATUS',
+            title: 'Dosificación Manual Expirada',
+            description: `La tarea de dosificación de "${productName}" (${scheduleName}) programada para las ${scheduledTimeStr} fue marcada como expirada tras 24h sin completarse.`,
+            dosingLogId: log.id,
+            priority: 'HIGH',
+          },
+        })
+
+        Logger.agro(
+          `Dosificación manual expirada: Tarea "${scheduleName}" - "${productName}" (${log.id.slice(0, 8)}) marcada como EXPIRED.`,
+        )
+      }
+    } catch (error) {
+      Logger.error('Error evaluando tareas de dosificación expiradas:', error)
+    }
+  }
+
   getActiveCount(): number {
     return this.activeCrons.size
   }

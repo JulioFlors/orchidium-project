@@ -148,7 +148,7 @@ export function Modal({
     // Guardar elemento con foco antes de abrir
     previousFocusRef.current = document.activeElement as HTMLElement
 
-    // Auto-focus al primer elemento interactivo del modal
+    // Auto-focus al primer elemento interactivo del modal una vez finalizada la animación de entrada
     const timer = setTimeout(() => {
       const modal = modalRef.current
 
@@ -157,16 +157,16 @@ export function Modal({
       const focusable = modal.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTORS)
 
       if (focusable.length > 0) {
-        focusable[0].focus()
+        focusable[0].focus({ preventScroll: true })
       }
-    }, 50)
+    }, 420)
 
     return () => {
       clearTimeout(timer)
 
       // Restaurar foco al cerrar
       if (previousFocusRef.current) {
-        previousFocusRef.current.focus()
+        previousFocusRef.current.focus({ preventScroll: true })
       }
     }
   }, [isOpen])
@@ -195,7 +195,7 @@ export function Modal({
         aria-labelledby="modal-title"
         aria-modal="true"
         className={clsx(
-          'bg-surface border-input-outline relative z-10 flex w-full flex-col isolate shadow-xl',
+          'bg-surface border-input-outline transform-gpu backface-hidden will-change-transform relative z-10 flex w-full flex-col isolate shadow-xl',
           // Mobile (<= tds-sm): Full-Width anclado al fondo, h-auto (se adapta al contenido) con tope máximo, rounded-t-3xl, border-t border-input-outline/40
           'h-auto max-h-[calc(100dvh-3.5rem)] rounded-t-3xl rounded-b-none border-t border-input-outline/40 border-x-0 border-b-0',
           // Desktop (> tds-sm): Centrado, h-auto max-h-[85vh], rounded-2xl, border completo

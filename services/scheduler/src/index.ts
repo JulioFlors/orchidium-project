@@ -2054,10 +2054,11 @@ async function initScheduler() {
     await cleanupExpiredTasks()
   })
 
-  // Cron de Pre-Agendamiento de Agroquímicos (Hidráulicos y Manuales con 12h de anticipación)
+  // Cron de Pre-Agendamiento y Expiración de Agroquímicos (Hidráulicos y Manuales con 12h de anticipación / 24h expiración)
   new Cron('0 * * * *', { timezone: 'America/Caracas' }, async () => {
     await preScheduleHydraulicAgrochemicals()
     await dosingScheduleManager.preScheduleDosing()
+    await dosingScheduleManager.evaluateExpiredDosingTasks()
   })
 
   // Poller de Tareas Autorizadas (cada 1 min)
@@ -2113,11 +2114,13 @@ async function initScheduler() {
   await dosingScheduleManager.syncDosingSchedules()
   await preScheduleHydraulicAgrochemicals()
   await dosingScheduleManager.preScheduleDosing()
+  await dosingScheduleManager.evaluateExpiredDosingTasks()
 
   // Cron nocturno de auditoría silenciosa (12:10 AM)
   new Cron('10 0 * * *', { timezone: 'America/Caracas' }, async () => {
     await scheduleManager.syncAutomationSchedules(runTask, true)
     await dosingScheduleManager.syncDosingSchedules(true)
+    await dosingScheduleManager.evaluateExpiredDosingTasks()
     await filterMaintenanceManager.evaluateDailyFilterMaintenance()
   })
 

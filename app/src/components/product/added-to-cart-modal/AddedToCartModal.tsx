@@ -100,7 +100,7 @@ export function AddedToCartModal() {
             aria-labelledby="added-to-cart-title"
             aria-modal="true"
             className={clsx(
-              'bg-canvas border-input-outline/40 fixed z-60 tds-sm:z-20 flex flex-col shadow-2xl',
+              'bg-canvas border-input-outline/40 transform-gpu backface-hidden will-change-transform fixed z-60 tds-sm:z-20 flex flex-col shadow-2xl',
               // Mobile (<= tds-sm): Full-width anclado al fondo (estilo SearchModal)
               'inset-x-0 bottom-0 max-h-[calc(100dvh-3.5rem)] w-full rounded-t-3xl rounded-b-none border-t p-6',
               // Desktop (> tds-sm): Bajo el header y fijado al extremo derecho

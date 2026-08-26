@@ -223,7 +223,7 @@ export function SearchModal({
             aria-labelledby="search-modal-title"
             aria-modal="true"
             className={clsx(
-              'bg-canvas border-input-outline/40 relative z-10 flex h-[calc(100dvh-3.5rem)] w-full flex-col rounded-t-3xl border-t shadow-2xl',
+              'bg-canvas border-input-outline/40 transform-gpu backface-hidden will-change-transform relative z-10 flex h-[calc(100dvh-3.5rem)] w-full flex-col rounded-t-3xl border-t shadow-2xl',
               className,
             )}
             role="dialog"

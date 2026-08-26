@@ -79,7 +79,33 @@ export async function getDosingTasks(limit = 50, offset = 0) {
       skip: offset,
     })
 
+    const now = Date.now()
+    const twentyFourHoursAgo = new Date(now - 24 * 60 * 60000)
+
     const actualTasks: DosingTaskItem[] = logs.map((task) => {
+      let currentStatus = task.status
+
+      if (
+        (task.status === TaskStatus.WAITING_CONFIRMATION || task.status === TaskStatus.PENDING) &&
+        task.scheduledAt < twentyFourHoursAgo
+      ) {
+        currentStatus = TaskStatus.EXPIRED
+        // Sincronizar en DB de forma pasiva en segundo plano
+        prisma.dosingLog
+          .update({
+            where: { id: task.id },
+            data: {
+              status: TaskStatus.EXPIRED,
+              notes: task.notes
+                ? `${task.notes}\n[EXPIRADA] Tarea no confirmada en 24h posteriores a su ejecución programada.`
+                : '[EXPIRADA] Tarea no confirmada en 24h posteriores a su ejecución programada.',
+            },
+          })
+          .catch((err) =>
+            Logger.warn(`Fallo sincronizando expiración pasiva en DosingLog ${task.id}:`, err),
+          )
+      }
+
       let routineName = ''
 
       if (task.schedule?.fertilizationProgram?.name) {
@@ -99,7 +125,7 @@ export async function getDosingTasks(limit = 50, offset = 0) {
         duration: task.duration,
         scheduledAt: task.scheduledAt.toISOString(),
         executedAt: task.executedAt ? task.executedAt.toISOString() : null,
-        status: task.status,
+        status: currentStatus,
         source: task.source,
         notes: task.notes,
         agrochemicalId: task.agrochemicalId,

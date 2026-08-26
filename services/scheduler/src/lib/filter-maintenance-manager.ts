@@ -87,12 +87,12 @@ class FilterMaintenanceManager {
               type: 'MAINTENANCE_REMINDER',
               title: 'Mantenimiento del Filtro de Agua',
               description:
-                'Recordatorio: Han transcurrido 48 horas desde la última limpieza del filtro de agua. Por favor realizar el mantenimiento antes del riego de las 11:00 AM.',
+                'Recordatorio: Han transcurrido 2 días desde la última limpieza del filtro de agua. Por favor realizar el mantenimiento antes de la próxima ejecucion del circuito hidraulico de riego.',
               priority: 'HIGH',
             },
           })
 
-          Logger.cron('Notificación de mantenimiento de filtro de 48h emitida a n8n/Telegram.')
+          Logger.cron('Notificación de mantenimiento de filtro de 2 dias emitida a n8n/Telegram.')
         }
       }
     } catch (error) {

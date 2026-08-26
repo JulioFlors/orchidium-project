@@ -16,7 +16,7 @@ import {
 } from './components'
 
 import { getDosingTasks, updateDosingTaskStatus, deleteDosingTask } from '@/actions/lab'
-import { Heading, Button, Modal } from '@/components/ui'
+import { Heading, Button, Modal } from '@/components'
 import { useToast } from '@/hooks'
 import { useFormDraftStore } from '@/store'
 
@@ -126,8 +126,18 @@ export function DosingView({ initialTasks, agrochemicals }: DosingViewProps) {
       const now = new Date()
 
       // 1. Filtro por Presets de Estado
-      if (statusPreset !== 'all' && t.status !== statusPreset) {
-        return false
+      if (statusPreset !== 'all') {
+        if (statusPreset === 'PENDING') {
+          if (t.status !== 'PENDING' && t.status !== 'WAITING_CONFIRMATION') {
+            return false
+          }
+        } else if (statusPreset === 'CANCELLED') {
+          if (t.status !== 'CANCELLED' && t.status !== 'EXPIRED') {
+            return false
+          }
+        } else if (t.status !== statusPreset) {
+          return false
+        }
       }
 
       // 2. Filtro por Fecha Personalizada
