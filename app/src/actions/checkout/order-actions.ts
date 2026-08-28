@@ -106,6 +106,18 @@ export async function createOrder(input: CreateOrderInput) {
     revalidatePath('/admin/orders')
     revalidatePath('/stock')
 
+    // Disparar notificación push a los administradores vía n8n (asíncrono)
+    const n8nBase = process.env.N8N_WEBHOOK_URL || 'https://n8n.sisparrow.com/'
+    const webhookUrl = new URL('/webhook/orders/new', n8nBase).toString()
+
+    fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orderId: result.id }),
+    }).catch((err) => {
+      console.error('Error notificando orden de venta a n8n:', err)
+    })
+
     return { ok: true, order: result }
   } catch (error) {
     return { ok: false, message: 'Error al procesar el pedido.', error }

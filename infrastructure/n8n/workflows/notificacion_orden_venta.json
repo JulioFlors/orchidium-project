@@ -1,0 +1,112 @@
+{
+  "name": "PristinoBot - Notificación de Nueva Orden (Ventas)",
+  "nodes": [
+    {
+      "id": "e0d61c79-6fb0-40e4-9e3b-22b2b3182b1f",
+      "name": "Webhook Nueva Orden",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "orders/new",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "webhookId": "62f90e87-b3d6-4b37-9c0c-c4069272b7dc"
+    },
+    {
+      "id": "61d8c01d-028a-4167-b2ca-56b4c98a47ae",
+      "name": "Consultar Orden en Postgres",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [224, 0],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=SELECT \n  o.id,\n  o.\"orderNumber\",\n  o.status,\n  o.\"paymentMethod\",\n  o.subtotal,\n  o.tax,\n  o.\"totalUsd\",\n  o.\"totalVes\",\n  o.\"exchangeRate\",\n  o.\"shippingAddress\",\n  o.\"billingInfo\",\n  o.\"expiresAt\",\n  o.\"createdAt\",\n  json_agg(json_build_object(\n    'speciesName', i.\"speciesName\",\n    'size', i.size,\n    'quantity', i.quantity,\n    'unitPrice', i.\"unitPrice\"\n  )) as items\nFROM \"Order\" o\nLEFT JOIN \"OrderItem\" i ON o.id = i.\"orderId\"\nWHERE o.id = '{{ $json.body.orderId }}'\nGROUP BY o.id;",
+        "options": {}
+      },
+      "credentials": {
+        "postgres": {
+          "id": "u0KCV3BiGESIicjN",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "id": "8fd4de4c-0c66-4e28-be59-be0be9ca25fc",
+      "name": "Formatear Mensaje Admin",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [448, 0],
+      "parameters": {
+        "jsCode": "const items = $input.all();\nif (!items.length || !items[0].json || !items[0].json.id) {\n  return [];\n}\n\nconst order = items[0].json;\nconst shipping = typeof order.shippingAddress === 'string' ? JSON.parse(order.shippingAddress) : (order.shippingAddress || {});\nconst orderItems = typeof order.items === 'string' ? JSON.parse(order.items) : (order.items || []);\n\nconst PAYMENT_METHODS = {\n  PAGO_MOVIL: 'Pago Móvil',\n  TRANSFERENCIA_BANCARIA: 'Transferencia Bancaria',\n  EFECTIVO_USD: 'Efectivo en Divisas',\n  ZELLE: 'Zelle',\n  BINANCE_PAY: 'Binance Pay'\n};\n\nconst POT_SIZE_LABELS = {\n  POTE_4_PULGADAS: '4\"',\n  POTE_5_PULGADAS: '5\"',\n  POTE_6_PULGADAS: '6\"',\n  POTE_8_PULGADAS: '8\"',\n  CEBOLLERO: 'Cebollero',\n  MINI: 'Mini',\n  CANASTA: 'Canasta',\n  TRONCO: 'Montada en Tronco'\n};\n\nconst customerName = shipping.name || 'Cliente';\nconst customerId = shipping.idNumber || 'Sin Cédula/RIF';\nconst customerPhone = shipping.phone || 'Sin Teléfono';\nconst deliveryType = shipping.deliveryType === 'PICKUP' ? 'Retiro en Vivero' : 'Envío Nacional (MRW/Tealca)';\nconst city = shipping.city && shipping.state ? `${shipping.city}, ${shipping.state}` : (shipping.city || shipping.state || 'N/A');\n\nlet productsBlock = '';\norderItems.forEach((it) => {\n  const sizeLabel = POT_SIZE_LABELS[it.size] || it.size || 'Estándar';\n  const qtyStr = it.quantity > 1 ? `(x${it.quantity})` : '(x1)';\n  const itemTotal = ((it.unitPrice || 0) * (it.quantity || 1)).toFixed(2);\n  productsBlock += `• <b>${it.speciesName}</b>\\n`;\n  productsBlock += `  Tamaño: ${sizeLabel} ${qtyStr}\\n`;\n  productsBlock += `  Precio: $${itemTotal} USD\\n`;\n});\n\nconst subtotalUsd = Number(order.subtotal || 0).toFixed(2);\nconst totalUsd = Number(order.totalUsd || 0).toFixed(2);\nconst totalVes = Number(order.totalVes || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });\nconst rateStr = Number(order.exchangeRate || 0).toFixed(2);\nconst paymentMethodStr = PAYMENT_METHODS[order.paymentMethod] || order.paymentMethod;\n\nlet replyText = `\\u200B\\n<b>Nueva Orden de Venta</b>\\n\\n`;\nreplyText += `Orden: <b>${order.orderNumber}</b>\\n`;\nreplyText += `Estado: Esperando Pago\\n`;\nreplyText += `Método: ${paymentMethodStr}\\n\\n`;\n\nreplyText += `<b>Cliente:</b> ${customerName}\\n`;\nreplyText += `Cédula/RIF: ${customerId}\\n`;\nreplyText += `Teléfono: ${customerPhone}\\n`;\nreplyText += `Modalidad: ${deliveryType}\\n`;\nreplyText += `Ubicación: ${city}\\n\\n`;\n\nreplyText += `<b>Productos:</b>\\n${productsBlock}\\n`;\n\nreplyText += `Subtotal: $${subtotalUsd}\\n`;\nreplyText += `<b>Total USD: $${totalUsd}</b>\\n`;\nreplyText += `<b>Total VES: Bs. ${totalVes}</b>\\n`;\nreplyText += `Tasa BCV: Bs. ${rateStr} / USD\\n\\n`;\nreplyText += `Reserva activa por 12 horas.`;\n\nconst rows = [\n  {\n    row: {\n      buttons: [\n        {\n          text: '📋 Ver Orden en Panel',\n          url: 'https://pristinoplant.com/admin/orders'\n        }\n      ]\n    }\n  }\n];\n\nreturn [{\n  json: {\n    orderId: order.id,\n    orderNumber: order.orderNumber,\n    replyText,\n    keyboardRows: rows\n  }\n}];"
+      }
+    },
+    {
+      "id": "feb9c26d-e297-4632-a5b3-0f0fd9b28f16",
+      "name": "Enviar Notificación Admin",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [672, 0],
+      "parameters": {
+        "resource": "chat",
+        "chatId": "-1004373843373",
+        "text": "={{ $json.replyText }}",
+        "replyMarkup": "inlineKeyboard",
+        "inlineKeyboard": {
+          "rows": "={{ $json.keyboardRows }}"
+        },
+        "additionalFields": {
+          "parse_mode": "HTML",
+          "appendAttribution": false
+        }
+      },
+      "webhookId": "e8395402-1603-48c6-817d-2ab37be106c8",
+      "credentials": {
+        "telegramApi": {
+          "id": "KQbL3ZD1kE32GDfc",
+          "name": "PristinoBot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Nueva Orden": {
+      "main": [
+        [
+          {
+            "node": "Consultar Orden en Postgres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Orden en Postgres": {
+      "main": [
+        [
+          {
+            "node": "Formatear Mensaje Admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Mensaje Admin": {
+      "main": [
+        [
+          {
+            "node": "Enviar Notificación Admin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

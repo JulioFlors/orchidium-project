@@ -5,6 +5,7 @@
 export const VALIDATION_LIMITS = {
   // Nombres botánicos y taxonómicos
   TAXONOMY_NAME_MAX: 60,
+  GENUS_NAME_MIN: 4,
   GENUS_NAME_MAX: 50,
   SPECIES_NAME_MAX: 60,
 

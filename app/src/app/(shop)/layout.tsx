@@ -56,7 +56,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
         suggestions={suggestions || []}
       />
 
-      <Sidebar session={session} suggestions={suggestions || []} />
+      <Sidebar layoutConfig={layoutConfig} session={session} suggestions={suggestions || []} />
 
       <AddedToCartModal />
 

@@ -1,4 +1,5 @@
-import prisma, { NotificationStatus } from '@package/database'
+import prisma, { NotificationStatus, TaskStatus } from '@package/database'
+import { Cron } from 'croner'
 
 import { Logger } from './logger'
 
@@ -101,8 +102,117 @@ class FilterMaintenanceManager {
   }
 
   /**
-   * Pre-evaluación ejecutada 1 hora antes de cualquier tarea del circuito hidráulico.
-   * Si el filtro está vencido, insiste con notificación de advertencia.
+   * Pre-evaluación ejecutada periódicamente antes de cualquier tarea agendada del circuito hidráulico.
+   * Si el filtro está vencido (overdue), busca si en la siguiente hora (~60 min) hay una tarea
+   * o rutina agendada para ejecutarse. Si la hay y no se ha emitido alerta previa para esa ventana,
+   * emite una notificación de advertencia de filtro sucio.
+   */
+  async evaluateUpcomingHydraulicTasks(): Promise<void> {
+    try {
+      const latestClean = await prisma.filterCleaningLog.findFirst({
+        orderBy: { cleanedAt: 'desc' },
+      })
+
+      const now = new Date()
+      const isOverdue = !latestClean || now >= latestClean.nextDueAt
+
+      if (!isOverdue) {
+        return
+      }
+
+      const oneHourAhead = new Date(now.getTime() + 65 * 60 * 1000)
+      const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000)
+
+      // 1. Evaluar rutinas activas en AutomationSchedule (riego, fertirriego, fumigación)
+      const activeSchedules = await prisma.automationSchedule.findMany({
+        where: { isEnabled: true },
+      })
+
+      for (const schedule of activeSchedules) {
+        const cron = new Cron(schedule.cronTrigger, { timezone: 'America/Caracas' })
+        const nextOccurrence = cron.nextRun()
+
+        if (nextOccurrence && nextOccurrence > now && nextOccurrence <= oneHourAhead) {
+          // Evitar alertas duplicadas para esta rutina en las últimas 2 horas
+          const recentAlert = await prisma.notification.findFirst({
+            where: {
+              type: 'MAINTENANCE_REMINDER',
+              description: { contains: schedule.name },
+              createdAt: { gte: twoHoursAgo },
+            },
+          })
+
+          if (!recentAlert) {
+            const timeStr = nextOccurrence.toLocaleTimeString('es-VE', {
+              hour: 'numeric',
+              minute: '2-digit',
+              hour12: true,
+              timeZone: 'America/Caracas',
+            })
+
+            await prisma.notification.create({
+              data: {
+                type: 'MAINTENANCE_REMINDER',
+                title: 'Filtro Sucio: Riego Próximo en 1h',
+                description: `Atención: La rutina "${schedule.name}" iniciará a las ${timeStr} (~1 hora) y el filtro de agua no ha sido limpiado. Confirma la limpieza con /filter en Telegram o desde la Web.`,
+                priority: 'URGENT',
+              },
+            })
+
+            Logger.warn(
+              `Alerta preventiva de filtro emitida 1h antes de rutina "${schedule.name}" (${timeStr}).`,
+            )
+          }
+        }
+      }
+
+      // 2. Evaluar tareas autorizadas o pendientes en TaskLog que vayan a correr en la próxima hora
+      const upcomingTasks = await prisma.taskLog.findMany({
+        where: {
+          status: { in: [TaskStatus.AUTHORIZED, TaskStatus.WAITING_CONFIRMATION, TaskStatus.PENDING] },
+          scheduledAt: { gt: now, lte: oneHourAhead },
+        },
+        include: { schedule: true },
+      })
+
+      for (const task of upcomingTasks) {
+        const taskName = task.schedule?.name || task.notes || 'Tarea de Riego'
+        const recentAlert = await prisma.notification.findFirst({
+          where: {
+            type: 'MAINTENANCE_REMINDER',
+            description: { contains: taskName },
+            createdAt: { gte: twoHoursAgo },
+          },
+        })
+
+        if (!recentAlert) {
+          const timeStr = task.scheduledAt.toLocaleTimeString('es-VE', {
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+            timeZone: 'America/Caracas',
+          })
+
+          await prisma.notification.create({
+            data: {
+              type: 'MAINTENANCE_REMINDER',
+              title: 'Filtro Sucio: Riego Próximo en 1h',
+              description: `Atención: La tarea "${taskName}" iniciará a las ${timeStr} (~1 hora) y el filtro de agua no ha sido limpiado. Confirma la limpieza con /filter en Telegram o desde la Web.`,
+              priority: 'URGENT',
+            },
+          })
+
+          Logger.warn(`Alerta preventiva de filtro emitida 1h antes de tarea "${taskName}" (${timeStr}).`)
+        }
+      }
+    } catch (error) {
+      Logger.error('Error evaluando tareas próximas para mantenimiento de filtro:', error)
+    }
+  }
+
+  /**
+   * Pre-evaluación ejecutada al momento de iniciar cualquier tarea del circuito hidráulico.
+   * Si el filtro está vencido, insiste con notificación de advertencia inmediata.
    */
   async evaluatePreIrrigationFilterCheck(routineName: string): Promise<boolean> {
     try {

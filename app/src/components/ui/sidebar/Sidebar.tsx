@@ -1,6 +1,6 @@
 'use client'
 
-import type { SearchSuggestion } from '@/actions'
+import type { SearchSuggestion, ShopLayoutConfig } from '@/actions'
 
 import { IoCloseOutline, IoChevronBackOutline } from 'react-icons/io5'
 import { motion, AnimatePresence } from 'motion/react'
@@ -16,9 +16,10 @@ import { useUIStore } from '@/store'
 interface Props {
   suggestions?: SearchSuggestion[]
   session?: Record<string, unknown> | null
+  layoutConfig?: ShopLayoutConfig | null
 }
 
-export function Sidebar({ suggestions = [], session }: Props) {
+export function Sidebar({ suggestions = [], session, layoutConfig = null }: Props) {
   // ----- Hooks ----
   const { isOrchidarium } = useNavigationContext()
 
@@ -179,7 +180,11 @@ export function Sidebar({ suggestions = [], session }: Props) {
             {/* ---- Sidebar Content (Scrollable) ---- */}
             <div className="mx-8 flex flex-1 flex-col items-start overflow-x-hidden pb-4 text-left">
               <SWRConfig value={{ fallback: { 'auth-session': session } }}>
-                {isOrchidarium ? <OrchidariumSidebar /> : <ShopSidebar suggestions={suggestions} />}
+                {isOrchidarium ? (
+                  <OrchidariumSidebar />
+                ) : (
+                  <ShopSidebar layoutConfig={layoutConfig} suggestions={suggestions} />
+                )}
               </SWRConfig>
             </div>
           </motion.nav>

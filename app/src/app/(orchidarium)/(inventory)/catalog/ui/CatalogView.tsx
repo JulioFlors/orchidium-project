@@ -457,6 +457,7 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
 
       <GenusFormModal
         editingGenus={editingGenus}
+        generaList={generaList}
         isOpen={isGenusModalOpen}
         isPending={isPending}
         plantTypeLabels={PLANT_TYPE_LABELS}

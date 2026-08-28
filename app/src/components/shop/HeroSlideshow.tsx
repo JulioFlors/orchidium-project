@@ -109,17 +109,24 @@ export function HeroSlideshow({ slides }: Props) {
             </div>
 
             {/* Contenido centrado en la parte inferior con padding responsivo */}
-            <div className="tds-sm:pb-16 tds-lg:pb-24 flex h-full w-full flex-col items-center justify-end pb-12">
+            <div className="tds-xs:pb-10 tds-sm:pb-16 tds-lg:pb-24 flex h-full w-full flex-col items-center justify-end pb-8">
               <div className="relative z-10 flex w-full flex-col items-center px-4 text-center">
-                {/* Título responsivo optimizado para zoom extremo */}
-                <h2 className="tds-sm:text-4xl tds-lg:text-6xl text-2xl font-bold tracking-tight text-white">
+                {/* Título responsivo optimizado para zoom y pantallas pequeñas */}
+                <h2 className="text-lg font-bold tracking-tight text-white tds-xs:text-xl tds-sm:text-3xl tds-lg:text-5xl">
                   {slide.title}
                 </h2>
 
+                {/* Subtítulo si existe */}
+                {slide.subtitle && (
+                  <p className="mx-auto mt-2 max-w-2xl text-xs font-medium leading-relaxed text-white/90 tds-xs:text-sm tds-sm:mt-3 tds-sm:text-base tds-lg:mt-4 tds-lg:text-lg">
+                    {slide.subtitle}
+                  </p>
+                )}
+
                 {/* Botón Único de Acción responsivo */}
-                <div className="tds-sm:mt-6 tds-lg:mt-8 mt-4 flex w-full justify-center">
+                <div className="mt-3 flex w-full justify-center tds-xs:mt-4 tds-sm:mt-6 tds-lg:mt-8">
                   <Link
-                    className="tds-sm:h-11 tds-lg:h-12 tds-sm:w-56 tds-lg:w-64 tds-sm:text-sm flex h-10 w-48 items-center justify-center rounded-md bg-white/70 text-xs font-semibold text-[#171A20] shadow-md backdrop-blur-md transition-all hover:bg-white/85"
+                    className="flex h-8.5 w-full max-w-40 items-center justify-center rounded-md bg-white/70 text-[11px] font-semibold text-[#171A20] shadow-md backdrop-blur-md transition-all hover:bg-white/85 tds-xs:h-9 tds-xs:w-44 tds-xs:text-xs tds-sm:h-10 tds-sm:w-48 tds-lg:h-11 tds-lg:w-56 tds-lg:text-sm"
                     href={slide.href}
                   >
                     Comprar ahora

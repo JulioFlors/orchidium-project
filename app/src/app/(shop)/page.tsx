@@ -146,33 +146,41 @@ export default async function HomePage() {
 
   const categoriesData = [
     {
-      title: 'Orquídeas de Colección',
-      subtitle: 'Cultivadas y aclimatadas al clima de Ciudad Guayana',
-      image: heroSlidesData[0]?.image || 'plants/orchids/orchids.webp',
+      title: layoutConfig?.categories.orchids.title || 'Orquídeas de Colección',
+      subtitle:
+        layoutConfig?.categories.orchids.subtitle ||
+        'Cultivadas y aclimatadas al clima de Ciudad Guayana',
+      image: layoutConfig?.categories.orchids.imageUrl || 'plants/orchids/orchids.webp',
       href: '/category/plants/orchids',
     },
     {
-      title: 'Rosas del Desierto',
-      subtitle: 'Bonsáis naturales de floración extraordinaria',
+      title: layoutConfig?.categories.adenium_obesum.title || 'Rosas del Desierto',
+      subtitle:
+        layoutConfig?.categories.adenium_obesum.subtitle ||
+        'Bonsáis naturales de floración extraordinaria',
       image:
-        heroSlidesData[1]?.image ||
+        layoutConfig?.categories.adenium_obesum.imageUrl ||
         'plants/adenium_obesum/multiple-petals/adenium-obesum-marbella/marbella_0_2000.webp',
       href: '/category/plants/adenium_obesum',
     },
     {
-      title: 'Cactus',
-      subtitle: 'Especies exóticas de colección y bajo mantenimiento',
+      title: layoutConfig?.categories.cactus.title || 'Cactus',
+      subtitle:
+        layoutConfig?.categories.cactus.subtitle ||
+        'Especies exóticas de colección y bajo mantenimiento',
       image:
-        heroSlidesData[2]?.image ||
-        'plants/cactus/mammillaria/mammillaria-vetula-ssp-gracilis/mammillaria-vetula-ssp-gracilis_0_2000.webp',
+        layoutConfig?.categories.cactus.imageUrl ||
+        'plants/cactus/mammillaria/mammillaria-prolifera-ssp-haitiensis/mammillaria-prolifera-ssp-haitiensis_0_2000.webp',
       href: '/category/plants/cactus',
     },
     {
-      title: 'Suculentas',
-      subtitle: 'Geometrías botánicas y colores extraordinarios',
+      title: layoutConfig?.categories.succulents.title || 'Suculentas',
+      subtitle:
+        layoutConfig?.categories.succulents.subtitle ||
+        'Geometrías botánicas y colores extraordinarios',
       image:
-        heroSlidesData[3]?.image ||
-        'plants/succulents/crassula/crassula-capitella-campfire/crassula-capitella-campfire_0_2000.webp',
+        layoutConfig?.categories.succulents.imageUrl ||
+        'plants/succulents/pachyveria/pachyveria-scheideckeri/pachyveria-scheideckeri_2_2000.webp',
       href: '/category/plants/succulents',
     },
   ]

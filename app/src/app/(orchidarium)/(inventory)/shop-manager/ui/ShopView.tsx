@@ -1,13 +1,26 @@
 'use client'
 
 import { useState, useTransition, useMemo } from 'react'
-import { PiStarFill, PiSlidersHorizontalFill, PiFolderFill, PiListFill } from 'react-icons/pi'
-import clsx from 'clsx'
+import { PiStarFill } from 'react-icons/pi'
 
 import { MediaPicker } from './components/MediaPicker'
 import { FeaturedSpeciesManager } from './components/FeaturedSpeciesManager'
 
-import { Heading, Card, CardHeader, CardTitle, CardContent, Button } from '@/components'
+import {
+  Heading,
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  Button,
+  FormField,
+  SelectDropdown,
+  type SelectOption,
+  Input,
+  FilterSliceBar,
+  type FilterSliceGroup,
+  type FilterSliceOption,
+} from '@/components'
 import { saveShopLayoutConfig, type ShopLayoutConfig } from '@/actions'
 import { useToastStore } from '@/store/toast/toast.store'
 
@@ -60,10 +73,27 @@ function SpeciesSelectorCascade({
     return allSpecies.find((s) => s.id === selectedSpeciesId)
   }, [allSpecies, selectedSpeciesId])
 
+  const [prevSpeciesId, setPrevSpeciesId] = useState(selectedSpeciesId)
   const [localType, setLocalType] = useState<string>(currentSpecies?.genus.type || fixedType || '')
   const [genusName, setGenusName] = useState<string>(currentSpecies?.genus.name || '')
 
+  if (selectedSpeciesId !== prevSpeciesId) {
+    setPrevSpeciesId(selectedSpeciesId)
+    if (currentSpecies) {
+      if (!fixedType) setLocalType(currentSpecies.genus.type)
+      setGenusName(currentSpecies.genus.name)
+    }
+  }
+
   const activeType = fixedType || localType
+
+  // Opciones de tipos de planta
+  const plantTypeOptions: SelectOption[] = useMemo(() => {
+    return Object.entries(PLANT_TYPE_LABELS).map(([k, v]) => ({
+      label: v,
+      value: k,
+    }))
+  }, [])
 
   // Géneros disponibles filtrados por Tipo
   const availableGenera = useMemo(() => {
@@ -79,12 +109,26 @@ function SpeciesSelectorCascade({
     return Array.from(set).sort()
   }, [allSpecies, activeType])
 
+  const genusOptions: SelectOption[] = useMemo(() => {
+    return availableGenera.map((g) => ({
+      label: g,
+      value: g,
+    }))
+  }, [availableGenera])
+
   // Especies disponibles filtradas por Género
   const availableSpecies = useMemo(() => {
     if (!genusName || !activeType) return []
 
     return allSpecies.filter((s) => s.genus.type === activeType && s.genus.name === genusName)
   }, [allSpecies, activeType, genusName])
+
+  const speciesOptions: SelectOption[] = useMemo(() => {
+    return availableSpecies.map((s) => ({
+      label: s.name,
+      value: s.id,
+    }))
+  }, [availableSpecies])
 
   const handleTypeChange = (newType: string) => {
     setLocalType(newType)
@@ -106,74 +150,40 @@ function SpeciesSelectorCascade({
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       {!fixedType && (
-        <div className="flex flex-col gap-1.5">
-          <label
-            className="text-secondary text-xs font-semibold uppercase opacity-60"
-            htmlFor="plant-type-select"
-          >
-            Tipo de Planta
-          </label>
-          <select
-            className="input-base"
+        <FormField htmlFor="plant-type-select" label="Tipo de Planta">
+          <SelectDropdown
             id="plant-type-select"
+            options={plantTypeOptions}
+            placeholder="Seleccionar Tipo"
             value={localType}
-            onChange={(e) => handleTypeChange(e.target.value)}
-          >
-            <option value="">-- Seleccionar Tipo --</option>
-            {Object.entries(PLANT_TYPE_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
-          </select>
-        </div>
+            onChange={(val) => handleTypeChange(String(val))}
+          />
+        </FormField>
       )}
 
-      <div className="flex flex-col gap-1.5">
-        <label
-          className="text-secondary text-xs font-semibold uppercase opacity-60"
-          htmlFor="genus-select"
-        >
-          Género
-        </label>
-        <select
-          className="input-base"
+      <FormField htmlFor="genus-select" label="Género">
+        <SelectDropdown
           disabled={!activeType}
+          emptyMessage="Selecciona un tipo primero"
           id="genus-select"
+          options={genusOptions}
+          placeholder="Seleccionar Género"
           value={genusName}
-          onChange={(e) => handleGenusChange(e.target.value)}
-        >
-          <option value="">-- Seleccionar Género --</option>
-          {availableGenera.map((g) => (
-            <option key={g} value={g}>
-              {g}
-            </option>
-          ))}
-        </select>
-      </div>
+          onChange={(val) => handleGenusChange(String(val))}
+        />
+      </FormField>
 
-      <div className="flex flex-col gap-1.5">
-        <label
-          className="text-secondary text-xs font-semibold uppercase opacity-60"
-          htmlFor="species-select"
-        >
-          Especie
-        </label>
-        <select
-          className="input-base"
+      <FormField htmlFor="species-select" label="Especie">
+        <SelectDropdown
           disabled={!genusName}
+          emptyMessage="Selecciona un género primero"
           id="species-select"
+          options={speciesOptions}
+          placeholder="Seleccionar Especie"
           value={selectedSpeciesId}
-          onChange={(e) => handleSpeciesChange(e.target.value)}
-        >
-          <option value="">-- Seleccionar Especie --</option>
-          {availableSpecies.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-      </div>
+          onChange={(val) => handleSpeciesChange(String(val))}
+        />
+      </FormField>
     </div>
   )
 }
@@ -182,14 +192,34 @@ function SpeciesSelectorCascade({
 // Componente Principal
 // ─────────────────────────────────────────────────────────────
 
+type TabType = 'hero' | 'featured' | 'categories' | 'navbar'
+
+const SECTION_OPTIONS: FilterSliceOption[] = [
+  { id: 'hero', label: 'Hero Sliders' },
+  { id: 'featured', label: 'Destacadas' },
+  { id: 'categories', label: 'Categorías' },
+  { id: 'navbar', label: 'Navbar' },
+]
+
 export function ShopView({ initialData, initialLayoutConfig }: ShopViewProps) {
   const [config, setConfig] = useState<ShopLayoutConfig>(initialLayoutConfig)
-  const [activeTab, setActiveTab] = useState<'hero' | 'featured' | 'categories' | 'megamenu'>(
-    'featured',
-  )
+  const [activeTab, setActiveTab] = useState<TabType>('hero')
 
   const { addToast } = useToastStore()
   const [isPending, startTransition] = useTransition()
+
+  const sectionGroups: FilterSliceGroup[] = useMemo(
+    () => [
+      {
+        id: 'shop-sections',
+        options: SECTION_OPTIONS,
+        value: activeTab,
+        onChange: (val) => setActiveTab(val as TabType),
+        ariaLabel: 'Secciones de la tienda',
+      },
+    ],
+    [activeTab],
+  )
 
   // Guardar configuración completa en base de datos
   const handleSaveAll = () => {
@@ -228,60 +258,15 @@ export function ShopView({ initialData, initialLayoutConfig }: ShopViewProps) {
         </Button>
       </div>
 
-      {/* Selector de Pestañas */}
-      <div className="border-input-outline flex gap-2 border-b pb-1">
-        <button
-          className={clsx(
-            'flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-semibold transition-all duration-200 focus:outline-none',
-            activeTab === 'featured'
-              ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
-              : 'text-secondary hover:text-primary border-transparent',
-          )}
-          type="button"
-          onClick={() => setActiveTab('featured')}
-        >
-          <PiStarFill />
-          Destacados Landing
-        </button>
-        <button
-          className={clsx(
-            'flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-semibold transition-all duration-200 focus:outline-none',
-            activeTab === 'hero'
-              ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
-              : 'text-secondary hover:text-primary border-transparent',
-          )}
-          type="button"
-          onClick={() => setActiveTab('hero')}
-        >
-          <PiSlidersHorizontalFill />
-          Hero Sliders
-        </button>
-        <button
-          className={clsx(
-            'flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-semibold transition-all duration-200 focus:outline-none',
-            activeTab === 'categories'
-              ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
-              : 'text-secondary hover:text-primary border-transparent',
-          )}
-          type="button"
-          onClick={() => setActiveTab('categories')}
-        >
-          <PiFolderFill />
-          Categorías
-        </button>
-        <button
-          className={clsx(
-            'flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-semibold transition-all duration-200 focus:outline-none',
-            activeTab === 'megamenu'
-              ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
-              : 'text-secondary hover:text-primary border-transparent',
-          )}
-          type="button"
-          onClick={() => setActiveTab('megamenu')}
-        >
-          <PiListFill />
-          Megamenú Header
-        </button>
+      {/* Selector de Secciones */}
+      <div className="w-full">
+        <FilterSliceBar
+          activeVariant="surface"
+          ariaLabel="Navegación de secciones de la tienda"
+          className="w-full"
+          groups={sectionGroups}
+          rounded="md"
+        />
       </div>
 
       {/* Contenidos */}
@@ -353,15 +338,8 @@ export function ShopView({ initialData, initialLayoutConfig }: ShopViewProps) {
                     />
 
                     {/* Título Personalizado */}
-                    <div className="flex flex-col gap-1.5">
-                      <label
-                        className="text-secondary text-xs font-semibold uppercase opacity-60"
-                        htmlFor={`hero-title-${index}`}
-                      >
-                        Título en el Hero
-                      </label>
-                      <input
-                        className="input-base"
+                    <FormField htmlFor={`hero-title-${index}`} label="Título en el Hero">
+                      <Input
                         id={`hero-title-${index}`}
                         placeholder="Ej: Cattleya Maxima"
                         type="text"
@@ -378,7 +356,7 @@ export function ShopView({ initialData, initialLayoutConfig }: ShopViewProps) {
                           })
                         }}
                       />
-                    </div>
+                    </FormField>
 
                     {/* Media Picker */}
                     {slide.speciesId && (
@@ -413,24 +391,36 @@ export function ShopView({ initialData, initialLayoutConfig }: ShopViewProps) {
               const catKey = key as keyof typeof config.categories
               let fixedType = ''
               let label = ''
+              let defaultTitle = ''
+              let defaultSubtitle = ''
 
               if (catKey === 'orchids') {
                 fixedType = 'ORCHID'
                 label = 'Orquídeas'
+                defaultTitle = 'Orquídeas de Colección'
+                defaultSubtitle = 'Cultivadas y aclimatadas al clima de Ciudad Guayana'
               } else if (catKey === 'cactus') {
                 fixedType = 'CACTUS'
                 label = 'Cactus'
+                defaultTitle = 'Cactus'
+                defaultSubtitle = 'Especies exóticas de colección y bajo mantenimiento'
               } else if (catKey === 'succulents') {
                 fixedType = 'SUCCULENT'
                 label = 'Suculentas'
+                defaultTitle = 'Suculentas'
+                defaultSubtitle = 'Geometrías botánicas y colores extraordinarios'
               } else if (catKey === 'adenium_obesum') {
                 fixedType = 'ADENIUM_OBESUM'
                 label = 'Rosas del Desierto'
+                defaultTitle = 'Rosas del Desierto'
+                defaultSubtitle = 'Bonsáis naturales de floración extraordinaria'
               }
 
-              // Buscar cuál especie tiene asignada esta imagen para inicializar la cascada
-              const matchingSpecies = initialData.find((s) => s.images.includes(cat.imageUrl))
-              const activeSpeciesId = matchingSpecies?.id || ''
+              // Buscar especie activa priorizando speciesId, luego fallback a imágenes
+              const matchingSpecies = cat.speciesId
+                ? initialData.find((s) => s.id === cat.speciesId)
+                : initialData.find((s) => s.images.includes(cat.imageUrl))
+              const activeSpeciesId = cat.speciesId || matchingSpecies?.id || ''
 
               return (
                 <Card key={catKey} className="bg-canvas border-input-outline overflow-hidden">
@@ -443,16 +433,72 @@ export function ShopView({ initialData, initialLayoutConfig }: ShopViewProps) {
                       allSpecies={initialData}
                       fixedType={fixedType}
                       selectedSpeciesId={activeSpeciesId}
-                      onChange={(_, imgUrl) => {
+                      onChange={(speciesId, imgUrl) => {
                         setConfig((prev) => ({
                           ...prev,
                           categories: {
                             ...prev.categories,
-                            [catKey]: { imageUrl: imgUrl },
+                            [catKey]: {
+                              ...prev.categories[catKey],
+                              speciesId,
+                              imageUrl: imgUrl || prev.categories[catKey].imageUrl,
+                            },
                           },
                         }))
                       }}
                     />
+
+                    {/* Inputs de Título y Subtítulo en Landing */}
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <FormField htmlFor={`category-title-${catKey}`} label="Título en Landing">
+                        <Input
+                          id={`category-title-${catKey}`}
+                          placeholder={defaultTitle}
+                          type="text"
+                          value={cat.title ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value
+
+                            setConfig((prev) => ({
+                              ...prev,
+                              categories: {
+                                ...prev.categories,
+                                [catKey]: {
+                                  ...prev.categories[catKey],
+                                  title: val,
+                                },
+                              },
+                            }))
+                          }}
+                        />
+                      </FormField>
+
+                      <FormField
+                        htmlFor={`category-subtitle-${catKey}`}
+                        label="Subtítulo en Landing"
+                      >
+                        <Input
+                          id={`category-subtitle-${catKey}`}
+                          placeholder={defaultSubtitle}
+                          type="text"
+                          value={cat.subtitle ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value
+
+                            setConfig((prev) => ({
+                              ...prev,
+                              categories: {
+                                ...prev.categories,
+                                [catKey]: {
+                                  ...prev.categories[catKey],
+                                  subtitle: val,
+                                },
+                              },
+                            }))
+                          }}
+                        />
+                      </FormField>
+                    </div>
 
                     {/* Media Picker */}
                     {activeSpeciesId && (
@@ -466,7 +512,10 @@ export function ShopView({ initialData, initialLayoutConfig }: ShopViewProps) {
                               ...prev,
                               categories: {
                                 ...prev.categories,
-                                [catKey]: { imageUrl: url },
+                                [catKey]: {
+                                  ...prev.categories[catKey],
+                                  imageUrl: url,
+                                },
                               },
                             }))
                           }}
@@ -480,8 +529,8 @@ export function ShopView({ initialData, initialLayoutConfig }: ShopViewProps) {
           </div>
         )}
 
-        {/* Pestaña: Megamenú */}
-        {activeTab === 'megamenu' && (
+        {/* Pestaña: Navbar / Megamenú */}
+        {activeTab === 'navbar' && (
           <Card className="bg-canvas border-input-outline overflow-hidden">
             <CardHeader className="bg-surface/50 border-input-outline border-b px-6 py-5">
               <CardTitle className="text-xl font-bold">
@@ -514,15 +563,8 @@ export function ShopView({ initialData, initialLayoutConfig }: ShopViewProps) {
               />
 
               {/* Título en megamenú */}
-              <div className="flex flex-col gap-1.5">
-                <label
-                  className="text-secondary text-xs font-semibold uppercase opacity-60"
-                  htmlFor="megamenu-title-input"
-                >
-                  Título del Megamenú
-                </label>
-                <input
-                  className="input-base"
+              <FormField htmlFor="megamenu-title-input" label="Título del Megamenú">
+                <Input
                   id="megamenu-title-input"
                   placeholder="Ej: Dendrobium Striata"
                   type="text"
@@ -541,7 +583,7 @@ export function ShopView({ initialData, initialLayoutConfig }: ShopViewProps) {
                     }))
                   }}
                 />
-              </div>
+              </FormField>
 
               {/* Media Picker */}
               {config.megamenu.featuredItem.speciesId && (

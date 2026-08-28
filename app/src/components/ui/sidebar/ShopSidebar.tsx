@@ -1,7 +1,8 @@
 'use client'
 
-import type { SearchSuggestion } from '@/actions'
+import type { SearchSuggestion, ShopLayoutConfig } from '@/actions'
 
+import { useMemo } from 'react'
 import clsx from 'clsx'
 import Image from 'next/image'
 import Link from 'next/link'
@@ -18,9 +19,10 @@ import { useUIStore } from '@/store'
 
 interface Props {
   suggestions?: SearchSuggestion[]
+  layoutConfig?: ShopLayoutConfig | null
 }
 
-export function ShopSidebar({ suggestions = [] }: Props) {
+export function ShopSidebar({ suggestions = [], layoutConfig = null }: Props) {
   // ----- Hooks -----
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -42,6 +44,36 @@ export function ShopSidebar({ suggestions = [] }: Props) {
   // ----- Helpers de Auth -----
   const isAuthenticated = !!session?.user
   const isAdmin = (session?.user as { role?: string })?.role?.toUpperCase() === 'ADMIN'
+
+  // ---- Rutas Dinámicas de Tienda sincronizadas con ShopLayoutConfig ----
+  const dynamicShopRoutes = useMemo(() => {
+    if (!layoutConfig) return shopRoutes
+
+    return shopRoutes.map((route) => {
+      if (route.slug === 'plants') {
+        const updatedCategories = route.categories?.map((cat) => {
+          let imageUrl = cat.image
+
+          if (cat.slug === 'orchids')
+            imageUrl = layoutConfig.categories.orchids.imageUrl || cat.image
+          if (cat.slug === 'cactus') imageUrl = layoutConfig.categories.cactus.imageUrl || cat.image
+          if (cat.slug === 'succulents')
+            imageUrl = layoutConfig.categories.succulents.imageUrl || cat.image
+          if (cat.slug === 'adenium_obesum')
+            imageUrl = layoutConfig.categories.adenium_obesum.imageUrl || cat.image
+
+          return { ...cat, image: imageUrl }
+        })
+
+        return {
+          ...route,
+          categories: updatedCategories,
+        }
+      }
+
+      return route
+    })
+  }, [layoutConfig])
 
   // ---- WAITING For data ----
   // Solo mostramos skeletons si NO tenemos sesión del servidor Y el cliente aún está cargando
@@ -82,11 +114,11 @@ export function ShopSidebar({ suggestions = [] }: Props) {
     )
   }
 
-  const sortedShopRoutes = [...shopRoutes].sort((a, b) =>
+  const sortedShopRoutes = [...dynamicShopRoutes].sort((a, b) =>
     a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }),
   )
 
-  const route = sidebarRoute ? shopRoutes.find((r) => r.slug === sidebarRoute) : null
+  const route = sidebarRoute ? dynamicShopRoutes.find((r) => r.slug === sidebarRoute) : null
   const sortedCategories = route?.categories
     ? [...route.categories].sort((a, b) =>
         a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }),

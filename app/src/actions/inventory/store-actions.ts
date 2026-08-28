@@ -145,6 +145,13 @@ export async function deleteVariant(id: string) {
 // LAYOUT CONFIG ACTIONS
 // ─────────────────────────────────────────────────────────────
 
+export interface CategoryConfigItem {
+  speciesId?: string
+  title?: string
+  subtitle?: string
+  imageUrl: string
+}
+
 export interface ShopLayoutConfig {
   heroSlides: {
     speciesId: string
@@ -153,10 +160,10 @@ export interface ShopLayoutConfig {
     imageUrl: string
   }[]
   categories: {
-    orchids: { imageUrl: string }
-    adenium_obesum: { imageUrl: string }
-    cactus: { imageUrl: string }
-    succulents: { imageUrl: string }
+    orchids: CategoryConfigItem
+    adenium_obesum: CategoryConfigItem
+    cactus: CategoryConfigItem
+    succulents: CategoryConfigItem
   }
   megamenu: {
     featuredItem: {
@@ -208,16 +215,30 @@ export async function getShopLayoutConfig() {
           },
         ],
         categories: {
-          orchids: { imageUrl: 'plants/orchids/orchids.webp' },
+          orchids: {
+            speciesId: '',
+            title: 'Orquídeas de Colección',
+            subtitle: 'Cultivadas y aclimatadas al clima de Ciudad Guayana',
+            imageUrl: 'plants/orchids/orchids.webp',
+          },
           adenium_obesum: {
+            speciesId: '',
+            title: 'Rosas del Desierto',
+            subtitle: 'Bonsáis naturales de floración extraordinaria',
             imageUrl:
               'plants/adenium_obesum/multiple-petals/adenium-obesum-marbella/marbella_0_2000.webp',
           },
           cactus: {
+            speciesId: '',
+            title: 'Cactus',
+            subtitle: 'Especies exóticas de colección y bajo mantenimiento',
             imageUrl:
               'plants/cactus/mammillaria/mammillaria-prolifera-ssp-haitiensis/mammillaria-prolifera-ssp-haitiensis_0_2000.webp',
           },
           succulents: {
+            speciesId: '',
+            title: 'Suculentas',
+            subtitle: 'Geometrías botánicas y colores extraordinarios',
             imageUrl:
               'plants/succulents/pachyveria/pachyveria-scheideckeri/pachyveria-scheideckeri_2_2000.webp',
           },
@@ -260,6 +281,7 @@ export async function saveShopLayoutConfig(config: ShopLayoutConfig) {
     })
 
     revalidatePath('/')
+    revalidatePath('/', 'layout')
     revalidatePath('/shop-manager')
 
     return { ok: true }

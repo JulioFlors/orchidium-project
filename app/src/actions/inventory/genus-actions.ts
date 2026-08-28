@@ -30,13 +30,74 @@ export async function getGenera() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────
+
+function formatGenusName(name: string): string {
+  return name
+    .trim()
+    .replace(/\s+/g, ' ')
+    .split(' ')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+}
+
+function validateGenusNameInput(name: string): {
+  isValid: boolean
+  message?: string
+  cleanName: string
+} {
+  const clean = name.trim().replace(/\s+/g, ' ')
+
+  if (!clean || clean.length < 4) {
+    return {
+      isValid: false,
+      message: 'El nombre del género debe tener al menos 4 letras.',
+      cleanName: clean,
+    }
+  }
+
+  if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]+$/.test(clean)) {
+    return {
+      isValid: false,
+      message: 'El nombre del género solo debe contener letras del abecedario.',
+      cleanName: clean,
+    }
+  }
+
+  return { isValid: true, cleanName: clean }
+}
+
+// ─────────────────────────────────────────────────────────────
 // CREATE
 // ─────────────────────────────────────────────────────────────
 
 export async function createGenus(data: { name: string; type: PlantType }) {
   try {
+    const validation = validateGenusNameInput(data.name)
+
+    if (!validation.isValid) {
+      return { ok: false, message: validation.message }
+    }
+
+    const formattedName = formatGenusName(validation.cleanName)
+
+    // Validar duplicados case-insensitive
+    const existing = await prisma.genus.findFirst({
+      where: {
+        name: { equals: formattedName, mode: 'insensitive' },
+      },
+    })
+
+    if (existing) {
+      return {
+        ok: false,
+        message: `Ya existe un género registrado con el nombre "${existing.name}".`,
+      }
+    }
+
     const genus = await prisma.genus.create({
-      data: { name: data.name.trim(), type: data.type },
+      data: { name: formattedName, type: data.type },
     })
 
     revalidatePath('/catalog')
@@ -45,7 +106,7 @@ export async function createGenus(data: { name: string; type: PlantType }) {
   } catch (err) {
     Logger.error('[Genus] Error al crear género:', err)
 
-    return { ok: false, message: 'Error al crear. ¿El nombre ya existe?' }
+    return { ok: false, message: 'Error al crear el género.' }
   }
 }
 
@@ -55,9 +116,32 @@ export async function createGenus(data: { name: string; type: PlantType }) {
 
 export async function updateGenus(id: string, data: { name: string; type: PlantType }) {
   try {
+    const validation = validateGenusNameInput(data.name)
+
+    if (!validation.isValid) {
+      return { ok: false, message: validation.message }
+    }
+
+    const formattedName = formatGenusName(validation.cleanName)
+
+    // Validar duplicados case-insensitive excluyendo el registro actual
+    const existing = await prisma.genus.findFirst({
+      where: {
+        name: { equals: formattedName, mode: 'insensitive' },
+        NOT: { id },
+      },
+    })
+
+    if (existing) {
+      return {
+        ok: false,
+        message: `Ya existe un género registrado con el nombre "${existing.name}".`,
+      }
+    }
+
     const genus = await prisma.genus.update({
       where: { id },
-      data: { name: data.name.trim(), type: data.type },
+      data: { name: formattedName, type: data.type },
     })
 
     revalidatePath('/catalog')

@@ -2061,6 +2061,11 @@ async function initScheduler() {
     await dosingScheduleManager.evaluateExpiredDosingTasks()
   })
 
+  // Cron de Evaluación Preventiva de Filtro de Agua (1 hora antes de tareas hidráulicas, cada 15 min)
+  new Cron('*/15 * * * *', { timezone: 'America/Caracas' }, async () => {
+    await filterMaintenanceManager.evaluateUpcomingHydraulicTasks()
+  })
+
   // Poller de Tareas Autorizadas (cada 1 min)
   new Cron('* * * * *', { timezone: 'America/Caracas' }, async () => {
     await processAuthorizedTasks()
@@ -2115,6 +2120,7 @@ async function initScheduler() {
   await preScheduleHydraulicAgrochemicals()
   await dosingScheduleManager.preScheduleDosing()
   await dosingScheduleManager.evaluateExpiredDosingTasks()
+  await filterMaintenanceManager.evaluateUpcomingHydraulicTasks()
 
   // Cron nocturno de auditoría silenciosa (12:10 AM)
   new Cron('10 0 * * *', { timezone: 'America/Caracas' }, async () => {

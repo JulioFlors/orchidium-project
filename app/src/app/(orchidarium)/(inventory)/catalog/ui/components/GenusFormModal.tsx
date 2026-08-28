@@ -23,6 +23,7 @@ interface GenusFormModalProps {
   onSave: (name: string, type: PlantType) => void
   plantTypeLabels: Record<PlantType, string>
   plantTypeSingleLabels: Record<PlantType, string>
+  generaList?: Genus[]
 }
 
 export function GenusFormModal({
@@ -33,6 +34,7 @@ export function GenusFormModal({
   onSave,
   plantTypeLabels,
   plantTypeSingleLabels,
+  generaList = [],
 }: GenusFormModalProps) {
   const [genusFormName, setGenusFormName] = useState('')
   const [genusFormType, setGenusFormType] = useState<PlantType>('ORCHID')
@@ -81,17 +83,55 @@ export function GenusFormModal({
     }
   }, [genusFormName, genusFormType, isOpen, editingGenus, setDraft])
 
-  const handleSubmit = () => {
-    const clean = genusFormName.trim()
+  const handleNameChange = (val: string) => {
+    // Sanitizar en tiempo real: permitir únicamente letras del abecedario y espacios simples
+    const sanitized = val.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]/g, '').replace(/\s{2,}/g, ' ')
 
-    if (!clean || clean.length < 2) {
-      setNameError('El nombre del género es obligatorio (mínimo 2 caracteres)')
+    setGenusFormName(sanitized)
+    if (nameError) {
+      setNameError(null)
+    }
+  }
+
+  const validateName = (nameToValidate: string): string | null => {
+    const clean = nameToValidate.trim().replace(/\s+/g, ' ')
+
+    if (!clean) {
+      return 'El nombre del género es obligatorio.'
+    }
+
+    if (clean.length < (VALIDATION_LIMITS.GENUS_NAME_MIN ?? 4)) {
+      return `El nombre del género debe tener al menos ${VALIDATION_LIMITS.GENUS_NAME_MIN ?? 4} letras.`
+    }
+
+    if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]+$/.test(clean)) {
+      return 'El nombre solo debe contener letras del abecedario.'
+    }
+
+    const isDuplicate = generaList.some(
+      (g) =>
+        g.name.trim().toLowerCase() === clean.toLowerCase() &&
+        (!editingGenus || g.id !== editingGenus.id),
+    )
+
+    if (isDuplicate) {
+      return `Ya existe un género registrado con el nombre "${clean}".`
+    }
+
+    return null
+  }
+
+  const handleSubmit = () => {
+    const error = validateName(genusFormName)
+
+    if (error) {
+      setNameError(error)
 
       return
     }
 
     setNameError(null)
-    onSave(clean, genusFormType)
+    onSave(genusFormName.trim().replace(/\s+/g, ' '), genusFormType)
   }
 
   return (
@@ -107,20 +147,17 @@ export function GenusFormModal({
             <FormField
               required
               error={nameError ?? undefined}
-              htmlFor="genusName"
+              htmlFor="edit-genus-name"
               label="Nombre del Género"
             >
               <Input
                 error={!!nameError}
-                id="genusName"
+                id="edit-genus-name"
                 maxLength={VALIDATION_LIMITS.GENUS_NAME_MAX}
-                placeholder=""
+                placeholder="Ej. Cattleya"
                 type="text"
                 value={genusFormName}
-                onChange={(e) => {
-                  setGenusFormName(e.target.value)
-                  if (nameError) setNameError(null)
-                }}
+                onChange={(e) => handleNameChange(e.target.value)}
               />
             </FormField>
             <div className="text-secondary flex items-center gap-1.5 rounded-lg bg-zinc-50 p-3 text-xs dark:bg-zinc-900/50">
@@ -142,6 +179,20 @@ export function GenusFormModal({
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">
+              <FormField required htmlFor="create-genus-type" label="Tipo de Planta">
+                <SelectDropdown
+                  id="create-genus-type"
+                  options={Object.entries(plantTypeLabels).map(([value, label]) => ({
+                    value,
+                    label,
+                  }))}
+                  value={genusFormType}
+                  onChange={(val) => setGenusFormType(val as PlantType)}
+                />
+              </FormField>
+            </div>
+
+            <div className="sm:col-span-2">
               <FormField
                 required
                 error={nameError ?? undefined}
@@ -152,27 +203,10 @@ export function GenusFormModal({
                   error={!!nameError}
                   id="create-genus-name"
                   maxLength={VALIDATION_LIMITS.GENUS_NAME_MAX}
-                  placeholder=""
+                  placeholder="Ej. Cattleya"
                   type="text"
                   value={genusFormName}
-                  onChange={(e) => {
-                    setGenusFormName(e.target.value)
-                    if (nameError) setNameError(null)
-                  }}
-                />
-              </FormField>
-            </div>
-
-            <div className="sm:col-span-2">
-              <FormField required htmlFor="create-genus-type" label="Tipo de Planta">
-                <SelectDropdown
-                  id="create-genus-type"
-                  options={Object.entries(plantTypeLabels).map(([value, label]) => ({
-                    value,
-                    label,
-                  }))}
-                  value={genusFormType}
-                  onChange={(val) => setGenusFormType(val as PlantType)}
+                  onChange={(e) => handleNameChange(e.target.value)}
                 />
               </FormField>
             </div>

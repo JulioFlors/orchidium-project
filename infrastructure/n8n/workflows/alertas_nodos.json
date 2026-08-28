@@ -48,7 +48,7 @@
     },
     {
       "parameters": {
-        "chatId": "-1002482379768",
+        "chatId": "-1004373843373",
         "text": "={{ $json.message }}",
         "additionalFields": {
           "appendAttribution": false,
