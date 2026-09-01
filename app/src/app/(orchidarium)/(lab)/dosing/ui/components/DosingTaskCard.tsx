@@ -271,15 +271,7 @@ export function DosingTaskCard({
 
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        if (entry.contentBoxSize) {
-          const inlineSize = Array.isArray(entry.contentBoxSize)
-            ? entry.contentBoxSize[0].inlineSize
-            : entry.contentBoxSize.inlineSize
-
-          setContainerWidth(inlineSize)
-        } else {
-          setContainerWidth(entry.contentRect.width)
-        }
+        setContainerWidth(entry.contentRect.width)
       }
     })
 
