@@ -9,6 +9,7 @@ import {
   MobileSlideshow,
   Slideshow,
   AddToCart,
+  FormattedText,
   isProductAvailable,
   isVariantAvailable,
 } from '@/components'
@@ -64,7 +65,7 @@ export function ProductClientWrapper({ product }: Props) {
         {product.description && (
           <div className="mt-6 max-w-[75ch]">
             <h3 className="text-primary pb-3 font-semibold">Descripción</h3>
-            <p className="text-secondary text-pretty">{product.description}</p>
+            <FormattedText className="text-secondary" text={product.description} />
           </div>
         )}
 

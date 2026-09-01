@@ -33,6 +33,15 @@ import { scheduleManager } from './lib/schedule-manager'
 import { dosingScheduleManager } from './lib/dosing-schedule-manager'
 import { filterMaintenanceManager } from './lib/filter-maintenance-manager'
 
+// ---- Manejo de Advertencias del Runtime ----
+// Silenciar quirúrgicamente advertencias de temporizadores negativos por micro-desfases en croner/event-loop
+process.on('warning', (warning: Error) => {
+  if (warning.name === 'TimeoutNegativeWarning') {
+    return
+  }
+  console.warn(warning)
+})
+
 // ---- Configuración de Reglas ----
 
 // Acumulador de telemetría post-boot: recoge las métricas de los 3 batches
@@ -2061,9 +2070,10 @@ async function initScheduler() {
     await dosingScheduleManager.evaluateExpiredDosingTasks()
   })
 
-  // Cron de Evaluación Preventiva de Filtro de Agua (1 hora antes de tareas hidráulicas, cada 15 min)
+  // Cron de Evaluación Preventiva de Filtro de Agua y Notificaciones de Dosificación Manual (cada 15 min)
   new Cron('*/15 * * * *', { timezone: 'America/Caracas' }, async () => {
     await filterMaintenanceManager.evaluateUpcomingHydraulicTasks()
+    await dosingScheduleManager.evaluateDosingNotifications()
   })
 
   // Poller de Tareas Autorizadas (cada 1 min)
@@ -2121,6 +2131,7 @@ async function initScheduler() {
   await dosingScheduleManager.preScheduleDosing()
   await dosingScheduleManager.evaluateExpiredDosingTasks()
   await filterMaintenanceManager.evaluateUpcomingHydraulicTasks()
+  await dosingScheduleManager.evaluateDosingNotifications()
 
   // Cron nocturno de auditoría silenciosa (12:10 AM)
   new Cron('10 0 * * *', { timezone: 'America/Caracas' }, async () => {

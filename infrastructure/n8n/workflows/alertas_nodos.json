@@ -1,5 +1,5 @@
 {
-  "name": "Alertas de Nodos Correlacionadas (EMA vs Actuador)",
+  "name": "Alertas (Nodo EMA + Nodo Actuador)",
   "nodes": [
     {
       "parameters": {
@@ -21,7 +21,7 @@
     {
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH EmaLogs AS (\n  SELECT status AS current_status, timestamp AS current_timestamp\n  FROM \"DeviceLog\" WHERE device = 'Weather_Station_ZONA_A'\n  ORDER BY timestamp DESC LIMIT 1\n),\nEmaPrev AS (\n  SELECT status AS prev_status, timestamp AS prev_timestamp\n  FROM \"DeviceLog\" \n  WHERE device = 'Weather_Station_ZONA_A' \n    AND timestamp < (SELECT current_timestamp FROM EmaLogs)\n    AND status != (SELECT current_status FROM EmaLogs)\n  ORDER BY timestamp DESC LIMIT 1\n),\nActLogs AS (\n  SELECT status AS current_status, timestamp AS current_timestamp\n  FROM \"DeviceLog\" WHERE device = 'Actuator_Controller'\n  ORDER BY timestamp DESC LIMIT 1\n)\nSELECT \n  (SELECT current_status FROM EmaLogs) AS ema_current_status,\n  (SELECT prev_status FROM EmaPrev) AS ema_prev_status,\n  EXTRACT(EPOCH FROM (NOW() - (SELECT current_timestamp FROM EmaLogs)))::integer AS ema_current_seconds,\n  EXTRACT(EPOCH FROM ((SELECT current_timestamp FROM EmaLogs) - (SELECT prev_timestamp FROM EmaPrev)))::integer AS ema_prev_seconds,\n  (SELECT current_status FROM ActLogs) AS act_current_status,\n  EXTRACT(EPOCH FROM (NOW() - (SELECT current_timestamp FROM ActLogs)))::integer AS act_current_seconds;",
+        "query": "WITH EmaLogs AS (\n  SELECT status AS current_status, timestamp AS current_timestamp\n  FROM \"DeviceLog\" WHERE device = 'Weather_Station_ZONA_A'\n  ORDER BY timestamp DESC LIMIT 1\n),\nActLogs AS (\n  SELECT status AS current_status, timestamp AS current_timestamp\n  FROM \"DeviceLog\" WHERE device = 'Actuator_Controller'\n  ORDER BY timestamp DESC LIMIT 1\n),\nLastEmaAlert AS (\n  SELECT description, \"createdAt\"\n  FROM \"Notification\"\n  WHERE type = 'NODE_ALERT'\n  ORDER BY \"createdAt\" DESC LIMIT 1\n)\nSELECT \n  (SELECT current_status FROM EmaLogs) AS ema_current_status,\n  EXTRACT(EPOCH FROM (NOW() - (SELECT current_timestamp FROM EmaLogs)))::integer AS ema_current_seconds,\n  (SELECT current_status FROM ActLogs) AS act_current_status,\n  EXTRACT(EPOCH FROM (NOW() - (SELECT current_timestamp FROM ActLogs)))::integer AS act_current_seconds,\n  (SELECT description FROM LastEmaAlert) AS last_alert_description,\n  EXTRACT(EPOCH FROM (NOW() - (SELECT \"createdAt\" FROM LastEmaAlert)))::integer AS last_alert_seconds;",
         "options": {}
       },
       "id": "a48ab45a-63fe-4c73-b7ba-60015044a934",
@@ -38,13 +38,31 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\n\nconst emaCurrent = data.ema_current_status || 'UNKNOWN';\nconst emaPrev = data.ema_prev_status || 'UNKNOWN';\nconst emaCurrentSeconds = data.ema_current_seconds ?? 999999;\nconst emaPrevSeconds = data.ema_prev_seconds ?? 0;\n\nconst actCurrent = data.act_current_status || 'UNKNOWN';\nconst actCurrentSeconds = data.act_current_seconds ?? 0;\n\nlet alertType = 'NONE';\nlet message = '';\n\n// 1. CASO CAÍDA PROLONGADA (Batería Agotada o Apagón):\n// El nodo EMA debe llevar en OFFLINE continuo exactamente entre 5 y 6 minutos (300 a 360 segundos).\n// Tras el timeout del watchdog, se dispara EXACTAMENTE UNA VEZ.\nif (emaCurrent === 'OFFLINE' && emaCurrentSeconds >= 300 && emaCurrentSeconds < 360) {\n  if (actCurrent === 'OFFLINE' && actCurrentSeconds >= 300) {\n    alertType = 'SIN_CONEXION_WIFI';\n    message = '\\u200B\\n*Sin Conexión WiFi*\\n\\n*Nodo EMA:* OFFLINE\\n*Nodo Actuador:* OFFLINE';\n  } else {\n    alertType = 'BATERIA_AGOTADA';\n    message = '\\u200B\\n*Bateria Agotada*\\n\\n*Nodo EMA:* OFFLINE';\n  }\n}\n// 2. CASO RESTABLECIMIENTO:\n// El nodo EMA acaba de conectarse ONLINE (en los primeros 60 segundos del cambio),\n// habiendo venido de un OFFLINE REAL que duró al menos 10 minutos (>= 600 segundos).\n// NOTA: SLEEP es estado rutinario de reposo, nunca dispara restablecimiento.\nelse if (\n  emaCurrent === 'ONLINE' &&\n  emaPrev === 'OFFLINE' &&\n  emaCurrentSeconds >= 0 &&\n  emaCurrentSeconds < 60 &&\n  emaPrevSeconds >= 600\n) {\n  alertType = 'EMA_RESTABLECIDO';\n  message = '\\u200B\\n*Nodo EMA* Operativo.';\n}\n\nif (alertType === 'NONE') {\n  return [];\n}\n\nreturn [{ json: { alertType, message } }];"
+        "jsCode": "const data = $input.first().json;\n\nconst emaCurrent = data.ema_current_status || 'UNKNOWN';\nconst actCurrent = data.act_current_status || 'UNKNOWN';\nconst actCurrentSeconds = data.act_current_seconds ?? 999999;\n\nconst lastAlert = data.last_alert_description || '';\nconst isBatteryAlertActive = lastAlert === 'BATERIA_AGOTADA';\n\nlet alertType = 'NONE';\nlet message = '';\nlet notifDescription = '';\n\nconst isActuatorOnline = actCurrent === 'ONLINE' || actCurrent === 'REBOOT' || actCurrentSeconds < 300;\n\n// -------------------------------------------------------------------\n// MÁQUINA DE ESTADOS FINITA (FSM) DE NOTIFICACIONES EMA\n// Transiciones estrictas:\n// Caso A (Batería Agotada) <-> Caso B (Operativo)\n// -------------------------------------------------------------------\n\n// CASO A: Transición a BATERÍA AGOTADA\n// Condición: EMA está OFFLINE, Actuador está ONLINE (sistema operativo),\n// Y NO hay una alerta de batería activa en Telegram.\nif (emaCurrent === 'OFFLINE' && isActuatorOnline && !isBatteryAlertActive) {\n  alertType = 'BATERIA_AGOTADA';\n  notifDescription = 'BATERIA_AGOTADA';\n  message = '\\u200B\\n<b>Batería Agotada / Sin Respuesta</b>\\n\\n<b>Nodo EMA:</b> OFFLINE\\n<b>Nodo Actuador:</b> ONLINE\\n\\nEl nodo Estación Meteorológica (EMA) se encuentra sin batería o fuera de servicio.';\n}\n// CASO B: Transición a NODO EMA OPERATIVO\n// Condición: EMA volvió a ONLINE (o SLEEP tras transmitir telemetría),\n// Y TENÍAMOS una alerta de batería agotada previamente activa en Telegram (Caso A).\nelse if ((emaCurrent === 'ONLINE' || emaCurrent === 'SLEEP') && isBatteryAlertActive) {\n  alertType = 'EMA_RESTABLECIDO';\n  notifDescription = 'EMA_RESTABLECIDO';\n  message = '\\u200B\\n<b>Nodo EMA</b> Operativo.\\n\\nEl nodo Estación Meteorológica ha reanudado la comunicación y enviado telemetría.';\n}\n\nif (alertType === 'NONE') {\n  return [];\n}\n\nreturn [{\n  json: {\n    alertType,\n    message,\n    notifDescription\n  }\n}];"
       },
       "id": "12e3d36b-8439-4b24-a22f-0e0b676e0995",
-      "name": "Evaluar Correlación",
+      "name": "Evaluar Correlación FSM",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [1616, 160]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO \"Notification\" (id, type, title, description, status, priority, \"createdAt\", \"updatedAt\")\nVALUES (gen_random_uuid(), 'NODE_ALERT'::\"NotificationType\", 'Alerta de Nodo EMA', '{{ $json.notifDescription }}', 'READ'::\"NotificationStatus\", 'HIGH'::\"NotificationPriority\", NOW(), NOW());",
+        "options": {}
+      },
+      "id": "7b8f9e12-3456-4c89-a123-9876543210ab",
+      "name": "Registrar Alerta FSM",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [1824, 160],
+      "credentials": {
+        "postgres": {
+          "id": "postgres-pristinoplant",
+          "name": "Postgres PristinoPlant"
+        }
+      }
     },
     {
       "parameters": {
@@ -52,14 +70,14 @@
         "text": "={{ $json.message }}",
         "additionalFields": {
           "appendAttribution": false,
-          "parse_mode": "Markdown"
+          "parse_mode": "HTML"
         }
       },
       "id": "36ae9ea4-542c-417b-8f88-914cb1701283",
       "name": "Enviar Alerta Telegram",
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
-      "position": [1824, 160],
+      "position": [2032, 160],
       "credentials": {
         "telegramApi": {
           "id": "telegram-pristinoplant",
@@ -84,14 +102,25 @@
       "main": [
         [
           {
-            "node": "Evaluar Correlación",
+            "node": "Evaluar Correlación FSM",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Evaluar Correlación": {
+    "Evaluar Correlación FSM": {
+      "main": [
+        [
+          {
+            "node": "Registrar Alerta FSM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Alerta FSM": {
       "main": [
         [
           {

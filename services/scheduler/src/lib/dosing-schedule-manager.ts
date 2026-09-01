@@ -9,6 +9,57 @@ interface ActiveDosingCronEntry {
 }
 
 /**
+ * Calcula la fecha/hora exacta en la que debe crearse la notificación para una tarea de dosificación manual:
+ * - Tarea en la TARDE (scheduledAt >= 12:00 PM): Notificar el mismo día a las 8:00 AM.
+ * - Tarea en la MAÑANA (scheduledAt < 12:00 PM): Notificar el día anterior a las 8:00 PM (20:00).
+ */
+function getDosingNotificationTargetTime(scheduledAt: Date): Date {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Caracas',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+
+  const parts = formatter.formatToParts(scheduledAt)
+  const map: Record<string, string> = {}
+  for (const part of parts) {
+    if (part.type !== 'literal') {
+      map[part.type] = part.value
+    }
+  }
+
+  const year = parseInt(map.year, 10)
+  const month = parseInt(map.month, 10) - 1
+  const day = parseInt(map.day, 10)
+  const hour = parseInt(map.hour, 10)
+
+  const isAfternoon = hour >= 12
+
+  let targetYear = year
+  let targetMonth = month + 1
+  let targetDay = day
+  let targetHour = 8
+
+  if (!isAfternoon) {
+    // Día anterior a las 20:00 (8:00 PM)
+    const prevDayDate = new Date(Date.UTC(year, month, day - 1))
+    targetYear = prevDayDate.getUTCFullYear()
+    targetMonth = prevDayDate.getUTCMonth() + 1
+    targetDay = prevDayDate.getUTCDate()
+    targetHour = 20
+  }
+
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const isoStr = `${targetYear}-${pad(targetMonth)}-${pad(targetDay)}T${pad(targetHour)}:00:00-04:00`
+  return new Date(isoStr)
+}
+
+/**
  * GESTOR DINÁMICO DE RUTINAS DE DOSIFICACIÓN (DosingScheduleManager)
  * Administra los crons en memoria para las rutinas de dosificación manual del laboratorio.
  * Pre-agenda tareas en DosingLog y genera notificaciones para Telegram / n8n.
@@ -97,6 +148,9 @@ class DosingScheduleManager {
   /**
    * Pre-agenda tareas de dosificación con 12h de antelación para que el usuario pueda confirmarlas/prepararlas.
    */
+  /**
+   * Pre-agenda tareas de dosificación con hasta 36h de antelación para que el usuario las visualice en el sistema.
+   */
   async preScheduleDosing(): Promise<void> {
     try {
       const activeSchedules = await prisma.dosingSchedule.findMany({
@@ -120,13 +174,13 @@ class DosingScheduleManager {
       })
 
       const now = new Date()
-      const twelveHoursAhead = new Date(now.getTime() + 12 * 60 * 60000)
+      const lookahead = new Date(now.getTime() + 36 * 60 * 60000)
 
       for (const schedule of activeSchedules) {
         const cron = new Cron(schedule.cronTrigger, { timezone: 'America/Caracas' })
         const nextOccurrence = cron.nextRun()
 
-        if (nextOccurrence && nextOccurrence <= twelveHoursAhead) {
+        if (nextOccurrence && nextOccurrence <= lookahead) {
           const startWindow = new Date(nextOccurrence.getTime() - 60000)
           const endWindow = new Date(nextOccurrence.getTime() + 60000)
 
@@ -151,7 +205,7 @@ class DosingScheduleManager {
               continue
             }
 
-            const task = await prisma.dosingLog.create({
+            await prisma.dosingLog.create({
               data: {
                 scheduleId: schedule.id,
                 purpose: schedule.purpose,
@@ -165,25 +219,71 @@ class DosingScheduleManager {
               },
             })
 
-            // Crear notificación vinculada para n8n / Telegram
-            await prisma.notification.create({
-              data: {
-                type: 'AGROCHEMICAL_CONFIRM',
-                title: 'Confirmación de Dosificación',
-                description: `Se requiere preparar el insumo para la rutina: ${schedule.name} programada para el ${nextOccurrence.toLocaleTimeString('es-VE')}`,
-                dosingLogId: task.id,
-                priority: 'HIGH',
-              },
-            })
-
             Logger.agro(
               `Pre-agendada tarea de dosificación "${schedule.name}" para el ${nextOccurrence.toLocaleString('es-VE')}`,
             )
           }
         }
       }
+
+      // Evaluar si corresponde emitir notificaciones para las tareas pre-agendadas
+      await this.evaluateDosingNotifications()
     } catch (error) {
       Logger.error('Error en preScheduleDosing:', error)
+    }
+  }
+
+  /**
+   * Evalúa las tareas de dosificación manual agendadas y emite la notificación en Telegram según las reglas:
+   * - Tarea en la Tarde (>= 12:00 PM): Notifica a las 8:00 AM del mismo día.
+   * - Tarea en la Mañana (< 12:00 PM): Notifica a las 8:00 PM del día anterior.
+   */
+  async evaluateDosingNotifications(): Promise<void> {
+    try {
+      const now = new Date()
+      const pendingTasks = await prisma.dosingLog.findMany({
+        where: {
+          status: { in: [TaskStatus.WAITING_CONFIRMATION, TaskStatus.PENDING] },
+          scheduledAt: { gte: new Date(now.getTime() - 2 * 60 * 60000) },
+        },
+        include: {
+          schedule: true,
+          notifications: true,
+        },
+      })
+
+      for (const task of pendingTasks) {
+        const hasNotif = task.notifications.some(n => n.type === 'AGROCHEMICAL_CONFIRM')
+        if (hasNotif) continue
+
+        const targetNotifyTime = getDosingNotificationTargetTime(task.scheduledAt)
+
+        if (now >= targetNotifyTime) {
+          const scheduleName = task.schedule?.name || task.notes || 'Dosificación Manual'
+          const timeStr = task.scheduledAt.toLocaleTimeString('es-VE', {
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+            timeZone: 'America/Caracas',
+          })
+
+          await prisma.notification.create({
+            data: {
+              type: 'AGROCHEMICAL_CONFIRM',
+              title: 'Confirmación de Dosificación',
+              description: `Se requiere preparar el insumo para la rutina: ${scheduleName} programada para las ${timeStr}`,
+              dosingLogId: task.id,
+              priority: 'HIGH',
+            },
+          })
+
+          Logger.agro(
+            `Notificación de dosificación manual emitida para "${scheduleName}" (Regla 8AM/8PM).`,
+          )
+        }
+      }
+    } catch (error) {
+      Logger.error('Error en evaluateDosingNotifications:', error)
     }
   }
 

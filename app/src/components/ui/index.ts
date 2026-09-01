@@ -93,3 +93,5 @@ export * from './selector-group/SelectorGroup'
 export * from './zone-tags/ZoneTags'
 
 export * from './filter-slice-bar'
+
+export * from './formatted-text/FormattedText'

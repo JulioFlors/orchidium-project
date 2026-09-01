@@ -169,7 +169,9 @@ class FilterMaintenanceManager {
       // 2. Evaluar tareas autorizadas o pendientes en TaskLog que vayan a correr en la próxima hora
       const upcomingTasks = await prisma.taskLog.findMany({
         where: {
-          status: { in: [TaskStatus.AUTHORIZED, TaskStatus.WAITING_CONFIRMATION, TaskStatus.PENDING] },
+          status: {
+            in: [TaskStatus.AUTHORIZED, TaskStatus.WAITING_CONFIRMATION, TaskStatus.PENDING],
+          },
           scheduledAt: { gt: now, lte: oneHourAhead },
         },
         include: { schedule: true },
@@ -202,7 +204,9 @@ class FilterMaintenanceManager {
             },
           })
 
-          Logger.warn(`Alerta preventiva de filtro emitida 1h antes de tarea "${taskName}" (${timeStr}).`)
+          Logger.warn(
+            `Alerta preventiva de filtro emitida 1h antes de tarea "${taskName}" (${timeStr}).`,
+          )
         }
       }
     } catch (error) {
@@ -224,16 +228,28 @@ class FilterMaintenanceManager {
       const isOverdue = !latestClean || now >= latestClean.nextDueAt
 
       if (isOverdue) {
-        await prisma.notification.create({
-          data: {
+        // Evitar notificaciones duplicadas si evaluateUpcomingHydraulicTasks ya notificó en las últimas 2 horas
+        const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000)
+        const recentAlert = await prisma.notification.findFirst({
+          where: {
             type: 'MAINTENANCE_REMINDER',
-            title: 'Filtro Sucio: Riego Próximo en 1h',
-            description: `Atención: La rutina "${routineName}" iniciará en 1 hora y el filtro de agua no ha sido limpiado. Confirma la limpieza con /filter en Telegram o desde la Web.`,
-            priority: 'URGENT',
+            description: { contains: routineName },
+            createdAt: { gte: twoHoursAgo },
           },
         })
 
-        Logger.warn(`Alerta preventiva de filtro enviada 1h antes del riego "${routineName}".`)
+        if (!recentAlert) {
+          await prisma.notification.create({
+            data: {
+              type: 'MAINTENANCE_REMINDER',
+              title: 'Filtro Sucio: Riego Próximo en 1h',
+              description: `Atención: La rutina "${routineName}" iniciará pronto y el filtro de agua no ha sido limpiado. Confirma la limpieza con /filter en Telegram o desde la Web.`,
+              priority: 'URGENT',
+            },
+          })
+
+          Logger.warn(`Alerta de filtro enviada al iniciar riego "${routineName}".`)
+        }
 
         return false
       }
