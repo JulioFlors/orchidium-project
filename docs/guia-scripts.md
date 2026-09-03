@@ -18,6 +18,7 @@ Este documento detalla los scripts reutilizables disponibles en `services/schedu
 | `test-bcv-scrape.ts` | Operaciones | Scraping manual bajo demanda de la tasa del BCV e inserción en PostgreSQL. |
 | `check-rates.ts` | Operaciones | Consulta rápida de las tasas de cambio registradas en PostgreSQL. |
 | `check-scheduler-activity.ts` | Operaciones | Inspección de las últimas tareas y logs de actividad del scheduler en PostgreSQL. |
+| `compare-microclimates.ts` | Agronomía / Análisis | Contraste microclimático entre EMA Exterior y EMA Orquideario: filtrado de malla-sombra en 3 segmentos, ventilación/balance térmico y retención de humedad/VPD. |
 | `listen-mqtt.ts` | Diagnóstico | Monitor en tiempo real de los tópicos MQTT del broker para depuración de hardware. |
 | `test-evaluate.ts` | Diagnóstico | Disparo manual de la evaluación de la máquina de estados del motor de inferencia. |
 
@@ -67,6 +68,22 @@ pnpm exec dotenv -e .env -- tsx services/scheduler/src/scripts/check-rates.ts
 
 ```powershell
 pnpm exec dotenv -e .env -- tsx services/scheduler/src/scripts/listen-mqtt.ts
+```
+
+#### 6. Contrastar Microclima (Orquideario vs Exterior)
+
+```powershell
+# Evaluación completa de todos los días con datos válidos (excluye fallas documentadas del 10 al 17 de Agosto)
+pnpm exec dotenv -e .env -- tsx services/scheduler/src/scripts/compare-microclimates.ts
+
+# Evaluar últimos 15 días
+pnpm exec dotenv -e .env -- tsx services/scheduler/src/scripts/compare-microclimates.ts --days=15
+
+# Evaluar rango de fechas específico
+pnpm exec dotenv -e .env -- tsx services/scheduler/src/scripts/compare-microclimates.ts --from=2026-06-01 --to=2026-06-30
+
+# Forzar inclusión de días con fallas de telemetría para depuración técnica
+pnpm exec dotenv -e .env -- tsx services/scheduler/src/scripts/compare-microclimates.ts --include-corrupt
 ```
 
 ## 🛠️ Plantilla para Nuevos Scripts de Utilidad
