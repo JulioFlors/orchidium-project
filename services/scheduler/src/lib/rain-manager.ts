@@ -97,8 +97,14 @@ function pushBatchMetrics(
       queue[0].min = Math.min(...allValues)
       queue[0].max = Math.max(...allValues)
     }
-    queue[0].timestamp = Math.max(queue[0].timestamp, batchTimestamp)
   } else {
+    // 🛡️ Protección contra cortes eléctricos / saltos temporales > 20 minutos:
+    // Si la cola previa tiene un salto de más de 20 minutos, los lotes anteriores pertenecen a antes del corte
+    // y no pueden servir de línea base para derivadas de 10 min. Reiniciar la cola.
+    if (queue.length > 0 && Math.abs(batchTimestamp - queue[0].timestamp) > 20 * 60 * 1000) {
+      queue.length = 0
+    }
+
     // Es un lote de una nueva ventana de 10 min: insertar al inicio de la cola
     const values = samples.map((s) => s.value)
     let min = Math.min(...values)
@@ -674,6 +680,14 @@ export async function evaluateClimateInference(): Promise<void> {
   // 2. Necesitamos al menos 4 batches en temp y hum para poder evaluar derivadas (Paso 3 B3 / Nocturno)
   if (tempBatches.length < 4 || humBatches.length < 4) {
     return
+  }
+
+  // 🛡️ Integridad Temporal: Los batches B0, B1, B2, B3 deben ser contiguos (<= 15 min de diferencia entre sí).
+  // Si hubo un corte eléctrico o salto temporal, las diferencias térmicas reflejan enfriamiento natural, no lluvia.
+  for (let i = 0; i < 3; i++) {
+    if (Math.abs(tempBatches[i].timestamp - tempBatches[i + 1].timestamp) > 15 * 60 * 1000) {
+      return
+    }
   }
 
   // 3. Extraer extremos del lote actual B0
