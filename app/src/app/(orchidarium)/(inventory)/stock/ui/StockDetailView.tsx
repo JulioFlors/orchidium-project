@@ -180,6 +180,12 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
     }
   }
 
+  // Tamaños de las variantes configuradas de la especie
+  const speciesPotSizes = useMemo(
+    () => sortVariantsByPotSizeAsc(species.variants).map((v) => v.size),
+    [species.variants],
+  )
+
   // Estados de los Modales
   const [isVariantModalOpen, setIsVariantModalOpen] = useState(false)
   const [editingVariant, setEditingVariant] = useState<Variant | null>(null)
@@ -767,8 +773,12 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
         isOpen={isBatchModalOpen}
         isPending={isPending}
         potSizeLabels={POT_SIZE_LABELS}
-        potSizes={POT_SIZES}
+        potSizes={speciesPotSizes}
         zoneLabels={ZONE_LABELS}
+        onAddVariant={() => {
+          setIsBatchModalOpen(false)
+          openCreateVariant()
+        }}
         onClose={() => setIsBatchModalOpen(false)}
         onSave={handleSaveBatchPlants}
       />
