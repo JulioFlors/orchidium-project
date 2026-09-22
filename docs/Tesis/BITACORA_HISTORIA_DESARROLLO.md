@@ -114,13 +114,16 @@ Este documento reúne de manera exhaustiva la narrativa técnica, las decisiones
 - **Diagnóstico del Causal**: Se había conectado un par trenzado del cable UTP Cat6 a positivo/negativo y otro par trenzado a las líneas de datos. Al viajar las señales de datos en un par sin apantallamiento balanceado, sufrieron diafonía cruzada.
 - **Solución de Cableado**: Se recableó el tendido acoplando **cada hilo de señal de datos directamente con su respectivo hilo de Tierra (GND) o VCC** dentro de su propio par trenzado Cat6, cancelando el ruido electromagnético.
 
-### 4.3. Mecanismo Autoreparable por Hardware: Power Cycle por GPIO/Relé
+### 4.3. Mecanismo Autoreparable por Hardware: Power Cycle por GPIO y Módulo Relé
 
-- **Ruido Residual por Longitud de Cable**: Debido a la longitud física del tendido eléctrico hacia los sensores, aún se experimentaba ruido residual e inicializaciones fallidas esporádicas en los sensores I2C/OneWire.
-- **Solución Autoreparable Innovadora**:
-  - Se alimentó la línea VCC de los sensores mediante un pin de salida GPIO/relé del ESP32.
-  - Si el código detecta un fallo de comunicación o lectura ruidosa al inicializar un sensor, el ESP32 ejecuta un **Power Cycle**: apaga la alimentación VCC del sensor por un segundo y la vuelve a encender, realizando un reset eléctrico completo que limpia los registros internos del sensor y restaura la lectura limpia.
-  - El microservicio `Scheduler` monitorea esta condición y fuerza la rutina de reinicio de ciclo de potencia si detecta ausencia de datos.
+- **Problema de Congelamiento tras Operación Continua**: Durante la puesta en marcha in situ, se observó que los sensores (como el SHT31 por bus I2C), tras varias horas de funcionamiento totalmente normal y lecturas correctas, experimentaban caídas o bloqueos esporádicos en su electrónica interna debido a ruido residual, transitorios o saturación en líneas de longitud considerable.
+- **Limitación del Firmware ante el Bloqueo**: Ante esta condición de fallo, el bus I2C quedaba colgado y el firmware del microcontrolador ESP32 era incapaz de restablecer la comunicación con el periférico sin forzar un reinicio total (*hard reset*) del nodo completo. Reiniciar el nodo implicaba perder transitoriamente el estado de control, desconectar la sesión MQTT/SSL y degradar la disponibilidad del servicio.
+- **Rediseño e Innovación de la Etapa de Alimentación**:
+  - Para resolver la falla sin sacrificar la operatividad del sistema, se eliminó la alimentación permanente de 3.3V/5V conectada directo al riel de potencia.
+  - Se implementó una conmutación de alimentación controlada: la línea VCC de los sensores se conectó a través de un pin GPIO del ESP32 acoplado a un módulo de relé/transistor de conmutación.
+  - El firmware fue provisto de una rutina de detección de anomalías por *timeout* en el bus I2C. Al detectar la caída del sensor, el ESP32 conmuta el pin GPIO cortando la alimentación del periférico durante 1 segundo y restableciéndola de inmediato (**Power Cycle**).
+  - Esta desenergización forzada drena los capacitores internos del sensor y lo reinicializa desde cero (*cold start*), reanudando el streaming telemétrico limpio en menos de dos segundos sin interrumpir la ejecución del nodo, sin reiniciar el microcontrolador y sin cortar la sesión de red con el broker.
+- **Supervisión desde el Scheduler**: El microservicio `Scheduler` en el backend supervisa la ventana de arribo de telemetría y puede instruir preventivamente un ciclo de potencia si detecta estancamiento de lecturas.
 
 ### 4.4. Estabilidad SSL/MQTT en MicroPython
 
