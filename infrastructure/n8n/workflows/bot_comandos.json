@@ -523,7 +523,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://api.telegram.org/bot8996710021:AAEggzC0KOltYzXFlK4lOH96PrYnI82Wcx4/sendMessage",
+        "url": "https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/sendMessage",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ { chat_id: $json.chatId, text: $json.replyText, parse_mode: 'HTML', reply_markup: $json.replyMarkupObj } }}",
