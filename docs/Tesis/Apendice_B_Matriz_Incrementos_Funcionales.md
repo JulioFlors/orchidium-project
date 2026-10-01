@@ -1,25 +1,26 @@
 # Apéndices
 
-## Apéndice B: Matriz de Incrementos Funcionales
+## Apéndice B: Matriz de Correspondencia Metodológica por Incremento
 
-El presente apéndice expone la matriz de trazabilidad y correspondencia metodológica de los seis (6) incrementos funcionales desarrollados para la plataforma PristinoPlant. Esta estructuración operacional articula las cinco (5) fases del Modelo Incremental de Pressman (2010) con los cuatro (4) bloques conceptuales y las once (11) fases de la Metodología de Desarrollo Guiado por Pruebas para Sistemas Basados en Internet de las Cosas (TDDM4IoTS), formulada por Guerrero-Ulloa et al. (2020) y respaldada por Hornos y Quinde (2024).
+El presente apéndice consolida la descomposición modular y la trazabilidad de los siete (7) incrementos funcionales desarrollados en la plataforma PristinoPlant. Esta estructuración articula las cinco (5) fases del Modelo Incremental de Pressman (2010) con los cuatro (4) bloques conceptuales y las once (11) fases de la Metodología de Desarrollo Guiado por Pruebas para Sistemas Basados en Internet de las Cosas (TDDM4IoTS), formulada por Guerrero-Ulloa et al. (2020).
 
 ---
 
 ### 1. Entregables de Ingeniería por Incremento
 
-La Tabla Ap-B1 consolida los módulos del sistema y los productos técnicos concretos generados en cada una de las iteraciones de desarrollo, garantizando que cada incremento proporcionó operatividad autónoma y valor tangible en campo.
+La Tabla Ap-B1 detalla los módulos del sistema y los entregables técnicos consolidados en cada una de las siete iteraciones de desarrollo, garantizando que cada incremento aportó operatividad autónoma y evaluable en campo.
 
 #### Tabla Ap-B1. *Módulos y entregables de ingeniería por incremento*
 
 | Inc. | Módulo / Denominación | Entregables de Ingeniería Consolidados |
 | :---: | :--- | :--- |
-| **1** | **Plataforma Web Base y Catálogos Taxonómico y Agroquímico** | Arquitectura web base, sistema visual UI/UX accesible, modelo de datos relacional para el catálogo taxonómico botánico e inventario de insumos agronómicos. |
-| **2** | **Circuito Hidráulico, Tablero de Potencia y Automatización** | Circuito hidráulico presurizado de 4 líneas independientes, tablero eléctrico con aislamiento en tres niveles de tensión y firmware base para conmutación segura de actuadores. |
-| **3** | **Infraestructura Backend Distribuida, Orquestación y Operaciones** | Arquitectura backend en servicios contenerizados (Docker), bróker de mensajería MQTTS sobre TLS, servicio orquestador desatendido 24/7 e interfaces de control y programación de riego. |
-| **4** | **Estaciones Meteorológicas y Telemetría Ambiental** | Estaciones meteorológicas automatizadas (exterior e interior), firmware de adquisición telemétrica, circuito de autorrecuperación (*power cycle*), supresión de interferencias y monitoreo en tiempo real. |
-| **5** | **Inferencia de Lluvia y Autonomía Hídrica** | Motor de inferencia de riego basado en umbrales microclimáticos (VPD), motor heurístico de precipitación pluvial sin sensores corrosivos y documentación formal de validación en campo. |
-| **6** | **Inventario y Comercio en Línea** | Modelo de gemelos digitales para seguimiento individualizado por ejemplar (`SeedPlant`), control de ocupación espacial en mesas de cultivo y canal de comercio electrónico integrado. |
+| **1** | **Plataforma Web Base y Modelado de Dominio** | Arquitectura web base en Next.js (App Router), monorepositorio Turborepo con tipado estricto en TypeScript, sistema de autenticación con control de acceso por roles (Better-Auth) y esquema relacional en PostgreSQL con datos semilla. |
+| **2** | **Circuito Hidráulico, Tablero Eléctrico y Conmutación Física** | Red presurizada de 4 líneas independientes con bomba de 1 HP, tablero de potencia aislado en tres niveles de tensión (110VAC, 24VAC, 5VDC), protecciones inductivas y firmware base en MicroPython para conmutación segura de actuadores. |
+| **3** | **Infraestructura Backend Distribuida, Orquestación y Operaciones** | Servicios contenerizados en Docker (PostgreSQL, InfluxDB, Mosquitto, Ingest, Scheduler), bróker MQTTS bajo TLS 1.3, temporizadores de seguridad fail-safe e interfaces web de control manual directo (`/control`), colas (`/queue`) y auditoría (`/history`). |
+| **4** | **Estaciones Meteorológicas y Telemetría Ambiental** | Estación meteorológica exterior (EMA Exterior) e interior (EMA Interior en garita 3D), firmware de adquisición telemétrica, circuito de autorrecuperación física (*power-cycle* en GPIO 5) y tablero de monitoreo microclimático en tiempo real (`/monitoring`). |
+| **5** | **Inferencia de Lluvia y Autonomía Hídrica** | Motor meteorológico de inferencia de lluvia sin sensores resistivos corrosivos (`rain-manager.ts`), motor de inferencia hídrica con matriz de vetos deliberativos por alternancia y saturación higrométrica, y monitor del oráculo (`/weather-oracle`). |
+| **6** | **Catálogo, Inventario, Tienda y Cronograma de Dosificación** | Modelado de gemelos digitales por ejemplar (`SeedPlant`), catálogo botánico (`/catalog`), gestión de stock en mesas (`/stock`), tienda digital e-commerce con carrito y checkout por WhatsApp, y laboratorio de recetas y dosificación rotativa (`/lab`). |
+| **7** | **Asistente Agronómico, Orquestación n8n y Resiliencia** | Integración del asistente inteligente conversacional para consultas botánicas y operativas, orquestación automatizada de flujos mediante n8n, canal de notificaciones y alertas al cultivador vía bot, y pruebas de resiliencia ante contingencias de red. |
 
 *Nota.* Fuente: Elaboración propia fundamentada en el plan de desarrollo incremental de PristinoPlant.
 
@@ -39,30 +40,31 @@ La Tabla Ap-B2 detalla la integración metodológica de cada incremento funciona
 | **4** | Modelado, Construcción, Despliegue | **F1, F3, F5, F6, F7, F8, F10** |
 | **5** | Construcción, Despliegue | **F3, F5, F7, F8, F10, F11** |
 | **6** | Modelado, Construcción, Despliegue | **F1, F2, F4, F7, F11** |
+| **7** | Modelado, Construcción, Despliegue | **F4, F7, F8, F9, F11** |
 
 *Nota.* Fuente: Elaboración propia a partir de las actividades de ingeniería ejecutadas en el proyecto.
 
 ---
 
-### 3. Taxonomía de Fases de la Metodología TDDM4IoTS
+### 3. Fases de la Metodología TDDM4IoTS
 
-En concordancia con el principio de adaptabilidad enunciado por Guerrero-Ulloa et al. (2020, p. 77), el marco TDDM4IoTS organiza el desarrollo de soluciones de Internet de las Cosas en once (11) fases estructuradas bajo cuatro (4) bloques conceptuales:
+De acuerdo con Guerrero-Ulloa et al. (2020), las fases de TDDM4IoTS se estructuran bajo cuatro bloques conceptuales:
 
 1. **Bloque I: Iniciación y Requisitos**
-   * *Fase 1 (F1) - Recopilación de Requisitos:* Levantamiento de necesidades agronómicas y operativas con el cultivador.
-   * *Fase 2 (F2) - Formulación de Requisitos de Alto Nivel:* Formalización de requerimientos funcionales y no funcionales (SRS).
-   * *Fase 3 (F3) - Lista Inicial de Casos de Prueba:* Definición de escenarios de validación para software, firmware y hardware.
+   * *F1 - Recopilación de Requisitos:* Levantamiento de necesidades agronómicas y operativas con el cultivador.
+   * *F2 - Formulación de Requisitos de Alto Nivel:* Formalización de requerimientos funcionales y no funcionales (SRS).
+   * *F3 - Lista Inicial de Casos de Prueba:* Definición de escenarios de validación para software, firmware y hardware.
 
 2. **Bloque II: Diseño y Pruebas IoTS**
-   * *Fase 4 (F4) - Arquitectura del Sistema IoTS:* Diseño en capas (percepción, control de borde, red y decisión).
-   * *Fase 5 (F5) - Especificación de Casos de Prueba IoTS:* Formulación de pruebas eléctricas, de estanqueidad y de enlace telemétrico.
-   * *Fase 6 (F6) - Criterios de Aceptación de las Pruebas IoTS:* Establecimiento de tolerancias admisibles (p. ej., tiempos de respuesta, presiones hidráulicas y aislamiento galvánico).
+   * *F4 - Arquitectura del Sistema IoTS:* Diseño en capas (percepción, control de borde, red y decisión).
+   * *F5 - Especificación de Casos de Prueba IoTS:* Formulación de pruebas eléctricas, de estanqueidad y de enlace telemétrico.
+   * *F6 - Criterios de Aceptación de las Pruebas IoTS:* Tolerancias admisibles (tiempos de respuesta, presiones hidráulicas y aislamiento galvánico).
 
 3. **Bloque III: Construcción Guiada por Pruebas**
-   * *Fase 7 (F7) - Creación del Entregable:* Ensamblaje físico de hardware, codificación de firmware o desarrollo de módulos de software.
-   * *Fase 8 (F8) - Casos de Prueba (TDD Red):* Ejecución de pruebas preliminares en banco para identificar fallas antes de la puesta en marcha.
-   * *Fase 9 (F9) - Desarrollo (TDD Green):* Implementación y ajuste de lógica para superar las pruebas unitarias y de integración.
-   * *Fase 10 (F10) - Refactorización (TDD Refactor):* Optimización de código (p. ej., bytecode `.mpy` en MicroPython) y mejoras de supresión de ruido (EMI/diafonía).
+   * *F7 - Creación del Entregable:* Ensamblaje físico de hardware, codificación de firmware o desarrollo de módulos de software.
+   * *F8 - Casos de Prueba (TDD Red):* Ejecución de pruebas preliminares en banco para identificar fallas antes de la puesta en marcha.
+   * *F9 - Desarrollo (TDD Green):* Implementación y ajuste de lógica para superar las pruebas unitarias y de integración.
+   * *F10 - Refactorización (TDD Refactor):* Optimización de código (bytecode en MicroPython) y supresión de ruido (EMI/diafonía).
 
 4. **Bloque IV: Evaluación y Entrega Final**
-   * *Fase 11 (F11) - Prueba de Aceptación Final, Despliegue Operativo, Mantenimiento y Evolución:* Puesta en servicio en el orquideario, calibración empírica en condiciones reales y monitoreo continuo del cultivo.
+   * *F11 - Prueba de Aceptación Final y Despliegue Operativo:* Puesta en servicio en el orquideario, calibración empírica en condiciones reales y monitoreo continuo del cultivo.

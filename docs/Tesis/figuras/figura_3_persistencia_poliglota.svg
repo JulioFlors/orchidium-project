@@ -1,0 +1,165 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1020 480" width="100%" height="100%" style="background-color:#ffffff; font-family:'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;">
+  <defs>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="112%">
+      <feDropShadow dx="1" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+
+    <!-- Marcadores Bidireccionales -->
+    <marker id="arr-blue-end-h" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#0284c7" />
+    </marker>
+    <marker id="arr-blue-start-h" viewBox="0 0 10 10" refX="3" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 8 1.5 L 0 5 L 8 8.5 z" fill="#0284c7" />
+    </marker>
+
+    <marker id="arr-emerald-end-h" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#059669" />
+    </marker>
+    <marker id="arr-emerald-start-h" viewBox="0 0 10 10" refX="3" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 8 1.5 L 0 5 L 8 8.5 z" fill="#059669" />
+    </marker>
+
+    <marker id="arr-amber-end-h" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#d97706" />
+    </marker>
+    <marker id="arr-amber-start-h" viewBox="0 0 10 10" refX="3" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 8 1.5 L 0 5 L 8 8.5 z" fill="#d97706" />
+    </marker>
+
+    <marker id="arr-purple-end-h" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#7c3aed" />
+    </marker>
+    <marker id="arr-purple-start-h" viewBox="0 0 10 10" refX="3" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 8 1.5 L 0 5 L 8 8.5 z" fill="#7c3aed" />
+    </marker>
+  </defs>
+
+  <!-- ENCABEZADO -->
+  <text x="510" y="38" text-anchor="middle" font-size="18" font-weight="700" fill="#0f172a" letter-spacing="-0.2">Arquitectura de Persistencia Políglota y Flujo de Datos Telemétricos</text>
+
+  <!-- COLUMNA 1: NODOS EMBEBIDOS (2 NODOS) -->
+  <g transform="translate(30, 90)" filter="url(#shadow)">
+    <rect width="180" height="95" rx="8" fill="#ffffff" stroke="#0284c7" stroke-width="1.8" />
+    <rect width="180" height="28" rx="8" fill="#e0f2fe" />
+    <text x="90" y="19" text-anchor="middle" font-size="12" font-weight="700" fill="#0369a1">Nodo Actuador / EMA-Exterior</text>
+    <text x="90" y="52" text-anchor="middle" font-size="11" fill="#334155">Tablero Eléctrico (5V DC)</text>
+    <text x="90" y="70" text-anchor="middle" font-size="10.5" fill="#64748b">Actuadores + Telemetría Ext.</text>
+  </g>
+
+  <g transform="translate(30, 290)" filter="url(#shadow)">
+    <rect width="180" height="95" rx="8" fill="#ffffff" stroke="#0284c7" stroke-width="1.8" />
+    <rect width="180" height="28" rx="8" fill="#e0f2fe" />
+    <text x="90" y="19" text-anchor="middle" font-size="12" font-weight="700" fill="#0369a1">Nodo EMA</text>
+    <text x="90" y="52" text-anchor="middle" font-size="11" fill="#334155">Garita Stevenson 3D</text>
+    <text x="90" y="70" text-anchor="middle" font-size="10.5" fill="#64748b">Batería Li-ion (Deep Sleep)</text>
+  </g>
+
+  <!-- COLUMNA 2: COMUNICACIÓN -->
+  <g transform="translate(245, 190)" filter="url(#shadow)">
+    <rect width="140" height="95" rx="8" fill="#ffffff" stroke="#d97706" stroke-width="1.8" />
+    <rect width="140" height="28" rx="8" fill="#fef3c7" />
+    <text x="70" y="19" text-anchor="middle" font-size="12" font-weight="700" fill="#92400e">Broker MQTTS</text>
+    <text x="70" y="52" text-anchor="middle" font-size="11" fill="#334155">Eclipse Mosquitto</text>
+    <text x="70" y="70" text-anchor="middle" font-size="10.5" fill="#64748b">Puerto Seguro 8883</text>
+  </g>
+
+  <!-- COLUMNA 3: MICROSERVICIOS -->
+  <g transform="translate(420, 90)" filter="url(#shadow)">
+    <rect width="155" height="95" rx="8" fill="#ffffff" stroke="#0284c7" stroke-width="1.8" />
+    <rect width="155" height="28" rx="8" fill="#e0f2fe" />
+    <text x="77" y="19" text-anchor="middle" font-size="12" font-weight="700" fill="#0369a1">Servicio Ingest</text>
+    <text x="77" y="52" text-anchor="middle" font-size="11" fill="#334155">Demonio 24/7 (Node.js)</text>
+    <text x="77" y="70" text-anchor="middle" font-size="10.5" fill="#64748b">Ingesta continua y VPD</text>
+  </g>
+
+  <g transform="translate(420, 290)" filter="url(#shadow)">
+    <rect width="155" height="95" rx="8" fill="#ffffff" stroke="#059669" stroke-width="1.8" />
+    <rect width="155" height="28" rx="8" fill="#d1fae5" />
+    <text x="77" y="19" text-anchor="middle" font-size="12" font-weight="700" fill="#065f46">Servicio Scheduler</text>
+    <text x="77" y="52" text-anchor="middle" font-size="11" fill="#334155">Orquestador de Riego</text>
+    <text x="77" y="70" text-anchor="middle" font-size="10.5" fill="#64748b">Inferencia y Despacho</text>
+  </g>
+
+  <!-- COLUMNA 4: PERSISTENCIA POLÍGLOTA -->
+  <g transform="translate(610, 90)" filter="url(#shadow)">
+    <rect width="155" height="95" rx="8" fill="#ffffff" stroke="#0284c7" stroke-width="1.8" />
+    <rect width="155" height="28" rx="8" fill="#e0f2fe" />
+    <text x="77" y="19" text-anchor="middle" font-size="12.5" font-weight="700" fill="#0369a1">InfluxDB</text>
+    <text x="77" y="52" text-anchor="middle" font-size="11" fill="#334155">Series de Tiempo</text>
+    <text x="77" y="70" text-anchor="middle" font-size="10.5" fill="#64748b">Muestras de Alta Frecuencia</text>
+  </g>
+
+  <g transform="translate(610, 290)" filter="url(#shadow)">
+    <rect width="155" height="95" rx="8" fill="#ffffff" stroke="#059669" stroke-width="1.8" />
+    <rect width="155" height="28" rx="8" fill="#d1fae5" />
+    <text x="77" y="19" text-anchor="middle" font-size="12.5" font-weight="700" fill="#065f46">PostgreSQL</text>
+    <text x="77" y="52" text-anchor="middle" font-size="11" fill="#334155">Prisma ORM (Relacional)</text>
+    <text x="77" y="70" text-anchor="middle" font-size="10.5" fill="#64748b">Transacciones y Resúmenes</text>
+  </g>
+
+  <!-- COLUMNA 5: APLICACIÓN Y CLIENTES -->
+  <g transform="translate(800, 90)" filter="url(#shadow)">
+    <rect width="165" height="95" rx="8" fill="#ffffff" stroke="#475569" stroke-width="1.8" />
+    <rect width="165" height="28" rx="8" fill="#f1f5f9" />
+    <text x="82" y="19" text-anchor="middle" font-size="12" font-weight="700" fill="#1e293b">Aplicación Web</text>
+    <text x="82" y="52" text-anchor="middle" font-size="11" fill="#334155">Next.js 14 App Router</text>
+    <text x="82" y="70" text-anchor="middle" font-size="10.5" fill="#64748b">Supervisión y Control</text>
+  </g>
+
+  <g transform="translate(800, 290)" filter="url(#shadow)">
+    <rect width="165" height="95" rx="8" fill="#ffffff" stroke="#7c3aed" stroke-width="1.8" />
+    <rect width="165" height="28" rx="8" fill="#f5f3ff" />
+    <text x="82" y="19" text-anchor="middle" font-size="12" font-weight="700" fill="#6d28d9">n8n &amp; Telegram</text>
+    <text x="82" y="52" text-anchor="middle" font-size="11" fill="#334155">Asistente PristinoBot</text>
+    <text x="82" y="70" text-anchor="middle" font-size="10.5" fill="#64748b">Human-in-the-Loop</text>
+  </g>
+
+  <!-- CONEXIONES Y FLECHAS BIDIRECCIONALES (<-->) -->
+  <!-- 1. Nodo Actuador <--> Broker MQTTS -->
+  <line x1="210" y1="150" x2="245" y2="210" stroke="#0284c7" stroke-width="1.8" marker-start="url(#arr-blue-start-h)" marker-end="url(#arr-blue-end-h)" />
+
+  <!-- 2. Nodo EMA <--> Broker MQTTS -->
+  <line x1="210" y1="325" x2="245" y2="265" stroke="#0284c7" stroke-width="1.8" marker-start="url(#arr-blue-start-h)" marker-end="url(#arr-blue-end-h)" />
+
+  <!-- 3. Broker MQTTS <--> Servicio Ingest -->
+  <line x1="385" y1="215" x2="420" y2="155" stroke="#d97706" stroke-width="1.8" marker-start="url(#arr-amber-start-h)" marker-end="url(#arr-amber-end-h)" />
+
+  <!-- 4. Broker MQTTS <--> Servicio Scheduler -->
+  <line x1="385" y1="265" x2="420" y2="325" stroke="#059669" stroke-width="1.8" marker-start="url(#arr-emerald-start-h)" marker-end="url(#arr-emerald-end-h)" />
+
+  <!-- 5. Servicio Ingest <--> InfluxDB -->
+  <line x1="575" y1="137" x2="606" y2="137" stroke="#0284c7" stroke-width="2" marker-start="url(#arr-blue-start-h)" marker-end="url(#arr-blue-end-h)" />
+
+  <!-- 6. Servicio Ingest <--> PostgreSQL -->
+  <path d="M 575 160 L 592 160 L 592 310 L 606 310" fill="none" stroke="#0284c7" stroke-width="1.5" stroke-dasharray="3,3" marker-start="url(#arr-blue-start-h)" marker-end="url(#arr-blue-end-h)" />
+
+  <!-- 7. Servicio Scheduler <--> InfluxDB (Consultas deslizantes e histórico) -->
+  <path d="M 575 320 L 592 320 L 592 160 L 606 160" fill="none" stroke="#0284c7" stroke-width="1.6" stroke-dasharray="4,3" marker-start="url(#arr-blue-start-h)" marker-end="url(#arr-blue-end-h)" />
+
+  <!-- 8. Servicio Scheduler <--> PostgreSQL -->
+  <line x1="575" y1="340" x2="606" y2="340" stroke="#059669" stroke-width="2" marker-start="url(#arr-emerald-start-h)" marker-end="url(#arr-emerald-end-h)" />
+
+  <!-- 9. InfluxDB <--> Aplicación Web (Lectura 24h) -->
+  <line x1="765" y1="137" x2="796" y2="137" stroke="#0284c7" stroke-width="1.8" stroke-dasharray="4,3" marker-start="url(#arr-blue-start-h)" marker-end="url(#arr-blue-end-h)" />
+
+  <!-- 10. PostgreSQL <--> Aplicación Web (Prisma ORM) -->
+  <path d="M 765 325 L 782 325 L 782 165 L 796 165" fill="none" stroke="#059669" stroke-width="1.8" marker-start="url(#arr-emerald-start-h)" marker-end="url(#arr-emerald-end-h)" />
+
+  <!-- 11. PostgreSQL <--> n8n & Telegram -->
+  <line x1="765" y1="340" x2="796" y2="340" stroke="#7c3aed" stroke-width="2" marker-start="url(#arr-purple-start-h)" marker-end="url(#arr-purple-end-h)" />
+
+  <!-- LEYENDA INFERIOR -->
+  <g transform="translate(180, 435)">
+    <line x1="0" y1="8" x2="25" y2="8" stroke="#0284c7" stroke-width="1.8" marker-start="url(#arr-blue-start-h)" marker-end="url(#arr-blue-end-h)" />
+    <text x="35" y="12" font-size="10.5" fill="#475569">Telemetría / Ingesta Bidireccional</text>
+
+    <line x1="210" y1="8" x2="235" y2="8" stroke="#059669" stroke-width="1.8" marker-start="url(#arr-emerald-start-h)" marker-end="url(#arr-emerald-end-h)" />
+    <text x="245" y="12" font-size="10.5" fill="#475569">Transaccional / Comandos</text>
+
+    <line x1="420" y1="8" x2="445" y2="8" stroke="#0284c7" stroke-width="1.6" stroke-dasharray="4,3" marker-start="url(#arr-blue-start-h)" marker-end="url(#arr-blue-end-h)" />
+    <text x="455" y="12" font-size="10.5" fill="#475569">Consultas Analíticas</text>
+
+    <line x1="590" y1="8" x2="615" y2="8" stroke="#7c3aed" stroke-width="1.8" marker-start="url(#arr-purple-start-h)" marker-end="url(#arr-purple-end-h)" />
+    <text x="625" y="12" font-size="10.5" fill="#475569">Orquestación n8n</text>
+  </g>
+</svg>

@@ -1,278 +1,281 @@
-# Apéndices
-
 ## Apéndice F: Catálogo de Interfaces de Usuario y Flujos Operativos
 
 El presente apéndice expone el catálogo estructurado de las interfaces de usuario que conforman la plataforma web de PristinoPlant, así como la especificación detallada de los cinco (5) flujos operativos medulares del sistema. Este compendio constituye la evidencia empírica de la materialización del software y su adecuación funcional (ISO/IEC 25010), sirviendo de guía operativa para la interacción del cultivador botánico y del cliente final.
 
 En atención a la naturaleza técnica y agronómica de la investigación, este catálogo omite los módulos administrativos genéricos (como inicio de sesión y gestión básica de cuentas) y prioriza de manera jerárquica los dominios críticos de la agricultura protegida:
 
-1. **Operaciones del Circuito Hidráulico y Riego Autónomo:** Tablero de comando directo, gestión de colas, programador recurrente y bitácora de auditoría histórica.
-2. **Laboratorio y Dosificación Agronómica:** Inventario de insumos puros, recetas compuestas, ciclos rotativos anti-resistencia y agenda proyectada.
-3. **Catálogo Botánico, Inventario Físico y Gemelos Digitales:** Clasificación taxonómica, inventario unívoco de especímenes (`SeedPlant`), seguimiento fenológico y conciliación de stock comercial en mesas.
-4. **Telemetría y Monitoreo Ambiental:** Dashboard de microclima en tiempo real, oráculo meteorológico de precipitación pluvial y análisis ecofisiológico por zonas.
-5. **Comercio Electrónico y Gestión de Ventas:** Portal público de la tienda botánica, selección de variantes vivas, checkout y conciliación de órdenes.
+1. **Operaciones del circuito hidráulico y riego autónomo:** Tablero de comando directo, gestión de colas, programador recurrente y bitácora de auditoría histórica.
+2. **Laboratorio y dosificación agronómica:** Inventario de insumos con dosis unitarias por litro, recetas compuestas, ciclos rotativos anti-resistencia y consola de seguimiento proyectado.
+3. **Catálogo botánico, inventario físico y gemelos digitales:** Clasificación taxonómica, inventario unívoco de especímenes (`SeedPlant`), seguimiento fenológico y conciliación de stock comercial en mesas.
+4. **Telemetría y monitoreo ambiental:** Dashboard de microclima en tiempo real, oráculo meteorológico de precipitación pluvial y análisis ecofisiológico por zonas.
+5. **Comercio electrónico y gestión de ventas:** Portal público de la tienda botánica, selección de variantes vivas, checkout y conciliación de órdenes.
+
+En las Figuras Ap-F1 a Ap-F25 se presentan las veinticinco (25) interfaces de usuario esenciales de la plataforma, acompañadas de sus especificaciones técnicas y denominaciones formales según la normativa de presentación de informes de la Escuela de Ingeniería Informática (UCAB Guayana).
 
 ---
 
-### 1. Catálogo Detallado de Interfaces de Usuario
+### **Operaciones del circuito hidráulico y riego autónomo.**
 
-A continuación se presentan las veinticuatro (24) interfaces de usuario esenciales de la plataforma, acompañadas de sus especificaciones técnicas, denominaciones formales y notas explicativas según la norma APA 7.ª edición.
+Las interfaces de este bloque permiten al cultivador supervisar y gobernar la infraestructura electromecánica del invernadero (bomba de agua de 1 HP y 1 pulgada, junto a las electroválvulas de solenoide). La seguridad operativa de las conmutaciones reside en que todas las maniobras son estrictamente atómicas y requieren la validación de su acuse de recibo bidireccional (`ACK`) vía MQTT; asimismo, ante cualquier eventual pérdida de conectividad Wi-Fi o del enlace con el bróker MQTT, el firmware del nodo actuador desenergiza y cierra de inmediato el circuito por protección (*fail-safe* por desconexión), impidiendo aperturas indefinidas o inundaciones en el cultivo.
 
----
-
-#### 1.1. Operaciones del Circuito Hidráulico y Riego Autónomo
-
-Las interfaces de este bloque permiten al cultivador supervisar y gobernar la infraestructura electromecánica del invernadero (bomba de agua de 1 HP y 1 pulgada, junto a las electroválvulas de solenoide), garantizando conmutaciones seguras mediante temporizadores locales de seguridad (*fail-safe*) y acuse de recibo bidireccional (`ACK`) vía MQTT.
-
-##### Centro de Control Manual Directo (`/operations/control`)
+#### ***Centro de control manual directo (`/operations/control`).***
 
 La interfaz centraliza el comando inmediato de las cuatro líneas hidráulicas del orquideario: Línea 1 (Humidificación / Foggers), Línea 2 (Aspersión principal de mesas), Línea 3 (Humectación de suelo para enfriamiento pasivo) y Línea 4 (Dosificación agroquímica aislada). Cuenta con tarjetas de conmutación individual provistas de selectores de duración preestablecida (por defecto 300 segundos), indicadores de estado de conexión al bróker MQTT, latencia del enlace telemétrico y temporizadores visuales con cuenta regresiva. Toda orden despachada activa una guarda local en firmware que interrumpe la impulsión ante pérdida de red.
 
 ![Figura Ap-F1. Centro de control manual directo de actuadores hidráulicos.](figuras/apendice_f/figura_ap_f1_centro_control_manual.png)
 
-**_Figura Ap-F1._** Centro de control manual directo de actuadores hidráulicos.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Muestra los controles de conmutación manual por línea hidráulica, selectores de temporización fail-safe, estado de enlace MQTT y tarjetas de retroalimentación de estado real.
+*Figura Ap-F1*. Centro de Control Manual Directo de Actuadores Hidráulicos.
+*Nota.* Muestra los controles de conmutación manual por línea hidráulica, selectores de temporización fail-safe, estado de enlace MQTT y tarjetas de retroalimentación de estado real.
 
-##### Modal de Advertencia y Confirmación de Agroquímicos (`/operations/control`)
+#### ***Modal de advertencia y confirmación de agroquímicos (`/operations/control`).***
 
 Dado que la manipulación de insumos fitosanitarios y fertilizantes concentrados exige rigurosas medidas de seguridad operacional, la conmutación de la Línea 4 requiere una confirmación interactiva explícita. El modal presenta al operador la lista de tareas de dosificación pendientes registradas en el laboratorio, detallando el nombre de la mezcla, el volumen de aplicación y las recomendaciones toxicológicas antes de autorizar el energizado de la electroválvula de 24V.
 
 ![Figura Ap-F2. Modal interactivo de advertencia y confirmación para maniobras de dosificación fitosanitaria.](figuras/apendice_f/figura_ap_f2_modal_confirmacion_agroquimicos.png)
 
-**_Figura Ap-F2._** Modal interactivo de advertencia y confirmación para maniobras de dosificación fitosanitaria.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Despliega los parámetros de la solución química a inyectar, alertas toxicológicas y solicitud de confirmación manual para prevenir descargas accidentales.
+*Figura Ap-F2*. Modal de Advertencia y Confirmación para Maniobras de Dosificación.
+*Nota.* Despliega los parámetros de la solución química a inyectar, alertas toxicológicas y solicitud de confirmación manual para prevenir descargas accidentales.
 
-##### Supervisión de Cola de Tareas y Maniobras Activas (`/operations/queue`)
+#### ***Supervisión de cola de tareas y maniobras activas (`/operations/queue`).***
 
 Esta pantalla supervisa en tiempo real las operaciones hídricas gestionadas por el microservicio `Scheduler`. Permite auditar las maniobras que se encuentran en ejecución inmediata (`RUNNING`), encoladas para los próximos minutos (`PENDING`) o diferidas temporalmente. Cada elemento visualiza la línea hidráulica involucrada, la duración programada, el origen del comando (manual o autónomo) y un botón de cancelación de emergencia para detener la maniobra en cualquier instante.
 
 ![Figura Ap-F3. Panel de supervisión de la cola de tareas hidráulicas activas y diferidas.](figuras/apendice_f/figura_ap_f3_cola_tareas_hidraulicas.png)
 
-**_Figura Ap-F3._** Panel de supervisión de la cola de tareas hidráulicas activas y diferidas.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Presenta el listado reactivo de maniobras hídricas en ejecución y en espera, con temporizadores de progreso y opciones de cancelación inmediata.
+*Figura Ap-F3*. Supervisión de la Cola de Tareas Hidráulicas Activas.
+*Nota.* Presenta el listado reactivo de maniobras hídricas en ejecución y en espera, con temporizadores de progreso y opciones de cancelación inmediata.
 
-##### Programador de Rutinas Recurrentes de Riego (`/operations/schedules`)
+#### ***Programador de rutinas recurrentes de riego (`/operations/schedules`).***
 
 Permite establecer cronogramas automatizados periódicos de irrigación y nebulización mediante expresiones basadas en tiempo (Cron). El cultivador selecciona los días de la semana, la hora de inicio, la duración en minutos y la línea de riego a energizar. Asimismo, la vista incorpora selectores para habilitar las guardas deliberativas del sistema: veto por lluvia activa, espaciamiento interdiario automático y límites por saturación higrométrica.
 
 ![Figura Ap-F4. Programador cronológico de rutinas recurrentes de irrigación y reglas de guarda ambiental.](figuras/apendice_f/figura_ap_f4_programador_rutinas_riego.png)
 
-**_Figura Ap-F4._** Programador cronológico de rutinas recurrentes de irrigación y reglas de guarda ambiental.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Exhibe la matriz de rutinas periódicas configuradas, días de activación, tiempos de apertura y conmutadores de vetos ambientales autónomos.
+*Figura Ap-F4*. Programador de Rutinas Recurrentes de Irrigación.
+*Nota.* Exhibe la matriz de rutinas periódicas configuradas, días de activación, tiempos de apertura y conmutadores de vetos ambientales autónomos.
 
-##### Bitácora de Auditoría Histórica de Operaciones (`/operations/history`)
+#### ***Bitácora de auditoría histórica de operaciones (`/operations/history`).***
 
-Registro cronológico inmutable de todas las conmutaciones y decisiones hídricas procesadas por el sistema. Cada fila documenta la fecha y hora exacta, la línea hidráulica afectada, la duración efectiva de apertura, el operador o servicio emisor y el estado final de la tarea (`COMPLETED`, `CANCELLED` o `VETOED`). En caso de veto deliberativo, la interfaz detalla el motivo algorítmico específico (p. ej., precipitación pluvial en curso, lluvia en las últimas 4 horas o humedad relativa superior al 85%).
+Tal como se ilustra en la **Figura Ap-F5**, la bitácora de auditoría histórica constituye el registro cronológico inmutable que centraliza la trazabilidad integral de todas las conmutaciones y decisiones hídricas del orquideario. La interfaz se estructura mediante una línea de tiempo interactiva (*timeline*) organizada en tarjetas secuenciales; cada una documenta la marca temporal exacta, la línea hidráulica afectada, el actor o servicio emisor (comando manual del cultivador o rutina del `Scheduler`), y el contraste entre la duración programada y la efectivamente ejecutada. Asimismo, la vista permite certificar el desenlace atómico de cada tarea (`COMPLETED`, `CANCELLED` o `INTERRUPTED` ante contingencias de enlace) y expone cuantitativamente la causal algorítmica de los vetos deliberativos (p. ej., precipitación pluvial en curso, lluvia en las últimas 4 horas o humedad relativa superior al 85%).
 
 ![Figura Ap-F5. Bitácora de auditoría histórica de operaciones hídricas y registro de vetos deliberativos.](figuras/apendice_f/figura_ap_f5_bitacora_auditoria_operaciones.png)
 
-**_Figura Ap-F5._** Bitácora de auditoría histórica de operaciones hídricas y registro de vetos deliberativos.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Ilustra el historial de tareas ejecutadas con indicadores de procedencia, duraciones reales y causas cuantitativas de veto ambiental emitidas por los motores.
+*Figura Ap-F5*. Bitácora de Auditoría Histórica de Operaciones y Registro de Vetos.
+*Nota.* Muestra el historial cronológico con indicadores de procedencia, duraciones reales y causas cuantitativas de veto ambiental emitidas por los motores.
 
 ---
 
-#### 1.2. Laboratorio y Dosificación Agronómica
+### **Laboratorio y dosificación agronómica.**
 
-Las interfaces del laboratorio agronómico transforman la preparación manual de nutrientes y plaguicidas en un proceso metódico, formulando recetas balanceadas para el tanque dosificador presurizado de 20 litros y programando ciclos rotativos que mitigan la resistencia biológica de patógenos.
+Transforma la formulación de tratamientos en un proceso metódico y escalable. El módulo gestiona un catálogo de insumos agroquímicos puros cuyas dosis se registran normalizadas por litro de agua, permitiendo formular mezclas compuestas para cualquier capacidad hídrica. A partir de estas recetas de nutrición foliar y fitosanidad, el sistema estructura ciclos rotativos anti-resistencia, automatiza su despacho hidráulico y audita el avance mediante un cronograma proyectado de seguimiento para rutinas manuales y automatizadas.
 
-##### Inventario de Insumos Agroquímicos Puros (`/lab/supplies`)
+#### ***Inventario de insumos agroquímicos puros (`/lab/supplies`).***
 
-Catálogo estructurado que almacena las formulaciones puras disponibles en el orquideario, clasificadas en fertilizantes minerales y productos fitosanitarios (fungicidas, insecticidas, acaricidas y bactericidas). Cada ficha presenta el nombre comercial, ingrediente activo, presentación física (líquido o polvo soluble), dosis recomendada por litro de agua ($ml/L$ o $g/L$), advertencias toxicológicas y período de reingreso al cultivo.
+Gestiona el inventario de insumos puros del orquideario (fertilizantes minerales, fungicidas, insecticidas y bactericidas). Para garantizar escalabilidad ante cualquier volumen de preparación, las dosis base se registran normalizadas por litro de agua ($ml/L$ o $g/L$). Cada ficha documenta el nombre comercial, ingrediente activo, advertencias toxicológicas, mecanismos de acción molecular (códigos FRAC e IRAC) y tiempo de reingreso seguro al cultivo.
 
 ![Figura Ap-F6. Inventario de insumos agroquímicos puros con proporciones de dilución y directrices de seguridad.](figuras/apendice_f/figura_ap_f6_inventario_insumos_agroquimicos.png)
 
-**_Figura Ap-F6._** Inventario de insumos agroquímicos puros con proporciones de dilución y directrices de seguridad.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Muestra la tabla de insumos concentrados, clasificación agronómica, dosis unitarias recomendadas y directrices de manipulación segura.
+*Figura Ap-F6*. Inventario de Insumos Agroquímicos Puros.
+*Nota.* Muestra el catálogo de insumos concentrados con dosis unitarias por litro de agua, clasificación agronómica y directrices de seguridad.
 
-##### Formulación de Recetas y Mezclas Compuestas (`/lab/recipes`)
+#### ***Formulación de recetas y mezclas compuestas (`/lab/recipes`).***
 
-Herramienta interactiva para la formulación de mezclas balanceadas destinadas al tanque dosificador de 20 litros. Al seleccionar los insumos puros a combinar y fijar el volumen total de agua a preparar, la interfaz calcula automáticamente la cantidad exacta de cada componente en mililitros o gramos, alertando sobre incompatibilidades químicas conocidas y riesgos de fitotoxicidad antes de guardar la formulación.
+Permite formular mezclas combinando múltiples insumos puros para diseñar recetas nutricionales o fitosanitarias. Al seleccionar los compuestos y fijar el volumen total de agua deseado, el sistema calcula automáticamente la proporción exacta de cada componente a partir de su dosis unitaria, alertando sobre incompatibilidades químicas conocidas y riesgos de fitotoxicidad antes de registrar la fórmula.
 
 ![Figura Ap-F7. Asistente interactivo para formulación y balanceo de recetas compuestas para tanque dosificador.](figuras/apendice_f/figura_ap_f7_formulacion_recetas_compuestas.png)
 
-**_Figura Ap-F7._** Asistente interactivo para formulación y balanceo de recetas compuestas para tanque dosificador.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Detalla el configurador de formulaciones, cálculo volumétrico automático de ingredientes por volumen de tanque y verificación de compatibilidad.
+*Figura Ap-F7*. Asistente de Formulación y Balanceo de Recetas Compuestas.
+*Nota.* Detalla el configurador de formulaciones, cálculo volumétrico automático de ingredientes por volumen de tanque y verificación de compatibilidad.
 
-##### Configuración de Programas Nutricionales y Fitosanitarios Rotativos (`/lab/dosing`)
+#### ***Configuración de programas nutricionales y fitosanitarios rotativos (`/lab/dosing`).***
 
-Permite estructurar planes agronómicos secuenciales organizados en ciclos rotativos de 4 a 8 pasos. Esta interfaz asegura la alternancia periódica de moléculas fitosanitarias con diferente modo de acción (FRAC e IRAC) e intercala riegos de lavado con agua pura entre aplicaciones nutricionales, preservando la conductividad eléctrica del sustrato y previniendo la acumulación salina en las raíces.
+Estructura planes agronómicos secuenciales organizados en ciclos rotativos de 4 a 8 pasos para su automatización. La interfaz garantiza la alternancia de moléculas con distinto mecanismo de acción (FRAC/IRAC) e intercala riegos de lavado con agua pura entre fertilizaciones, preservando la conductividad eléctrica del sustrato y mitigando la resistencia biológica de patógenos.
 
 ![Figura Ap-F8. Diseñador de programas agronómicos secuenciales y rotación de principios activos.](figuras/apendice_f/figura_ap_f8_programas_agronomicos_rotativos.png)
 
-**_Figura Ap-F8._** Diseñador de programas agronómicos secuenciales y rotación de principios activos.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Presenta la secuencia cíclica de aplicaciones, asignación de recetas por etapa y pautas de alternancia de moléculas anti-resistencia.
+*Figura Ap-F8*. Diseñador de Programas Agronómicos Secuenciales y Rotación de Principios Activos.
+*Nota.* Presenta la secuencia cíclica de aplicaciones, asignación de recetas por etapa y pautas de alternancia de moléculas anti-resistencia.
 
-##### Agenda Proyectada y Programación de Tratamientos (`/lab/dosing-schedules`)
+#### ***Agenda proyectada y programación de tratamientos (`/lab/dosing-schedules`).***
 
-Visualiza un calendario proyectado en el tiempo donde se programan las fechas y horas exactas de aplicación de cada paso del programa agronómico. Permite vincular la rutina a sectores específicos de mesas de cultivo, asociar recordatorios para la preparación manual de la mezcla en tanque y habilitar la conmutación de la Línea 4 de agroquímicos del tablero eléctrico.
+Consola de seguimiento para dosificación manual y automatizada, homóloga a las vistas de cola (`/queue`) e histórico (`/history`) del circuito hidráulico. Mediante un cronograma interactivo, supervisa las fechas y horas de aplicación de cada tratamiento proyectado, asigna las rutinas a mesas de cultivo específicas y audita el estado de cada labor (pendiente, completada o diferida), coordinando la preparación en tanque con la conmutación de la Línea 4 de agroquímicos.
 
 ![Figura Ap-F9. Agenda cronológica proyectada de tratamientos agronómicos y seguimiento de calendario.](figuras/apendice_f/figura_ap_f9_agenda_tratamientos_agronomicos.png)
 
-**_Figura Ap-F9._** Agenda cronológica proyectada de tratamientos agronómicos y seguimiento de calendario.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Exhibe la vista de calendario con las aplicaciones fitosanitarias y nutricionales proyectadas, estado de ejecución y asignación de mesas.
+*Figura Ap-F9*. Agenda Proyectada y Programación de Tratamientos.
+*Nota.* Exhibe el cronograma de tratamientos agronómicos proyectados, estado de seguimiento de tareas y asignación por mesas de cultivo.
 
 ---
 
-#### 1.3. Catálogo Botánico, Inventario Físico y Gemelos Digitales
+### **Catálogo botánico, inventario físico y gemelos digitales.**
 
 Este módulo materializa la individualización de cada activo biológico vivo en las mesas de cultivo mediante el modelo de gemelos digitales (`SeedPlant`), vinculando la taxonomía botánica, el tamaño de maceta (`PotSize`), la trazabilidad fenológica de floración y la disponibilidad comercial en tienda.
 
-##### Catálogo Taxonómico de Especies Botánicas (`/inventory/catalog`)
+#### ***Modales de creación y parametrización taxonómica (`/catalog`).***
 
-Listado maestro de las especies y variantes botánicas registradas en la plataforma. Presenta información taxonómica exhaustiva (familia *Orchidaceae*, género, especie, variedad o epíteto híbrido), galería fotográfica botánica, requerimientos de cultivo (rango óptimo de temperatura, humedad relativa e iluminación en lux) y descripción fenológica general de la inflorescencia.
+Permite gobernar la taxonomía vegetal del sistema a través de tres diálogos modales activados desde las tarjetas métricas de la cabecera. El modal de Tipos de Plantas expone las clases botánicas base (`PlantType`: Orquídeas, Adeniums, Bromelias, Cactus y Suculentas). El modal de Géneros posibilita registrar y editar géneros botánicos vinculándolos a su tipo correspondiente. Por su parte, el modal de Alta Rápida de Especies captura el nombre de la especie, la selección en cascada de tipo y género, la descripción y el color de resplandor (*glowColor*), integrando persistencia automática de borradores en cliente (`useFormDraftStore`) que previene la pérdida de datos antes de transicionar hacia el gestor avanzado.
 
-![Figura Ap-F10. Catálogo maestro de especies botánicas y referencias taxonómicas de cultivo.](figuras/apendice_f/figura_ap_f10_catalogo_especies_botanicas.png)
+![Figura Ap-F10. Modales de creación y parametrización taxonómica de tipos, géneros y especies.](figuras/apendice_f/figura_ap_f10_modales_creacion_taxonomica.png)
 
-**_Figura Ap-F10._** Catálogo maestro de especies botánicas y referencias taxonómicas de cultivo.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Despliega la colección de especies registradas con clasificación taxonómica, miniaturas fotográficas y parámetros ecofisiológicos de referencia.
+*Figura Ap-F10*. Modales de Creación y Parametrización Taxonómica.
+*Nota.* Muestra los diálogos modales para gestión de tipos botánicos, registro de géneros y alta rápida de especies con persistencia de borradores.
 
-##### Formulario de Alta y Edición Taxonómica de Especie (`/inventory/catalog/new`)
+#### ***Catálogo botánico y cuadrícula de especies por género (`/catalog`).***
 
-Formulario estructurado que permite ingresar nuevos genotipos botánicos al sistema. Captura el género, especie, autor botánico, híbrido parental, fotoperíodo sugerido, rangos térmicos admisibles, sustrato recomendado y carga de archivos multimedia en alta definición representativos de la flor y porte foliar.
+Organiza la colección vegetal del orquideario en una estructura jerárquica agrupada por Tipo de Planta y seccionada por bloques de Género. Cada bloque de género incluye un menú contextual de administración para editar su denominación o eliminarlo de forma protegida (con validación de seguridad que bloquea la acción si posee especies hijas asociadas). La cuadrícula presenta las tarjetas interactivas (`CatalogSpeciesCard`) de cada especie con su fotografía de portada, nombre botánico y badges cuantitativos de variantes comerciales configuradas y plantas vivas en mesas. La vista integra un sistema de enfoque reactivo que realiza un desplazamiento suave centrado y resalta temporalmente con un halo luminoso (*glow*) la especie recién creada o modificada.
 
-![Figura Ap-F11. Formulario de registro y edición de atributos taxonómicos y ecofisiológicos de la especie.](figuras/apendice_f/figura_ap_f11_formulario_alta_taxonomica.png)
+![Figura Ap-F11. Catálogo botánico y cuadrícula de especies por género con tarjetas interactivas.](figuras/apendice_f/figura_ap_f11_catalogo_especies_por_genero.png)
 
-**_Figura Ap-F11._** Formulario de registro y edición de atributos taxonómicos y ecofisiológicos de la especie.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Ilustra los campos de captura de datos botánicos, parámetros climáticos de confort y gestor de carga de fotografías de referencia.
+*Figura Ap-F11*. Catálogo Botánico y Cuadrícula de Especies por Género.
+*Nota.* Presenta la organización del catálogo por géneros, tarjetas de especies con indicadores de variantes y plantas en mesa, y acciones de gestión.
 
-##### Matriz de Inventario de Gemelos Digitales en Mesas (`/inventory/stock`)
+#### ***Gestión integral de especie y galería multimedia (`/catalog/[slug]`).***
 
-Panel central de inventario físico individualizado. Muestra cada espécimen en maceta (`SeedPlant`) registrado en el orquideario con un código unívoco. La tabla permite filtrar por tamaño de contenedor (`PotSize`: Nro 5, Nro 7, Nro 10 y Nro 14), ubicación espacial tridimensional (Zonas A a D y Mesas 1 a 6) y estado biológico (`AVAILABLE` para especímenes comerciales o `MOTHER` para ejemplares élite de banco germoplasma).
+Centraliza la administración técnica y visual de una especie botánica individual. Permite editar el nombre taxonómico, reasignar su género y redactar la descripción morfológica. Incorpora un selector cromático inteligente (`glowColor`) que analiza y extrae en tiempo real el color vibrante dominante de la fotografía floral para fijar la identidad visual y el resplandor de la planta en la tienda. Su gestor multimedia interactivo permite cargar imágenes en alta resolución organizadas en Cloudflare R2 (`plants/[tipo]/[género]/[slug]`), reordenar las tomas mediante arrastre (*drag & drop*), designar la fotografía principal de portada (*badge Principal / botón Destacar*) y eliminar imágenes bajo confirmación modal, protegiendo al espécimen contra eliminaciones accidentales si cuenta con activos biológicos en cultivo.
 
-![Figura Ap-F12. Matriz de inventario individualizado de gemelos digitales (SeedPlant) en mesas de cultivo.](figuras/apendice_f/figura_ap_f12_inventario_gemelos_digitales.png)
+![Figura Ap-F12. Gestión integral de especie, selector cromático y galería multimedia con reordenamiento por arrastre.](figuras/apendice_f/figura_ap_f12_gestion_especie_galeria.png)
 
-**_Figura Ap-F12._** Matriz de inventario individualizado de gemelos digitales (SeedPlant) en mesas de cultivo.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Muestra la relación unívoca de macetas vivas, tamaño de maceta, sector físico en mesas, estado biológico y enlace a ficha de floración.
+*Figura Ap-F12*. Gestión Integral de Especie y Galería Multimedia.
+*Nota.* Exhibe el editor de metadatos botánicos, selector de colorimetría vibrante y el gestor de imágenes con ordenamiento por arrastre y selección de portada.
 
-##### Ficha Individual de Espécimen y Bitácora Fenológica (`/inventory/stock/[id]`)
+#### ***Matriz de inventario físico y gemelos digitales en mesas (`/stock`).***
 
-Ficha técnica dedicada a un ejemplar físico específico. Documenta su fecha de siembra o trasplante, maceta actual, registros fotográficos cronológicos y la bitácora fenológica completa de sus floraciones: fecha de brote de vara floral, apertura de la primera flor, conteo de botones florales, duración total de la inflorescencia en días y fecha de marchitamiento. Esta información permite evaluar la vitalidad del espécimen y catalogarlo para venta o propagación.
+Panel central de inventario físico y seguimiento de activos biológicos en cultivo. Agrupa las especies registradas mostrando para cada una el total acumulado de ejemplares vivos (`SeedPlant`) y el desglose de variantes de venta disponibles. La vista permite explorar las macetas presentes en las mesas del orquideario, verificar su estado vegetativo y acceder directamente a la ficha individual de inventario por especie.
 
-![Figura Ap-F13. Ficha individual de espécimen botánico con registro y bitácora fenológica de floración.](figuras/apendice_f/figura_ap_f13_ficha_individual_fenologia.png)
+![Figura Ap-F13. Matriz de inventario físico y variantes de venta por especie en mesas de cultivo.](figuras/apendice_f/figura_ap_f13_inventario_stock_mesas.png)
 
-**_Figura Ap-F13._** Ficha individual de espécimen botánico con registro y bitácora fenológica de floración.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Despliega la hoja de vida de la planta en maceta, historial de eventos fenológicos, duración de flores y evolución visual.
+*Figura Ap-F13*. Matriz de Inventario Físico y Gemelos Digitales en Mesas.
+*Nota.* Muestra el listado de especies en inventario con conteo total de plantas vivas en mesas y variantes comerciales activas.
 
-##### Gestor Comercial de Variantes y Stock Sincronizado (`/inventory/shop-manager`)
+#### ***Ficha técnica de espécimen y bitácora fenológica (`/stock/[id]`).***
 
-Interfaz que gestiona la conciliación comercial del inventario. Permite al cultivador estructurar las variantes comerciales vendibles (`ProductVariant`), asociando una especie abstracta a un tamaño de maceta específico, fijando el precio en dólares estadounidenses (USD) y sincronizando automáticamente el stock disponible en tienda a partir del cómputo exacto de gemelos digitales (`SeedPlant`) disponibles en ese tamaño en las mesas.
+Ficha técnica y operacional dedicada al inventario de una especie específica en las mesas. Integra un panel de analítica fenológica que consolida el benchmark histórico de floración (duración media de la flor en días, frecuencia anual y meses típicos de inflorescencia), el gestor de variantes comerciales por tamaño de contenedor (`PotSize`: Nro 5, Nro 7, Nro 10 y Nro 14) con sus precios en USD, y la relación unívoca de plantas físicas en mesa (`PlantInstanceCard`) con registro de eventos fenológicos de floración (fechas de brote de vara, apertura y marchitamiento) y su ubicación espacial tridimensional (Zona y Mesa).
 
-![Figura Ap-F14. Gestor de variantes comerciales y sincronización reactiva de stock con mesas físicas.](figuras/apendice_f/figura_ap_f14_gestor_variantes_stock.png)
+![Figura Ap-F14. Ficha técnica de inventario de especie con analítica fenológica de floración y plantas en mesa.](figuras/apendice_f/figura_ap_f14_ficha_stock_fenologia.png)
 
-**_Figura Ap-F14._** Gestor de variantes comerciales y sincronización reactiva de stock con mesas físicas.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Muestra la asignación de precios por tamaño de maceta, estado comercial visible y stock calculado en tiempo real según plantas en mesa.
+*Figura Ap-F14*. Ficha Técnica de Espécimen y Bitácora Fenológica.
+*Nota.* Despliega la analítica histórica de floración, conciliación de macetas físicas por mesa y tarjetas de ejemplares vivos.
 
-##### Panel de Solicitudes y Lista de Espera de Ejemplares (`/inventory/requests`)
+#### ***Gestor comercial de variantes y stock sincronizado (`/shop-manager`).***
 
-Permite gestionar el interés de clientes sobre especies botánicas actualmente agotadas o en fase de maduración vegetativa. Registra el nombre, correo electrónico y tamaño de maceta solicitado, generando notificaciones automáticas al momento en que nuevas plantas de esa especie alcanzan el estado disponible en el inventario físico de mesas.
+Interfaz administrativa que gestiona la personalización de la tienda pública digital. Permite al cultivador designar las especies botánicas destacadas en la vitrina comercial (`FeaturedSpeciesManager`), seleccionar piezas multimedia de portada (`MediaPicker`) y sincronizar automáticamente el stock disponible para venta en línea a partir de la conciliación estricta de las macetas vivas registradas en las mesas de cultivo.
 
-![Figura Ap-F15. Panel de administración de solicitudes de reposición y lista de espera de clientes.](figuras/apendice_f/figura_ap_f15_solicitudes_lista_espera.png)
+![Figura Ap-F15. Gestor comercial de vitrina, especies destacadas y sincronización de stock con mesas físicas.](figuras/apendice_f/figura_ap_f15_gestor_tienda_destacados.png)
 
-**_Figura Ap-F15._** Panel de administración de solicitudes de reposición y lista de espera de clientes.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Exhibe las peticiones de reserva de especies sin stock, datos de contacto del comprador y alertas automáticas de reposición.
+*Figura Ap-F15*. Gestor Comercial de Variantes y Stock Sincronizado.
+*Nota.* Ilustra el panel de personalización de la vitrina comercial, selección de especies destacadas y asignación de banners multimedia.
+
+#### ***Panel de solicitudes y lista de espera de ejemplares (`/requests`).***
+
+Permite administrar el interés de compra de clientes sobre especies botánicas temporalmente agotadas o en fase de crecimiento vegetativo. Centraliza los registros de solicitud vinculando el correo electrónico del comprador con la especie y tamaño de maceta de interés, disparando notificaciones automáticas tan pronto como nuevos ejemplares físicos de dicha especie alcanzan el estado comercial disponible en las mesas de cultivo.
+
+![Figura Ap-F16. Panel de administración de solicitudes de reposición y lista de espera de clientes.](figuras/apendice_f/figura_ap_f16_solicitudes_lista_espera.png)
+
+*Figura Ap-F16*. Panel de Solicitudes y Lista de Espera de Ejemplares.
+*Nota.* Exhibe las peticiones de reserva de especies sin stock, datos de contacto del comprador y alertas automáticas de reposición.
 
 ---
 
-#### 1.4. Telemetría y Monitoreo Ambiental
+### **Telemetría y monitoreo ambiental.**
 
 Estas vistas representan el núcleo de percepción del microclima, exhibiendo las magnitudes físicas transmitidas minuto a minuto por las estaciones EMA Exterior e Interior, las derivadas analíticas del oráculo pluvial y los indicadores psicrométricos de estrés vegetal.
 
-##### Dashboard Telemétrico Central en Tiempo Real (`/monitoring`)
+#### ***Dashboard telemétrico central en tiempo real (`/monitoring`).***
 
-Panel principal de supervisión climática del orquideario. Exhibe tarjetas de lectura instantánea que contrastan las condiciones de intemperie (EMA Exterior) con las condiciones bajo malla sombra (EMA Interior): Temperatura ($^\circ\text{C}$), Humedad Relativa ($\%HR$), Iluminancia solar ($\text{Lux}$) y Déficit de Presión de Vapor ($\text{VPD}$ en $\text{kPa}$). Adicionalmente, integra gráficos históricos interactivos alimentados desde InfluxDB con selectores de ventana temporal (24 horas, 7 días, 30 días) y marcadores de la zona de confort fisiológico de las orquídeas.
+Panel principal de supervisión climática del orquideario. Exhibe tarjetas de lectura instantánea que contrastan las condiciones de intemperie (EMA Exterior) con las condiciones bajo malla sombra (EMA Interior): Temperatura ($^\circ\text{C}$), Humedad Relativa ($\%HR$) e Iluminancia solar ($\text{Lux}$). Adicionalmente, integra gráficos históricos interactivos alimentados desde InfluxDB con selectores de ventana temporal (24 horas, 7 días, 30 días) y marcadores de la zona de confort ambiental de las orquídeas.
 
-![Figura Ap-F16. Dashboard telemétrico de supervisión microclimática en tiempo real y series históricas.](figuras/apendice_f/figura_ap_f16_dashboard_telemetria_tiempo_real.png)
+![Figura Ap-F17. Dashboard telemétrico de supervisión microclimática en tiempo real y series históricas.](figuras/apendice_f/figura_ap_f17_dashboard_telemetria_tiempo_real.png)
 
-**_Figura Ap-F16._** Dashboard telemétrico de supervisión microclimática en tiempo real y series históricas.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Presenta los indicadores microclimáticos instantáneos de ambas estaciones, gráficos temporales de T, HR y VPD, y bandas de confort vegetal.
+*Figura Ap-F17*. Dashboard Telemétrico de Supervisión Microclimática en Tiempo Real.
+*Nota.* Presenta los indicadores microclimáticos instantáneos de ambas estaciones, gráficos temporales de temperatura, humedad y luz, y bandas de confort vegetal.
 
-##### Monitor del Oráculo Meteorológico e Inferencia de Lluvia (`/weather-oracle`)
+#### ***Monitor del oráculo meteorológico e inferencia de lluvia (`/weather-oracle`).***
 
 Interfaz de visualización operativa del Motor de Inferencia Meteorológica (`rain-manager.ts`). Muestra el estado atmosférico actual deducido por el algoritmo (Despejado, Lluvia Nublada, Lluvia Soleada, Lluvia Nocturna o Cese de Precipitación), el cálculo en tiempo real de las derivadas térmicas instantáneas ($-\Delta T$) e higrométricas ($+\Delta HR$) en ventanas deslizantes de 10, 20 y 30 minutos, y la activación de guardas que vetan preventivamente las operaciones hidráulicas de aspersión.
 
-![Figura Ap-F17. Monitor del oráculo meteorológico e inferencia algorítmica de eventos pluviales.](figuras/apendice_f/figura_ap_f17_monitor_oraculo_meteorologico.png)
+![Figura Ap-F18. Monitor del oráculo meteorológico e inferencia algorítmica de eventos pluviales.](figuras/apendice_f/figura_ap_f18_monitor_oraculo_meteorologico.png)
 
-**_Figura Ap-F17._** Monitor del oráculo meteorológico e inferencia algorítmica de eventos pluviales.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Ilustra el estado pluvial inferido en tiempo real, derivadas de gradientes higrotérmicos en ventanas deslizantes y estado de veto hídrico.
+*Figura Ap-F18*. Monitor del Oráculo Meteorológico e Inferencia de Lluvia.
+*Nota.* Ilustra el estado pluvial inferido en tiempo real, derivadas de gradientes higrotérmicos en ventanas deslizantes y estado de veto hídrico.
 
-##### Análisis Ecofisiológico e Indicadores de Microclima por Zona (`/botanics`)
+#### ***Análisis ecofisiológico e indicadores de microclima por zona (`/botanics`).***
 
-Panel de analítica agronómica avanzada que sintetiza el comportamiento ecofisiológico del cultivo. Evalúa la integral higrométrica diaria, las horas acumuladas bajo estrés térmico ($T > 32^\circ\text{C}$), los niveles medios de VPD y la radiación solar acumulada. Proporciona recomendaciones cualitativas automáticas al cultivador sobre la necesidad de aplicar pulsos de humectación en piso (Línea 3) o nebulización aérea (Línea 1).
+Panel de analítica agronómica avanzada que sintetiza el comportamiento ambiental del cultivo. Evalúa la integral higrométrica diaria, las horas acumuladas bajo estrés térmico ($T > 32^\circ\text{C}$), los promedios térmicos diurnos y la radiación solar acumulada. Proporciona recomendaciones cualitativas automáticas al cultivador sobre la necesidad de aplicar pulsos de humectación en piso (Línea 3) o nebulización aérea (Línea 1).
 
-![Figura Ap-F18. Panel de analítica agronómica, balance higrotérmico e indicadores de confort vegetal.](figuras/apendice_f/figura_ap_f18_analisis_botanico_microclima.png)
+![Figura Ap-F19. Panel de analítica agronómica, balance higrotérmico e indicadores de confort vegetal.](figuras/apendice_f/figura_ap_f19_analisis_botanico_microclima.png)
 
-**_Figura Ap-F18._** Panel de analítica agronómica, balance higrotérmico e indicadores de confort vegetal.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Despliega índices de estrés por déficit de presión de vapor, acumulación de calor diurno y recomendaciones ecofisiológicas de irrigación.
+*Figura Ap-F19*. Panel de Analítica Agronómica e Indicadores de Confort Vegetal.
+*Nota.* Despliega índices de estrés térmico, acumulación de calor diurno y recomendaciones ambientales de irrigación.
 
 ---
 
-#### 1.5. Comercio Electrónico y Gestión Comercial
+### **Comercio electrónico y gestión comercial.**
 
 Este bloque comprende la experiencia comercial del cliente externo en la tienda digital y las herramientas administrativas del orquideario para conciliar pagos multimoneda y coordinar despachos.
 
-##### Catálogo Público de la Tienda Botánica (`/category/plants`)
+#### ***Catálogo público de la tienda botánica (`/category/plants`).***
 
 Vista principal de exploración para el cliente final. Dispone de una cuadrícula de productos responsiva con fotografías botánicas de alta resolución, nombre científico, nombre común y rango de precios. Incorpora un motor de búsqueda por texto y filtros dinámicos por género taxonómico (*Cattleya*, *Phalaenopsis*, *Dendrobium*, *Vanda*, *Oncidium*, etc.) y requerimientos de iluminación.
 
-![Figura Ap-F19. Catálogo público de la tienda botánica con filtros taxonómicos dinámicos y buscador.](figuras/apendice_f/figura_ap_f19_catalogo_tienda_publica.png)
+![Figura Ap-F20. Catálogo público de la tienda botánica con filtros taxonómicos dinámicos y buscador.](figuras/apendice_f/figura_ap_f20_catalogo_tienda_publica.png)
 
-**_Figura Ap-F19._** Catálogo público de la tienda botánica con filtros taxonómicos dinámicos y buscador.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Exhibe la vitrina comercial con tarjetas de especies, selector interactivo de géneros botánicos y barra de búsqueda reactiva.
+*Figura Ap-F20*. Catálogo Público de la Tienda Botánica.
+*Nota.* Exhibe la vitrina comercial con tarjetas de especies, selector interactivo de géneros botánicos y barra de búsqueda reactiva.
 
-##### Ficha Comercial de Producto Botánico y Selector de Maceta (`/plant/[slug]`)
+#### ***Ficha comercial de producto botánico y selector de maceta (`/plant/[slug]`).***
 
 Ficha técnica y comercial de la especie. Presenta la galería de imágenes, ficha botánica descriptiva, consejos de cultivo y un selector de tamaño de maceta interactivo (`PotSize`). Al seleccionar el contenedor deseado, la vista actualiza en tiempo real el precio en USD y la disponibilidad en existencias sustentada en las macetas vivas en mesa, deshabilitando la opción de compra si la variante no cuenta con ejemplares físicos disponibles.
 
-![Figura Ap-F20. Ficha comercial de especie con selector de tamaño de maceta y disponibilidad real en mesas.](figuras/apendice_f/figura_ap_f20_ficha_comercial_producto.png)
+![Figura Ap-F21. Ficha comercial de especie con selector de tamaño de maceta y disponibilidad real en mesas.](figuras/apendice_f/figura_ap_f21_ficha_comercial_producto.png)
 
-**_Figura Ap-F20._** Ficha comercial de especie con selector de tamaño de maceta y disponibilidad real en mesas.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Muestra la ficha detallada de la especie, selector dinámico de tamaño de maceta, actualización de precio y botón de agregar al carrito.
+*Figura Ap-F21*. Ficha Comercial de Especie y Selector de Tamaño de Maceta.
+*Nota.* Muestra la ficha detallada de la especie, selector dinámico de tamaño de maceta, actualización de precio y botón de agregar al carrito.
 
-##### Carrito de Compras Interactivo (`/cart`)
+#### ***Carrito de compras interactivo (`/cart`).***
 
 Permite al comprador auditar los especímenes seleccionados, modificar las cantidades respetando los límites de stock real en mesa, visualizar los subtotales en dólares y proceder al cierre de la compra. Dispone de almacenamiento persistente en el navegador para preservar los productos durante la sesión de compra.
 
-![Figura Ap-F21. Carrito de compras interactivo con validación de existencias y cálculo de subtotales.](figuras/apendice_f/figura_ap_f21_carrito_compras_interactivo.png)
+![Figura Ap-F22. Carrito de compras interactivo con validación de existencias y cálculo de subtotales.](figuras/apendice_f/figura_ap_f22_carrito_compras_interactivo.png)
 
-**_Figura Ap-F21._** Carrito de compras interactivo con validación de existencias y cálculo de subtotales.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Ilustra el desglose de productos seleccionados por maceta, cálculo reactivo del monto total y botón de inicio de checkout.
+*Figura Ap-F22*. Carrito de Compras Interactivo.
+*Nota.* Ilustra el desglose de productos seleccionados por maceta, cálculo reactivo del monto total y botón de inicio de checkout.
 
-##### Proceso de Pago y Datos de Entrega (`/checkout`)
+#### ***Proceso de pago y datos de entrega (`/checkout`).***
 
 Formulario de formalización de compra donde el usuario suministra sus datos de facturación y selecciona la modalidad de entrega: retiro directo en las instalaciones del orquideario en San Félix o despacho a domicilio. Asimismo, permite seleccionar el método de pago preferente (Pago Móvil, Transferencia bancaria o divisas en efectivo).
 
-![Figura Ap-F22. Formulario de formalización de pedido, selección de despacho y método de pago multimoneda.](figuras/apendice_f/figura_ap_f22_formulario_checkout_entrega.png)
+![Figura Ap-F23. Formulario de formalización de pedido, selección de despacho y método de pago multimoneda.](figuras/apendice_f/figura_ap_f23_formulario_checkout_entrega.png)
 
-**_Figura Ap-F22._** Formulario de formalización de pedido, selección de despacho y método de pago multimoneda.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Presenta los campos para datos de consignación, opciones logísticas de retiro/despacho y selección de pasarela de pago.
+*Figura Ap-F23*. Formulario de Formalización de Pedido y Selección de Despacho.
+*Nota.* Presenta los campos para datos de consignación, opciones logísticas de retiro/despacho y selección de pasarela de pago.
 
-##### Confirmación de Orden y Canalización por WhatsApp (`/checkout/order/[id]`)
+#### ***Confirmación de orden y canalización por WhatsApp (`/checkout/order/[id]`).***
 
 Pantalla de confirmación tras registrar el pedido en la base de datos. Muestra el número correlativo de la orden, el resumen detallado de las plantas adquiridas y las instrucciones para formalizar la transferencia bancaria. Dispone de un botón interactivo que canaliza el resumen de la orden directamente hacia el canal de mensajería del cultivador (WhatsApp API), adjuntando el código unívoco para agilizar la verificación del pago.
 
-![Figura Ap-F23. Pantalla de confirmación de pedido con instrucciones de pago y derivación directa a WhatsApp.](figuras/apendice_f/figura_ap_f23_confirmacion_orden_whatsapp.png)
+![Figura Ap-F24. Pantalla de confirmación de pedido con instrucciones de pago y derivación directa a WhatsApp.](figuras/apendice_f/figura_ap_f24_confirmacion_orden_whatsapp.png)
 
-**_Figura Ap-F23._** Pantalla de confirmación de pedido con instrucciones de pago y derivación directa a WhatsApp.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Detalla el comprobante digital de la orden, datos bancarios del vendedor y botón interactivo para validar la transacción por WhatsApp.
+*Figura Ap-F24*. Pantalla de Confirmación de Pedido y Canalización por WhatsApp.
+*Nota.* Detalla el comprobante digital de la orden, datos bancarios del vendedor y botón interactivo para validar la transacción por WhatsApp.
 
-##### Conciliación de Órdenes y Registro de Venta Directa (`/orders` y `/orders/sales`)
+#### ***Conciliación de órdenes y registro de venta directa (`/orders` y `/orders/sales`).***
 
 Panel administrativo para el cultivador. Permite auditar las órdenes entrantes, verificar los comprobantes de pago suministrados por los clientes y transicionar el estado del pedido (`PENDING` $\to$ `PAID` $\to$ `DELIVERED`). Al confirmarse el despacho, la plataforma descuenta automáticamente las macetas físicas correspondientes en la matriz de inventario. Adicionalmente, incluye un módulo de venta directa en mostrador (`/orders/sales`) para registrar compras presenciales en el invernadero.
 
-![Figura Ap-F24. Panel de conciliación administrativa de órdenes y módulo de venta directa en orquideario.](figuras/apendice_f/figura_ap_f24_conciliacion_ordenes_ventas.png)
+![Figura Ap-F25. Panel de conciliación administrativa de órdenes y módulo de venta directa en orquideario.](figuras/apendice_f/figura_ap_f25_conciliacion_ordenes_ventas.png)
 
-**_Figura Ap-F24._** Panel de conciliación administrativa de órdenes y módulo de venta directa en orquideario.
-*Nota.* Fuente: Elaboración propia a partir de la interfaz de usuario de PristinoPlant. Muestra la tabla de órdenes de compra para confirmación de pagos, cambio de estados de despacho y registro de ventas de mostrador.
+*Figura Ap-F25*. Panel de Conciliación Administrativa de Órdenes y Venta Directa.
+*Nota.* Muestra la tabla de órdenes de compra para confirmación de pagos, cambio de estados de despacho y registro de ventas de mostrador.
 
 ---
 
-### 2. Flujos Operativos y Diagramas de Interacción de Extremo a Extremo
+### **Flujos operativos y diagramas de interacción de extremo a extremo.**
 
 A fin de ilustrar la articulación funcional entre el usuario, la plataforma web, los microservicios del backend, el protocolo de mensajería y el hardware electromecánico en campo, a continuación se detallan los cinco (5) flujos operativos medulares del sistema.
 
 ---
 
-#### Flujo Operativo 1: Conmutación y Despacho Hidráulico (Manual y Programado)
+#### ***Flujo operativo 1: conmutación y despacho hidráulico (manual y programado).***
 
 Este flujo gobierna el ciclo de control físico sobre la red presurizada de cuatro líneas hidráulicas, cerrando el lazo entre las interfaces de usuario o el planificador automático y los actuadores de potencia.
 
@@ -317,7 +320,7 @@ sequenceDiagram
 
 ---
 
-#### Flujo Operativo 2: Dosificación Agronómica y Ciclos Fitosanitarios Rotativos
+#### ***Flujo operativo 2: dosificación agronómica y ciclos fitosanitarios rotativos.***
 
 Este flujo asegura el cumplimiento estricto de las labores de nutrición y sanidad botánica mediante la formulación computarizada y la conmutación de la Línea 4 de agroquímicos físicamente aislada.
 
@@ -356,7 +359,7 @@ sequenceDiagram
 
 ---
 
-#### Flujo Operativo 3: Ciclo de Vida del Gemelo Digital y Trazabilidad Botánica
+#### ***Flujo operativo 3: ciclo de vida del gemelo digital y trazabilidad botánica.***
 
 Este flujo implementa el modelo de correspondencia unívoca del activo biológico, garantizando que cada espécimen en maceta física cuente con un reflejo digital que documenta su evolución fenológica y gobierna el stock comercial de forma dinámica.
 
@@ -391,7 +394,7 @@ sequenceDiagram
 
 ---
 
-#### Flujo Operativo 4: Supervisión Telemétrica y Protección Algorítmica contra el Sobre-Riego
+#### ***Flujo operativo 4: supervisión telemétrica y protección algorítmica contra el sobre-riego.***
 
 Este flujo describe la captura sensorial continua y la intervención de los motores deliberativos para cancelar o vetar rutinas hídricas cuando el microclima no lo demanda, previniendo la pudrición radicular.
 
@@ -410,7 +413,7 @@ sequenceDiagram
     loop Cada 60 segundos
         EMA_Ext->>Ingest: Muestrea T, HR, Lux en intemperie y publica en MQTT (QoS 0)
         EMA_Int->>Ingest: Muestrea T, HR protegida y publica en MQTT
-        Ingest->>InfluxDB: Valida trama, calcula VPD y persiste muestra temporal
+        Ingest->>InfluxDB: Valida trama y persiste muestra temporal (T, HR, Lux)
         Ingest->>Oracle: Alimenta buffer deslizante (lotes B0, B1, B2 de 10 min)
     end
 
@@ -435,7 +438,7 @@ sequenceDiagram
 **Descripción Técnica del Flujo:**
 
 1. Las estaciones meteorológicas EMA Exterior y EMA Interior muestrean las magnitudes de temperatura ($T$), humedad relativa ($HR$) e iluminancia solar ($Lux$) cada 60 segundos, publicando tramas estructuradas en el bróker MQTT.
-2. El servicio `services/ingest` recibe las tramas, valida su integridad, calcula el Déficit de Presión de Vapor ($VPD$) y almacena los puntos en la base de series temporales InfluxDB.
+2. El servicio `services/ingest` recibe las tramas, valida su integridad y almacena los puntos en la base de series temporales InfluxDB.
 3. El Oráculo Meteorológico (`rain-manager.ts`) agrupa las lecturas en una cola de lotes deslizantes de 10 minutos ($B_0, B_1, B_2$) y calcula las derivadas instantáneas ($-\Delta T$ y $+\Delta HR$). Si los gradientes satisfacen las reglas heurísticas diurnas o nocturnas según la radiación solar, el algoritmo deduce la presencia de lluvia sin depender de sensores mecánicos corrosivos.
 4. Cuando el planificador (`Scheduler`) se dispone a ejecutar una rutina de riego programada, consulta al Motor de Inferencia Hídrica.
 5. El motor contrasta las condiciones actuales y recientes contra su matriz deliberativa: bloquea el riego si hay lluvia activa, si llovió en las últimas 4 a 8 horas, si la humedad relativa en el orquideario supera el 85%, o si se acumuló riego el día anterior.
@@ -443,7 +446,7 @@ sequenceDiagram
 
 ---
 
-#### Flujo Operativo 5: Adquisición Comercial, Checkout Multimoneda y Conciliación
+#### ***Flujo operativo 5: adquisición comercial, checkout multimoneda y conciliación.***
 
 Este flujo modela la interacción entre el cliente que formaliza una compra en la plataforma pública y el cultivador que valida la transacción y actualiza el inventario físico en mesa.
 

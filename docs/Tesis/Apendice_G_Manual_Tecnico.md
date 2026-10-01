@@ -1,173 +1,167 @@
 # Apéndices
 
-## Apéndice G: Manual Técnico del Sistema PristinoPlant
+## Apéndice G: Manual Técnico de Ingeniería, Arquitectura y Firmware
 
-El presente manual técnico proporciona las especificaciones de ingeniería, procedimientos de despliegue, configuración de firmware y pautas de mantenimiento requeridas para la operación, soporte y reproducibilidad de la plataforma PristinoPlant. Está dirigido a administradores de infraestructura, desarrolladores de software e ingenieros de mantenimiento de hardware.
+El presente manual técnico proporciona las especificaciones completas de ingeniería, la arquitectura de microservicios backend contenerizados, el dimensionamiento electromecánico del hardware, el diseño del firmware embebido en MicroPython y las directrices de manufactura y mantenimiento de la plataforma PristinoPlant. Este documento está dirigido a ingenieros de soporte, desarrolladores y personal de mantenimiento.
 
 ---
 
-### 1. Requisitos del Entorno de Desarrollo e Infraestructura
+### 1. Requisitos de Infraestructura y Entorno de Ingeniería
 
-Para configurar el entorno de trabajo y realizar tareas de mantenimiento o despliegue, la estación de ingeniería debe contar con las siguientes herramientas instaladas:
+Para reproducir el entorno operativo, desplegar el monorepositorio o ejecutar labores de soporte, la estación de trabajo y el servidor deben disponer de las siguientes herramientas:
 
 * **Node.js y Gestor de Paquetes:** Versión 22.x LTS o superior, administrada mediante Corepack para vincular rígidamente la versión de `pnpm` utilizada en el monorepositorio Turborepo.
 * **Entorno Python y Herramientas Embebidas:** Python 3.10 o superior, acompañado de los paquetes globales `esptool` (para operaciones en memoria flash) y `mpremote` (para interacción serial con MicroPython).
 * **Firmware Oficial de MicroPython:** Imagen binaria compilada para arquitectura ESP32 SoC (versión estable v1.26.0 o posterior).
-* **Motor de Contenedores:** Docker Engine y Docker Compose para el aislamiento y despliegue de los servicios de backend y almacenamiento persistente.
-* **Herramientas de Diagnóstico de Red:** Cliente MQTT Explorer para la auditoría y validación en tiempo real de los tópicos telemétricos bajo canales TLS seguros.
+* **Motor de Contenedores:** Docker Engine y Docker Compose para el aislamiento y despliegue de los servicios backend y las bases de datos políglotas.
+* **Diagnóstico de Red:** Cliente MQTT Explorer para la auditoría y validación en tiempo real de los tópicos telemétricos bajo canales MQTTS (puerto 8883 con TLS 1.3).
 
 ---
 
-### 2. Despliegue de Servicios de Servidor (VPS / Docker)
+### 2. Despliegue de Servicios Backend Contenerizados (Docker Compose)
 
-La arquitectura de backend se despliega en un Servidor Privado Virtual (VPS) bajo sistema operativo Linux Ubuntu Server 22.04 LTS, orquestada mediante un archivo maestro `docker-compose.yml` que encapsula la base de datos relacional, el almacenamiento de series temporales, el bróker telemétrico y los microservicios auxiliares.
+La infraestructura de servidor opera en un Servidor Privado Virtual (VPS) bajo Ubuntu Server 22.04 LTS, gobernada mediante un archivo maestro `docker-compose.yml` que encapsula la base de datos relacional, el motor de series de tiempo, el bróker telemétrico y los microservicios auxiliares.
 
-**Configuración del Bróker MQTTS (Eclipse Mosquitto).** El servicio de mensajería opera en el contenedor `mosquitto`, exponiendo el puerto seguro 8883 con cifrado TLS obligatorio. Requiere la vinculación de certificados SSL de dominio (CA, certificado de servidor y clave privada) y la configuración de listas de control de acceso (ACL) para autenticar unívocamente al nodo actuador, a las estaciones meteorológicas y a los microservicios de ingesta y planificación.
+* **Bróker MQTTS (Eclipse Mosquitto):** Expone el puerto seguro 8883 con cifrado TLS obligatorio, autenticación de credenciales por usuario y listas de control de acceso (ACL) que delimitan los tópicos autorizados para cada nodo físico y microservicio.
+* **Persistencia Políglota:**
+  * **PostgreSQL:** Persiste las entidades del dominio botánico (`PlantType`, `PlantGenus`, `PlantSpecies`, `Plant`), las recetas y programas de laboratorio, los usuarios y la bitácora inmutable de operaciones (`TaskLog`).
+  * **InfluxDB:** Almacena en un bucket de retención ilimitada las series temporales climáticas de alta resolución ($T, HR, Lux$) transmitidas minuto a minuto por las estaciones meteorológicas.
 
-**Persistencia Políglota y Microservicios.** La base de datos relacional PostgreSQL opera en el contenedor `postgres`, persistiendo las migraciones estructuradas por Prisma ORM relativas a especies, variantes comerciales, ejemplares individuales (`SeedPlant`) y bitácoras de auditoría. Paralelamente, el motor InfluxDB almacena en un *bucket* con retención ilimitada las series temporales climáticas ($T, HR, Lux, VPD$) consumidas por el microservicio `services/ingest`. La orquestación temporal de riego y los motores de inferencia se ejecutan en el microservicio `Scheduler` desarrollado en Node.js.
-
-La Tabla Ap-G1 consolida los parámetros de entorno esenciales requeridos para la inicialización y vinculación de los contenedores en el servidor de producción.
-
-#### Tabla Ap-G1. *Matriz de variables de entorno y parámetros de infraestructura de producción*
+#### Tabla Ap-G1. *Matriz de variables de entorno esenciales de producción*
 
 | Variable de Entorno | Servicio Destino | Propósito y Restricción Técnica |
 | :--- | :--- | :--- |
 | `DATABASE_URL` | App Web / Scheduler | Cadena de conexión TCP relacional hacia PostgreSQL con pooling de conexiones. |
 | `INFLUXDB_URL` | Ingest / Telemetría | Dirección del socket HTTP del motor InfluxDB (ej. `http://influxdb:8086`). |
-| `INFLUXDB_TOKEN` | Ingest / Telemetría | Token criptográfico de acceso con privilegios de lectura y escritura en el bucket. |
+| `INFLUXDB_TOKEN` | Ingest / Telemetría | Token criptográfico de acceso con privilegios de lectura/escritura en el bucket. |
 | `INFLUXDB_ORG` | Ingest / Telemetría | Identificador de organización dentro de la instancia de InfluxDB. |
 | `INFLUXDB_BUCKET` | Ingest / Telemetría | Contenedor lógico de persistencia para las series temporales del invernadero. |
 | `MQTT_BROKER_URL` | Ingest / Scheduler | URI del bróker seguro en producción (`mqtts://vps.sisparrow.com:8883`). |
-| `MQTT_USERNAME` | Todos los servicios | Usuario autenticado con permisos de publicación y suscripción en tópicos `/orchidium/*`. |
+| `MQTT_USERNAME` | Todos los servicios | Usuario autenticado con permisos en tópicos `pristinoplant/*`. |
 | `MQTT_PASSWORD` | Todos los servicios | Contraseña robusta de acceso telemétrico al bróker Mosquitto. |
 | `BETTER_AUTH_SECRET` | App Web Next.js | Clave secreta para el firmado criptográfico de sesiones y tokens de usuario. |
-| `NEXT_PUBLIC_R2_PUBLIC_URL` | Tienda / E-commerce | URL pública del bucket Cloudflare R2 para el renderizado optimizado de imágenes botánicas. |
-
-*Nota.* Fuente: Elaboración propia a partir de los archivos de configuración `.env.template` y `docker-compose.yml`.
+| `NEXT_PUBLIC_R2_PUBLIC_URL` | Tienda / E-commerce | URL pública del bucket Cloudflare R2 para renderizado de imágenes botánicas. |
 
 ---
 
-### 3. Especificación Técnica de Hardware y Conexiones Electromecánicas
+### 3. Arquitectura de Microservicios Backend
 
-La infraestructura física del sistema PristinoPlant articula el sensado microclimático hiperlocal, la conmutación eléctrica de fuerza y la impulsión hidráulica presurizada mediante componentes seleccionados por su robustez ante la intemperie tropical y alta humedad.
+Para garantizar alta resiliencia y desacoplar la ingesta de telemetría de las interfaces de usuario web, la lógica de servidor se distribuye en dos microservicios autónomos en Node.js y TypeScript:
 
-**Catálogo y Especificación de Componentes Físicos.** La Tabla Ap-G2 detalla los módulos de procesamiento, potencia, sensado y protección eléctrica integrados en el orquideario, documentando sus especificaciones nominales, tensiones de operación y funciones de ingeniería.
+```
++-----------------------------------------------------------------------------------+
+|                              ARQUITECTURA BACKEND DOCKER                          |
+|                                                                                   |
+|  [ESP32 Actuador] ---\                                                            |
+|  [ESP32 EMA Ext]   ----+----> [Bróker MQTTS: Mosquitto]                            |
+|  [ESP32 EMA Int]   ---/          |                 |                              |
+|                                  v                 v                              |
+|                         [Microservicio]     [Microservicio]                       |
+|                             INGEST             SCHEDULER                          |
+|                            (Node.js)           (Node.js)                          |
+|                                |                   |                              |
+|                   +------------+----+              +------------+                 |
+|                   |                 |              |            |                 |
+|                   v                 v              v            v                 |
+|              [InfluxDB]       [PostgreSQL]    [PostgreSQL]  [Mosquitto]           |
+|            (Series Tiempo)      (Sync)         (TaskLog)     (Comandos)           |
++-----------------------------------------------------------------------------------+
+```
 
-#### Tabla Ap-G2. *Especificación técnica y catálogo de componentes de hardware del sistema PristinoPlant*
+#### 3.1 Microservicio de Ingesta Telemétrica (`services/ingest`)
+Actúa como la pasarela de procesamiento asíncrono entre el bróker MQTTS y las bases de datos:
+1. **Desacoplamiento del Núcleo Web:** Mantiene una suscripción continua al árbol `pristinoplant/telemetria/#`. Evita que las ráfagas concurrentes de paquetes saturen las conexiones del servidor web Next.js.
+2. **Normalización y Filtrado de Datos:** Valida la estructura JSON de cada paquete, descarta lecturas anómalas fuera de rango físico producidas por transitorios eléctricos y añade marcas temporales normalizadas.
+3. **Escritura Dual Políglota:** Inserta los puntos climáticos escalares ($T, HR, Lux$) en InfluxDB y actualiza la marca de último reporte del nodo en PostgreSQL para alimentar los indicadores de estado en tiempo real.
+
+#### 3.2 Microservicio Planificador y Orquestador (`services/scheduler`)
+Opera de forma desatendida 24/7 coordinando las operaciones hidráulicas y la deliberación algorítmica:
+1. **Bucle Croner (`croner`):** Evalúa expresiones temporales periódicas para disparar rutinas de riego configuradas.
+2. **Motor de Inferencia Pluvial (`rain-manager.ts`):** Mantiene una cola deslizante de 4 lotes de 10 minutos ($B_0$ a $B_3$) para calcular derivadas de temperatura e incremento de humedad relativa clasificadas por ramas de radiación solar, deduciendo en tiempo real el inicio y cese de precipitación.
+3. **Motor de Inferencia Hídrica (`water-intelligence.ts`):** Aplica la matriz de guardas y vetos: cancela riegos si hay lluvia activa, lluvia en las últimas 4 horas, humedad interior $\ge 85\%$ o si ya se regó en la jornada previa (alternancia interdiaria).
+4. **Secuenciador de Comandos (`CommandSequencer`):** Despacha órdenes con QoS 1 hacia el nodo actuador, supervisa el tiempo de espera del acuse de recibo (`ACK`) y asienta el resultado inmutable en la tabla `TaskLog`.
+
+---
+
+### 4. Especificación Técnica de Hardware y Conexiones Electromecánicas
+
+La infraestructura física del sistema articula el sensado microclimático, la conmutación eléctrica de fuerza y la impulsión presurizada mediante componentes seleccionados por su resistencia al entorno tropical.
+
+#### Tabla Ap-G2. *Catálogo de componentes de hardware del sistema PristinoPlant*
 
 | Ítem | Componente / Modelo | Cantidad | Tensión / Consumo | Función en el Sistema | Interfaz / Notas Técnicas |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **1** | **ESP32-WROOM-32** (SoC dual-core 240 MHz) | 2 unidades | 3.3V / 5V DC (240 mA) | Procesamiento embebido, telemetría y control | Unidades en Tablero de Fuerza/EMA Ext. y EMA Int. Wi-Fi 802.11 b/g/n, MQTTS TLS (8883). |
-| **2** | **Placa Shield de Expansión ESP32** | 2 unidades | 5V DC pasivo | Borneras de conexión y fijación mecánica rígida | Terminales de tornillo para suprimir falsos contactos en buses y cableado hacia relés. |
+| **1** | **ESP32-WROOM-32** (SoC dual-core 240 MHz) | 2 unidades | 3.3V / 5V DC (240 mA) | Procesamiento embebido, telemetría y control | Unidades en Tablero de Potencia/EMA Ext. y EMA Int. Wi-Fi 802.11 b/g/n, MQTTS TLS (8883). |
+| **2** | **Placa Shield de Expansión ESP32** | 2 unidades | 5V DC pasivo | Borneras de conexión y fijación mecánica rígida | Terminales de tornillo para suprimir falsos contactos en buses de datos. |
 | **3** | **Bomba de Agua Periférica (1 HP, 0.75 kW)** | 1 unidad | 110VAC / 11A nominal | Impulsión presurizada de la red matriz de riego | Conexión de 1 pulgada; 2.5 a 3.2 bar (50 L/min). Conmutada vía contactor industrial de 30A. |
 | **4** | **Contactor Industrial en Riel DIN** | 1 unidad | Bobina 110VAC / Contactos 30A | Conmutación de fuerza de la bomba de agua | Manejo de corriente inductiva de arranque; desacopla y protege a los relés de 10A de fatiga térmica. |
 | **5** | **Controlador de Presión (*Press Control*)** | 1 unidad | 110VAC / 10A | Automatización de flujo y protección contra marcha en seco | Manómetro integrado y sensor de flujo; detiene la bomba ante ausencia de caudal en succión. |
 | **6** | **Electroválvulas de Solenoide Maestras** | 2 unidades | 110VAC / 15W | Conmutación de entradas matrices de agua y agroquímicos | Rosca de 1 pulgada, normalmente cerradas (NC); conmutadas vía relés optoacoplados. |
-| **7** | **Electroválvulas de Solenoide de Sector** | 4 unidades | 24VAC / 8W | Apertura y cierre de las 4 líneas de riego independientes | Rosca de 3/4 pulgada, NC; distribuyen a nebulizadores, microaspersores y manguera de piso. |
+| **7** | **Electroválvulas de Solenoide de Sector** | 4 unidades | 24VAC / 8W | Apertura y cierre de las 4 líneas de riego independientes | Rosca de 3/4 pulgada, NC; distribuyen a nebulizadores, aspersores y manguera de piso. |
 | **8** | **Módulos de Relés Optoacoplados (4 Canales)** | 2 módulos (8 relés) | 5VDC lógica / 250VAC 10A contactos | Aislamiento galvánico y disparo de bobinas de fuerza | Disparo por nivel bajo (Active-Low); 1 relé para contactor de bomba y 6 para electroválvulas. |
 | **9** | **Fusileras Industriales de Protección (15A)** | 2 unidades | 110VAC / 15A cartucho | Protección contra sobrecorrientes en acometida | Instaladas individualmente en línea de fase positiva y en línea de neutro. |
 | **10** | **Interruptor Switch Industrial de Maniobra** | 1 unidad | 110VAC / 20A | Seccionamiento y corte general manual del tablero | Montaje en panel frontal para desenergización inmediata de todo el ecosistema. |
 | **11** | **Transformador Electromagnético Reductor** | 1 unidad | Entrada 110VAC / Salida 24VAC (50VA) | Alimentación de maniobra para electroválvulas de 24V | Suministra tensión alterna aislada para la operación de las 4 válvulas de distribución. |
-| **12** | **Filtro de Disco de 1 Pulgada** | 1 unidad (+1 rec.) | Operación a 2.5 bar / 120 mesh | Retención de sólidos y prevención de obturación | Instalado en descarga de bomba; se recomienda unidad adicional en succión. |
+| **12** | **Filtro de Disco de 1 Pulgada** | 1 unidad | Operación a 2.5 bar / 120 mesh | Retención de sólidos y prevención de obturación | Instalado en descarga de bomba para proteger nebulizadores y aspersores. |
 | **13** | **Sensor Microclimático DHT22 (AM2302)** | 2 unidades | 3.3V - 5V DC (< 1.5 mA) | Muestreo de temperatura y humedad relativa | Rango -40 a 80 °C, 0 a 100% HR; bus digital unifilar 1-Wire con pull-up de 4.7 kΩ. |
-| **14** | **Sensor de Iluminancia Digital BH1750** | 2 unidades | 3.3V - 5V DC (0.12 mA) | Medición de radiación lumínica y luminosidad foliar | Bus I2C; rango ampliado dinámico de 1 a 121.557 lux mediante ajuste de MTreg. |
-| **15** | **Transistor MOSFET de Potencia** | 1 unidad | 3.3V Gate / 5V Drain (Canal N) | Corte de alimentación para autorrecuperación de sensores | Conmutado por GPIO 5 para ciclo de desenergización (*power cycle*) de 200 ms. |
+| **14** | **Sensor de Iluminancia Digital BH1750** | 2 unidades | 3.3V - 5V DC (0.12 mA) | Medición de radiación lumínica solar | Bus I2C; rango ampliado dinámico de 1 a 121.557 lux mediante ajuste de tiempo de integración. |
+| **15** | **Transistor MOSFET de Potencia** | 1 unidad | 3.3V Gate / 5V Drain (Canal N) | Corte de alimentación para autorrecuperación de sensores | Conmutado por GPIO 5 para ciclo de desenergización (*power-cycle*) de 200 ms. |
 | **16** | **Tomacorriente Interno y Adaptador 5V 2A** | 1 unidad | Entrada 110VAC / Salida 5VDC regulada | Fuente de alimentación lógica del nodo ESP32 | Provee energía limpia desacoplada de transitorios inductivos de conmutación. |
-| **17** | **Borneras de Conexión de Paso en Riel DIN** | 1 juego (12 bornes) | 600V / 30A capacidad | Distribución ordenada de fases, neutros y señales | Sujeción mecánica rígida en riel DIN metálico dentro de gabinete estanco IP65. |
+| **17** | **Borneras de Conexión de Paso en Riel DIN** | 1 juego (12 bornes) | 600V / 30A capacidad | Distribución ordenada de fases, neutros y señales | Sujeción mecánica rígida en riel DIN dentro de gabinete estanco IP65. |
 
-*Nota.* Fuente: Elaboración propia a partir del levantamiento electromecánico y de instrumentación del orquideario.
+#### Tabla Ap-G3. *Mapa de distribución de pines GPIO en microcontroladores ESP32*
 
-**Mapeo de Pines GPIO y Conexiones Electromecánicas.** La Tabla Ap-G3 documenta la asignación física de pines en los microcontroladores ESP32 del ecosistema físico, distinguiendo entre el nodo actuador y las estaciones sensoras.
-
-#### Tabla Ap-G3. *Mapa de distribución de pines GPIO y asignación de periféricos en nodos ESP32*
-
-| Dispositivo / Nodo | Pin GPIO | Modo / Tipo | Periférico Conectado | Función en el Sistema |
+| Pin GPIO | Nodo / Dispositivo | Función / Periférico Conectado | Modo de Operación | Justificación Técnica |
 | :--- | :--- | :--- | :--- | :--- |
-| **Nodo Actuador (Tablero)** | `GPIO 23` | Salida Digital | Módulo Relé 1 / Bobina Contactor 30A | Conmutación de potencia de la bomba de agua de 1 HP (110VAC). |
-| **Nodo Actuador (Tablero)** | `GPIO 22` | Salida Digital | Módulo Relé 2 / Válvula Solenoide 1 | Conmutación de 24VAC para Línea 1 (Nebulización / Foggers). |
-| **Nodo Actuador (Tablero)** | `GPIO 21` | Salida Digital | Módulo Relé 3 / Válvula Solenoide 2 | Conmutación de 24VAC para Línea 2 (Aspersión principal mesas). |
-| **Nodo Actuador (Tablero)** | `GPIO 19` | Salida Digital | Módulo Relé 4 / Válvula Solenoide 3 | Conmutación de 24VAC para Línea 3 (Humectación de piso / Manguera perforada). |
-| **Nodo Actuador (Tablero)** | `GPIO 18` | Salida Digital | Módulo Relé 5 / Válvula Solenoide 4 | Conmutación de 24VAC para Línea 4 (Dosificación agronómica). |
-| **Nodo Actuador (Tablero)** | `GPIO 16` | Salida Digital | Módulo Relé 6 / Válvula Solenoide Matriz A | Conmutación de 110VAC para entrada de agua limpia. |
-| **Nodo Actuador (Tablero)** | `GPIO 17` | Salida Digital | Módulo Relé 7 / Válvula Solenoide Matriz B | Conmutación de 110VAC para entrada de agroquímicos. |
-| **Nodo Sensor (EMA Exterior)** | `GPIO 4` | Entrada/Salida Digital | Sensor DHT22 (AM2302) | Muestreo de temperatura y humedad a la intemperie (1-Wire). |
-| **Nodo Sensor (EMA Exterior)** | `GPIO 21` | Bidireccional Open-Drain | Sensor BH1750 (Línea SDA) | Comunicación I2C para iluminancia solar exterior. |
-| **Nodo Sensor (EMA Exterior)** | `GPIO 22` | Salida Clock | Sensor BH1750 (Línea SCL) | Reloj I2C para iluminancia solar exterior. |
-| **Nodo Sensor (EMA Exterior)** | `GPIO 5` | Salida Digital | Compuerta Transistor MOSFET | Conmutación de corte de energía (200 ms *power cycle*) en sensores. |
-| **Nodo Sensor (EMA Interior)** | `GPIO 15` | Entrada/Salida Digital | Sensor DHT22 (AM2302) | Muestreo de microclima bajo persiana Stevenson (1-Wire). |
-| **Nodo Sensor (EMA Interior)** | `GPIO 21 / 22` | Bidireccional / Salida | Sensor BH1750 (I2C) | Medición de iluminancia solar difusa bajo malla sombra. |
-
-*Nota.* Fuente: Elaboración propia a partir de los esquemas de hardware y archivos de inicialización de pines del firmware.
-
----
-
-### 4. Aprovisionamiento y Mantenimiento del Firmware Embebido
-
-El aprovisionamiento de los microcontroladores ESP32 en las estaciones meteorológicas (EMA) y en el nodo actuador de riego se rige por un procedimiento riguroso para asegurar la estabilidad térmica y la gestión de memoria RAM.
-
-**Flasheo del Sistema Base MicroPython.** Antes de cargar el código del proyecto, la memoria Flash del SoC debe borrarse íntegramente para erradicar sectores defectuosos o fragmentación previa, ejecutando secuencialmente en la terminal de desarrollo:
-
-```bash
-esptool erase-flash
-esptool write-flash 0x1000 firmware/ESP32_2025-08-09_v1.26.0.bin
-```
-
-**Tooling Automatizado y Despliegue con `mprun`.** La gestión de dependencias y la transferencia de código hacia los nodos embebidos se automatizó mediante el comando personalizado en PowerShell `mprun -b -l`. Este script analiza el manifiesto local del nodo (`manifest.json`), compila los módulos de código fuente `.py` a bytecode binario `.mpy` mediante la utilidad `mpy-cross` (liberando más de 12 KB de RAM dinámica durante la compilación en caliente en el ESP32), purga la carpeta remota `:lib` y sincroniza las bibliotecas estrictamente necesarias.
+| **GPIO 5** | Tablero / Nodo Actuador | Compuerta Gate de MOSFET (*Power-Cycle*) | Salida Digital (Output) | Conmuta corte de alimentación de 200 ms a sensores ante fallo de bus. |
+| **GPIO 18** | Tablero / Nodo Actuador | Bus I2C - Señal SCL (Sensor BH1750) | Salida de Reloj I2C | Línea de sincronismo temporal con resistencia de pull-up a 3.3V. |
+| **GPIO 19** | Tablero / Nodo Actuador | Bus I2C - Señal SDA (Sensor BH1750) | Bidireccional I2C | Canal de transferencia de datos de iluminancia. |
+| **GPIO 4** | Tablero / Nodo Actuador | Bus 1-Wire - Sensor DHT22 (EMA Ext.) | Entrada/Salida Digital | Lectura higrotérmica digital de intemperie con pull-up de 4.7 kΩ. |
+| **GPIO 13** | Tablero / Nodo Actuador | Relé 1: Contactor Bobina 110VAC (Bomba 1HP) | Salida Digital (Active-Low) | Conmuta el contactor industrial para energizar la impulsión hidráulica. |
+| **GPIO 12** | Tablero / Nodo Actuador | Relé 2: Electroválvula Maestra Agua (110VAC) | Salida Digital (Active-Low) | Abre la admisión de la red de acueducto matriz. |
+| **GPIO 14** | Tablero / Nodo Actuador | Relé 3: Electroválvula Maestra Químicos (110VAC)| Salida Digital (Active-Low) | Conmuta la succión desde el tanque presurizado de agroquímicos. |
+| **GPIO 27** | Tablero / Nodo Actuador | Relé 4: Línea 1 - Nebulización (24VAC) | Salida Digital (Active-Low) | Apertura de línea de nebulizadores finos (*foggers*). |
+| **GPIO 26** | Tablero / Nodo Actuador | Relé 5: Línea 2 - Aspersión Principal (24VAC) | Salida Digital (Active-Low) | Apertura de microaspersores rotativos para riego de mesas. |
+| **GPIO 25** | Tablero / Nodo Actuador | Relé 6: Línea 3 - Humectación de Piso (24VAC) | Salida Digital (Active-Low) | Apertura de manguera perforada de suelo para enfriamiento pasivo. |
+| **GPIO 33** | Tablero / Nodo Actuador | Relé 7: Línea 4 - Dosificación Sector (24VAC) | Salida Digital (Active-Low) | Apertura de línea fitosanitaria aislada bajo confirmación modal. |
+| **GPIO 21** | EMA Interior (ZONA_A) | Bus I2C - Señal SDA (BH1750 Interior) | Bidireccional I2C | Canal de adquisición lumínica bajo malla sombra. |
+| **GPIO 22** | EMA Interior (ZONA_A) | Bus I2C - Señal SCL (BH1750 Interior) | Salida de Reloj I2C | Reloj I2C en garita meteorológica interior. |
+| **GPIO 23** | EMA Interior (ZONA_A) | Bus 1-Wire - Sensor DHT22 Interior | Entrada/Salida Digital | Adquisición de temperatura y humedad en mesas de cultivo. |
+| **GPIO 34** | EMA Interior (ZONA_A) | Divisor de tensión para monitoreo de batería | Entrada Analógica (ADC1) | Lectura de voltaje de la celda Li-ion 18650 (3.0V a 4.2V). |
 
 ---
 
-### 5. Protocolo de Resiliencia y Bibliotecas Especializadas de Firmware
+### 5. Arquitectura de Firmware Embebido en MicroPython
 
-Para garantizar una operación ininterrumpida frente a redes inalámbricas inestables y restricciones de memoria dinámica (*heap*), el firmware de PristinoPlant descartó los paquetes comunitarios convencionales e incorporó componentes altamente optimizados.
+El software embebido fue desarrollado en MicroPython v1.26.0 bajo dos paradigmas adaptados a las restricciones de cada nodo:
 
-**Driver MQTT Endurecido (`simple2.py`).** Modificación profunda sobre `umqtt.simple` orientada a la tolerancia a fallos en enlaces TLS sobre ESP32:
-* *Cierre Atómico de Descriptores:* Si la negociación SSL (`wrap_socket`) aborta por agotamiento temporal de RAM, el driver ejecuta un cierre forzoso del socket TCP subyacente, impidiendo la acumulación de descriptores huérfanos que derivan en el error fatal `OSError: [Errno 16] EBUSY`.
-* *Timeouts Asíncronos Estrictos:* El socket se aprovisiona con un temporizador perentorio previo al enlace seguro, evitando bloqueos indefinidos si el bróker deja de responder.
-* *Escritura y Lectura No Bloqueante:* Utiliza `uselect.poll` en `_send_with_timeout` para verificar la disponibilidad del búfer de salida antes de transmitir tramas telemétricas.
-* *Escudo de Concurrencia:* Las operaciones de comunicación se sincronizan bajo un cerrojo global `asyncio.Lock`, anulando la corrupción de paquetes ante la llegada simultánea de órdenes mientras se emite telemetría.
+#### 5.1 Firmware del Nodo Actuador y EMA Exterior
+Opera de forma ininterrumpida con alimentación de red:
+1. **Asincronía con `uasyncio`:** Ejecuta un bucle cooperativo no bloqueante que gestiona la escucha MQTT, el envío de telemetría y los temporizadores sin incurrir en pausas ciegas (`time.sleep`).
+2. **Temporizador Fail-Safe de Hardware:** Al recibir un comando de riego, el firmware programa un temporizador local por interrupción de hardware. Al expirar la duración ordenada, el microcontrolador desenergiza los relés de forma autónoma sin depender del servidor ni de la red Wi-Fi, eliminando cualquier riesgo de sobre-riego por desconexión.
+3. **Mecanismo de Autorrecuperación Física (*Power-Cycle*):** Si se detectan 3 fallas de lectura consecutivas en los sensores, el microcontrolador conmuta el pin GPIO 5 por 200 ms, desenergizando la línea de alimentación de los sensores mediante el MOSFET de potencia para forzar un reinicio eléctrico en frío del bus sin reiniciar el SoC.
+4. **Resiliencia de Memoria RAM:** Se suprimió el módulo flash `NVSManager` del código embebido, estabilizando la memoria dinámica libre (`gc.mem_free()`) por encima de 52 KB estables tras meses de operación continua.
 
-La Tabla Ap-G4 sintetiza la codificación semántica de excepciones implementada en `simple2.py` para facilitar la auto-recuperación y el diagnóstico remoto.
-
-#### Tabla Ap-G4. *Códigos de excepción semántica y diagnóstico en el driver MQTT endurecido (simple2.py)*
-
-| Código Semántico | Tipo de Excepción | Causa Raíz Diagnosticada | Acción de Recuperación en Firmware |
-| :--- | :--- | :--- | :--- |
-| **1** | Fallo de conexión TCP | El host del bróker es inalcanzable o el puerto 8883 está cerrado. | Reintento con retroceso exponencial (*exponential backoff*). |
-| **28** | Enlace físico ausente | Radio WiFi desconectada de la red local inalámbrica. | Reescaneo de SSID y reconexión forzada de la interfaz STA. |
-| **30** | Timeout de red / Falla DNS | El servidor DNS no resuelve la IP del VPS o el socket expiró. | Purga de descriptores y reintento de resolución tras 5 segundos. |
-| **-202** | Fallo de negociación SSL | Memoria RAM dinámica insuficiente (< 45 KB) para el contexto TLS. | Liberación forzada de memoria vía `gc.collect()` y reintento. |
-
-*Nota.* Fuente: Elaboración propia a partir del código fuente de `firmware/lib/umqtt/simple2.py`.
-
-**Driver Dinámico para Sensor de Iluminancia (BH1750).** El sensor BH1750 en su modo predeterminado se satura al alcanzar 65.535 lux, nivel frecuentemente superado por la radiación cenital de Ciudad Guayana. El firmware incorpora un algoritmo adaptativo que modifica dinámicamente el registro de tiempo de medición `MTreg` (entre 31 y 254), extendiendo el límite de captura hasta 121.557 lux sin desbordamiento numérico.
-
-**Rutina de Autorrecuperación por Hardware (*Power Cycle*).** Ante congelamientos de la lógica interna de los transductores I2C o 1-Wire por transitorios eléctricos, el firmware evalúa el contador de errores consecutivos. Al alcanzar tres fallos continuos, activa el pin `GPIO 5`, abriendo el circuito del transistor MOSFET por 200 ms. Esto desenergiza completamente los sensores, drena sus condensadores de desacoplo y reconfigura el bus en dos segundos, restableciendo las lecturas normales sin necesidad de reiniciar el SoC ni interrumpir el socket seguro con el servidor.
-
-**Temporizador de Seguridad Local (*Fail-Safe Timer*).** Ante una pérdida imprevista del enlace de red durante una maniobra de riego, el nodo actuador previene inundaciones catastróficas mediante un temporizador por interrupción de hardware (*Hardware Timer*). Cada comando recibido desde el servidor incorpora su parámetro de duración en segundos; el microcontrolador inicia la cuenta regresiva local y, si no recibe una orden de apagado explícita al término del periodo, desenergiza de inmediato la bomba de agua y las electroválvulas de forma autónoma.
+#### 5.2 Firmware de la Estación Meteorológica Interior (EMA Interior)
+Diseñado para operación móvil e inalámbrica en mesas de cultivo a batería:
+1. **Gestión de Consumo Ultra-Bajo (*Deep Sleep*):** Alimentada por una celda de iones de litio 18650 (2500 mAh), la estación permanece en reposo profundo consumiendo menos de $15\,\mu\text{A}$.
+2. **Ciclo de Ráfaga Telemétrica:** Cada 10 minutos, el temporizador interno del ESP32 despierta el microcontrolador, enciende los sensores, adquiere $T, HR$ y $Lux$, establece enlace Wi-Fi con IP estática, despacha la trama MQTTS cifrada en menos de 2.5 segundos y reingresa inmediatamente a *Deep Sleep*, alcanzando una autonomía calculada superior a 60 días de operación continua.
 
 ---
 
-### 6. Mantenimiento Preventivo y Solución de Incidencias Técnicas
+### 6. Modelado y Fabricación 3D de la Garita Meteorológica (EMA Interior)
 
-Para asegurar la longevidad del sistema físico y la continuidad operativa del software, se define un conjunto de revisiones periódicas e instrucciones de diagnóstico rápido en campo.
+Para proteger la electrónica de la EMA Interior contra la radiación cenital y las salpicaduras de riego sin obstaculizar la ventilación natural, se diseñó una garita meteorológica modular tipo Stevenson:
 
-**Mantenimiento Preventivo de Hardware e Instalación.**
-* *Inspección Semestral del Tablero:* Verificar el torque de apriete en las borneras de riel DIN y terminales del contactor de 30A para prevenir puntos calientes por resistencia de contacto.
-* *Limpieza de Garita Meteorológica:* Limpiar trimestralmente las ranuras de la persiana Stevenson 3D con un paño seco para asegurar la libre convección de aire sobre los sensores DHT22 y BH1750.
-* *Inspección y Limpieza del Filtro de Disco de 1 Pulgada:* Desmontar semestralmente el cuerpo roscado del filtro de disco de 1 pulgada ubicado a la salida de la bomba de agua. Se debe extraer la columna de discos anulares ranurados, aflojar el tornillo de compresión y lavar a contracorriente con agua a presión (o sumergir en solución desincrustante ligera si existen sales precipitadas de agroquímicos), verificando el empaque de goma antes del reensamblaje manual.
-* *Recomendación Técnica de Filtrado en Succión:* Se recomienda enfáticamente instalar una segunda unidad de filtro de disco de 1 pulgada en la línea de succión (entrada) de la bomba de agua. Esta disposición alivia la carga de partículas sobre el impulsor mecánico y el filtro principal de descarga, minimizando drásticamente el riesgo de obstrucción en los nebulizadores y microaspersores.
+* **Material de Fabricación:** Se seleccionó copoliéster PETG (tereftalato de polietileno glicol) en color blanco reflectante. Este termoplástico ofrece alta resistencia mecánica, estabilidad dimensional ante temperaturas superiores a $70^\circ\text{C}$ e inmunidad a la degradación por radiación ultravioleta (UV), evitando el alabeo y decoloración que sufre el PLA en el clima de Ciudad Guayana.
+* **Geometría y Ventilación Louvered:** La estructura incorpora lamas deflectoras inclinadas a $45^\circ$ con separación de $8\text{ mm}$, garantizando la circulación libre de corrientes convectivas y aislando los transductores de lecturas térmicas falsas por radiación directa.
+* **Estructura Desmontable:** Ensamblada mediante 4 varillas roscadas de acero inoxidable M4 que comprimen los módulos apilables (base de soporte, compartimiento estanco para ESP32 y batería 18650, y cámara ventilada para sensores DHT22 y BH1750).
 
-La Tabla Ap-G5 consolida la matriz formal de diagnóstico y resolución de problemas técnicos en firmware, red e infraestructura.
+---
 
-#### Tabla Ap-G5. *Matriz de diagnóstico y solución de incidencias técnicas en firmware e infraestructura (Troubleshooting)*
+### 7. Pautas de Mantenimiento Preventivo
 
-| Síntoma o Incidencia | Causa Raíz Probable | Procedimiento de Verificación Técnica | Acción Correctiva de Ingeniería |
-| :--- | :--- | :--- | :--- |
-| **Reinicio continuo del ESP32 en tablero (`EBUSY`).** | Descriptores de socket huérfanos o memoria RAM dinámica menor a 45 KB. | Inspeccionar consola serial con `mpremote` y medir `gc.mem_free()`. | Confirmar presencia del driver `simple2.py` y purgar bibliotecas innecesarias con `mprun -b -l`. |
-| **Lecturas climáticas congeladas en valores fijos.** | Bloqueo transitorio en el circuito integrado del sensor DHT22 o BH1750. | Auditar en log si la rutina de MOSFET conmuta el GPIO 5 por 200 ms. | Verificar continuidad del cableado Cat6 y confirmar funcionamiento del MOSFET de corte. |
-| **La bomba de agua no arranca al conmutar desde la web.** | Disparo térmico en fusilera de 15A o falla en bobina del contactor industrial. | Medir voltaje en la salida de 110VAC del contactor con multímetro. | Comprobar fusibles cilíndricos, verificar alimentación de bobina y revisar estado de press control. |
-| **El servidor no registra datos en InfluxDB.** | Token de autenticación revocado o interrupción del contenedor `influxdb`. | Ejecutar `docker ps` y revisar logs del servicio `services/ingest`. | Reiniciar pila con `docker compose restart ingest` y verificar variables en el archivo `.env`. |
-| **Comandos de riego descartados con acuse `VETO`.** | Lluvia activa inferida o humedad ambiental interior superior a 85%. | Consultar pantalla `/operations/history` y estado en `/weather-oracle`. | Comportamiento normal del motor deliberativo; si se requiere forzar, utilizar `/operations/control`. |
-| **Desconexión periódica del ESP32 al mediodía.** | Atenuación de señal WiFi por dilatación térmica de antena o colapso DNS. | Monitorear RSSI inalámbrico y auditar logs del bróker Mosquitto en puerto 8883. | Ajustar orientación de antena en tablero y fijar IP estática con DNS 1.1.1.1 en firmware. |
-
-*Nota.* Fuente: Elaboración propia a partir de los registros de incidencias de campo y bitácora técnica de desarrollo.
+1. **Inspección de Filtro de Disco:** Purgar y desenroscar el cartucho de disco de 120 mesh cada 30 días para remover sedimentos minerales acumulados en la red de agua.
+2. **Revisión de Contactos Eléctricos:** Verificar el apriete de las borneras en riel DIN y la ausencia de sulfatación en las conexiones de 24VAC cada 60 días.
+3. **Limpieza de Cúpulas Ópticas:** Limpiar suavemente con paño de microfibra humedecido con agua destilada la cúpula translúcida del sensor BH1750 para prevenir atenuación artificial de la iluminancia por polvo ambiental.
+4. **Calibración de Sensores DHT22:** Contrastar semestralmente las lecturas higrotérmicas contra un psicrómetro patrón certificado.

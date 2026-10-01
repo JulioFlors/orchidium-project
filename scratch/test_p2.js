@@ -1,0 +1,3 @@
+﻿const p2 = `Por su parte, el *motor de inferencia hídrica* gobierna el riego articulando ambas estaciones (EMA Exterior e Interior). Inhibe la irrigación ante lluvia activa o reciente (ventanas de cuatro horas en suelo y ocho en nebulización), respetando la alternancia interdiaria. A su vez, clasifica el día según el DLI acumulado y cruza temperatura con humedad interna para autorizar la nebulización o accionar humectación en piso para enfriamiento pasivo (la matriz de vetos y auditoría de 369 tareas se detallan en el **Apéndice D**, ilustrándose en la Figura Ap-F5 del **Apéndice F**).`;
+
+console.log("P2 chars:", p2.length, "lines:", (p2.length / 78).toFixed(1));

@@ -1,120 +1,106 @@
 # Apéndices
 
-## Apéndice H: Manual de Usuario y Operaciones de la Plataforma PristinoPlant
+## Apéndice H: Manual de Usuario y Procedimientos de Operación
 
-El presente manual de usuario proporciona las directrices operativas, procedimientos paso a paso e instrucciones de interacción requeridas para el uso efectivo de la plataforma PristinoPlant. Su contenido está estructurado para guiar tanto al cultivador botánico en la gestión agronómica, telemétrica e hidráulica del invernadero, como al cliente final en la adquisición de ejemplares a través de la tienda digital.
+El presente manual de usuario establece las directrices operativas, secuencias de interacción paso a paso y protocolos de seguridad requeridos para el uso efectivo de la plataforma PristinoPlant. Está estructurado para guiar tanto al cultivador botánico en la administración integral del orquideario como al cliente final en la adquisición de plantas a través de la tienda digital.
 
 ---
 
-### 1. Perfiles de Usuario y Control de Acceso
+### 1. Perfiles de Usuario y Control de Acceso (RBAC)
 
-La plataforma implementa un esquema de seguridad fundamentado en el control de acceso basado en roles (RBAC) gestionado por la librería Better-Auth. La Tabla Ap-H1 detalla los perfiles configurados, sus responsabilidades operacionales y las vistas autorizadas en el sistema.
+La plataforma gobierna las autorizaciones operativas mediante un esquema de control de acceso basado en roles gestionado por Better-Auth.
 
-#### Tabla Ap-H1. *Matriz de perfiles de usuario, roles y permisos de acceso a la plataforma*
+#### Tabla Ap-H1. *Matriz de perfiles de usuario, roles y permisos de acceso*
 
-| Perfil de Usuario | Rol del Sistema | Alcance y Responsabilidades | Rutas y Vistas Autorizadas |
+| Perfil de Usuario | Rol del Sistema | Alcance y Responsabilidades | Vistas y Rutas Autorizadas |
 | :--- | :--- | :--- | :--- |
-| **Cultivador Administrador** | `ADMIN` / `CULTIVATOR` | Gobierno integral del orquideario: comando hidráulico, programación, formulación química, inventario y ventas. | Acceso total a `/operations/*`, `/monitoring`, `/lab/*`, `/inventory/*` y administración. |
-| **Operador de Riego** | `OPERATOR` | Supervisión telemétrica, comando manual directo de emergencia y consulta de la cola de riego activa. | Acceso restringido a `/operations/control`, `/operations/queue` y `/monitoring`. |
-| **Cliente / Comprador** | `USER` / `PUBLIC` | Exploración del catálogo botánico, selección de ejemplares vivos disponibles y emisión de solicitudes de compra. | Acceso público a `/category/*`, `/product/*`, `/cart` y formalización de órdenes. |
-
-*Nota.* Fuente: Elaboración propia a partir del esquema de autenticación relacional en PostgreSQL.
+| **Cultivador Administrador** | `ADMIN` / `GROWER` | Gobierno integral: comando hidráulico, programación, formulación en laboratorio, inventario de mesas y conciliación de ventas. | Acceso completo a `/operations/*`, `/monitoring`, `/lab/*`, `/catalog`, `/stock`, `/orders` y administración. |
+| **Operador de Riego** | `OPERATOR` | Supervisión climática en tiempo real, comando manual de emergencia y consulta de la cola activa de tareas hídricas. | Acceso restringido a `/operations/control`, `/operations/queue` y `/monitoring`. |
+| **Cliente / Comprador** | `CLIENT` / `PUBLIC` | Exploración de la colección botánica, selección de ejemplares vivos disponibles en mesa y formalización de compras. | Acceso público a `/category/*`, `/plant/*`, `/cart` y formalización de checkout. |
 
 ---
 
-### 2. Autenticación y Navegación Principal
+### 2. Procedimientos de Operación del Circuito Hidráulico (`/operations`)
 
-Para acceder a las funciones operativas del sistema, el operador debe autenticarse ingresando su correo electrónico y contraseña en la ruta `/auth/login`. Tras validar las credenciales criptográficas, el sistema redirige al usuario hacia el panel de supervisión correspondiente a su rol.
+#### 2.1 Conmutación Manual Directa de Actuadores (`/operations/control`)
+Permite energizar de forma inmediata cualquiera de las 4 líneas hidráulicas del orquideario:
+1. Ingrese a la ruta `/operations/control`.
+2. Ubique la tarjeta del sector requerido:
+   * **Línea 1:** Nebulización (*foggers*) para humedad ambiental.
+   * **Línea 2:** Aspersión principal rotativa sobre mesas de cultivo.
+   * **Línea 3:** Humectación de piso para enfriamiento pasivo sin mojar hojas.
+   * **Línea 4:** Dosificación fitosanitaria aislada.
+3. Seleccione la duración deseada en el menú desplegable (60, 180, 300 o 600 segundos).
+4. Pulse el botón de encendido. La tarjeta mostrará un indicador luminoso y una barra regresiva en tiempo real. Al recibir la orden, el hardware activa su temporizador fail-safe para garantizar el apagado local ante caídas de red.
+5. **Protocolo de Seguridad para Línea 4 (Agroquímicos):** Al intentar activar la Línea 4, el sistema abre automáticamente un modal de advertencia toxicológica. El operador debe confirmar la mezcla química preparada antes de que el sistema energice la electroválvula de 24VAC.
 
-La barra de navegación superior proporciona acceso directo a los dominios del sistema: **Operaciones** (riego y maniobras), **Monitoreo** (series climáticas en tiempo real), **Laboratorio** (dosificación agronómica) e **Inventario** (gemelos botánicos y catálogo). Asimismo, incorpora indicadores visuales permanentes sobre el estado de conectividad del bróker MQTTS y la presencia de alertas climáticas activas.
+#### 2.2 Gestión de Colas y Parada de Emergencia (`/operations/queue`)
+Permite supervisar maniobras activas y abortar operaciones ante imprevistos físicos:
+1. Ingrese a `/operations/queue` para visualizar las tareas en ejecución inmediata (`RUNNING`) y en espera (`PENDING`).
+2. **Detención de Emergencia:** Si detecta una fuga en tuberías o anomalía en campo, presione el botón rojo de *Detención de Emergencia*. El sistema despacha una orden prioritaria vía MQTT que desenergiza el contactor de la bomba y las electroválvulas en menos de un segundo, cancelando la maniobra.
 
----
+#### 2.3 Programación de Rutinas Recurrentes con Guardas Ambientales (`/operations/schedules`)
+Permite automatizar cronogramas semanales desatendidos:
+1. En `/operations/schedules`, pulse *"Nueva Rutina de Riego"*.
+2. Asigne un nombre descriptivo (ej. *"Aspersión Matutina Mesas A"*), seleccione los días de la semana y la hora exacta de ejecución.
+3. Defina la duración en minutos y la línea hidráulica a energizar.
+4. Active las **Guardas Ambientales**:
+   * *Veto por Lluvia:* Inhibe el riego si el motor meteorológico detecta lluvia activa o lluvia en las últimas 4 horas.
+   * *Alternancia Interdiaria:* Cancela la aspersión si el día previo llovió ($\ge 20\text{ min}$) o se completó un riego.
+   * *Límite de Saturación:* Bloquea la rutina si la humedad relativa interior supera el 85%.
+5. Guarde la rutina. El servicio `Scheduler` asumirá la deliberación automática 24/7.
 
-### 3. Operaciones del Circuito Hidráulico y Riego
-
-El gobierno de la bomba de agua de impulsión de 1 HP (1 pulgada) y las electroválvulas del circuito de cuatro líneas se realiza a través del módulo `/operations`, garantizando maniobras seguras y auditadas en todo momento.
-
-**Centro de Control Manual Directo (`/operations/control`).** Permite activar de forma inmediata cualquiera de las cuatro líneas hidráulicas:
-1. Localizar la tarjeta correspondiente a la línea deseada: Línea 1 (Nebulización / *Foggers*), Línea 2 (Aspersión principal de mesas), Línea 3 (Humectación de piso) o Línea 4 (Dosificación fitosanitaria).
-2. Seleccionar el tiempo de apertura requerido mediante el menú desplegable (valores preestablecidos de 60, 180, 300 o 600 segundos).
-3. Presionar el interruptor interactivo de conmutación. La tarjeta reflejará el cambio de color y mostrará un temporizador con cuenta regresiva. Al enviar el comando, el firmware activa su temporizador *fail-safe* para cortar la energía automáticamente si expira el lapso.
-4. *Protocolo especial de seguridad para Línea 4:* Al conmutar la línea de dosificación fitosanitaria, el sistema despliega una ventana modal de advertencia toxicológica que exige al operador confirmar la fórmula química preparada antes de energizar la válvula.
-
-**Supervisión de la Cola de Tareas (`/operations/queue`).** Despliega el listado reactivo de las operaciones hídricas en ejecución inmediata (`RUNNING`) o programadas para las próximas horas (`PENDING`). Si el cultivador detecta una anomalía física en el invernadero (ej. fuga en tubería), puede presionar el botón rojo de *Detención de Emergencia*, abortando la maniobra de forma instantánea tanto en el servidor como en el microcontrolador.
-
-**Programador Cronológico de Riego (`/operations/schedules`).** Permite automatizar rutinas semanales recurrentes:
-1. Pulsar el botón *Nueva Rutina de Riego* y asignar una etiqueta descriptiva (ej. "Riego Matutino Mesas A y B").
-2. Definir los días de la semana y la hora exacta de ejecución mediante el selector temporal.
-3. Especificar la duración en minutos y asociar la línea hidráulica a conmutar.
-4. Activar las guardas ambientales requeridas: *Veto por Lluvia* (bloquea el riego si se detecta precipitación reciente) y *Límite Higrométrico* (cancela la nebulización si la humedad relativa supera el 85%).
-
-**Bitácora de Auditoría Histórica (`/operations/history`).** Presenta el registro inmutable de todas las tareas procesadas por el sistema. Cada entrada detalla la fecha y hora, línea hidráulica, duración efectiva, actor de procedencia (manual o planificador autónomo) y el estado final resultante: conmutación exitosa (`COMPLETED`), cancelación de usuario (`CANCELLED`) o bloqueo algorítmico deliberativo (`VETO`).
-
----
-
-### 4. Laboratorio y Dosificación Agronómica (`/lab`)
-
-El módulo de laboratorio centraliza la gestión científica de fertilizantes e insumos fitosanitarios, erradicando los riesgos de fitotoxicidad y el desarrollo de cepas fúngicas resistentes.
-
-**Gestión de Insumos y Recetas Compuestas.** En la vista de insumos puros, el cultivador administra la ficha técnica de cada producto (nombre comercial, principio activo, concentración recomendada y periodo de carencia). En la vista de recetas compuestas (`/lab/recipes`), es posible formular caldos combinados (ej. fertilizante foliar N-P-K enriquecido con calcio micronizado), donde el sistema valida la compatibilidad química de la mezcla y calcula automáticamente los gramos o mililitros requeridos en función del volumen total de agua a preparar en el tanque presurizado.
-
-**Planificación de Programas Rotativos.** A través del planificador de dosificación (`/lab/schedules`), el usuario programa secuencias rotativas de aplicación fitosanitaria. El sistema proyecta en un calendario interactivo las aplicaciones futuras, alternando sistemáticamente los grupos químicos de acción para evitar la resistencia de plagas y emitiendo recordatorios preventivos en la pantalla de inicio del cultivador.
+#### 2.4 Auditoría de Maniobras y Vetos Deliberativos (`/operations/history`)
+Permite certificar la trazabilidad inmutable del invernadero:
+1. Ingrese a `/operations/history` para examinar la línea de tiempo interactiva.
+2. Cada tarjeta documenta la fecha y hora exacta, la línea hidráulica conmutada, el actor emisor (manual o planificador autónomo) y la duración real.
+3. En caso de una tarea inhibida, la tarjeta expone el estado `VETOED` y el motivo cuantitativo emitido por el motor (ej. *"Veto por lluvia activa"* o *"Humedad $\ge 85\%$ en las últimas 4 horas"*).
 
 ---
 
-### 5. Monitoreo Telemétrico y Confort Bioclimático (`/monitoring`)
+### 3. Procedimientos de Laboratorio y Dosificación Agronómica (`/lab`)
 
-La supervisión del microclima en tiempo real permite al cultivador evaluar las condiciones ecofisiológicas del orquideario y contrastarlas contra el entorno exterior.
+#### 3.1 Formulación y Cálculo Volumétrico de Recetas (`/lab/recipes`)
+1. Ingrese a `/lab/recipes` y pulse *"Nueva Receta"*.
+2. Asigne un nombre a la formulación (ej. *"Fertilización Balanceada Crecimiento"*) e ingrese el volumen total de agua del tanque presurizado (por defecto 20 litros).
+3. Agregue los insumos concentrados requeridos desde el catálogo de insumos puros (`/lab/supplies`).
+4. El sistema calcula automáticamente los gramos o mililitros exactos a disolver. Si selecciona componentes con incompatibilidad química conocida (como Nitrato de Calcio junto a Sulfatos), el sistema bloquea el guardado para evitar la precipitación de sales insolubles que colmaten las electroválvulas.
 
-**Interpretación de Curvas Ambientales.** El tablero despliega series temporales continuas correspondientes a las últimas 24 horas para cuatro magnitudes físicas:
-* *Temperatura ($^\circ\text{C}$):* Trazo diferencial entre la temperatura a la intemperie (EMA Exterior) y la temperatura protegida bajo malla sombra (EMA Interior).
-* *Humedad Relativa ($HR\%$):* Indicador del contenido de vapor de agua. Valores sostenidos superiores al 85% indican riesgo de condensación y ataque bacteriano.
-* *Iluminancia Solar ($Lux$):* Medición de radiación difusa recibida en las mesas, fundamental para certificar que no se excedan los 25.000 lux en especies sensibles como *Phalaenopsis*.
-* *Déficit de Presión de Vapor ($VPD$ en $\text{kPa}$):* Métrica psicrométrica calculada en tiempo real. La franja verde en el gráfico señala la ventana óptima de transpiración ($0.8\text{ a }1.2\text{ kPa}$). Si la curva penetra la zona roja ($VPD > 1.8\text{ kPa}$), el operador debe inducir un pulso de humectación en piso.
-
-**Consulta del Oráculo Meteorológico (`/weather-oracle`).** Pantalla especializada que expone las derivadas climáticas calculadas por el motor pluvial. Muestra el estado meteorológico actual inferido (Despejado, Nublado o Precipitación Activa), la tasa instantánea de enfriamiento ($-\Delta T$) y el historial de eventos de lluvia recientes, permitiendo al operador verificar por qué una rutina programada fue vetada por el sistema.
-
----
-
-### 6. Inventario de Gemelos Digitales y Trazabilidad Botánica
-
-La administración de los activos biológicos individuales del orquideario se realiza mediante el modelo de gemelos digitales (`SeedPlant`), asociando cada maceta física con su registro computacional en la base de datos.
-
-**Registro y Ubicación de Ejemplares (`/admin/plants`).**
-1. Seleccionar la opción *Registrar Nueva Planta* e indicar la especie botánica asociada.
-2. Asignar el código unívoco de identificación impreso en la etiqueta de la maceta.
-3. Especificar el tamaño del contenedor (`PotSize`: Nro 5, Nro 7, Nro 10 o Nro 14) y definir su estado inicial (`AVAILABLE` para venta o `MOTHER` para preservación de germoplasma).
-4. Indicar la localización física tridimensional en el invernadero (Zona A–D y Mesa 1–6), facilitando la rápida ubicación de la planta durante inspecciones de cultivo.
-
-**Bitácora Fenológica de Floración.** Al pulsar sobre un ejemplar en la matriz de inventario, se despliega su ficha de vida biológica. El cultivador puede registrar hitos fenológicos: emergencia de vara floral, apertura de la primera flor, conteo de botones viables y fecha de marchitamiento. Esta bitácora calcula de forma automática la longevidad floral media del espécimen, información clave para valorar comercialmente la planta.
-
-**Gestión Comercial y Sincronización de Stock (`/inventory/shop-manager`).** En esta interfaz el cultivador define qué tamaños de maceta se encuentran a la venta para cada especie y fija su precio en dólares estadounidenses. El sistema calcula reactivamente el stock disponible para la tienda digital contando únicamente las instancias de `SeedPlant` activas en estado `AVAILABLE` de ese tamaño específico, asegurando que jamás se ofrezca un producto que no exista físicamente en las mesas.
+#### 3.2 Programación de Ciclos Rotativos Anti-Resistencia (`/lab/dosing`)
+1. Ingrese a `/lab/dosing` para estructurar la secuencia de aplicaciones.
+2. Defina los pasos del ciclo rotativo (ej. Paso 1: Fungicida; Paso 2: Lavado con agua pura; Paso 3: Fertilizante; Paso 4: Insecticida). El sistema verifica que se alternen los códigos de resistencia molecular (FRAC / IRAC).
+3. En `/lab/dosing-schedules`, proyecte las fechas de aplicación sobre el calendario y asigne las mesas de cultivo a tratar.
 
 ---
 
-### 7. Tienda Digital y Experiencia del Cliente
+### 4. Procedimientos de Catálogo Botánico e Inventario Físico
 
-El portal de comercio electrónico (`/category/plants`) ofrece al público general un canal intuitivo para la adquisición de orquídeas cultivadas bajo agricultura de precisión.
+#### 4.1 Alta y Parametrización de Especies (`/catalog`)
+1. En la cabecera de `/catalog`, gestione tipos taxonómicos (`PlantType`) y géneros (`PlantGenus`).
+2. Abra el modal de alta rápida de especies: seleccione el tipo y género mediante menús en cascada, ingrese el nombre específico y redacte la descripción morfológica. El formulario retiene borradores automáticamente para evitar pérdidas accidentales.
+3. Ingrese al detalle de la especie (`/catalog/[slug]`):
+   * Utilice el selector cromático inteligente para fijar el color dominante de la flor (`glowColor`).
+   * Suba fotografías en alta resolución a la galería en Cloudflare R2, reordénelas mediante arrastre (*drag & drop*) y designe la imagen de portada mediante el botón *Destacar*.
 
-**Navegación y Selección de Especímenes.** El cliente explora el catálogo filtrando por género botánico (*Phalaenopsis*, *Cattleya*, *Dendrobium*, *Vanda*), nivel de dificultad de cultivo o requerimientos lumínicos. Al ingresar a la ficha del producto (`/product/[slug]`), el comprador visualiza fotografías de alta resolución alojadas en Cloudflare R2, la descripción taxonómica, los consejos de cuidado y las variantes de maceta disponibles con sus respectivos precios y stock en tiempo real.
-
-**Carrito y Formalización de Pedidos vía WhatsApp.** El usuario selecciona el tamaño deseado y añade el ejemplar a su cesta de compras (`/cart`). Al avanzar hacia el proceso de pago, introduce sus datos de contacto y selecciona la opción de formalizar compra. La plataforma emite una solicitud estructurada que abre automáticamente una conversación en la API de WhatsApp del orquideario, remitiendo el detalle exacto de las plantas seleccionadas, los identificadores de variante y el monto total calculado, permitiendo al cultivador coordinar la entrega y la recepción del pago de manera directa y personalizada.
+#### 4.2 Registro de Ejemplares en Mesas y Fenología (`/stock`)
+1. En `/stock`, pulse *"Registrar Nueva Planta"*.
+2. Asigne la especie, el tamaño de contenedor (`PotSize`: Nro 5, Nro 7, Nro 10 o Nro 14), la ubicación física (Zona y Mesa) y el estado biológico inicial (`VEGETATIVE`, `SPIKE`, `BLOOMING`).
+3. En la ficha individual de la maceta (`/stock/[id]`), asiente las fechas de brote de vara, apertura de flores y senescencia para alimentar el benchmark histórico de floración de la especie.
+4. En `/shop-manager`, vincule el precio en USD a la variante comercial. El stock disponible para la tienda pública se calculará automáticamente sumando las macetas vivas registradas en las mesas.
 
 ---
 
-### 8. Canal de Mensajería Interactiva y Alertas Móviles
+### 5. Procedimientos Comerciales y Atención al Cliente
 
-Para garantizar una supervisión ágil fuera de la estación de trabajo, el sistema cuenta con un bot de mensajería interactiva enlazado a la infraestructura central. La Tabla Ap-H2 sintetiza las notificaciones automáticas y los comandos de consulta rápida disponibles para el cultivador.
+#### 5.1 Flujo de Compra para Clientes (Tienda Digital Pública)
+1. El cliente accede al catálogo público en `/category/plants`, utiliza el buscador por texto y aplica filtros taxonómicos por género (*Cattleya*, *Phalaenopsis*, *Dendrobium*, etc.).
+2. En la ficha de producto (`/plant/[slug]`), examina la galería fotográfica y selecciona el tamaño de maceta deseado. Si la variante cuenta con macetas disponibles en mesa, presiona *"Añadir al Carrito"*.
+3. Accede al carrito interactivo (`/cart`), verifica los subtotales en dólares y pulsa *"Proceder al Pago"*.
+4. En `/checkout`, ingresa sus datos de contacto, selecciona la modalidad de entrega (retiro en orquideario o despacho a domicilio) y elige el método de pago preferente (Pago Móvil, Transferencia bancaria o divisas en efectivo).
+5. En la pantalla de confirmación (`/checkout/order/[id]`), presiona el botón interactivo *"Notificar Pago vía WhatsApp"*, el cual precarga un mensaje estructurado con el número de orden y monto exacto para que el comprador envíe su comprobante de pago.
 
-#### Tabla Ap-H2. *Matriz de notificaciones automáticas y comandos disponibles vía mensajería móvil*
-
-| Evento / Comando | Origen del Mensaje | Contenido y Notificación Generada |
-| :--- | :--- | :--- |
-| **Alerta de Lluvia Detectada** | Motor Pluvial (Scheduler) | Aviso inmediato de lluvia inferida con duración estimada y veto preventivo de riegos. |
-| **Confirmación de Riego (`ACK`)** | Nodo Actuador (ESP32) | Reporte de conmutación efectiva indicando línea energizada, caudal y duración cumplida. |
-| **Alerta por Estrés Térmico** | Monitor de Telemetría | Advertencia de temperatura $> 34^\circ\text{C}$ con recomendación de humectación de suelo. |
-| `/estado` | Comando del Cultivador | Respuesta con telemetría actual ($T, HR, Lux, VPD$) de EMA Exterior e Interior. |
-| `/riegos` | Comando del Cultivador | Listado cronológico de las próximas maniobras agendadas en la cola del Scheduler. |
-| `/vetos` | Comando del Cultivador | Resumen de los vetos deliberativos aplicados por el sistema durante las últimas 24 horas. |
-
-*Nota.* Fuente: Elaboración propia a partir del servicio de mensajería interactiva del sistema PristinoPlant.
+#### 5.2 Conciliación de Pagos y Despacho (`/orders`)
+1. El cultivador recibe el mensaje en WhatsApp, ingresa a `/orders` y localiza el pedido por su número de orden.
+2. Corrobora la acreditación de los fondos en las cuentas bancarias del vivero y actualiza el estado de la orden a `PAID`.
+3. Al entregar las plantas al comprador, transiciona el estado a `DELIVERED`; el sistema descuenta de forma definitiva las macetas físicas correspondientes en la matriz de inventario de mesas.
+4. Para clientes presenciales que compren directamente en el vivero, el cultivador utiliza el módulo de venta directa en mostrador (`/orders/sales`).

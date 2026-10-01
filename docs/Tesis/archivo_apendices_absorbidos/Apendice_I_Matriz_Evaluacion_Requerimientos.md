@@ -39,4 +39,4 @@ La Tabla Ap-I1 presenta la evaluación pormenorizada de los veintiocho (28) requ
 | **RNF08** | Inmunidad al ruido electromagnético en sensores. | Cableado / Hardware | Evaluación oscilográfica de señales digitales a lo largo de 10 m de Cat6. | **Cumplido:** Señales 1-Wire e I2C balanceadas con pares de referencia a tierra, suprimiendo la diafonía por EMI. |
 | **RNF09** | Recuperación autónoma de sensores sin reinicio del SoC. | Hardware / MOSFET | Simulación de cuelgue de bus I2C forzando falla de transductor en banco. | **Cumplido:** Rutina de *power cycle* conmuta GPIO 5 por 200 ms, drenando sensores y restableciendo lectura en 2 s. |
 
-*Nota.* Fuente: Elaboración propia fundamentada en los protocolos de prueba formalizados en la Especificación de Requerimientos del Sistema (SRS) y la bitácora técnica de desarrollo.
+*Nota.* 

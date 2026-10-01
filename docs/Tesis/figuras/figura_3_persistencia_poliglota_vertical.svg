@@ -1,0 +1,195 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 740 760" width="100%" height="100%" style="background-color:#ffffff; font-family:'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;">
+  <defs>
+    <filter id="shadow-v" x="-6%" y="-6%" width="112%" height="114%">
+      <feDropShadow dx="1" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+    
+    <!-- Marcadores de Flechas Bidireccionales -->
+    <!-- Azul -->
+    <marker id="arr-blue-end" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#0284c7" />
+    </marker>
+    <marker id="arr-blue-start" viewBox="0 0 10 10" refX="3" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 8 1.5 L 0 5 L 8 8.5 z" fill="#0284c7" />
+    </marker>
+
+    <!-- Esmeralda -->
+    <marker id="arr-emerald-end" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#059669" />
+    </marker>
+    <marker id="arr-emerald-start" viewBox="0 0 10 10" refX="3" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 8 1.5 L 0 5 L 8 8.5 z" fill="#059669" />
+    </marker>
+
+    <!-- Ámbar -->
+    <marker id="arr-amber-end" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#d97706" />
+    </marker>
+    <marker id="arr-amber-start" viewBox="0 0 10 10" refX="3" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 8 1.5 L 0 5 L 8 8.5 z" fill="#d97706" />
+    </marker>
+
+    <!-- Púrpura -->
+    <marker id="arr-purple-end" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#7c3aed" />
+    </marker>
+    <marker id="arr-purple-start" viewBox="0 0 10 10" refX="3" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M 8 1.5 L 0 5 L 8 8.5 z" fill="#7c3aed" />
+    </marker>
+  </defs>
+
+  <!-- TÍTULO SUPERIOR -->
+  <text x="370" y="36" text-anchor="middle" font-size="17" font-weight="700" fill="#0f172a" letter-spacing="-0.2">Arquitectura de Persistencia Políglota y Flujo de Datos Telemétricos</text>
+
+  <!-- ========================================== -->
+  <!-- NIVEL 1: NODOS EMBEBIDOS (EDGE)            -->
+  <!-- ========================================== -->
+  <rect x="35" y="65" width="670" height="95" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="4,4" />
+  <text x="50" y="83" font-size="10" font-weight="700" fill="#64748b" letter-spacing="0.5">CAPA DE BORDE (EDGE)</text>
+
+  <!-- Nodo Actuador / EMA-Exterior -->
+  <g transform="translate(55, 90)" filter="url(#shadow-v)">
+    <rect width="280" height="58" rx="7" fill="#ffffff" stroke="#0284c7" stroke-width="1.6" />
+    <rect width="280" height="22" rx="7" fill="#e0f2fe" />
+    <text x="140" y="16" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0369a1">Nodo Actuador / EMA-Exterior</text>
+    <text x="140" y="44" text-anchor="middle" font-size="10.5" fill="#334155">Tablero Eléctrico (5V DC)</text>
+  </g>
+
+  <!-- Nodo EMA -->
+  <g transform="translate(405, 90)" filter="url(#shadow-v)">
+    <rect width="280" height="58" rx="7" fill="#ffffff" stroke="#0284c7" stroke-width="1.6" />
+    <rect width="280" height="22" rx="7" fill="#e0f2fe" />
+    <text x="140" y="16" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0369a1">Nodo EMA</text>
+    <text x="140" y="44" text-anchor="middle" font-size="10.5" fill="#334155">Garita Stevenson 3D (Batería)</text>
+  </g>
+
+  <!-- ========================================== -->
+  <!-- NIVEL 2: COMUNICACIÓN (BROKER MQTTS)       -->
+  <!-- ========================================== -->
+  <g transform="translate(250, 190)" filter="url(#shadow-v)">
+    <rect width="240" height="60" rx="7" fill="#ffffff" stroke="#d97706" stroke-width="1.8" />
+    <rect width="240" height="22" rx="7" fill="#fef3c7" />
+    <text x="120" y="16" text-anchor="middle" font-size="12" font-weight="700" fill="#92400e">Broker MQTTS</text>
+    <text x="120" y="45" text-anchor="middle" font-size="10.5" fill="#334155">Eclipse Mosquitto (Puerto 8883 TLS)</text>
+  </g>
+
+  <!-- ========================================== -->
+  <!-- NIVEL 3: MICROSERVICIOS BACKEND            -->
+  <!-- ========================================== -->
+  <rect x="35" y="280" width="670" height="95" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="4,4" />
+  <text x="50" y="298" font-size="10" font-weight="700" fill="#64748b" letter-spacing="0.5">CAPA DE SERVICIOS (DOCKER VPS)</text>
+
+  <!-- Servicio Ingest -->
+  <g transform="translate(55, 305)" filter="url(#shadow-v)">
+    <rect width="280" height="58" rx="7" fill="#ffffff" stroke="#0284c7" stroke-width="1.6" />
+    <rect width="280" height="22" rx="7" fill="#e0f2fe" />
+    <text x="140" y="16" text-anchor="middle" font-size="11.5" font-weight="700" fill="#0369a1">Servicio Ingest</text>
+    <text x="140" y="44" text-anchor="middle" font-size="10.5" fill="#334155">Ingesta continua y cálculo de VPD</text>
+  </g>
+
+  <!-- Servicio Scheduler -->
+  <g transform="translate(405, 305)" filter="url(#shadow-v)">
+    <rect width="280" height="58" rx="7" fill="#ffffff" stroke="#059669" stroke-width="1.6" />
+    <rect width="280" height="22" rx="7" fill="#d1fae5" />
+    <text x="140" y="16" text-anchor="middle" font-size="11.5" font-weight="700" fill="#065f46">Servicio Scheduler</text>
+    <text x="140" y="44" text-anchor="middle" font-size="10.5" fill="#334155">Orquestación, Inferencia y Despacho</text>
+  </g>
+
+  <!-- ========================================== -->
+  <!-- NIVEL 4: PERSISTENCIA POLÍGLOTA            -->
+  <!-- ========================================== -->
+  <rect x="35" y="425" width="670" height="95" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="4,4" />
+  <text x="50" y="443" font-size="10" font-weight="700" fill="#64748b" letter-spacing="0.5">PERSISTENCIA POLÍGLOTA</text>
+
+  <!-- InfluxDB -->
+  <g transform="translate(55, 450)" filter="url(#shadow-v)">
+    <rect width="280" height="58" rx="7" fill="#ffffff" stroke="#0284c7" stroke-width="1.8" />
+    <rect width="280" height="22" rx="7" fill="#e0f2fe" />
+    <text x="140" y="16" text-anchor="middle" font-size="12" font-weight="700" fill="#0369a1">InfluxDB</text>
+    <text x="140" y="44" text-anchor="middle" font-size="10.5" fill="#334155">Series de Tiempo (Alta Frecuencia)</text>
+  </g>
+
+  <!-- PostgreSQL -->
+  <g transform="translate(405, 450)" filter="url(#shadow-v)">
+    <rect width="280" height="58" rx="7" fill="#ffffff" stroke="#059669" stroke-width="1.8" />
+    <rect width="280" height="22" rx="7" fill="#d1fae5" />
+    <text x="140" y="16" text-anchor="middle" font-size="12" font-weight="700" fill="#065f46">PostgreSQL</text>
+    <text x="140" y="44" text-anchor="middle" font-size="10.5" fill="#334155">Prisma ORM (Relacional y Resúmenes)</text>
+  </g>
+
+  <!-- ========================================== -->
+  <!-- NIVEL 5: APLICACIÓN Y CLIENTES             -->
+  <!-- ========================================== -->
+  <rect x="35" y="570" width="670" height="95" rx="8" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.2" stroke-dasharray="4,4" />
+  <text x="50" y="588" font-size="10" font-weight="700" fill="#64748b" letter-spacing="0.5">CAPA DE APLICACIÓN Y CLIENTES</text>
+
+  <!-- Aplicación Web -->
+  <g transform="translate(55, 595)" filter="url(#shadow-v)">
+    <rect width="280" height="58" rx="7" fill="#ffffff" stroke="#475569" stroke-width="1.6" />
+    <rect width="280" height="22" rx="7" fill="#f1f5f9" />
+    <text x="140" y="16" text-anchor="middle" font-size="11.5" font-weight="700" fill="#1e293b">Aplicación Web</text>
+    <text x="140" y="44" text-anchor="middle" font-size="10.5" fill="#334155">Next.js 14 (Monitoreo y Control)</text>
+  </g>
+
+  <!-- n8n & Telegram -->
+  <g transform="translate(405, 595)" filter="url(#shadow-v)">
+    <rect width="280" height="58" rx="7" fill="#ffffff" stroke="#7c3aed" stroke-width="1.6" />
+    <rect width="280" height="22" rx="7" fill="#f5f3ff" />
+    <text x="140" y="16" text-anchor="middle" font-size="11.5" font-weight="700" fill="#6d28d9">n8n &amp; Telegram</text>
+    <text x="140" y="44" text-anchor="middle" font-size="10.5" fill="#334155">PristinoBot (Human-in-the-Loop)</text>
+  </g>
+
+  <!-- ========================================== -->
+  <!-- CONEXIONES BIDIRECCIONALES (<-->)          -->
+  <!-- ========================================== -->
+  <!-- 1. Nodo Actuador <--> Broker MQTTS -->
+  <line x1="205" y1="152" x2="290" y2="188" stroke="#0284c7" stroke-width="1.8" marker-start="url(#arr-blue-start)" marker-end="url(#arr-blue-end)" />
+  
+  <!-- 2. Nodo EMA <--> Broker MQTTS (Telemetría ascendente + Sync RTC/Auditoría descendente) -->
+  <line x1="535" y1="152" x2="450" y2="188" stroke="#0284c7" stroke-width="1.8" marker-start="url(#arr-blue-start)" marker-end="url(#arr-blue-end)" />
+
+  <!-- 3. Broker MQTTS <--> Servicio Ingest -->
+  <line x1="320" y1="252" x2="225" y2="303" stroke="#d97706" stroke-width="1.8" marker-start="url(#arr-amber-start)" marker-end="url(#arr-amber-end)" />
+
+  <!-- 4. Broker MQTTS <--> Servicio Scheduler (Comandos, ACKs y Telemetría) -->
+  <line x1="420" y1="252" x2="515" y2="303" stroke="#059669" stroke-width="1.8" marker-start="url(#arr-emerald-start)" marker-end="url(#arr-emerald-end)" />
+
+  <!-- 5. Servicio Ingest <--> InfluxDB (Escritura y Verificación de Ingesta) -->
+  <line x1="195" y1="367" x2="195" y2="446" stroke="#0284c7" stroke-width="2" marker-start="url(#arr-blue-start)" marker-end="url(#arr-blue-end)" />
+
+  <!-- 6. Servicio Ingest <--> PostgreSQL (DeviceLog y Auditoría de Estados) -->
+  <path d="M 335 334 L 380 334 L 380 479 L 401 479" fill="none" stroke="#0284c7" stroke-width="1.5" stroke-dasharray="3,3" marker-start="url(#arr-blue-start)" marker-end="url(#arr-blue-end)" />
+
+  <!-- 7. Servicio Scheduler <--> PostgreSQL (Schedules, TaskLogs, DailySummary) -->
+  <line x1="545" y1="367" x2="545" y2="446" stroke="#059669" stroke-width="2" marker-start="url(#arr-emerald-start)" marker-end="url(#arr-emerald-end)" />
+
+  <!-- 8. Servicio Scheduler <--> InfluxDB (Consultas de ventanas deslizantes e histórico) -->
+  <path d="M 401 345 L 350 345 L 350 465 L 339 465" fill="none" stroke="#0284c7" stroke-width="1.6" stroke-dasharray="4,3" marker-start="url(#arr-blue-start)" marker-end="url(#arr-blue-end)" />
+  <text x="350" y="415" font-size="8.5" fill="#0284c7" text-anchor="middle" transform="rotate(-90, 350, 415)">Ventanas 10/20/30m</text>
+
+  <!-- 9. InfluxDB <--> Aplicación Web (Consultas directas 24h para graficación) -->
+  <line x1="195" y1="512" x2="195" y2="591" stroke="#0284c7" stroke-width="1.8" stroke-dasharray="4,3" marker-start="url(#arr-blue-start)" marker-end="url(#arr-blue-end)" />
+  <text x="145" y="555" font-size="8.5" fill="#0284c7" text-anchor="middle">Series 24h (/monitoring)</text>
+
+  <!-- 10. PostgreSQL <--> Aplicación Web (Prisma ORM transaccional y consultas de negocio) -->
+  <path d="M 401 485 L 350 485 L 350 610 L 339 610" fill="none" stroke="#059669" stroke-width="1.8" marker-start="url(#arr-emerald-start)" marker-end="url(#arr-emerald-end)" />
+  <text x="350" y="555" font-size="8.5" fill="#059669" text-anchor="middle" transform="rotate(-90, 350, 555)">Prisma ORM (CRUD)</text>
+
+  <!-- 11. PostgreSQL <--> n8n & Telegram (Polling de tareas y confirmación Human-in-the-Loop) -->
+  <line x1="545" y1="512" x2="545" y2="591" stroke="#7c3aed" stroke-width="2" marker-start="url(#arr-purple-start)" marker-end="url(#arr-purple-end)" />
+
+  <!-- LEYENDA INFERIOR -->
+  <g transform="translate(60, 715)">
+    <line x1="0" y1="8" x2="22" y2="8" stroke="#0284c7" stroke-width="1.8" marker-start="url(#arr-blue-start)" marker-end="url(#arr-blue-end)" />
+    <text x="30" y="12" font-size="10" fill="#475569">Telemetría / Ingesta Bidireccional</text>
+
+    <line x1="210" y1="8" x2="232" y2="8" stroke="#059669" stroke-width="1.8" marker-start="url(#arr-emerald-start)" marker-end="url(#arr-emerald-end)" />
+    <text x="240" y="12" font-size="10" fill="#475569">Transaccional / Comandos y ACKs</text>
+
+    <line x1="420" y1="8" x2="442" y2="8" stroke="#0284c7" stroke-width="1.6" stroke-dasharray="4,3" marker-start="url(#arr-blue-start)" marker-end="url(#arr-blue-end)" />
+    <text x="450" y="12" font-size="10" fill="#475569">Consultas Analíticas</text>
+
+    <line x1="570" y1="8" x2="592" y2="8" stroke="#7c3aed" stroke-width="1.8" marker-start="url(#arr-purple-start)" marker-end="url(#arr-purple-end)" />
+    <text x="600" y="12" font-size="10" fill="#475569">Orquestación n8n</text>
+  </g>
+</svg>

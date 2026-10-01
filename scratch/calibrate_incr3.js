@@ -1,0 +1,2 @@
+﻿const p = '**Entregables consolidados.** Como resultado de este incremento, se entregó la infraestructura contenerizada en el servidor VPS operando 24/7, el bróker con cifrado MQTTS, los microservicios de ingesta y planificación con recuperación de estado en caliente, y la suite web de operaciones hidráulicas y laboratorio agronómico (Figuras Ap-F1 a Ap-F9 del **Apéndice F**; véase Tabla Ap-B1 del Apéndice B).';
+console.log('Len:', p.length, 'lines:', (p.length/78).toFixed(1));

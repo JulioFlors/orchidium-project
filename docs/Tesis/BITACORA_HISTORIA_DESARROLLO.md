@@ -170,6 +170,43 @@ Este documento reúne de manera exhaustiva la narrativa técnica, las decisiones
 
 ---
 
+## 7. Asistente Agronómico Móvil (PristinoBot), Orquestación n8n y Supervisión de Resiliencia (Agosto - Septiembre 2026)
+
+### 7.1. Desacoplamiento Operativo: Dosificación Manual vs. Fertirriego Automatizado
+
+- **Desafío Operativo**: Tras la consolidación del inventario vivo y el catálogo taxonómico, se evidenció que la gestión agronómica en campo presentaba dos modalidades físicamente diferenciadas que requerían tratamiento especializado:
+  1. *Dosificación Manual en Mesas*: Tratamientos fitosanitarios y nutricionales aplicados mediante aspersión manual con mochila para macetas individuales o lotes específicos, gestionados desde `/lab/dosing` con seguimiento de formulaciones (`AgrochemicalMixItem`) y unidades de dosis (`ML_L`, `CDA_L`, `CDITA_L`).
+  2. *Fertirriego Automatizado por Circuito Hidráulico*: Conducción presurizada mediante la Línea 4 de agroquímicos, accionada por la motobomba de 1 HP y la electroválvula de 24V bajo el comando del microservicio `Scheduler`.
+- **Riesgo Crítico y Patrón Human-in-the-Loop**: La automatización ciega del fertirriego por tubería constituía un riesgo operativo mayor: si el microcontrolador abría la electroválvula y encendía la bomba sin que el cultivador hubiese preparado la mezcla líquida en el tanque auxiliar, el sistema provocaría marcha en seco o una dosificación nula.
+- **Solución Arquitectónica**: Se estableció una separación estricta en el modelo de datos y se diseñó un mecanismo de confirmación interactiva (*Human-in-the-Loop*) vía mensajería móvil antes de habilitar la conmutación física de los actuadores de potencia.
+
+### 7.2. Asistente Agronómico Interactivo en Telegram (PristinoBot) y Orquestación n8n
+
+- **Adopción de n8n en Docker**: Para independizar la lógica de mensajería y flujos reactivos del núcleo web, se desplegó la plataforma de orquestación de flujos **n8n** contenerizada en el servidor VPS, conectada directamente a PostgreSQL y a la API de Telegram Bot.
+- **Enrutador de Comandos y Ergonomía Móvil (`bot_comandos.json`)**:
+  - Implementación de comandos rápidos para el cultivador en campo: `/status` (estado en tiempo real de electroválvulas y bomba), `/dosing` (consulta de tareas pendientes de la semana), `/filter` (inspección y registro de limpieza de filtros) y `/help`.
+  - Normalización temporal en zona horaria local `America/Caracas` (UTC-4) y estructuración visual vertical limpia (sin sobrecarga de emojis) optimizada para terminales móviles.
+  - Comando `/complete` con botones interactivos en línea (*Inline Keyboards*) para marcar tareas de dosificación manual como completadas con un solo toque desde el invernadero, persistiendo el cambio en `DosingLog` sin requerir inicio de sesión en la plataforma web.
+- **Flujo de Fertirriego Interactivo (`fertirriego_interactivo.json`)**:
+  - Emisión de notificación push 12 horas antes de la ejecución de una tarea automatizada en la Línea 4.
+  - Presentación de opciones interactivas: `[ ✅ Confirmar Tanque ]` (`agro_hw_confirm:`), `[ ⏳ Posponer 24h/48h ]` (`agro_hw_postpone:`) y `[ ❌ Cancelar Riego ]` (`agro_hw_cancel:`).
+  - Al recibir el callback del cultivador, n8n muta el estado en `TaskLog` a `AUTHORIZED`, autorizando al `Scheduler` a proceder con la maniobra física de conmutación.
+
+### 7.3. Supervisión de Resiliencia, Diagnóstico de Batería y Mantenimiento de Filtros
+
+- **Diagnóstico Correlacionado de Conectividad (`alertas_nodos.json`)**:
+  - Supervisión continua del latido (*heartbeat*) de los microcontroladores en `DeviceLog`.
+  - **Ventana de Tolerancia de 10 Minutos**: Se diagnosticó que micro-caídas transitorias de WiFi (con reconexiones en menos de 3 minutos) generaban falsas alarmas de desconexión. Se implementó una ventana estricta de confirmación que exige $\ge 10$ minutos continuos en estado `OFFLINE` antes de emitir cualquier alerta.
+  - **Lógica de Correlación de Contingencias**:
+    - Si el Nodo EMA (alimentado por batería) permanece `OFFLINE` $\ge 10$ min mientras el Nodo Actuador (alimentado por red 110VAC) continúa `ONLINE` $\rightarrow$ Notifica: **«Batería Agotada en EMA Interior»**.
+    - Si ambos nodos permanecen `OFFLINE` simultáneamente $\rightarrow$ Notifica: **«Corte Eléctrico General / Sin Conexión WiFi»**.
+    - Al reconectarse tras un fallo real, emite un aviso de restablecimiento operativo, ignorando los ciclos normales de reposo (*Deep Sleep*).
+- **Mantenimiento Preventivo del Filtro Hídrico (`filter-maintenance-manager`)**:
+  - Acumulación de ciclos de impulsión de la bomba en base de datos. Al alcanzar el umbral de colmatación (6 ciclos de uso), n8n despacha un recordatorio de mantenimiento preventivo.
+  - La notificación incluye el botón interactivo `[ ✅ Filtro Limpiado ]`, el cual inserta un evento inmutable en `FilterCleaningLog`, reinicia el contador de ciclos acumulados y desactiva las alertas pendientes, resolviendo incidencias de notificaciones repetitivas.
+
+---
+
 ## Resumen de Aportes para el Informe TIG
 
 | Área de Ingeniería | Desafío o Requisito Real | Solución Técnica e Innovación Aplicada |
@@ -186,3 +223,7 @@ Este documento reúne de manera exhaustiva la narrativa técnica, las decisiones
 | **Filtro de Bomba** | Transductor de presión destruido por golpe de ariete. | Descarte documentado y limpieza de firmware para evitar código muerto. |
 | **Nutrición Agronómica** | Necesidad de guiar la fertilización/fumigación del cultivador. | Módulo **`/lab`** conectando guías de dilución con la línea de 24V de agroquímicos. |
 | **Inventario Físico** | Control de existencias botánicas en invernadero. | Registro unívoco **`SeedPlant`** por maceta, fecha y ubicación en mesa. |
+| **Interacción Móvil** | Cultivador en campo sin acceso a terminales web de escritorio. | Asistente **PristinoBot en Telegram** con comandos rápidos y botones interactivos. |
+| **Seguridad Fertirriego** | Riesgo de encendido de Línea 4 con tanque de agroquímicos vacío. | Patrón **Human-in-the-Loop** en n8n con autorización previa vía Inline Keyboards. |
+| **Monitoreo de Batería** | Falsas alarmas por micro-desconexiones WiFi de la EMA Interior. | **Ventana de tolerancia de 10 min** y correlación de estados (red vs batería). |
+| **Mantenimiento Hídrico** | Obstrucción inadvertida del filtro de disco en la impulsión. | **Alertas preventivas de limpieza** tras 6 ciclos con registro interactivo en 1 toque. |

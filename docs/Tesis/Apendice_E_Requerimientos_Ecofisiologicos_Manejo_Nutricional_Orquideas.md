@@ -1,116 +1,91 @@
 # Apéndices
 
-## Apéndice E: Requerimientos Ecofisiológicos y Manejo Nutricional de la Familia Orchidaceae
+## Apéndice E. Fundamentos Ecofisiológicos y Manejo de Orquídeas
 
-El presente apéndice documenta las características biológicas, los condicionantes ecofisiológicos y los requerimientos de nutrición mineral de las especies pertenecientes a la familia *Orchidaceae*. Esta base conceptual constituye el fundamento agronómico sobre el cual se estructuran el catálogo taxonómico botánico, el modelado de mezclas de agroquímicos y la planificación de programas rotativos en el Módulo IV (Dosificación y Laboratorio Agronómico) de la plataforma PristinoPlant, garantizando el rigor biológico sin sobrecargar el marco teórico central de la investigación.
-
----
-
-### 1. Diversidad, Biogeografía y Formas de Vida
-
-Las orquídeas (*Orchidaceae*) constituyen una de las familias más vastas y diversas del reino vegetal, superando las 25.000 especies silvestres clasificadas en más de 800 géneros, además de una cifra superior a 100.000 híbridos hortícolas registrados comercialmente (Judd et al., 2019). Su morfología reproductiva se distingue por una alta especialización floral caracterizada por la presencia de un pétalo medio modificado denominado *labelo* —el cual actúa como plataforma de aterrizaje para polinizadores específicos— y la fusión de los órganos reproductivos masculinos (estambres) y femeninos (estilo y estigma) en una estructura columnar única llamada *columna* o *ginostemo* (Judd et al., 2019). Asimismo, en su hábitat natural exhiben una estrecha dependencia mutualista simbiótica con hongos micorrízicos, indispensables para suministrar carbohidratos y minerales durante la germinación protocórmica y las etapas tempranas de desarrollo vegetal.
-
-En términos biogeográficos, la familia se distribuye a lo largo de casi todos los biomas del planeta, excluyendo únicamente los desiertos polares y las regiones hiperáridas extremas (Hágsater et al., 2005). La variabilidad topográfica y altitudinal condiciona sus hábitos de crecimiento:
-1. **Especies terrestres:** Predominan en zonas templadas, sabanas y sotobosques montañosos, anclando sus raíces en suelos orgánicos o mantillos vegetales con moderada humedad.
-2. **Especies epífitas y litófitas:** Concentran cerca del 70% de la diversidad taxonómica global y habitan primordialmente en las copas y cortezas de árboles de las selvas tropicales y bosques nublados cálidos y húmedos (Hágsater et al., 2005). Al evolucionar suspendidas sin contacto con el suelo mineral, han desarrollado adaptaciones morfoanatómicas extremas para captar agua pluvial y tolerar ciclos alternados de sequía. Debido a su extraordinaria vistosidad floral y alta demanda ornamental, las variedades epífitas (*Phalaenopsis*, *Cattleya*, *Dendrobium*, *Oncidium*, *Vanda*) representan el núcleo de producción en el orquideario PristinoPlant.
+El presente apéndice expone los fundamentos biológicos, bioclimáticos y de nutrición mineral de las especies cultivadas en el orquideario PristinoPlant (San Félix, Estado Bolívar). Esta documentación técnica constituye el soporte biológico formal que justifica los umbrales de decisión basados en **temperatura ($T$)**, **humedad relativa ($HR$)** e **iluminancia solar ($Lux$)** en el servicio `Scheduler`, el modelado taxonómico en el catálogo de plantas y las reglas de compatibilidad química en el laboratorio de dosificación.
 
 ---
 
-### 2. Condicionantes Fisiológicos para el Cultivo *Ex Situ*
+### 1. Entorno Bioclimático y Cultivo Protegido en PristinoPlant
 
-La domesticación y aclimatación de orquídeas epífitas en estructuras cerradas o protegidas (*ex situ*) requiere replicar los factores físicos del dosel arbóreo tropical mediante cinco principios agronómicos cardinales (Hágsater et al., 2005):
+El diseño de la plataforma se fundamenta en la caracterización ambiental empírica de San Félix (clima tropical cálido), sustentada en la serie telemétrica consolidada por la Estación Meteorológica Exterior (EMA Exterior) y la Estación Meteorológica Interior (EMA Interior):
 
-* **Medio de anclaje no compactable y aireado:** Las orquídeas epífitas no toleran la tierra negra ni los sustratos agrícolas convencionales. El sistema radicular exige medios inorgánicos o de lenta degradación (corteza de pino tratada, trozos de carbón vegetal, fibra de coco y piedra pómez) que aseguren una porosidad libre superior al 40%, facilitando un drenaje gravitacional instantáneo y una continua circulación de oxígeno que impida la proliferación de patógenos anaerobios.
-* **Sincronización fenológica hídrica:** El suministro de agua debe ajustarse al estadio de desarrollo vegetativo. Durante la emisión de nuevos brotes foliares y elongación de raíces, la demanda metabólica y transpiratoria se maximiza; por el contrario, en las fases de reposo fisiológico post-floración, el aporte hídrico debe reducirse significativamente para evitar la pudrición de pseudobulbos o rizomas.
-* **Radiación fotosintéticamente activa (PAR) difusa:** Las especies epífitas están fisiológicamente adaptadas a recibir luz filtrada por el follaje arbóreo superior. La incidencia solar directa destruye los cloroplastos por fotooxidación y genera quemaduras necróticas irreversibles en las hojas. El equilibrio lumínico se evalúa a través de bioindicadores cromáticos foliares:
-  * *Luminosidad óptima:* Hojas de tonalidad verde manzana o verde claro brillante, reflejando una tasa fotosintética equilibrada y propicia para la iniciación floral.
-  * *Sobreexposición lumínica:* El follaje sintetiza pigmentos antocianinas como pantalla protectora frente a la radiación UV, manifestando manchas rojizas o violáceas.
-  * *Déficit lumínico:* Las hojas adquieren un color verde oscuro profundo y alargamiento desproporcionado (etiolación), inhibiendo la diferenciación meristemática floral.
-* **Ventilación y turbulencia continua del aire:** La circulación forzada de aire es vital para dispersar el calor latente de las hojas en horas de mediodía y evaporar las películas de agua depositadas en las axilas foliares antes del anochecer, reduciendo las infecciones bacterianas (*Erwinia carotovora*). No obstante, corrientes excesivamente secas o frías desatan estrés osmótico y aborto de botones florales.
-
----
-
-### 3. Requerimientos Térmicos y Termoperiodo por Grupo Agronómico
-
-La respuesta fisiológica de las orquídeas frente a la temperatura se vincula directamente con la cota altitudinal de su centro de origen biogeográfico. En la horticultura protegida se distinguen tres grupos agronómicos principales (Hágsater et al., 2005):
-
-1. **Grupo de Clima Frío (Altas elevaciones, > 1.800 msnm):** Comprende géneros como *Cymbidium*, *Miltoniopsis* y *Odontoglossum*, que demandan temperaturas diurnas entre $15^\circ\text{C}$ y $22^\circ\text{C}$, descendiendo en la noche a rangos de $8^\circ\text{C}$ a $14^\circ\text{C}$.
-2. **Grupo de Clima Intermedio o Templado (Altitudes medias, 800–1.800 msnm):** Representado por géneros como *Cattleya*, *Laelia* y la mayoría de *Oncidium*, con rangos óptimos diurnos de $20^\circ\text{C}$ a $26^\circ\text{C}$ y nocturnos de $14^\circ\text{C}$ a $18^\circ\text{C}$.
-3. **Grupo de Clima Cálido (Tierras bajas y selvas tropicales, < 800 msnm):** Agrupa a géneros monopodiales como *Phalaenopsis* y *Vanda*, con temperaturas óptimas diurnas de $24^\circ\text{C}$ a $30^\circ\text{C}$ y nocturnas no inferiores a $18^\circ\text{C}$.
-
-#### El Termoperiodo como Disparador Floral
-
-Más allá del rango térmico absoluto, el factor decisivo para inducir la brotación de varas florales es el **termoperiodo**, definido como el gradiente diferencial entre la temperatura máxima diurna y la mínima nocturna ($\Delta T = T_{\text{día}} - T_{\text{noche}}$). En géneros como *Phalaenopsis*, un termoperiodo sostenido de $6^\circ\text{C}$ a $9^\circ\text{C}$ durante un período de cuatro semanas consecutivas resulta indispensable para activar la translocación hormonal que dispara la diferenciación de meristemos reproductivos. La uniformidad térmica sin variación diurna-nocturna mantiene a la planta en un ciclo vegetativo permanente sin floración.
+* **Condiciones Críticas en la Intemperie (EMA Exterior):** 
+  1. *Régimen Térmico Extremo:* Temperatura diurna promedio de $36.1^\circ\text{C}$ (08:00–16:00 h), con picos térmicos sostenidos entre $40.0^\circ\text{C}$ y $42.0^\circ\text{C}$ durante las horas de radiación cenital, descendiendo de noche a $26.0^\circ\text{C}$.
+  2. *Radiación Solar:* Iluminancia diurna promedio de $34.460\text{ lux}$ con máximos directos superiores a $45.000\text{ lux}$.
+  3. *Demanda Hídrica:* Caídas agudas de humedad relativa diurna hasta valores críticos de $45\%$--$55\%$ en las horas de mayor insolación, contrastadas con saturación nocturna superior al $90\%$.
+* **Amortiguamiento Real Bajo la Malla Sombra (EMA Interior):** 
+  El contraste continuo entre ambas estaciones demuestra la eficacia del microclima bajo cultivo protegido:
+  1. *Filtrado Lumínico Eficiente:* La malla sombra proporciona una **atenuación diurna media del $88.5\%$**, reduciendo los más de $34.000\text{ lux}$ exteriores a un promedio interior de **$4.020\text{ lux}$**, eliminando el riesgo de fotooxidación y quemaduras en las hojas.
+  2. *Amortiguamiento Térmico:* La ventilación pasiva y el sombreado producen un **descenso térmico diurno promedio de $-6.5^\circ\text{C}$** respecto al exterior (el interior promedia $29.6^\circ\text{C}$). En días de calor extremo exterior ($> 40^\circ\text{C}$), el diferencial alcanza entre $-8.0^\circ\text{C}$ y $-9.3^\circ\text{C}$.
+  3. *Estabilidad Higrométrica:* La humedad relativa interior diurna promedia **$74.0\%$** (superior al exterior), previniendo la deshidratación de las raíces aéreas sin propiciar encharcamientos continuos.
+* **Géneros Botánicos en Cultivo:**
+  1. ***Cattleya*:** Orquídea epífita de pseudobulbos y hojas coriáceas. Requiere buena iluminación filtrada y un ciclo estricto de secado radicular completo entre riegos.
+  2. ***Dendrobium*:** Orquídea de cañas cilíndricas que demanda alternancia estacional entre crecimiento húmedo y reposo seco para inducir la brotación de varas florales.
+  3. ***Phalaenopsis*:** Orquídea monopodial muy sensible al exceso de radiación directa y con alta demanda de humedad ambiental estable.
+  4. **Colecciones Complementarias:** Rosas del desierto (*Adenium obesum*), cactus y suculentas en áreas sin automatización hidráulica, gestionadas mediante el catálogo unificado y órdenes de dosificación manual.
 
 ---
 
-### 4. Nutrición Mineral y Régimen de Dosificación
+### 2. Fundamentación Biológica de las Reglas de Inferencia
 
-Al evolucionar sobre soportes aéreos, las raíces de las orquídeas epífitas están morfológicamente diseñadas para captar nutrientes disueltos en concentraciones iónicas sumamente diluidas, procedentes de la escorrentía pluvial, la lixiviación del dosel forestal y los detritos orgánicos atrapados en las ramas. Debido a esta condición, poseen una bajísima tolerancia al exceso de sales solubles (conductividad eléctrica, CE). Las aplicaciones de fertilizantes concentrados destruyen los ápices meristemáticos radiculares por deshidratación osmótica violenta (Hágsater et al., 2005).
+Las decisiones automatizadas del servicio `Scheduler` sustituyen los riegos empíricos por reglas basadas en la respuesta biológica de la planta frente a los sensores de temperatura, humedad y luz:
 
-#### Formulación de Macronutrientes y Micronutrientes
-
-El protocolo de fertilización técnica implementado en la plataforma PristinoPlant establece diluciones que no exceden una conductividad eléctrica de $1.0\text{ mS/cm}$ (equivalente aproximado a $0.8$ a $1.25\text{ g/L}$ en agua desmineralizada o pluvial):
-
-* **Macronutrientes primarios (N-P-K):**
-  * *Desarrollo vegetativo:* Fórmulas con balance nitrogenado prioritario (p. ej., $30\text{-}10\text{-}10$) aplicadas durante la emergencia de brotes para impulsar la biosíntesis de proteínas y clorofila.
-  * *Mantenimiento integral:* Fórmulas equilibradas (p. ej., $20\text{-}20\text{-}20$) administradas quincenalmente en plantas adultas en crecimiento activo.
-  * *Inducción y maduración floral:* Fórmulas de bajo nitrógeno y alto contenido de fósforo y potasio (p. ej., $10\text{-}30\text{-}20$) aplicadas previo al ciclo de brotación floral para conferir consistencia a los botones y tallos.
-* **Macronutrientes secundarios y micronutrientes:**
-  * *Calcio ($\text{Ca}$):* Elemento estructural fundamental para la rigidez de la lámina media en las paredes celulares de los nuevos crecimientos foliares y radiculares. Se suministra mediante nitrato de calcio soluble o enmiendas de carbonato de calcio ($\text{CaCO}_3$) micronizado. En aplicaciones orgánicas caseras alternativas se aprovechan infusiones diluidas de cáscaras de huevo finamente trituradas o dispersiones de leche desnatada al 20% v/v.
-  * *Magnesio ($\text{Mg}$):* Átomo central de la molécula de clorofila y activador de reacciones enzimáticas para el transporte de azúcares. Se dosifica preferentemente como sulfato de magnesio heptahidratado ($\text{MgSO}_4 \cdot 7\text{H}_2\text{O}$, sales de Epsom) en concentraciones de $1.5$ a $2.5\text{ g/L}$.
-  * *Micronutrientes quelatados ($\text{Fe, Mn, Zn, Cu, B, Mo}$):* Aplicados con agentes quelatantes tipo EDTA para asegurar su biodisponibilidad en el rango de pH ligeramente ácido óptimo para orquídeas ($5.5$ a $6.5$).
-* **Restricción de Sodio y Cloruros:**
-  Cualquier enmienda o extracto orgánico líquido (como aguas de lavado de cereales o cocción vegetal) debe estar rigurosamente libre de cloruro de sodio ($\text{NaCl}$), ya que concentraciones traza de $\text{Na}^+$ saturan rápidamente la capacidad de intercambio catiónico del velamen, induciendo necrosis apical radicular inmediata.
+* **Dinámica del Velamen Radicular y Veto por Alternancia Interdiaria:**
+  Las raíces de las orquídeas epífitas están recubiertas por el *velamen*, un tejido esponjoso que absorbe agua con gran rapidez. Si el sustrato permanece empapado por más de 24 a 48 horas seguidas, la falta de oxígeno en las raíces provoca **asfixia radicular (anoxia)** y pudrición negra causada por hongos fitopatógenos (*Phytophthora*, *Pythium*). Por ello, el sistema impone la **alternancia interdiaria**: si el día anterior llovió ($\ge 20\text{ min}$) o se completó un ciclo de aspersión, el riego del día siguiente se cancela automáticamente para permitir la oxigenación y secado del sustrato.
+* **Enfriamiento de Suelo ante Estrés Térmico ($T > 34^\circ\text{C}$):**
+  Cuando la temperatura supera los $34^\circ\text{C}$, las orquídeas cierran sus estomas foliares para no perder agua, deteniendo su crecimiento. Regar el follaje bajo calor intenso causaría quemaduras y proliferación bacteriana; por ello, el sistema acciona la **humectación de piso (Línea 3)**. El agua esparcida en el suelo se evapora, absorbiendo calor del ambiente y reduciendo la temperatura interior entre $2^\circ\text{C}$ y $4^\circ\text{C}$ sin mojar las hojas.
+* **Veto por Saturación Higrométrica ($HR \ge 85\%$ y $HR \ge 98\%$):**
+  Si la humedad relativa supera el $85\%$ durante 4 horas continuas, el sustrato no puede evaporar el agua retenida. En consecuencia, el sistema veta cualquier rutina de aspersión programada. Asimismo, si se registran entre 6 y 8 bloques horarios consecutivos con humedad $\ge 98\%$, el sistema identifica un temporal continuo y bloquea preventivamente toda operación hidráulica.
+* **Discriminación Lumínica Solar ($Lux$):**
+  El luxómetro permite clasificar la jornada en tres ramas operativas (Rama A: Nublado $\le 15.000\text{ lux}$; Rama B: Soleado $> 26.000\text{ lux}$; Rama C: Intermedio). Bajo sol pleno continuo ($\ge 26.000\text{ lux}$), cualquier caída de temperatura aislada se descarta como lluvia, previniendo falsos vetos en momentos de máxima demanda de luz.
 
 ---
 
-### 5. Dinámica Hídrica y Fisiología del Velamen Radicular
+### 3. Modelo Taxonómico y Trazabilidad Fenológica
 
-La singularidad adaptativa de las orquídeas epífitas reside en la presencia del **velamen radicular**, una epidermis multiseriada compuesta por células epidérmicas muertas, lignificadas y desprovistas de citoplasma, que forman un manto esponjoso alrededor del cilindro central vascular de la raíz (Hágsater et al., 2005).
+La estructura en la base de datos relacional (PostgreSQL / Prisma ORM) trasciende el inventario comercial tradicional al reflejar las características biológicas del cultivo:
 
-```
-ESTRUCTURA RADICULAR DE ORQUÍDEAS EPÍFITAS
-┌────────────────────────────────────────────────────────┐
-│  VELAMEN RADICULAR (Manto higroscópico y aislante)     │
-│  ├── Captación capilar inmediata de agua y rocío       │
-│  └── Protección física contra choque térmico y radiación│
-├────────────────────────────────────────────────────────┤
-│  EXODERMIS (Filtro celular con células de paso)        │
-│  └── Regulación de entrada de sales minerales          │
-├────────────────────────────────────────────────────────┤
-│  CÓRTEX Y CILINDRO VASCULAR (Xilema y Floema)          │
-│  └── Conducción hídrica unidireccional hacia la planta │
-└────────────────────────────────────────────────────────┘
-```
-
-El velamen ejerce tres funciones biofísicas determinantes:
-1. **Captación capilar instantánea:** Absorbe en segundos el agua condensada del rocío o de las precipitaciones torrenciales breves, reteniendo hasta cinco veces su peso seco en humedad.
-2. **Aislamiento mecánico y térmico:** Protege los tejidos vasculares internos de la desecación provocada por los vientos cálidos tropicales y la radiación cenital.
-3. **Fotosíntesis radicular:** Cuando el velamen se satura de agua, se torna traslúcido, permitiendo que la radiación solar alcance los cloroplastos del córtex radicular (adquiriendo un color verde brillante característico). Al secarse, las células se llenan de aire y reflejan la luz, adquiriendo un color blanco plateado.
-
-#### El Ciclo de Humedecimiento y Secado Intermitente
-
-Para mantener la funcionalidad del velamen radicular es imperativo que las raíces experimenten ciclos continuos de **humedecimiento profundo seguido de secado rápido y ventilado**:
-* Si el sustrato se mantiene empapado o sin aireación por más de 48 horas continuas, los espacios celulares del velamen permanecen anegados, colapsando el intercambio gaseoso y provocando **anoxia radicular**. La privación de oxígeno induce la autólisis celular del tejido y desencadena la colonización violenta de oomicetos fúngicos del suelo (*Phytophthora cactorum* y *Pythium ultimum*), causantes de la pudrición negra radicular.
-* Por este motivo, el motor de inferencia hídrica de PristinoPlant programa sus algoritmos no solo en función del tiempo transcurrido, sino verificando el secado atmosférico mediante el monitoreo del Déficit de Presión de Vapor ($VPD$) y estableciendo vetos automáticos de irrigación durante periodos lluviosos o de alta humedad persistente.
+* **Estructura Relacional Taxonómica:**
+  1. `PlantType`: Categorización macro (Orquídeas, Suculentas, Cactus, Rosas del Desierto).
+  2. `PlantGenus`: Agrupación por género (*Cattleya*, *Dendrobium*, *Phalaenopsis*) con descriptores de hábito y frecuencia de riego.
+  3. `PlantSpecies`: Ficha biológica con descripción botánica, color característico de floración (`glowColor`) y galería fotográfica.
+  4. `Plant`: Gemelo digital de la maceta individual (`SeedPlant`), enlazado con su tamaño (`PotSize`), mesa física y estado.
+* **Segregación de Ejemplares:**
+  1. *Plantas Madres:* Especímenes élite reservados exclusivamente para propagación vegetativa o conservación botánica; no disponibles para la venta.
+  2. *Ejemplares Comerciales:* Macetas disponibles en la tienda digital con reserva atómica durante el proceso de compra.
+* **Trazabilidad Fenológica de Floración:**
+  Registro por ejemplar de la fecha de brote de vara, apertura de flor y marchitamiento. El sistema consolida estos eventos para calcular automáticamente: duración promedio de floración en días, frecuencia anual de floración y meses típicos de floración en la ficha pública de la especie.
 
 ---
 
-### 6. Matriz Paramétrica de Referencia para el Sistema Informático
+### 4. Dosificación Agronómica y Seguridad en Laboratorio
 
-La Tabla Ap-E1 sintetiza los umbrales de referencia agronómica que alimentan las tablas de parámetros de cultivo y los límites de alerta en el software PristinoPlant.
+El módulo de laboratorio (`/lab`) asegura la correcta preparación de mezclas y previene daños mecánicos o biológicos:
 
-#### Tabla Ap-E1. *Límites y umbrales agronómicos para orquídeas epífitas incorporados en PristinoPlant*
+* **Prevención de Incompatibilidad Química:**
+  Los fertilizantes ricos en Calcio soluble (Nitrato de Calcio) **nunca deben mezclarse con Sulfatos ni Fosfatos** en el tanque presurizado. La reacción química produce precipitados insolubles como el **Sulfato de Calcio (yeso)**:
+  $$\text{Ca}^{2+} + \text{SO}_4^{2-} \longrightarrow \text{CaSO}_4 \downarrow$$
+  Estos cristales sólidos obstruyen de inmediato los filtros de disco de 120 mesh y traban los solenoides de las electroválvulas. La interfaz de formulación de recetas valida los ingredientes para impedir estas combinaciones.
+* **Rotación de Principios Activos (FRAC / IRAC):**
+  Para evitar que plagas o patógenos desarrollen resistencia genética, el programador de dosificación rota sistemáticamente los mecanismos de acción de fungicidas (códigos FRAC) e insecticidas (códigos IRAC), intercalando aplicaciones de lavado con agua pura entre tratamientos.
 
-| Variable Ambiental / Operativa | Rango Mínimo Admisible | Rango Óptimo Estándar | Rango Máximo Admisible | Acción Algorítmica en Sistema |
-| :--- | :---: | :---: | :---: | :--- |
-| **Temperatura Diurna ($^\circ\text{C}$)** | $18.0$ | $24.0\text{ -- }28.0$ | $34.0$ | Si $T > 34^\circ\text{C}$, activa humectación de piso para enfriamiento. |
-| **Temperatura Nocturna ($^\circ\text{C}$)** | $14.0$ | $18.0\text{ -- }22.0$ | $26.0$ | Registro telemétrico para cálculo del gradiente nictemeral ($\Delta T$). |
-| **Humedad Relativa ($HR\,\%$)** | $50.0$ | $65.0\text{ -- }80.0$ | $90.0$ | Si $HR > 85\%$, veta preventivamente el riego por aspersión. |
-| **Déficit de Presión de Vapor ($VPD\text{ kPa}$)** | $0.40$ | $0.80\text{ -- }1.20$ | $1.80$ | Si $VPD > 1.80\text{ kPa}$, señaliza estrés hídrico y evalúa microaspersión. |
-| **Iluminancia Solar ($Lux$)** | $10.000$ | $15.000\text{ -- }25.000$ | $35.000$ | Monitoreo PAR difusa; discriminación de tormentas solares vs nubladas. |
-| **Conductividad Fertilizante ($\text{mS/cm}$)** | $0.40$ | $0.70\text{ -- }1.00$ | $1.25$ | Umbrales de dilución para formulación de recetas en Módulo IV. |
-| **pH del Agua de Riego** | $5.5$ | $6.0\text{ -- }6.5$ | $7.0$ | Control de calidad hídrica y biodisponibilidad de micronutrientes. |
+---
 
-*Nota.* Fuente: Elaboración propia fundamentada en Hágsater et al. (2005) y validaciones de campo en el orquideario PristinoPlant.
+### 5. Matriz Paramétrica de Referencia Operativa
+
+La Tabla Ap-E1 sintetiza los umbrales climáticos y agronómicos que rigen las decisiones automáticas del sistema:
+
+#### Tabla Ap-E1. *Límites y umbrales agronómicos para orquídeas epífitas en PristinoPlant*
+
+| Variable / Magnitud | Rango Estándar | Umbral Crítico | Acción Algorítmica y Control en Sistema |
+| :--- | :---: | :---: | :--- |
+| **Temperatura Diurna ($T$)** | $24.0\text{ -- }30.0^\circ\text{C}$ | $> 34.0^\circ\text{C}$ | Conmuta humectación de piso (Línea 3) para enfriamiento evaporativo sin mojar follaje. |
+| **Temperatura Nocturna ($T$)** | $18.0\text{ -- }22.0^\circ\text{C}$ | $< 15.0^\circ\text{C}$ | Auditoría telemétrica continua y cálculo del diferencial día/noche ($\Delta T$). |
+| **Humedad Relativa ($HR$)** | $65.0\text{ -- }80.0\%$ | $\ge 85.0\%$ (4h) | Veto preventivo de la rutina de aspersión general por falta de evaporación. |
+| **Saturación Sostenida ($HR$)** | $< 90.0\%$ | $\ge 98.0\%$ (6-8h) | Bloqueo absoluto de operaciones hídricas por temporal pluvial continuo. |
+| **Iluminancia Solar ($Lux$)** | $15.000\text{ -- }25.000\text{ lux}$ | $\ge 26.000\text{ lux}$ | Descarta falsos positivos de lluvia bajo sol pleno y clasifica la rama de inferencia diurna. |
+| **Dilución de Fertilizantes** | $0.5\text{ -- }1.0\text{ g/L}$ | $> 1.25\text{ g/L}$ | Alerta en el configurador de recetas para prevenir quemaduras de raíces por sobredosis. |
+| **Compatibilidad Química** | Mezclas homogéneas | Calcio + Sulfatos/Fosfatos | Bloqueo de formulación para evitar precipitación de yeso y obstrucción de electroválvulas. |
+
+*Nota.* Fuente: Elaboración propia a partir de las validaciones de campo en el orquideario PristinoPlant.
