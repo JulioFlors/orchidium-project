@@ -8,7 +8,7 @@ import { textFont } from '@/config/fonts'
 export const metadata: Metadata = {
   // Esto define la base para todas las imágenes OG y Twitter cards en la app.
   // Resuelve el warning y asegura que al compartir enlaces en redes sociales las imágenes se vean.
-  metadataBase: new URL('https://pristinoplant.vercel.app'),
+  metadataBase: new URL('https://pristinoplant.com'),
 
   title: {
     // %s se sustituye por el título que definas en cada página

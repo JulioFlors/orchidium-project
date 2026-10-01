@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     title: 'Tienda',
     description:
       'Descubre nuestra colección de orquídeas, cactus, suculentas, rosas del desierto y kokedamas para interiores. Envíos garantizados y asesoramiento experto para tus plantas.',
-    url: 'https://pristinoplant.vercel.app/',
+    url: 'https://pristinoplant.com/',
     siteName: 'PristinoPlant',
     images: [
       {

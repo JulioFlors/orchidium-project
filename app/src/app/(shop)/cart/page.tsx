@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Su Carrito',
     description: 'Revisa tus plantas seleccionadas. Un paso más cerca de tu colección ideal.',
-    url: 'https://pristinoplant.vercel.app/cart',
+    url: 'https://pristinoplant.com/cart',
     siteName: 'PristinoPlant',
     images: [
       {

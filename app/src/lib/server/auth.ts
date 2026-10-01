@@ -37,6 +37,6 @@ export const auth = betterAuth({
       ? process.env.BETTER_AUTH_URL
       : 'http://localhost:3000',
   trustedOrigins: isVercel
-    ? []
+    ? ['https://pristinoplant.com', 'https://pristinoplant.vercel.app']
     : ['http://192.168.0.20:3000', 'http://192.168.0.227:3000', 'http://localhost:3000'],
 })

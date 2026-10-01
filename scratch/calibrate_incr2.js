@@ -1,2 +1,0 @@
-﻿const p = '**Entregables consolidados.** Como resultado de este incremento, se entregó el circuito hidráulico presurizado de cuatro líneas, el tablero de fuerza estructurado en tres niveles de tensión (110VAC, 24VAC y 5V DC) y el firmware base de conmutación física en MicroPython, validando la operación remota mediante MQTT (véase Tabla Ap-B1 del Apéndice B y Flujo 1 del **Apéndice F**).';
-console.log('Len:', p.length, 'lines:', (p.length/78).toFixed(1));

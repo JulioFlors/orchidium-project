@@ -1,3 +1,0 @@
-﻿const p1 = `**Diseño algorítmico de los motores de inferencia.** La deliberación autónoma reside en dos motores que procesan la telemetría en tiempo real. El *motor de inferencia meteorológica* sustituye a los sensores resistivos analizando derivadas térmicas e higrométricas en ventanas de 10, 20 y 30 minutos. El algoritmo evalúa caídas de temperatura y alzas de humedad bajo cielo soleado, nublado o nocturno, infiriendo el inicio y cese de lluvias (su formulación matemática y validación empírica se detallan en el **Apéndice C**, visualizándose en la Figura Ap-F17 del **Apéndice F**).`;
-
-console.log("P1 chars:", p1.length, "lines:", (p1.length / 78).toFixed(1));

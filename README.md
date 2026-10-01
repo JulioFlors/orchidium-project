@@ -164,6 +164,7 @@ Para permitir la subida directa (`PUT`) desde el navegador sin que sea bloqueada
   {
     "AllowedOrigins": [
       "http://localhost:3000",
+      "https://pristinoplant.com",
       "https://pristinoplant.vercel.app"
     ],
     "AllowedMethods": [

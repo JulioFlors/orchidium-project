@@ -1,2 +1,0 @@
-﻿const p = '**Entregables consolidados.** Como resultado de este incremento, se entregaron las estaciones meteorológicas EMA Exterior e Interior plenamente operativas, el circuito de autorrecuperación física por corte de alimentación, el firmware endurecido con autoescala lumínica y el panel de telemetría con cálculo psicrométrico en tiempo real (Figuras Ap-F16 y Ap-F18 del **Apéndice F**; véase Tabla Ap-B1 del Apéndice B).';
-console.log('Len:', p.length, 'lines:', (p.length/78).toFixed(1));

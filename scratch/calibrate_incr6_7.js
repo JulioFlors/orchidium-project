@@ -1,4 +1,0 @@
-﻿const p6 = '**Entregables consolidados.** Como resultado de este incremento, se desplegaron las rutas especializadas de inventario `(inventory)`, el módulo de gemelos digitales (`SeedPlant`), la bitácora de trazabilidad fenológica de floración y la tienda de comercio electrónico sincronizada en tiempo real (Figuras Ap-F10 a Ap-F15 y Ap-F19 a Ap-F24 del **Apéndice F**; véase Tabla Ap-B1 del Apéndice B).';
-const p7 = '**Entregables consolidados.** Como resultado de este incremento, se entregaron los flujos de trabajo de n8n en producción (`fertirriego_interactivo.json`, `bot_comandos.json`, `alertas_nodos.json` y `dosing_notifications.json`), el bot de Telegram `PristinoBot` operativo y el desacoplamiento formal de dosificación en la base de datos (véase Tabla 3).';
-console.log('P6 len:', p6.length, 'lines:', (p6.length/78).toFixed(1));
-console.log('P7 len:', p7.length, 'lines:', (p7.length/78).toFixed(1));
