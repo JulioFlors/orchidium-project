@@ -10,6 +10,7 @@ import {
 import { IoCalendarOutline, IoTimeOutline } from 'react-icons/io5'
 
 import { StatusCircleIcon, Button } from '@/components'
+import { formatCalendarDate } from '@/utils'
 
 export interface FloweringRecord {
   id: string
@@ -26,20 +27,10 @@ interface FloweringRecordCardProps {
   onCloseFlowering?: (record: FloweringRecord) => void
 }
 
-function formatDate(dateVal: Date | string) {
-  const d = typeof dateVal === 'string' ? new Date(dateVal) : dateVal
-
-  return d.toLocaleDateString('es-VE', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  })
-}
-
 export function FloweringRecordCard({ record, onCloseFlowering }: FloweringRecordCardProps) {
   const isOngoing = !record.endDate
-  const formattedStart = formatDate(record.startDate)
-  const formattedEnd = record.endDate ? formatDate(record.endDate) : null
+  const formattedStart = formatCalendarDate(record.startDate)
+  const formattedEnd = record.endDate ? formatCalendarDate(record.endDate) : null
 
   return (
     <motion.div

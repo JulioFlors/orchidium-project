@@ -1,15 +1,15 @@
 'use client'
 
-import type { SelectOption } from '@/components/ui/select/SelectDropdown'
+import type { SelectOption } from '@/components'
 
 import { useState, useEffect } from 'react'
 import { Flower2 } from 'lucide-react'
 
-import { Modal, SelectDropdown, Button } from '@/components/ui'
+import { Modal, SelectDropdown, Button } from '@/components'
 import { registerFlowering, getPlantsByZone } from '@/actions'
-import { useToastStore } from '@/store/toast/toast.store'
-import { useFormDraftStore } from '@/store/ui/form-draft.store'
-import { ZoneType, ZoneTypeLabels } from '@/config/mappings'
+import { useToastStore, useFormDraftStore } from '@/store'
+import { ZoneType, ZoneTypeLabels } from '@/config'
+import { getTodayCalendarString, parseCalendarDate } from '@/utils'
 
 interface Plant {
   id: string
@@ -106,7 +106,7 @@ export function FloweringModal({ isOpen, onClose }: FloweringModalProps) {
     try {
       const res = await registerFlowering({
         plantId: selectedPlantId,
-        startDate: new Date(),
+        startDate: parseCalendarDate(getTodayCalendarString()),
       })
 
       if (res.success) {

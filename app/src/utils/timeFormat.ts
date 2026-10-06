@@ -136,3 +136,83 @@ export function getHourInCaracas(dateValue: string | Date | number): number {
 
   return hour === 24 ? 0 : hour
 }
+
+/**
+ * Obtiene la fecha actual en la zona horaria de Caracas en formato ISO 'YYYY-MM-DD'.
+ * Previene que el usuario vea la fecha de mañana al operar en horario nocturno (ej. 8pm-12am).
+ */
+export function getTodayCalendarString(): string {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Caracas',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+
+  return formatter.format(new Date())
+}
+
+/**
+ * Parsea una cadena de fecha de calendario 'YYYY-MM-DD' fijándola al mediodía UTC (12:00:00Z).
+ * Esto evita desfases de día en cualquier huso horario entre UTC-11 y UTC+11.
+ */
+export function parseCalendarDate(dateStr: string): Date {
+  const cleanDate = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr
+
+  return new Date(`${cleanDate}T12:00:00.000Z`)
+}
+
+/**
+ * Convierte un Date o string ISO a formato 'YYYY-MM-DD' en UTC para inputs HTML type="date".
+ * Compatible tanto con registros históricos a las 00:00:00Z como con nuevos a las 12:00:00Z.
+ */
+export function toCalendarDateString(dateValue: Date | string): string {
+  if (!dateValue) return ''
+
+  const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue
+
+  if (isNaN(date.getTime())) return ''
+
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'UTC',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+
+  return formatter.format(date)
+}
+
+/**
+ * Formatea una fecha de calendario en español (es-VE) fijando UTC para que
+ * el navegador jamás reste horas ni cambie el día o mes seleccionado.
+ */
+export function formatCalendarDate(
+  dateValue: Date | string,
+  options: { month?: 'short' | 'long' } = { month: 'short' },
+): string {
+  if (!dateValue) return ''
+
+  const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue
+
+  if (isNaN(date.getTime())) return ''
+
+  return date.toLocaleDateString('es-VE', {
+    day: '2-digit',
+    month: options.month ?? 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
+}
+
+/**
+ * Extrae el mes del calendario (1 a 12) a partir de los componentes UTC de la fecha,
+ * garantizando exactitud matemática sin importar el huso horario del servidor.
+ */
+export function getCalendarMonth(dateValue: Date | string): number {
+  const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue
+
+  if (isNaN(date.getTime())) return 1
+
+  return date.getUTCMonth() + 1
+}

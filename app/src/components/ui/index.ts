@@ -46,6 +46,8 @@ export * from './icons/SearchIcon'
 
 export * from './modal/Modal'
 
+export * from './modal/FloweringEventModal'
+
 export * from './input'
 
 export * from './not-found/PageNotFound'

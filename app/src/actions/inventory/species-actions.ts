@@ -1,10 +1,13 @@
 'use server'
 
+import type { Prisma } from '@package/database'
+import type { PlantType, Species } from '@/interfaces'
+
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@package/database'
 
 import { Logger } from '@/lib'
-import { sortVariantsByPotSizeAsc } from '@/config/mappings'
+import { sortVariantsByPotSizeAsc } from '@/config'
 import { deleteR2Object } from '@/actions/storage/upload-actions'
 
 // ─────────────────────────────────────────────────────────────
@@ -352,8 +355,82 @@ export async function toggleSpeciesFeatured(id: string, isFeatured: boolean) {
   }
 }
 
-/** Obtiene las especies destacadas (más vendidas) y las que tienen floración activa */
-export async function getLandingSpecies() {
+const landingSpeciesInclude = {
+  genus: { select: { id: true, name: true, type: true } },
+  images: {
+    select: { id: true, url: true },
+    orderBy: { position: 'asc' as const },
+  },
+  variants: true,
+  plants: {
+    where: {
+      status: 'AVAILABLE' as const,
+    },
+    select: {
+      id: true,
+      currentSize: true,
+      FloweringEvent: {
+        where: {
+          endDate: null,
+        },
+        select: {
+          id: true,
+        },
+        take: 1,
+      },
+    },
+  },
+} satisfies Prisma.SpeciesInclude
+
+type LandingSpeciesQueryPayload = Prisma.SpeciesGetPayload<{
+  include: typeof landingSpeciesInclude
+}>
+
+function formatSpeciesForLanding(specie: LandingSpeciesQueryPayload): Species {
+  const isFlowering = specie.plants.some((p) => p.FloweringEvent && p.FloweringEvent.length > 0)
+
+  const updatedVariants = sortVariantsByPotSizeAsc(
+    specie.variants.map((v) => {
+      const realQty = specie.plants.filter((p) => p.currentSize === v.size).length
+
+      return {
+        id: v.id,
+        size: v.size,
+        price: v.price,
+        quantity: realQty,
+        available: realQty > 0,
+        speciesId: specie.slug,
+      }
+    }),
+  )
+
+  return {
+    id: specie.id,
+    name: specie.name,
+    slug: specie.slug,
+    description: specie.description,
+    glowColor: specie.glowColor,
+    images: specie.images.map((img) => img.url),
+    genus: {
+      name: specie.genus.name,
+      type: specie.genus.type as PlantType,
+    },
+    variants: updatedVariants,
+    isFlowering,
+    floweringDurationDays: specie.floweringDurationDays,
+    floweringFrequencyYear: specie.floweringFrequencyYear,
+    floweringMonths: specie.floweringMonths,
+    floweringRecordsCount: specie.floweringRecordsCount,
+  }
+}
+
+/** Obtiene las especies destacadas (más vendidas) y las que tienen floración activa con stock sincronizado */
+export async function getLandingSpecies(): Promise<{
+  ok: boolean
+  featured: Species[]
+  flowering: Species[]
+  message?: string
+}> {
   try {
     // Intentar leer la configuración de la tienda
     const setting = await prisma.systemSetting.findUnique({
@@ -368,16 +445,12 @@ export async function getLandingSpecies() {
       featuredIds = config.featuredSpeciesIds || []
     }
 
-    const featured =
+    const featuredRaw =
       featuredIds.length > 0
         ? await (async () => {
             const speciesList = await prisma.species.findMany({
               where: { id: { in: featuredIds } },
-              include: {
-                genus: { select: { id: true, name: true, type: true } },
-                images: { select: { id: true, url: true } },
-                variants: true,
-              },
+              include: landingSpeciesInclude,
             })
 
             return featuredIds
@@ -386,17 +459,13 @@ export async function getLandingSpecies() {
           })()
         : await prisma.species.findMany({
             where: { isFeatured: true },
-            include: {
-              genus: { select: { id: true, name: true, type: true } },
-              images: { select: { id: true, url: true } },
-              variants: true,
-            },
+            include: landingSpeciesInclude,
             take: 9,
             orderBy: { name: 'asc' },
           })
 
     // 2. Obtener especies con plantas en floración activa - máximo 9
-    const flowering = await prisma.species.findMany({
+    const floweringRaw = await prisma.species.findMany({
       where: {
         plants: {
           some: {
@@ -409,19 +478,16 @@ export async function getLandingSpecies() {
           },
         },
       },
-      include: {
-        genus: { select: { id: true, name: true, type: true } },
-        images: {
-          select: { id: true, url: true },
-          orderBy: { position: 'asc' },
-        },
-        variants: true,
-      },
+      include: landingSpeciesInclude,
       take: 9,
       orderBy: { name: 'asc' },
     })
 
-    return { ok: true, featured, flowering }
+    return {
+      ok: true,
+      featured: featuredRaw.map(formatSpeciesForLanding),
+      flowering: floweringRaw.map(formatSpeciesForLanding),
+    }
   } catch (err) {
     Logger.error('[Species] Error al obtener especies para landing:', err)
 

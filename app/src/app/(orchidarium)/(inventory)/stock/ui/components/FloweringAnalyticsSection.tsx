@@ -8,8 +8,9 @@ import { PlantInstance } from './PlantInstanceCard'
 import { FloweringRecordCard, FloweringRecord } from './FloweringRecordCard'
 
 import { SelectorGroup, type SelectorGroupItem, Button } from '@/components'
-import { PotSizeColors as POT_SIZE_COLORS } from '@/config/mappings'
+import { PotSizeColors as POT_SIZE_COLORS } from '@/config'
 import { SpeciesFloweringAnalyticsData } from '@/interfaces'
+import { getCalendarMonth } from '@/utils'
 
 interface FloweringAnalyticsSectionProps {
   speciesName: string
@@ -89,7 +90,7 @@ export function FloweringAnalyticsSection({
 
       for (let i = 1; i <= 12; i++) pDist[i] = 0
       for (const le of localEvents) {
-        const m = new Date(le.startDate).getMonth() + 1
+        const m = getCalendarMonth(le.startDate)
 
         pDist[m] = (pDist[m] || 0) + 1
       }

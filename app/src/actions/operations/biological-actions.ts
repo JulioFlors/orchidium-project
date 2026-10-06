@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import prisma, { type ZoneType, type Severity } from '@package/database'
 
 import { Logger } from '@/lib'
+import { getCalendarMonth } from '@/utils'
 
 /**
  * Obtiene el catálogo de plagas disponibles.
@@ -255,7 +256,11 @@ export async function registerFlowering(data: {
       },
     })
 
+    await syncSpeciesFloweringBenchmark(plant.speciesId)
+
     revalidatePath('/orchidarium')
+    revalidatePath('/stock')
+    revalidatePath(`/stock/${plant.speciesId}`)
     revalidatePath('/category/plants') // Para actualizar el label de "Floración" en la tienda
 
     return { success: true, data: event }
@@ -305,7 +310,14 @@ export async function endFlowering(eventId: string, endDate: Date) {
     const event = await prisma.floweringEvent.update({
       where: { id: eventId },
       data: { endDate },
+      include: {
+        plant: { select: { speciesId: true } },
+      },
     })
+
+    if (event.plant) {
+      await syncSpeciesFloweringBenchmark(event.plant.speciesId)
+    }
 
     revalidatePath('/orchidarium')
     revalidatePath('/category/plants')
@@ -334,6 +346,9 @@ export async function getActiveBiologicalEvents() {
             species: {
               include: {
                 genus: true,
+                images: {
+                  orderBy: { position: 'asc' },
+                },
               },
             },
             location: true,
@@ -349,7 +364,13 @@ export async function getActiveBiologicalEvents() {
         pest: true,
         plant: {
           include: {
-            species: true,
+            species: {
+              include: {
+                images: {
+                  orderBy: { position: 'asc' },
+                },
+              },
+            },
           },
         },
       },
@@ -530,7 +551,7 @@ export async function syncSpeciesFloweringBenchmark(speciesId: string) {
     const detectedMonths = new Set<number>()
 
     for (const fe of floweringEvents) {
-      const month = new Date(fe.startDate).getMonth() + 1
+      const month = getCalendarMonth(fe.startDate)
 
       detectedMonths.add(month)
 
@@ -670,7 +691,7 @@ export async function getSpeciesFloweringAnalytics(speciesSlugOrId: string) {
 
     // Procesar y enriquecer eventos
     const enrichedEvents = floweringEvents.map((fe) => {
-      const month = new Date(fe.startDate).getMonth() + 1
+      const month = getCalendarMonth(fe.startDate)
 
       monthlyFloweringDistribution[month] = (monthlyFloweringDistribution[month] || 0) + 1
 
@@ -739,7 +760,7 @@ export async function getSpeciesFloweringAnalytics(speciesSlugOrId: string) {
       pStat.events.push(ev)
       pStat.totalFloweringEvents++
 
-      const month = new Date(ev.startDate).getMonth() + 1
+      const month = getCalendarMonth(ev.startDate)
 
       pStat.monthlyFloweringDistribution[month] =
         (pStat.monthlyFloweringDistribution[month] || 0) + 1

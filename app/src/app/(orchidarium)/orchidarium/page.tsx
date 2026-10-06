@@ -8,9 +8,9 @@ import { OrchidariumView } from './ui'
 import { auth } from '@/lib/server'
 
 export const metadata: Metadata = {
-  title: 'Orquideario Inteligente',
+  title: 'Floraciones',
   description:
-    'Sistema de gestión automatizado, control de inventario y optimización biológica para el cultivo de orquídeas de PristinoPlant.',
+    'Supervisión centralizada y conclusión de eventos de floración activa en todos los ejemplares del orquideario.',
 }
 
 export default async function OrchidariumDashboardPage() {

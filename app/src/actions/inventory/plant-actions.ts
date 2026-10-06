@@ -8,6 +8,7 @@ import { prisma } from '@package/database'
 import { syncSpeciesFloweringBenchmark } from '../operations/biological-actions'
 
 import { Logger } from '@/lib'
+import { parseCalendarDate } from '@/utils'
 
 // Auxiliar para obtener o crear la Location basada en la Zona
 async function getOrCreateLocationForZone(zone: ZoneType) {
@@ -347,8 +348,8 @@ export async function createFloweringEvent(data: {
       }
     }
 
-    const startDateObj = new Date(data.startDate)
-    const endDateObj = data.endDate ? new Date(data.endDate) : null
+    const startDateObj = parseCalendarDate(data.startDate)
+    const endDateObj = data.endDate ? parseCalendarDate(data.endDate) : null
 
     if (endDateObj && endDateObj < startDateObj) {
       return {
@@ -399,7 +400,7 @@ export async function closeFloweringEvent(data: {
       return { ok: false, message: 'Evento de floración no encontrado.' }
     }
 
-    const endDateObj = new Date(data.endDate)
+    const endDateObj = parseCalendarDate(data.endDate)
 
     if (endDateObj < existing.startDate) {
       return {
@@ -424,6 +425,8 @@ export async function closeFloweringEvent(data: {
     if (existing.plant) {
       revalidatePath(`/stock/${existing.plant.speciesId}`)
     }
+    revalidatePath('/orchidarium')
+    revalidatePath('/category/plants')
 
     return { ok: true, floweringEvent }
   } catch (err) {

@@ -1,13 +1,10 @@
 import type { Metadata } from 'next'
-import type { Species, PlantType } from '@/interfaces'
 
 import prisma from '@package/database'
 
 import { getLandingSpecies, getShopLayoutConfig } from '@/actions'
 import {
-  ProductGrid,
   Title,
-  Subtitle,
   TeslaSection,
   TeslaContactSection,
   HeroSlideshow,
@@ -37,58 +34,9 @@ export const metadata: Metadata = {
   },
 }
 
-interface LandingSpecies {
-  id: string
-  name: string
-  slug: string
-  description: string | null
-  isFeatured?: boolean
-  genus: {
-    id: string
-    name: string
-    type: string
-  }
-  images: {
-    id: string
-    url: string
-  }[]
-  variants: {
-    id: string
-    size: 'NRO_5' | 'NRO_7' | 'NRO_10' | 'NRO_14'
-    price: number
-    quantity: number
-    available: boolean
-  }[]
-}
-
-function mapSpeciesToProduct(sp: LandingSpecies): Species {
-  return {
-    id: sp.id,
-    name: sp.name,
-    slug: sp.slug,
-    description: sp.description,
-    images: sp.images.map((img) => img.url),
-    genus: {
-      name: sp.genus.name,
-      type: sp.genus.type as PlantType,
-    },
-    variants: sp.variants.map((variant) => ({
-      id: variant.id,
-      size: variant.size,
-      price: variant.price,
-      quantity: variant.quantity,
-      available: variant.available,
-      speciesId: sp.slug,
-    })),
-  }
-}
-
 export default async function HomePage() {
-  const { featured = [], flowering = [] } = await getLandingSpecies()
-
-  // Mapear los datos de BD a las interfaces compatibles de ProductGrid
-  const featuredProducts = (featured as unknown as LandingSpecies[]).map(mapSpeciesToProduct)
-  const floweringProducts = (flowering as unknown as LandingSpecies[]).map(mapSpeciesToProduct)
+  const { featured: featuredProducts = [], flowering: floweringProducts = [] } =
+    await getLandingSpecies()
 
   // Cargar configuración de Layout
   const layoutResult = await getShopLayoutConfig()
@@ -206,14 +154,14 @@ export default async function HomePage() {
 
       {/* SECCIÓN 7: Floración Activa */}
       {floweringProducts.length > 0 && (
-        <section className="bg-surface dark:bg-canvas relative flex min-h-dvh w-full snap-start flex-col justify-between overflow-y-auto pt-24 pb-16">
-          <div className="mx-auto w-full max-w-7xl grow px-4 sm:px-6 lg:px-8">
-            <div className="mb-8 text-center">
-              <Title title="Floración Activa" />
-              <Subtitle subtitle="Especies en floración real en nuestro invernadero en este momento" />
-            </div>
+        <section
+          className="bg-canvas relative flex w-full flex-col px-5 py-13.5"
+          id="floracion-activa"
+        >
+          <Title title="Floración Activa" />
 
-            <ProductGrid index={1} products={floweringProducts} showGlow={false} />
+          <div className="mt-8">
+            <ProductSlideshow products={floweringProducts} />
           </div>
         </section>
       )}
