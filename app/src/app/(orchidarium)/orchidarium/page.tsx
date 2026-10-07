@@ -1,11 +1,8 @@
 import type { Metadata } from 'next'
 
-import { headers } from 'next/headers'
-import { redirect } from 'next/navigation'
-
 import { OrchidariumView } from './ui'
 
-import { auth } from '@/lib/server'
+import { getActiveFloweringEvents } from '@/actions'
 
 export const metadata: Metadata = {
   title: 'Floraciones',
@@ -14,13 +11,8 @@ export const metadata: Metadata = {
 }
 
 export default async function OrchidariumDashboardPage() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const res = await getActiveFloweringEvents()
+  const initialEvents = res.success && res.data ? res.data : []
 
-  if (!session?.user) {
-    redirect('/auth/login?callbackUrl=/orchidarium')
-  }
-
-  return <OrchidariumView />
+  return <OrchidariumView initialEvents={initialEvents} />
 }

@@ -5,7 +5,7 @@ import type { PotSize, PlantStatus, ZoneType } from '@package/database/enums'
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@package/database'
 
-import { syncSpeciesFloweringBenchmark } from '../operations/biological-actions'
+import { syncSpeciesFloweringBenchmark } from '../operations/flowering-actions'
 
 import { Logger } from '@/lib'
 import { parseCalendarDate } from '@/utils'

@@ -1,76 +1,30 @@
 'use client'
 
-import { useState, useEffect, useTransition, useCallback } from 'react'
+import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { PiLeafFill } from 'react-icons/pi'
 import { MdOutlineStickyNote2 } from 'react-icons/md'
 import { IoLocationOutline, IoCalendarOutline, IoTimeOutline } from 'react-icons/io5'
 
 import { FloweringEventModal, type FloweringFormValues } from '@/components'
-import { getActiveBiologicalEvents, closeFloweringEvent } from '@/actions'
+import { closeFloweringEvent, type ActiveFloweringEvent } from '@/actions'
 import { useToastStore } from '@/store'
 import { getImageUrl } from '@/lib'
 import { formatCalendarDate } from '@/utils'
 import { ZoneTypeLabels, type ZoneType } from '@/config'
 
-interface SpeciesImage {
-  id: string
-  url: string
-  position: number
+interface BiologicalAuditPanelProps {
+  initialEvents?: ActiveFloweringEvent[]
 }
 
-interface FloweringEvent {
-  id: string
-  startDate: string
-  notes: string | null
-  plant: {
-    id: string
-    location: {
-      zone: string
-      table: string
-    } | null
-    species: {
-      name: string
-      genus: {
-        name: string
-      }
-      images?: SpeciesImage[]
-    }
-  }
-}
-
-export function BiologicalAuditPanel() {
-  const [floweringEvents, setFloweringEvents] = useState<FloweringEvent[]>([])
-  const [isLoading, setIsLoading] = useState(true)
-
+export function BiologicalAuditPanel({ initialEvents = [] }: BiologicalAuditPanelProps) {
+  const router = useRouter()
+  const [floweringEvents, setFloweringEvents] = useState<ActiveFloweringEvent[]>(initialEvents)
   const { addToast } = useToastStore()
   const [isPending, startTransition] = useTransition()
+  const [eventToClose, setEventToClose] = useState<ActiveFloweringEvent | null>(null)
 
-  const [eventToClose, setEventToClose] = useState<FloweringEvent | null>(null)
-
-  const loadData = useCallback(
-    async (showLoading = true) => {
-      if (showLoading) {
-        setIsLoading(true)
-      }
-      const res = await getActiveBiologicalEvents()
-
-      if (res.success && res.data) {
-        setFloweringEvents(res.data.floweringEvents as unknown as FloweringEvent[])
-      } else {
-        addToast(res.error || 'Error al cargar floraciones activas.', 'error')
-      }
-      setIsLoading(false)
-    },
-    [addToast],
-  )
-
-  useEffect(() => {
-    Promise.resolve().then(() => {
-      loadData(false)
-    })
-  }, [loadData])
-
-  const handleOpenCloseFlowering = (event: FloweringEvent) => {
+  const handleOpenCloseFlowering = (event: ActiveFloweringEvent) => {
     setEventToClose(event)
   }
 
@@ -87,19 +41,12 @@ export function BiologicalAuditPanel() {
       if (res.ok) {
         addToast('Floración finalizada correctamente.', 'success')
         setEventToClose(null)
-        loadData(false)
+        setFloweringEvents((prev) => prev.filter((e) => e.id !== values.eventId))
+        router.refresh()
       } else {
         addToast(res.message || 'No se pudo finalizar la floración.', 'error')
       }
     })
-  }
-
-  if (isLoading) {
-    return (
-      <div className="text-secondary/50 py-12 text-center text-sm italic">
-        Cargando floraciones activas...
-      </div>
-    )
   }
 
   return (

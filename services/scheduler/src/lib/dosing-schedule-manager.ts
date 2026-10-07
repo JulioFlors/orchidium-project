@@ -66,6 +66,7 @@ function getDosingNotificationTargetTime(scheduledAt: Date): Date {
  */
 class DosingScheduleManager {
   private activeCrons = new Map<string, ActiveDosingCronEntry>()
+  private isEvaluatingNotifications = false
 
   /**
    * Sincroniza las rutinas de dosificación de la base de datos con Croner.
@@ -226,8 +227,6 @@ class DosingScheduleManager {
         }
       }
 
-      // Evaluar si corresponde emitir notificaciones para las tareas pre-agendadas
-      await this.evaluateDosingNotifications()
     } catch (error) {
       Logger.error('Error en preScheduleDosing:', error)
     }
@@ -239,6 +238,9 @@ class DosingScheduleManager {
    * - Tarea en la Mañana (< 12:00 PM): Notifica a las 8:00 PM del día anterior.
    */
   async evaluateDosingNotifications(): Promise<void> {
+    if (this.isEvaluatingNotifications) return
+    this.isEvaluatingNotifications = true
+
     try {
       const now = new Date()
       const pendingTasks = await prisma.dosingLog.findMany({
@@ -253,7 +255,7 @@ class DosingScheduleManager {
       })
 
       for (const task of pendingTasks) {
-        const hasNotif = task.notifications.some(n => n.type === 'AGROCHEMICAL_CONFIRM')
+        const hasNotif = task.notifications.some((n) => n.type === 'AGROCHEMICAL_CONFIRM')
         if (hasNotif) continue
 
         const targetNotifyTime = getDosingNotificationTargetTime(task.scheduledAt)
@@ -284,6 +286,8 @@ class DosingScheduleManager {
       }
     } catch (error) {
       Logger.error('Error en evaluateDosingNotifications:', error)
+    } finally {
+      this.isEvaluatingNotifications = false
     }
   }
 

@@ -1,8 +1,14 @@
+import type { ActiveFloweringEvent } from '@/actions'
+
 import { BiologicalAuditPanel } from './components'
 
 import { Heading } from '@/components'
 
-export function OrchidariumView() {
+interface OrchidariumViewProps {
+  initialEvents?: ActiveFloweringEvent[]
+}
+
+export function OrchidariumView({ initialEvents = [] }: OrchidariumViewProps) {
   return (
     <div className="tds-sm:px-0 mx-auto mt-9 flex w-full max-w-7xl flex-col gap-8 px-4 pb-12">
       <Heading
@@ -11,7 +17,7 @@ export function OrchidariumView() {
       />
 
       <div className="flex flex-col gap-8">
-        <BiologicalAuditPanel />
+        <BiologicalAuditPanel initialEvents={initialEvents} />
       </div>
     </div>
   )

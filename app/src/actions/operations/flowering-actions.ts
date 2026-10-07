@@ -1,126 +1,78 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import prisma, { type ZoneType, type Severity } from '@package/database'
+import prisma, { type ZoneType } from '@package/database'
 
 import { Logger } from '@/lib'
 import { getCalendarMonth } from '@/utils'
 
-/**
- * Obtiene el catálogo de plagas disponibles.
- */
-export async function getPestCatalog() {
-  try {
-    const pests = await prisma.pest.findMany({
-      orderBy: { name: 'asc' },
-    })
+export interface SpeciesImageSummary {
+  id: string
+  url: string
+  position: number
+}
 
-    return { success: true, data: pests }
-  } catch (error) {
-    Logger.error('Error al obtener catálogo de plagas:', error)
-
-    return {
-      success: false,
-      error: 'No se pudo cargar el catálogo de plagas.',
+export interface ActiveFloweringEvent {
+  id: string
+  startDate: Date
+  notes: string | null
+  plant: {
+    id: string
+    location: {
+      zone: string
+      table: string
+    } | null
+    species: {
+      name: string
+      genus: {
+        name: string
+      }
+      images?: SpeciesImageSummary[]
     }
   }
 }
 
 /**
- * Registra un avistamiento de plaga en una zona específica.
+ * Obtiene las floraciones activas de forma atómica y ligera.
+ * Consulta únicamente eventos vigentes (endDate null) y su imagen principal.
  */
-export async function registerPestSighting(data: {
-  pestId?: string
-  pestName?: string
-  zone: ZoneType
-  severity: Severity
-  notes?: string
-  plantId?: string
-}) {
+export async function getActiveFloweringEvents(): Promise<{
+  success: boolean
+  data?: ActiveFloweringEvent[]
+  error?: string
+}> {
   try {
-    const now = new Date()
-    const dateLimit = new Date(now)
-
-    dateLimit.setDate(dateLimit.getDate() - 30)
-
-    const stats = await prisma.dailyEnvironmentStat.findMany({
-      where: {
-        zone: data.zone,
-        date: {
-          gte: dateLimit,
-          lte: now,
+    const floweringEvents = await prisma.floweringEvent.findMany({
+      where: { endDate: null },
+      include: {
+        plant: {
+          include: {
+            species: {
+              include: {
+                genus: true,
+                images: {
+                  orderBy: { position: 'asc' },
+                  take: 1,
+                },
+              },
+            },
+            location: true,
+          },
         },
       },
+      orderBy: { startDate: 'desc' },
     })
 
-    let avgTemp30d: number | null = null
-    let avgHum30d: number | null = null
-    let avgDli30d: number | null = null
-    let highHumHours30d: number | null = null
-
-    if (stats.length > 0) {
-      let tempSum = 0,
-        tempCount = 0
-      let humSum = 0,
-        humCount = 0
-      let dliSum = 0,
-        dliCount = 0
-      let highHumSum = 0,
-        highHumCount = 0
-
-      for (const stat of stats) {
-        if (stat.avgTemperature !== null && stat.avgTemperature !== undefined) {
-          tempSum += stat.avgTemperature
-          tempCount++
-        }
-        if (stat.avgHumidity !== null && stat.avgHumidity !== undefined) {
-          humSum += stat.avgHumidity
-          humCount++
-        }
-        if (stat.dli !== null && stat.dli !== undefined) {
-          dliSum += stat.dli
-          dliCount++
-        }
-        if (stat.highHumidityHours !== null && stat.highHumidityHours !== undefined) {
-          highHumSum += stat.highHumidityHours
-          highHumCount++
-        }
-      }
-
-      if (tempCount > 0) avgTemp30d = tempSum / tempCount
-      if (humCount > 0) avgHum30d = humSum / humCount
-      if (dliCount > 0) avgDli30d = dliSum / dliCount
-      if (highHumCount > 0) highHumHours30d = highHumSum / highHumCount
+    return {
+      success: true,
+      data: floweringEvents as ActiveFloweringEvent[],
     }
-
-    const sighting = await prisma.pestSighting.create({
-      data: {
-        pestId: data.pestId,
-        pestName: data.pestName,
-        zone: data.zone,
-        severity: data.severity,
-        notes: data.notes,
-        plantId: data.plantId,
-        capturedAt: now,
-        avgTemp30d,
-        avgHum30d,
-        avgDli30d,
-        highHumHours30d,
-      },
-      include: {
-        pest: true,
-      },
-    })
-
-    revalidatePath('/orchidarium')
-
-    return { success: true, data: sighting }
   } catch (error) {
-    Logger.error('Error al registrar avistamiento:', error)
+    Logger.error('Error al obtener floraciones activas:', error)
 
     return {
       success: false,
-      error: 'Error al guardar el reporte de plaga.',
+      error: 'No se pudieron cargar las floraciones activas.',
     }
   }
 }
@@ -152,8 +104,6 @@ export async function registerFlowering(data: {
     }
 
     // 2. Determinar la zona climática EMA correspondiente
-    // Por defecto, orquídeas usan el invernadero (su zona asignada, o fallback a ZONA_A),
-    // el resto (cactus, suculentas, adenium, bromelias) usan EXTERIOR.
     const isOrchid = plant.species.genus.type === 'ORCHID'
     const targetZone: ZoneType = isOrchid
       ? plant.location?.zone || ('ZONA_A' as ZoneType)
@@ -184,20 +134,20 @@ export async function registerFlowering(data: {
     let vpdAverageAtInduction: number | null = null
 
     if (stats.length > 0) {
-      let dliSum = 0,
-        dliCount = 0
-      let difSum = 0,
-        difCount = 0
-      let tempDaySum = 0,
-        tempDayCount = 0
-      let tempNightSum = 0,
-        tempNightCount = 0
-      let humDaySum = 0,
-        humDayCount = 0
-      let humNightSum = 0,
-        humNightCount = 0
-      let vpdSum = 0,
-        vpdCount = 0
+      let dliSum = 0
+      let dliCount = 0
+      let difSum = 0
+      let difCount = 0
+      let tempDaySum = 0
+      let tempDayCount = 0
+      let tempNightSum = 0
+      let tempNightCount = 0
+      let humDaySum = 0
+      let humDayCount = 0
+      let humNightSum = 0
+      let humNightCount = 0
+      let vpdSum = 0
+      let vpdCount = 0
 
       for (const stat of stats) {
         if (stat.dli !== null && stat.dli !== undefined) {
@@ -261,7 +211,7 @@ export async function registerFlowering(data: {
     revalidatePath('/orchidarium')
     revalidatePath('/stock')
     revalidatePath(`/stock/${plant.speciesId}`)
-    revalidatePath('/category/plants') // Para actualizar el label de "Floración" en la tienda
+    revalidatePath('/category/plants')
 
     return { success: true, data: event }
   } catch (error) {
@@ -329,179 +279,6 @@ export async function endFlowering(eventId: string, endDate: Date) {
     return {
       success: false,
       error: 'No se pudo finalizar el evento de floración.',
-    }
-  }
-}
-
-/**
- * Obtiene los eventos de floración activos y avistamientos de plagas recientes.
- */
-export async function getActiveBiologicalEvents() {
-  try {
-    const floweringEvents = await prisma.floweringEvent.findMany({
-      where: { endDate: null },
-      include: {
-        plant: {
-          include: {
-            species: {
-              include: {
-                genus: true,
-                images: {
-                  orderBy: { position: 'asc' },
-                },
-              },
-            },
-            location: true,
-          },
-        },
-      },
-      orderBy: { startDate: 'desc' },
-    })
-
-    const pestSightings = await prisma.pestSighting.findMany({
-      take: 15,
-      include: {
-        pest: true,
-        plant: {
-          include: {
-            species: {
-              include: {
-                images: {
-                  orderBy: { position: 'asc' },
-                },
-              },
-            },
-          },
-        },
-      },
-      orderBy: { capturedAt: 'desc' },
-    })
-
-    return {
-      success: true,
-      data: {
-        floweringEvents,
-        pestSightings,
-      },
-    }
-  } catch (error) {
-    Logger.error('Error al obtener eventos biológicos activos:', error)
-
-    return {
-      success: false,
-      error: 'No se pudieron cargar los eventos biológicos activos.',
-    }
-  }
-}
-
-/**
- * Obtiene métricas analíticas agregadas de floración (estacionalidad, duración, frecuencia) y plagas (correlaciones 30d).
- */
-export async function getBiologicalAnalytics() {
-  try {
-    const oneYearAgo = new Date()
-
-    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
-
-    // 1. Todos los eventos de floración históricos
-    const floweringEvents = await prisma.floweringEvent.findMany({
-      include: {
-        plant: {
-          include: {
-            species: {
-              include: {
-                genus: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: { startDate: 'desc' },
-    })
-
-    // 2. Calcular distribución por mes (estacionalidad), duración promedio y conteo anual
-    const monthlyFloweringDistribution: Record<number, number> = {}
-
-    for (let i = 1; i <= 12; i++) monthlyFloweringDistribution[i] = 0
-
-    let totalDurationDays = 0
-    let closedFloweringCount = 0
-    let lastYearFloweringCount = 0
-
-    for (const fe of floweringEvents) {
-      const month = new Date(fe.startDate).getMonth() + 1
-
-      monthlyFloweringDistribution[month] = (monthlyFloweringDistribution[month] || 0) + 1
-
-      if (new Date(fe.startDate) >= oneYearAgo) {
-        lastYearFloweringCount++
-      }
-
-      if (fe.endDate) {
-        const durationMs = new Date(fe.endDate).getTime() - new Date(fe.startDate).getTime()
-        const durationDays = Math.max(1, Math.round(durationMs / (1000 * 60 * 60 * 24)))
-
-        totalDurationDays += durationDays
-        closedFloweringCount++
-      }
-    }
-
-    const avgFloweringDurationDays =
-      closedFloweringCount > 0
-        ? Math.round((totalDurationDays / closedFloweringCount) * 10) / 10
-        : 0
-
-    // 3. Avistamientos de plagas con su correlación de 30 días
-    const pestSightings = await prisma.pestSighting.findMany({
-      include: {
-        pest: true,
-      },
-      orderBy: { capturedAt: 'desc' },
-    })
-
-    const pestFrequency: Record<
-      string,
-      { name: string; count: number; avgTemp30d: number | null; avgHum30d: number | null }
-    > = {}
-    const monthlyPestDistribution: Record<number, number> = {}
-
-    for (let i = 1; i <= 12; i++) monthlyPestDistribution[i] = 0
-
-    for (const ps of pestSightings) {
-      const pName = ps.pestName || ps.pest?.name || 'Desconocida'
-      const month = new Date(ps.capturedAt).getMonth() + 1
-
-      monthlyPestDistribution[month] = (monthlyPestDistribution[month] || 0) + 1
-
-      if (!pestFrequency[pName]) {
-        pestFrequency[pName] = {
-          name: pName,
-          count: 0,
-          avgTemp30d: ps.avgTemp30d,
-          avgHum30d: ps.avgHum30d,
-        }
-      }
-      pestFrequency[pName].count++
-    }
-
-    return {
-      success: true,
-      data: {
-        totalFloweringEvents: floweringEvents.length,
-        lastYearFloweringCount,
-        avgFloweringDurationDays,
-        monthlyFloweringDistribution,
-        totalPestSightings: pestSightings.length,
-        monthlyPestDistribution,
-        pestFrequencyList: Object.values(pestFrequency),
-      },
-    }
-  } catch (error) {
-    Logger.error('Error al obtener analítica biológica:', error)
-
-    return {
-      success: false,
-      error: 'Error al calcular analíticas biológicas.',
     }
   }
 }

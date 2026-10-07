@@ -1820,11 +1820,7 @@ function sendCaracasTimeToEma(): void {
       time: [year, month, day, weekday, hour, minute, second, 0],
     })
 
-    mqttClient.publish(EMA_CMD_TOPIC, payload, { qos: 1 })
-    Logger.mqtt(
-      `Comando: Sincronización horaria RTC (${colors.magenta}${formatFriendlyHeartbeatDate(now)}${colors.reset})`,
-      'Nodo EMA',
-    )
+    executeEmaCommand(payload, true)
   } catch (error) {
     Logger.error('Error enviando sincronización horaria al EMA:', error)
   }
@@ -1865,11 +1861,7 @@ function sendCaracasTimeToActuator(): void {
       time: [year, month, day, weekday, hour, minute, second, 0],
     })
 
-    mqttClient.publish(SYSTEM_CMD_TOPIC, payload, { qos: 1 })
-    Logger.mqtt(
-      `Comando: Sincronización horaria RTC (${colors.magenta}${formatFriendlyHeartbeatDate(now)}${colors.reset})`,
-      'Nodo Actuador',
-    )
+    executeSystemCommand(payload, true)
   } catch (error) {
     Logger.error('Error enviando sincronización horaria al Actuador:', error)
   }

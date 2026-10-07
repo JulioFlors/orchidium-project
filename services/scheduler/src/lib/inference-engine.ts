@@ -721,55 +721,33 @@ export class InferenceEngine {
     }
 
     try {
-      const sqlQuery = `
+      // 1. Telemetría de Exterior (Muestreo continuo, ventana de 30 min)
+      const extQuery = `
         SELECT *
         FROM environment_metrics 
-        WHERE time >= now() - INTERVAL '30 minutes' 
+        WHERE zone = '${ZoneType.EXTERIOR}'
+          AND time >= now() - INTERVAL '30 minutes' 
         ORDER BY time DESC 
-        LIMIT 20
+        LIMIT 10
       `
-
-      const stream = influxClient.query(sqlQuery)
-
+      const extStream = influxClient.query(extQuery)
       let extLux: number | null = null
       let extRain: number | null = null
       let extTemp: number | null = null
       let extHum: number | null = null
 
-      let intTemp: number | null = null
-      let intHum: number | null = null
-      let intLux: number | null = null
-
-      for await (const row of stream) {
-        // La zona determina el destino. Ambos nodos (Actuador y EMA) usan la fuente Weather_Station.
-        const isExterior = row.zone === ZoneType.EXTERIOR
-        const isInterior =
-          !isExterior &&
-          (row.zone?.toString().startsWith('Zona_') || row.zone?.toString().startsWith('ZONA_'))
-
-        if (isExterior && row.source === 'Weather_Station') {
-          if (extLux === null && row.illuminance != null) {
-            extLux = Number(row.illuminance)
-          }
-          if (extRain === null && row.rain_intensity != null) {
-            extRain = Number(row.rain_intensity)
-          }
-          if (extTemp === null && row.temperature != null) {
-            extTemp = Number(row.temperature)
-          }
-          if (extHum === null && row.humidity != null) {
-            extHum = Number(row.humidity)
-          }
-        } else if (isInterior && row.source === 'Weather_Station') {
-          if (intTemp === null && row.temperature != null) {
-            intTemp = Number(row.temperature)
-          }
-          if (intHum === null && row.humidity != null) {
-            intHum = Number(row.humidity)
-          }
-          if (intLux === null && row.illuminance != null) {
-            intLux = Number(row.illuminance)
-          }
+      for await (const row of extStream) {
+        if (extLux === null && row.illuminance != null) {
+          extLux = Number(row.illuminance)
+        }
+        if (extRain === null && row.rain_intensity != null) {
+          extRain = Number(row.rain_intensity)
+        }
+        if (extTemp === null && row.temperature != null) {
+          extTemp = Number(row.temperature)
+        }
+        if (extHum === null && row.humidity != null) {
+          extHum = Number(row.humidity)
         }
       }
 
@@ -779,6 +757,32 @@ export class InferenceEngine {
         result.exterior.temp = extTemp ?? 0
         result.exterior.hum = extHum ?? 0
         result.foundExterior = true
+      }
+
+      // 2. Telemetría de Interior (Nodo EMA en Deep Sleep horario, ventana tolerante de 90 min)
+      const intQuery = `
+        SELECT *
+        FROM environment_metrics 
+        WHERE (zone = 'ZONA_A' OR zone LIKE 'Zona_%' OR zone LIKE 'ZONA_%')
+          AND time >= now() - INTERVAL '90 minutes' 
+        ORDER BY time DESC 
+        LIMIT 10
+      `
+      const intStream = influxClient.query(intQuery)
+      let intTemp: number | null = null
+      let intHum: number | null = null
+      let intLux: number | null = null
+
+      for await (const row of intStream) {
+        if (intTemp === null && row.temperature != null) {
+          intTemp = Number(row.temperature)
+        }
+        if (intHum === null && row.humidity != null) {
+          intHum = Number(row.humidity)
+        }
+        if (intLux === null && row.illuminance != null) {
+          intLux = Number(row.illuminance)
+        }
       }
 
       if (intTemp !== null || intHum !== null || intLux !== null) {

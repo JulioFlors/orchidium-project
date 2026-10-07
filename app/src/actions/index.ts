@@ -30,7 +30,9 @@ export * from './lab/dosing-schedule-actions'
 
 export * from './navigation/get-plants-navigation'
 
-export * from './operations/biological-actions'
+export * from './operations/flowering-actions'
+
+export * from './operations/pest-actions'
 
 export * from './operations/control-actions'
 
