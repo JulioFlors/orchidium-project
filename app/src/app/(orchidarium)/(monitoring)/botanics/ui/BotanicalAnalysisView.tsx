@@ -290,6 +290,7 @@ export function BotanicalAnalysisView() {
               connectionState="online" // Simulamos online ya que son datos históricos
               dropdownTitle="Zona de Análisis"
               selectedZone={zone}
+              size="wide"
               zones={[ZoneType.EXTERIOR, ZoneType.ZONA_A]}
               onZoneChanged={(newZone) => {
                 setZone(newZone)

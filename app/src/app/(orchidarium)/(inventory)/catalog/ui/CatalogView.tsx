@@ -2,7 +2,7 @@
 
 import type { PlantType } from '@package/database'
 
-import { useState, useTransition, useEffect } from 'react'
+import { useState, useTransition, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { MdEdit, MdDelete, MdInfo, MdFolder, MdCategory, MdSpa } from 'react-icons/md'
 
@@ -138,28 +138,51 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
   const totalGenera = generaList.length
   const totalTypes = Object.keys(PLANT_TYPE_LABELS).length
 
-  // Agrupación de Especies por PlantType y Genus
-  const speciesByType = speciesList.reduce<Record<PlantType, Record<string, Species[]>>>(
-    (acc, species) => {
-      const type = species.genus.type
-      const genusId = species.genusId
+  // Agrupar géneros por Tipo de Planta asegurando que los géneros sin especies también se incluyan
+  const generaByType = useMemo(() => {
+    const genusMap = new Map<string, Genus>()
 
-      if (!acc[type]) {
-        acc[type] = {}
+    for (const g of generaList) {
+      genusMap.set(g.id, g)
+    }
+
+    for (const s of speciesList) {
+      if (s.genus && !genusMap.has(s.genus.id)) {
+        genusMap.set(s.genus.id, s.genus)
       }
-      if (!acc[type][genusId]) {
-        acc[type][genusId] = []
+    }
+
+    const grouped: Partial<Record<PlantType, Genus[]>> = {}
+
+    for (const genus of genusMap.values()) {
+      if (!grouped[genus.type]) {
+        grouped[genus.type] = []
       }
-      acc[type][genusId].push(species)
+      grouped[genus.type]!.push(genus)
+    }
 
-      return acc
-    },
-    {} as Record<PlantType, Record<string, Species[]>>,
-  )
+    return grouped
+  }, [generaList, speciesList])
 
-  const sortedTypes = (Object.keys(speciesByType) as PlantType[]).sort((a, b) =>
-    PLANT_TYPE_LABELS[a].localeCompare(PLANT_TYPE_LABELS[b], 'es'),
-  )
+  const sortedTypes = useMemo(() => {
+    return (Object.keys(generaByType) as PlantType[]).sort((a, b) =>
+      PLANT_TYPE_LABELS[a].localeCompare(PLANT_TYPE_LABELS[b], 'es'),
+    )
+  }, [generaByType])
+
+  // Agrupación de especies por genusId para búsqueda O(1)
+  const speciesByGenus = useMemo(() => {
+    const map = new Map<string, Species[]>()
+
+    for (const species of speciesList) {
+      const current = map.get(species.genusId) || []
+
+      current.push(species)
+      map.set(species.genusId, current)
+    }
+
+    return map
+  }, [speciesList])
 
   // Handlers para Géneros
   function openEditGenus(genus: Genus) {
@@ -269,9 +292,24 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
       return
     }
 
+    const cleanName = data.name.trim().replace(/\s+/g, ' ')
+
+    const duplicate = speciesList.find(
+      (s) => s.name.trim().toLowerCase() === cleanName.toLowerCase(),
+    )
+
+    if (duplicate) {
+      addToast(
+        `Ya existe una especie registrada con el nombre "${duplicate.name}" (no se distingue entre mayúsculas y minúsculas).`,
+        'warning',
+      )
+
+      return
+    }
+
     startTransition(async () => {
       const result = await createSpecies({
-        name: data.name.trim(),
+        name: cleanName,
         genusId: data.genusId,
         description: data.description,
         glowColor: data.glowColor,
@@ -351,22 +389,19 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
       </div>
 
       {/* Grid del Catálogo Estilo Tienda */}
-      {speciesList.length === 0 ? (
+      {sortedTypes.length === 0 ? (
         <div className="bg-canvas border-input-outline rounded-xl border border-dashed py-24 text-center">
           <span className="text-secondary text-sm">
-            No hay especies registradas en el catálogo.
+            No hay géneros ni especies registradas en el catálogo.
           </span>
         </div>
       ) : (
         <div className="mt-4 flex flex-col">
           {sortedTypes.map((type) => {
-            const generaInType = speciesByType[type]
-            const sortedGeneraIds = Object.keys(generaInType).sort((a, b) => {
-              const nameA = generaInType[a][0]?.genus.name ?? ''
-              const nameB = generaInType[b][0]?.genus.name ?? ''
-
-              return nameA.localeCompare(nameB, 'es')
-            })
+            const generaInType = generaByType[type] || []
+            const sortedGenera = [...generaInType].sort((a, b) =>
+              a.name.localeCompare(b.name, 'es'),
+            )
 
             return (
               <div key={type} className="flex flex-col pb-8 last:pb-0">
@@ -391,53 +426,56 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
 
                 {/* Sub-agrupación por Géneros */}
                 <div className="flex flex-col gap-6">
-                  {sortedGeneraIds.map((genusId) => {
-                    const speciesInGenus = generaInType[genusId]
+                  {sortedGenera.map((genus) => {
+                    const speciesInGenus = speciesByGenus.get(genus.id) || []
                     const sortedSpeciesInGenus = [...speciesInGenus].sort((a, b) =>
                       a.name.localeCompare(b.name, 'es'),
                     )
-                    const firstSpecies = speciesInGenus[0]
-                    const genusName = firstSpecies?.genus.name ?? 'Sin Género'
-                    const genusObj = firstSpecies ? firstSpecies.genus : null
 
                     return (
-                      <div key={genusId} className="flex flex-col">
+                      <div key={genus.id} className="flex flex-col">
                         <div className="group tds-xs:sticky tds-xs:backdrop-blur-lg bg-canvas/30 dark:bg-canvas/60 top-14 z-9 mt-10 ml-1 flex w-[calc(100%-8px)]! items-center gap-2 px-0">
                           <h3 className="text-primary text-xl leading-10.5 font-medium tracking-wider antialiased">
-                            {genusName}
+                            {genus.name}
                           </h3>
-                          {genusObj && (
-                            <ActionMenu
-                              hoverOnly
-                              align="left"
-                              items={[
-                                {
-                                  label: 'Editar Nombre',
-                                  icon: <MdEdit />,
-                                  onClick: () => openEditGenus(genusObj),
-                                },
-                                {
-                                  label: 'Eliminar Género',
-                                  icon: <MdDelete />,
-                                  variant: 'destructive',
-                                  onClick: () => handleDeleteGenusClick(genusObj),
-                                },
-                              ]}
-                              triggerClassName="h-7 w-7 mt-1.5"
-                            />
-                          )}
+                          <ActionMenu
+                            hoverOnly
+                            align="left"
+                            items={[
+                              {
+                                label: 'Editar Nombre',
+                                icon: <MdEdit />,
+                                onClick: () => openEditGenus(genus),
+                              },
+                              {
+                                label: 'Eliminar Género',
+                                icon: <MdDelete />,
+                                variant: 'destructive',
+                                onClick: () => handleDeleteGenusClick(genus),
+                              },
+                            ]}
+                            triggerClassName="h-7 w-7 mt-1.5"
+                          />
                         </div>
 
-                        {/* Listado de Especies */}
-                        <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-3 tds-2xl:grid-cols-4 mt-9 grid grid-cols-1 gap-x-4 gap-y-2">
-                          {sortedSpeciesInGenus.map((species, speciesIndex) => (
-                            <CatalogSpeciesCard
-                              key={species.id}
-                              index={speciesIndex}
-                              species={species}
-                            />
-                          ))}
-                        </div>
+                        {/* Listado de Especies o Estado Vacío para Género sin Especies */}
+                        {sortedSpeciesInGenus.length === 0 ? (
+                          <div className="border-input-outline bg-canvas/40 dark:bg-zinc-900/20 mt-4 rounded-xl border border-dashed py-8 text-center">
+                            <span className="text-secondary text-xs">
+                              Sin especies registradas en este género.
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="tds-sm:grid-cols-2 tds-lg:grid-cols-3 tds-2xl:grid-cols-4 mt-9 grid grid-cols-1 gap-x-4 gap-y-2">
+                            {sortedSpeciesInGenus.map((species, speciesIndex) => (
+                              <CatalogSpeciesCard
+                                key={species.id}
+                                index={speciesIndex}
+                                species={species}
+                              />
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )
                   })}
@@ -461,7 +499,6 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
         isOpen={isGenusModalOpen}
         isPending={isPending}
         plantTypeLabels={PLANT_TYPE_LABELS}
-        plantTypeSingleLabels={PLANT_TYPE_SINGLE_LABELS}
         onClose={() => {
           setIsGenusModalOpen(false)
           setEditingGenus(null)
@@ -474,6 +511,7 @@ export function CatalogView({ initialSpecies, initialGenera }: CatalogViewProps)
         isOpen={isSpeciesCreateModalOpen}
         isPending={isPending}
         plantTypeLabels={PLANT_TYPE_LABELS}
+        speciesList={speciesList}
         onClose={() => setIsSpeciesCreateModalOpen(false)}
         onSave={handleSaveSpecies}
       />

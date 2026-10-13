@@ -249,6 +249,7 @@ export function DeviceDebugger() {
             connectionState={connectionState}
             dropdownTitle="Seleccionar Firmware"
             selectedZone={selectedDeviceId}
+            size="compact"
             zoneMapping={Object.fromEntries(DEVICES.map((d) => [d.id, d.name]))}
             zones={DEVICES.map((d) => d.id)}
             onZoneChanged={(id) => {

@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { IoCheckmarkCircleOutline } from 'react-icons/io5'
 import { clsx } from 'clsx'
-import { AnimatePresence, motion, Variants } from 'motion/react'
+import { twMerge } from 'tailwind-merge'
+import { AnimatePresence, motion, type Variants } from 'motion/react'
 import { ZoneType } from '@package/database/enums'
 
 import { ZoneTypeLabels } from '@/config/mappings'
@@ -23,6 +24,14 @@ interface DeviceStatusProps {
   connectionState?: 'online' | 'offline' | 'unknown' | 'zombie' | 'sleep'
   /** Indica si se está consultando el estado actualmente */
   isLoadingStatus?: boolean
+  /**
+   * Dimensión adaptativa alineada al ancho de las tarjetas de la vista:
+   * - 'compact': Alinear con grilla de 4 columnas (ej: /control, /admin, ~310px).
+   * - 'wide': Alinear con grilla de 3 columnas (ej: /monitoring, /botanics, ~410px).
+   * - 'auto': Rango fluido (min-w 310px, max-w 410px).
+   * @default 'auto'
+   */
+  size?: 'compact' | 'wide' | 'auto'
   /** Clases adicionales para el contenedor */
   className?: string
 }
@@ -39,6 +48,7 @@ export function DeviceStatus({
   onZoneChanged,
   connectionState = 'unknown',
   isLoadingStatus = false,
+  size = 'auto',
   className,
 }: DeviceStatusProps) {
   const [isOpen, setIsOpen] = useState(false)
@@ -193,8 +203,19 @@ export function DeviceStatus({
     exit: { opacity: 0, scale: 0.8, y: -10, transition: { duration: 0.15, ease: 'easeInOut' } },
   }
 
+  const sizeClasses: Record<NonNullable<DeviceStatusProps['size']>, string> = {
+    compact: 'tds-sm:max-w-[310px]',
+    wide: 'tds-sm:max-w-[310px] tds-lg:max-w-[410px]',
+    auto: 'tds-sm:max-w-[410px]',
+  }
+
   return (
-    <div ref={dropdownRef} className={clsx('relative w-full p-0.5 sm:w-64', className)}>
+    <div
+      ref={dropdownRef}
+      className={twMerge(
+        clsx('relative w-full max-w-full tds-sm:w-fit p-0.5', sizeClasses[size], className),
+      )}
+    >
       <div className="group relative w-full rounded-md p-px shadow-sm transition-all duration-300 hover:shadow-md">
         <div
           className={clsx(
@@ -207,7 +228,7 @@ export function DeviceStatus({
           aria-expanded={zones.length > 1 ? isOpen : undefined}
           aria-haspopup={zones.length > 1 ? 'listbox' : undefined}
           className={clsx(
-            'bg-surface relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-[5px] px-3 py-3 font-medium transition-all sm:py-4',
+            'bg-surface relative grid w-full grid-cols-[1fr_auto_1fr] items-center gap-2 overflow-hidden rounded-[5px] px-3 py-3 font-medium transition-all sm:gap-3 sm:py-3.5',
             zones.length > 1 ? 'cursor-pointer focus:ring-1 focus:outline-none' : '',
             statusConfig.text,
           )}
@@ -224,14 +245,17 @@ export function DeviceStatus({
               statusConfig.glow,
             )}
           />
-          <span className="text-primary relative z-5 flex-1 truncate text-center font-semibold">
+          <span className="text-primary relative z-5 min-w-0 truncate text-center text-[13px] font-semibold tracking-tight tds-sm:text-sm">
             {getDisplayName(selectedZone)}
           </span>
           <div
-            className={clsx('relative z-5 h-4 w-px flex-none transition-colors', statusConfig.pipe)}
+            className={clsx(
+              'relative z-5 h-4 w-px justify-self-center transition-colors',
+              statusConfig.pipe,
+            )}
           />
-          <div className="relative z-5 flex flex-1 items-center justify-center gap-3">
-            <span className="text-[11px] font-bold tracking-wider uppercase opacity-80 group-hover:opacity-100">
+          <div className="relative z-5 flex items-center justify-center gap-2 px-1 sm:gap-2.5 sm:px-2">
+            <span className="text-[10px] font-bold tracking-wider uppercase opacity-80 group-hover:opacity-100 whitespace-nowrap tds-sm:text-[10.5px]">
               {statusConfig.label}
             </span>
             <span

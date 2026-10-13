@@ -413,7 +413,7 @@ export async function closeFloweringEvent(data: {
       where: { id: data.eventId },
       data: {
         endDate: endDateObj,
-        ...(data.notes !== undefined ? { notes: data.notes } : {}),
+        ...(data.notes !== undefined ? { notes: data.notes.trim() ? data.notes : null } : {}),
       },
     })
 

@@ -73,7 +73,8 @@ como parte de los requisitos para optar al título de
 [Apéndice D \- Validación Experimental del Motor de Inferencia Hídrica	88](#apéndice-d---validación-experimental-del-motor-de-inferencia-hídrica)  
 [Apéndice E \- Catálogo de Interfaces de Usuario	92](#apéndice-e---catálogo-de-interfaces-de-usuario)  
 [Apéndice F \- Arquitectura y Trazabilidad del Scheduler	118](#apéndice-f---arquitectura-y-trazabilidad-del-scheduler)  
-[Apéndice G \- Construcción de la Infraestructura en Campo	123](#apéndice-g---construcción-de-la-infraestructura-en-campo)
+[Apéndice G \- Construcción de la Infraestructura en Campo	123](#apéndice-g---construcción-de-la-infraestructura-en-campo)  
+[Apéndice H \- Catálogo de Documentación Técnica, Orquestación y Automatización en Repositorio Digital	131](#apéndice-h---catálogo-de-documentación-técnica-orquestación-y-automatización-en-repositorio-digital)
 
 # **Índice de Figuras** {#índice-de-figuras}
 
@@ -170,7 +171,11 @@ como parte de los requisitos para optar al título de
 [Tabla Ap-D3.](#tabla-ap-d3.-distribución-de-intervenciones-de-control-manual-y-contingencias-operativas.)  
 [Distribución de intervenciones de control manual y contingencias operativas.	90](#tabla-ap-d3.-distribución-de-intervenciones-de-control-manual-y-contingencias-operativas.)  
 [Tabla Ap-D4.](#tabla-ap-d4.-clasificación-de-vetos-del-motor-de-inferencia-hídrica.)   
-[Clasificación de vetos del motor de inferencia hídrica.	91](#tabla-ap-d4.-clasificación-de-vetos-del-motor-de-inferencia-hídrica.)
+[Clasificación de vetos del motor de inferencia hídrica.	91](#tabla-ap-d4.-clasificación-de-vetos-del-motor-de-inferencia-hídrica.)  
+[Tabla Ap-H1.](#tabla-ap-h1.-índice-de-artefactos-de-documentación-técnica-readme.md-en-github.)   
+[Índice de artefactos de documentación técnica (README.md) en GitHub.	131](#tabla-ap-h1.-índice-de-artefactos-de-documentación-técnica-readme.md-en-github.)  
+[Tabla Ap-H2.](#tabla-ap-h2.-artefactos-de-orquestación-scripts-de-automatización-y-configuración.)   
+[Artefactos de orquestación, scripts de automatización y configuración.	135](#tabla-ap-h2.-artefactos-de-orquestación-scripts-de-automatización-y-configuración.)
 
 **![][image1]**  
 **Universidad Católica Andrés Bello**   
@@ -1880,6 +1885,159 @@ El presente apéndice documenta visualmente la construcción, montaje y desplieg
 ![][image68]
 
 ##### ***Figura Ap-G18.*** Cableado del EMA-Exterior. {#figura-ap-g18.-cableado-del-ema-exterior.}
+
+## **Apéndice H \- Catálogo de Documentación Técnica, Orquestación y Automatización en Repositorio Digital** {#apéndice-h---catálogo-de-documentación-técnica-orquestación-y-automatización-en-repositorio-digital}
+
+Para garantizar la reproducibilidad de la plataforma, facilitar la transferencia tecnológica y guiar las labores de administración y soporte por parte de futuros ingenieros, el código fuente, los esquemas de aprovisionamiento contenerizado y las guías de mantenimiento de PristinoPlant se encuentran centralizados en el repositorio público de GitHub:
+
+* **Repositorio Maestro del Proyecto:** [JulioFlors/orchidium-project (GitHub)](https://github.com/JulioFlors/orchidium-project)
+
+Bajo la arquitectura de monorepositorio (*Turborepo*), el proyecto complementa sus manuales de grado con artefactos modulares de ingeniería en formato Markdown (`README.md`), manifiestos de orquestación en contenedores (`docker-compose.yml`), scripts de automatización para el servidor (`.sh`) y plantillas exhaustivas de configuración (`.env.template`). En este apéndice se indexan dichos recursos, detallando su localización en la rama principal (`main`) y su función operativa dentro de la infraestructura.
+
+---
+
+### Tabla Ap-H1. *Índice de artefactos de documentación técnica (README.md) en GitHub* {#tabla-ap-h1.-índice-de-artefactos-de-documentación-técnica-readme.md-en-github.}
+
+| Componente / Módulo | Subsistema Tecnológico | Archivo y Enlace en GitHub |
+| :--- | :--- | :--- |
+| **Monorepositorio Maestro** | Arquitectura general, modelo de datos y entorno local | [README.md (Raíz)](https://github.com/JulioFlors/orchidium-project/blob/main/README.md) |
+| **Nodos Embebidos IoT** | Firmware en MicroPython para SoCs ESP32 y sensores | [firmware/README.md](https://github.com/JulioFlors/orchidium-project/blob/main/firmware/README.md) |
+| **Infraestructura MQTT** | Bróker Mosquitto contenerizado, TLS y seguridad | [infrastructure/README.md](https://github.com/JulioFlors/orchidium-project/blob/main/infrastructure/README.md) |
+| **Orquestación n8n** | Asistente PristinoBot en Telegram y alertas de red | [infrastructure/n8n/README.md](https://github.com/JulioFlors/orchidium-project/blob/main/infrastructure/n8n/README.md) |
+| **Microservicio Scheduler** | Motor de deliberación hídrica y scripts de backfill | [services/scheduler/README.md](https://github.com/JulioFlors/orchidium-project/blob/main/services/scheduler/README.md) |
+| **Weather Oracle** | Oráculo meteorológico multi-API y riesgo predictivo | [services/weather-oracle/README.md](https://github.com/JulioFlors/orchidium-project/blob/main/services/weather-oracle/README.md) |
+| **Base Agronómica Web** | Formulación de recetas químicas y catálogo biológico | [app/README.md](https://github.com/JulioFlors/orchidium-project/blob/main/app/README.md) |
+| **Estándar de Componentes UI** | Arquitectura de capas z-index, GPU y accesibilidad | [app/src/components/ui/action-menu/README.md](https://github.com/JulioFlors/orchidium-project/blob/main/app/src/components/ui/action-menu/README.md) |
+
+---
+
+### Descripción del Contenido por Artefacto de Documentación
+
+#### 1. Arquitectura General y Monorepositorio Maestro
+* **Enlace directo:** [JulioFlors/orchidium-project/README.md](https://github.com/JulioFlors/orchidium-project/blob/main/README.md)
+* **Contenido y alcance técnico:**
+  * **Estructura del Monorepositorio:** Organización modular de paquetes bajo Turborepo y pnpm workspaces (`app`, `firmware`, `infrastructure`, `packages/database`, `services`).
+  * **Modelo de Datos de Triple Fuente de Verdad:** Resolución de discrepancias entre catálogo digital e inventario físico mediante los modelos `Species` (información botánica), `ProductVariant` (SKU comercial y precio) y `Plant` (activo biológico físico individual).
+  * **Filosofía de Co-ubicación y Buenas Prácticas:** Directrices de diseño modular para mantener la UI desacoplada de la lógica de negocio y estado.
+  * **Guía de Despliegue Local:** Procedimiento de arranque en entornos de desarrollo mediante Docker Desktop, Node.js 22 LTS (vía Corepack), cliente PostgreSQL y variables de entorno iniciales.
+  * **Políticas de Integración de Servicios Externos:** Configuración de la política CORS para la subida directa de activos fotográficos botánicos a Cloudflare R2 sin bloqueos en el navegador.
+
+#### 2. Firmware Embebido para Nodos ESP32
+* **Enlace directo:** [JulioFlors/orchidium-project/firmware/README.md](https://github.com/JulioFlors/orchidium-project/blob/main/firmware/README.md)
+* **Contenido y alcance técnico:**
+  * **Entorno y Herramientas Embebidas:** Requisitos para flashear microcontroladores ESP32 con la imagen oficial de MicroPython (v1.26.0+) usando `esptool`.
+  * **Automatización de Despliegue con `mprun`:** Manual del comando personalizado `mprun -b -l` que interpreta archivos `manifest.json` para aprovisionar automáticamente librerías en la memoria flash de cada nodo.
+  * **Especificación de Transductores y Actuadores:** Circuitos de conexionado y protocolos para el sensor de temperatura/humedad DHT22, sensor de iluminancia BH1750 (bus I2C), módulo de relés de 4 canales y protecciones de conmutación de potencia.
+  * **Librerías Parchadas y Resiliencia:** Documentación de las modificaciones a la librería `umqtt` para implementar reconexión automática ante micro-caídas y temporizadores locales de seguridad (*fail-safe*) que desenergizan las válvulas si se pierde la red.
+  * **Auditoría Telemétrica:** Procedimientos de validación de tópicos y payloads JSON bajo canales seguros MQTTS utilizando MQTT Explorer.
+
+#### 3. Infraestructura de Comunicaciones y Bróker MQTTS (Mosquitto)
+* **Enlace directo:** [JulioFlors/orchidium-project/infrastructure/README.md](https://github.com/JulioFlors/orchidium-project/blob/main/infrastructure/README.md)
+* **Contenido y alcance técnico:**
+  * **Despliegue Contenerizado:** Configuración del servicio Eclipse Mosquitto en Docker Compose para el intercambio de mensajes en tiempo real entre hardware, servicios y frontend.
+  * **Seguridad y Control de Acceso:** Procedimiento de encriptación de contraseñas mediante la utilidad interna `mosquitto_passwd` y mapeo seguro de volúmenes persistentes (`config/passwd`).
+  * **Gestión de Calidad de Servicio (QoS):** Directrices para conmutaciones críticas con confirmación obligatoria (QoS 1) frente a publicaciones telemétricas ambientales continuas (QoS 0).
+  * **Diagnóstico y Mantenimiento de Servidor:** Comandos de monitoreo en tiempo real de paquetes `PUBLISH` y directivas de truncamiento seguro del log físico para evitar la saturación del almacenamiento en el VPS.
+
+#### 4. Orquestación con n8n y Asistente Autónomo en Telegram
+* **Enlace directo:** [JulioFlors/orchidium-project/infrastructure/n8n/README.md](https://github.com/JulioFlors/orchidium-project/blob/main/infrastructure/n8n/README.md)
+* **Contenido y alcance técnico:**
+  * **Flujo de Comandos de PristinoBot:** Arquitectura del workflow interactivo de Telegram (`/status`, `/dosing`, `/help`), detallando la depuración de conexiones paralelas en nodos Switch y consultas SQL con `UNION ALL` para unificar eventos pasados (`DosingLog`) con tareas proyectadas en agenda (`DosingSchedule`).
+  * **Normalización de Salida y API de Telegram:** Inyección de caracteres de ancho cero (`\u200B`) para preservar saltos de línea e incorporación de diccionarios de traducción de zonas agronómicas.
+  * **Workflow de Alertas Correlacionadas de Nodos:** Lógica de supervisión continua sobre la tabla `DeviceLog` en PostgreSQL para monitorear el estado de las estaciones meteorológicas y el nodo actuador.
+  * **Algoritmo de Tolerancia a Micro-Fallos:** Regla de ventana temporal de 10 minutos continuos en estado `OFFLINE` para inhibir falsas alarmas ante reconexiones transitorias de Wi-Fi, distinguiendo entre cortes eléctricos generales y descargas de batería de la EMA.
+
+#### 5. Microservicio Scheduler y Procedimientos de Reconstrucción de Datos
+* **Enlace directo:** [JulioFlors/orchidium-project/services/scheduler/README.md](https://github.com/JulioFlors/orchidium-project/blob/main/services/scheduler/README.md)
+* **Contenido y alcance técnico:**
+  * **Consolidación de Telemetría (Backfill):** Procedimiento para ejecutar el script `backfill-history.ts` utilizando contenedores temporales de Node.js en el VPS o en entornos locales, transfiriendo y compactando métricas higrotérmicas desde InfluxDB hacia PostgreSQL.
+  * **Reconstrucción Histórica de Precipitaciones:** Guía de uso del script `rebuild-rain-history.ts` para recalcular retroactivamente eventos de lluvia a partir de gradientes microclimáticos brutos, alimentando la base de datos de auditoría del motor hídrico.
+  * **Variables de Entorno Operativas:** Configuración de parámetros de conexión a InfluxDB (URL, Token criptográfico, Organización y Bucket) y rangos temporales de procesamiento (`BACKFILL_DAYS`).
+
+#### 6. Microservicio Weather Oracle (Oráculo Meteorológico)
+* **Enlace directo:** [JulioFlors/orchidium-project/services/weather-oracle/README.md](https://github.com/JulioFlors/orchidium-project/blob/main/services/weather-oracle/README.md)
+* **Contenido y alcance técnico:**
+  * **Arquitectura de Riego Contextual:** Justificación del servicio satelital como mecanismo para eliminar el riego a ciegas mediante la consulta concurrente a tres proveedores externos (OpenWeatherMap, Open-Meteo y AgroMonitoring).
+  * **Supervisión Edafológica:** Recopilación de humedad remanente en suelo a 10 cm de profundidad y probabilidad horaria de lluvia para suministrar guardas ambientales predictivas al `Scheduler`.
+  * **Estrategia Fail-Safe y Optimización de Cuotas:** Ejecución asíncrona mediante cronjob interno cada 3 horas, consumiendo menos del 1% del límite diario de solicitudes de las capas gratuitas de las APIs.
+  * **Parámetros Geográficos:** Configuración de coordenadas de geolocalización e identificadores de polígono agronómico en el archivo maestro de entorno.
+
+#### 7. Base de Conocimiento Agronómico y Formulación de Recetas
+* **Enlace directo:** [JulioFlors/orchidium-project/app/README.md](https://github.com/JulioFlors/orchidium-project/blob/main/app/README.md)
+* **Contenido y alcance técnico:**
+  * **Compendio Técnico de Insumos:** Fichas técnicas completas de fertilizantes de liberación controlada (Osmocote Plus), formulaciones NPK hidrosolubles (Solucat, Nitrifort, Bio-Fert 72, Triples 20-20-20), enraizantes (Razormin), bioestimulantes (Dalgin, Melaza) y correctores nutricionales (Calcio+Boro).
+  * **Fitosanitarios e Insecticidas:** Especificaciones de preparación por litro de agua (g/L y ml/L), principios activos, modo de acción y precauciones toxicológicas.
+  * **Modelado del Módulo de Laboratorio:** Fundamentación botánica para la parametrización de tareas de dosificación manual y cálculo automatizado de volumen en el tanque de mezcla.
+
+#### 8. Estándares de Implementación y Accesibilidad de Interfaces
+* **Enlace directo:** [JulioFlors/orchidium-project/app/src/components/ui/action-menu/README.md](https://github.com/JulioFlors/orchidium-project/blob/main/app/src/components/ui/action-menu/README.md)
+* **Contenido y alcance técnico:**
+  * **Jerarquía Estricta de Capas (Z-Index):** Escala normalizada desde `z-0` (contenido base) hasta `z-9999` (toasts prioritarios) para prevenir superposiciones visuales no deseadas.
+  * **Reglas de Aislamiento Gráfico:** Prohibición del uso de `createPortal` en menús de tarjeta y directivas para forzar aceleración por GPU (`transform-gpu antialiased [backface-visibility:hidden]`) para eliminar el parpadeo de texto (*flicker*) durante animaciones con Framer Motion en Chromium.
+  * **Conformidad de Accesibilidad (WAI-ARIA):** Soporte de navegación por teclado mediante teclas de flecha arriba/abajo, escape y pérdida de foco (`blur`/`Tab`).
+
+---
+
+### Tabla Ap-H2. *Artefactos de orquestación, scripts de automatización y configuración* {#tabla-ap-h2.-artefactos-de-orquestación-scripts-de-automatización-y-configuración.}
+
+| Artefacto / Archivo | Rol en el Servidor (VPS) | Enlace en GitHub |
+| :--- | :--- | :--- |
+| **`docker-compose.yml`** | Orquestador maestro de la arquitectura contenerizada | [docker-compose.yml](https://github.com/JulioFlors/orchidium-project/blob/main/docker-compose.yml) |
+| **`deploy.sh`** | Automatización de despliegue continuo en producción | [deploy.sh](https://github.com/JulioFlors/orchidium-project/blob/main/deploy.sh) |
+| **`renew_certs.sh`** | Renovación SSL/TLS con Certbot Docker y permisos | [renew_certs.sh](https://github.com/JulioFlors/orchidium-project/blob/main/renew_certs.sh) |
+| **`.env.template`** | Plantilla maestra de variables de entorno y guía de conexión | [.env.template](https://github.com/JulioFlors/orchidium-project/blob/main/.env.template) |
+| **`entrypoint.sh` (Servicios)** | Scripts de arranque con espera activa de bases de datos | [services/scheduler/entrypoint.sh](https://github.com/JulioFlors/orchidium-project/blob/main/services/scheduler/entrypoint.sh) |
+
+---
+
+### Descripción de Artefactos de Orquestación y Automatización
+
+#### A. Manifiesto de Orquestación Contenerizada (`docker-compose.yml`)
+* **Enlace directo:** [JulioFlors/orchidium-project/docker-compose.yml](https://github.com/JulioFlors/orchidium-project/blob/main/docker-compose.yml)
+* **Contenido y decisiones de arquitectura:**
+  * **Desacoplamiento por Perfiles (`profiles`):**
+    * *Perfil `local`:* Despliega en la estación de desarrollo contenedores ligeros de PostgreSQL 17 (`postgres-local`), InfluxDB 3 (`influxdb-local`) y Mosquitto en puertos estándar (1883 y 9001), permitiendo la depuración local sin requerir conexión a internet.
+    * *Perfil `cloud`:* Gobierna la infraestructura de producción en el VPS bajo Ubuntu Server. Despliega PostgreSQL con canal seguro SSL obligatorio (puerto 5432), Mosquitto con puertos duales seguros (8883 bajo MQTTS para hardware ESP32 y 8884 bajo WSS con soporte de WebSockets para la app web en Vercel), InfluxDB 3 Core con TLS (puerto 8181), y los microservicios autónomos `ingest`, `scheduler` y `weather-oracle`.
+  * **Aislamiento y Redes Virtuales:** Redes Docker puente (*bridge*) que garantizan la comunicación inter-servicios mediante nombres de host internos (p. ej., `postgres`, `mosquitto-local`), evitando exponer sockets innecesarios a la red pública.
+  * **Persistencia de Volúmenes:** Mapeo de almacenamiento para los datos relacionales (`/var/lib/postgresql/data`), las series temporales de InfluxDB y los certificados criptográficos compartidos.
+
+#### B. Script de Despliegue en Servidor (`deploy.sh`)
+* **Enlace directo:** [JulioFlors/orchidium-project/deploy.sh](https://github.com/JulioFlors/orchidium-project/blob/main/deploy.sh)
+* **Contenido y flujo de ejecución en el VPS:**
+  * **Sincronización Segura del Código:** Ejecuta `git fetch origin main` y `git reset --hard origin/main`, protegiendo de forma intacta los volúmenes de datos, certificados SSL y archivos de registro locales.
+  * **Construcción y Lanzamiento:** Ejecuta `docker compose --profile cloud build` para compilar las imágenes optimizadas de los microservicios y levanta la pila con `docker compose --profile cloud up -d --remove-orphans`.
+  * **Mantenimiento y Purga de Almacenamiento:** Ejecuta rutinas de limpieza automática mediante `docker image prune -a -f` y `docker builder prune -f`, liberando espacio en disco al eliminar capas de construcción y versiones obsoletas de imágenes.
+  * **Directrices de Migración de Base de Datos:** Documenta los procedimientos de migración en producción delegados en el contenedor:
+    ```bash
+    docker compose exec scheduler npx prisma migrate deploy
+    ```
+
+#### C. Automatización de Certificados Criptográficos SSL/TLS (`renew_certs.sh`)
+* **Enlace directo:** [JulioFlors/orchidium-project/renew_certs.sh](https://github.com/JulioFlors/orchidium-project/blob/main/renew_certs.sh)
+* **Contenido y relevancia para el hardware:**
+  * **Gestión de Dominios Múltiples:** Renueva y administra certificados Let's Encrypt mediante la imagen oficial `certbot/certbot` para los dominios `mqtt.sisparrow.com`, `vps.sisparrow.com` y `n8n.sisparrow.com`.
+  * **Apertura y Cierre Automatizado de Firewall (UFW):** Detecta si el cortafuegos UFW está activo, abre temporalmente el puerto `80/tcp` para el desafío *standalone* de Certbot y lo clausura inmediatamente al finalizar el proceso.
+  * **Optimización Criptográfica para Microcontroladores ESP32:** Resuelve la limitación de memoria RAM en el microcontrolador al momento del saludo TLS. Certbot genera cadenas completas (`fullchain.pem`) que desbordan el *heap* del ESP32; el script aísla y distribuye exclusivamente el certificado hoja (`cert.pem`) y la clave privada (`privkey.pem`) hacia el directorio de Mosquitto, fijando los permisos de usuario `chown 1883:1883` y reiniciando el servicio para aplicar el cifrado sin saturar los nodos de campo.
+
+#### D. Plantilla Maestra de Variables de Entorno (`.env.template`)
+* **Enlace directo:** [JulioFlors/orchidium-project/.env.template](https://github.com/JulioFlors/orchidium-project/blob/main/.env.template)
+* **Contenido y guía operativa:**
+  * **Acceso y Administración del VPS:** Comandos documentados para conexión remota segura vía SSH (`ssh root@ip`, `ssh root@vps.tu-dominio.com`).
+  * **Almacenamiento de Medios en Cloudflare R2:** Claves de API (`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`), identificadores de cuenta y URLs públicas para la entrega de imágenes botánicas mediante CDN.
+  * **Autenticación Federada con Google OAuth 2.0:** Guía paso a paso para dar de alta las URIs de redireccionamiento autorizadas en Google Cloud Console tanto para desarrollo local (`http://localhost:3000/api/auth/callback/google`) como para producción institucional (`https://pristinoplant.com/api/auth/callback/google`).
+  * **Seguridad de Sesiones (Better Auth):** Generación de secretos criptográficos (`BETTER_AUTH_SECRET`) y configuración de la URL base canónica (`BETTER_AUTH_URL=https://pristinoplant.com`).
+  * **Matriz de Credenciales MQTT por Roles:** Definición de usuarios y contraseñas diferenciadas con listas de control de acceso (ACL) para el microservicio de ingesta, el planificador (*Scheduler*), el nodo actuador y el frontend.
+  * **Persistencia Políglota:** Cadenas de conexión TCP para PostgreSQL local y en la nube (con pooling y unpooled para migraciones), junto a los tokens de autenticación de organización y buckets para InfluxDB 3.
+  * **Parámetros Geográficos y Tokens Externos:** Coordenadas latitud/longitud del orquideario e identificadores de polígonos para las consultas automáticas de Weather Oracle en OpenWeatherMap y AgroMonitoring.
+
+#### E. Scripts de Inicialización Segura en Microservicios (`entrypoint.sh`)
+* **Enlaces directos:** 
+  * [services/scheduler/entrypoint.sh](https://github.com/JulioFlors/orchidium-project/blob/main/services/scheduler/entrypoint.sh)
+  * [services/ingest/entrypoint.sh](https://github.com/JulioFlors/orchidium-project/blob/main/services/ingest/entrypoint.sh)
+  * [services/weather-oracle/entrypoint.sh](https://github.com/JulioFlors/orchidium-project/blob/main/services/weather-oracle/entrypoint.sh)
+* **Contenido técnico:**
+  * **Espera Activa de Dependencias (*Healthcheck Loops*):** Implementa bucles de verificación mediante `pg_isready` para suspender el inicio de las aplicaciones Node.js hasta que la base de datos relacional esté completamente receptiva.
+  * **Sondeo a InfluxDB 3:** Valida la respuesta HTTP del endpoint `/api/v2/ping` incorporando el encabezado de autorización criptográfica, evitando errores de inicialización y fallas en cascada al momento de levantar el servidor.
 
 [image1]: <data:image/png;base64,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>
 

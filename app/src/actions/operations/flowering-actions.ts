@@ -1,5 +1,7 @@
 'use server'
 
+import type { SpeciesFloweringAnalyticsData } from '@/interfaces'
+
 import { revalidatePath } from 'next/cache'
 import prisma, { type ZoneType } from '@package/database'
 
@@ -411,7 +413,11 @@ export async function syncSpeciesFloweringBenchmark(speciesId: string) {
 /**
  * Obtiene analítica de floración estructurada por ejemplar y consolidada por especie.
  */
-export async function getSpeciesFloweringAnalytics(speciesSlugOrId: string) {
+export async function getSpeciesFloweringAnalytics(speciesSlugOrId: string): Promise<{
+  success: boolean
+  data?: SpeciesFloweringAnalyticsData
+  error?: string
+}> {
   try {
     const species = await prisma.species.findFirst({
       where: {

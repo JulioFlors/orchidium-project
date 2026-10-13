@@ -2,7 +2,9 @@
 
 import type { PotSize, PlantStatus, ZoneType } from '@package/database/enums'
 
-import { useEffect, useMemo, useState, useTransition } from 'react'
+import { useMemo, useState, useTransition } from 'react'
+import useSWR from 'swr'
+import { useRouter } from 'next/navigation'
 import { IoAddOutline } from 'react-icons/io5'
 
 import {
@@ -11,19 +13,24 @@ import {
   VariantFormModal,
   PlantFormModal,
   StockPlantModal,
-  FloweringEventModal,
-  FloweringFormValues,
   ProductVariantCard,
   FloweringAnalyticsSection,
   FloweringRecord,
 } from './components'
 
-import { Heading, Button, Modal } from '@/components'
+import {
+  Heading,
+  Button,
+  Modal,
+  FloweringEventModal,
+  type FloweringFormValues,
+  type FloweringEventToClose,
+} from '@/components'
 import {
   PotSizeLabels as POT_SIZE_LABELS,
   ZoneTypeLabels as ZONE_LABELS,
   sortVariantsByPotSizeAsc,
-} from '@/config/mappings'
+} from '@/config'
 import {
   upsertVariant,
   deleteVariant,
@@ -36,7 +43,7 @@ import {
   getSpeciesFloweringAnalytics,
 } from '@/actions'
 import { SpeciesFloweringAnalyticsData } from '@/interfaces'
-import { useToastStore } from '@/store/toast/toast.store'
+import { useToastStore } from '@/store'
 
 interface Variant {
   id: string
@@ -58,6 +65,7 @@ interface SpeciesDetail {
 
 interface StockDetailViewProps {
   species: SpeciesDetail
+  initialAnalytics?: SpeciesFloweringAnalyticsData | null
 }
 
 const POT_SIZES: PotSize[] = [
@@ -75,9 +83,13 @@ const POT_SIZES: PotSize[] = [
   'CT4',
 ]
 
-export function StockDetailView({ species: initialSpecies }: StockDetailViewProps) {
+export function StockDetailView({
+  species: initialSpecies,
+  initialAnalytics = null,
+}: StockDetailViewProps) {
   const { addToast } = useToastStore()
   const [isPending, startTransition] = useTransition()
+  const router = useRouter()
 
   const [species, setSpecies] = useState<SpeciesDetail>(initialSpecies)
 
@@ -149,18 +161,19 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
 
   const selectedPlantId = selectedPlant?.id || null
 
-  // Estado de la Analítica de Floración
-  const [analytics, setAnalytics] = useState<SpeciesFloweringAnalyticsData | null>(null)
+  // Analítica de Floración e Historial de Registros hidratado con SWR y fallback del servidor
+  const { data: analytics = initialAnalytics, mutate: mutateAnalytics } = useSWR(
+    species.slug ? `/api/species/${species.slug}/flowering-analytics` : null,
+    async () => {
+      const res = await getSpeciesFloweringAnalytics(species.slug)
 
-  useEffect(() => {
-    if (species.slug) {
-      getSpeciesFloweringAnalytics(species.slug).then((res) => {
-        if (res.success && res.data) {
-          setAnalytics(res.data as SpeciesFloweringAnalyticsData)
-        }
-      })
-    }
-  }, [species.slug])
+      return res.success && res.data ? res.data : null
+    },
+    {
+      fallbackData: initialAnalytics ?? null,
+      revalidateOnFocus: false,
+    },
+  )
 
   // Selección interactiva de ejemplar con scroll suave hacia la ficha inferior
   function handleSelectPlantForFlowering(plant: PlantInstance) {
@@ -172,12 +185,17 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
 
   function handleCloseFloweringFromRecord(record: FloweringRecord) {
     const target = species.plants.find((p) => p.FloweringEvent?.some((e) => e.id === record.id))
+    const plant = target || selectedPlant || championPlant
 
-    if (target) {
-      handleOpenFlowering(target)
-    } else if (selectedPlant) {
-      handleOpenFlowering(selectedPlant)
-    }
+    setFloweringEventToClose({
+      id: record.id,
+      plantId: plant?.id || '',
+      startDate: record.startDate,
+      notes: record.notes,
+    })
+    setFloweringTargetPlant(plant || null)
+    setFloweringModalMode('close')
+    setIsFloweringModalOpen(true)
   }
 
   // Tamaños de las variantes configuradas de la especie
@@ -197,6 +215,10 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
 
   const [isFloweringModalOpen, setIsFloweringModalOpen] = useState(false)
   const [floweringTargetPlant, setFloweringTargetPlant] = useState<PlantInstance | null>(null)
+  const [floweringEventToClose, setFloweringEventToClose] = useState<FloweringEventToClose | null>(
+    null,
+  )
+  const [floweringModalMode, setFloweringModalMode] = useState<'create' | 'close'>('create')
 
   const [variantToDelete, setVariantToDelete] = useState<Variant | null>(null)
   const [plantToDelete, setPlantToDelete] = useState<PlantInstance | null>(null)
@@ -403,12 +425,36 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
   }
 
   function handleOpenFlowering(plant: PlantInstance) {
+    const activeFlowering = plant.FloweringEvent?.find((e) => !e.endDate)
+
+    if (activeFlowering) {
+      setFloweringEventToClose({
+        id: activeFlowering.id,
+        plantId: plant.id,
+        startDate: activeFlowering.startDate,
+        notes: activeFlowering.notes,
+      })
+      setFloweringModalMode('close')
+    } else {
+      setFloweringEventToClose(null)
+      setFloweringModalMode('create')
+    }
+
     setFloweringTargetPlant(plant)
     setIsFloweringModalOpen(true)
   }
 
+  function handleCreateNewFlowering(plant: PlantInstance) {
+    setFloweringEventToClose(null)
+    setFloweringTargetPlant(plant)
+    setFloweringModalMode('create')
+    setIsFloweringModalOpen(true)
+  }
+
   function handleSaveFlowering(values: FloweringFormValues) {
-    if (!floweringTargetPlant) return
+    const targetPlantId = floweringTargetPlant?.id || floweringEventToClose?.plantId
+
+    if (!targetPlantId && !values.eventId) return
 
     startTransition(async () => {
       if (values.eventId) {
@@ -435,7 +481,7 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
         setSpecies((prev) => ({
           ...prev,
           plants: prev.plants.map((p) =>
-            p.id === floweringTargetPlant.id
+            p.id === targetPlantId
               ? {
                   ...p,
                   FloweringEvent: (p.FloweringEvent || []).map((e) =>
@@ -449,8 +495,10 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
         addToast('Floración finalizada correctamente.', 'success')
       } else {
         // Registro de Nueva Floración (En Curso o Completa)
+        if (!targetPlantId) return
+
         const res = await createFloweringEvent({
-          plantId: floweringTargetPlant.id,
+          plantId: targetPlantId,
           startDate: values.startDate,
           endDate: values.endDate,
           notes: values.notes,
@@ -472,7 +520,7 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
         setSpecies((prev) => ({
           ...prev,
           plants: prev.plants.map((p) =>
-            p.id === floweringTargetPlant.id
+            p.id === targetPlantId
               ? { ...p, FloweringEvent: [newEvent, ...(p.FloweringEvent || [])] }
               : p,
           ),
@@ -481,14 +529,12 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
         addToast('Evento de floración registrado correctamente.', 'success')
       }
 
-      getSpeciesFloweringAnalytics(species.slug).then((res) => {
-        if (res.success && res.data) {
-          setAnalytics(res.data as SpeciesFloweringAnalyticsData)
-        }
-      })
+      mutateAnalytics()
 
+      router.refresh()
       setIsFloweringModalOpen(false)
       setFloweringTargetPlant(null)
+      setFloweringEventToClose(null)
     })
   }
 
@@ -742,7 +788,7 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
         selectedPlant={selectedPlant}
         speciesName={species.name}
         onCloseFloweringRecord={handleCloseFloweringFromRecord}
-        onOpenFloweringModal={handleOpenFlowering}
+        onOpenFloweringModal={handleCreateNewFlowering}
       />
 
       {/* Modales */}
@@ -784,10 +830,16 @@ export function StockDetailView({ species: initialSpecies }: StockDetailViewProp
       />
 
       <FloweringEventModal
+        eventToClose={floweringEventToClose}
         isOpen={isFloweringModalOpen}
         isPending={isPending}
+        mode={floweringModalMode}
         targetPlant={floweringTargetPlant}
-        onClose={() => setIsFloweringModalOpen(false)}
+        onClose={() => {
+          setIsFloweringModalOpen(false)
+          setFloweringTargetPlant(null)
+          setFloweringEventToClose(null)
+        }}
         onSave={handleSaveFlowering}
       />
 

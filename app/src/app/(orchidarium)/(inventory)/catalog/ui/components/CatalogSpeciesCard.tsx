@@ -3,7 +3,6 @@
 import type { Species as ProductSpecies } from '@/interfaces'
 
 import Link from 'next/link'
-import { PiLeafFill } from 'react-icons/pi'
 
 import { useImageColor, getPresetForColorString } from '@/hooks/useImageColor'
 import { getImageUrl } from '@/lib'
@@ -53,10 +52,7 @@ export function CatalogSpeciesCard({ species, index }: CatalogSpeciesCardProps) 
 
   // Obtenemos el color dinámico recomendado o de contraste
   const mode = species.glowColor === 'contrast' ? 'contrast' : 'recommended'
-  const { lightRgbString, darkRgbString, isLoaded } = useImageColor(
-    rawImageUrl ? formattedImageUrl : species.name,
-    mode,
-  )
+  const { lightRgbString, darkRgbString, isLoaded } = useImageColor(formattedImageUrl, mode)
 
   const isCustom = Boolean(
     species.glowColor && !['dynamic', 'recommended', 'contrast'].includes(species.glowColor),
@@ -114,17 +110,11 @@ export function CatalogSpeciesCard({ species, index }: CatalogSpeciesCardProps) 
             className="relative block h-full w-full outline-none"
             href={`/catalog/${species.slug || species.id}`}
           >
-            {rawImageUrl ? (
-              <img
-                alt={species.name}
-                className="h-full w-full rounded-xl object-cover transition-transform duration-500 group-hover:scale-[1.02]"
-                src={formattedImageUrl}
-              />
-            ) : (
-              <div className="text-secondary flex h-full items-center justify-center bg-zinc-100/50 opacity-20 dark:bg-zinc-900/50">
-                <PiLeafFill size={48} />
-              </div>
-            )}
+            <img
+              alt={species.name}
+              className="h-full w-full rounded-xl object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+              src={formattedImageUrl}
+            />
           </Link>
 
           {/* Etiqueta de Agotado si la especie no posee stock comercial disponible */}

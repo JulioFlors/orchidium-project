@@ -276,7 +276,7 @@ export function CheckoutView() {
                             required
                             id="shipping-id"
                             maxLength={20}
-                            placeholder="Ej. V-19745523"
+                            placeholder=""
                             type="text"
                             value={shippingAddress.idNumber}
                             onChange={(e) => setShippingAddress({ idNumber: e.target.value })}
@@ -288,7 +288,7 @@ export function CheckoutView() {
                             required
                             id="shipping-phone"
                             maxLength={30}
-                            placeholder="Ej. 0414-8724205"
+                            placeholder=""
                             type="text"
                             value={shippingAddress.phone}
                             onChange={(e) => setShippingAddress({ phone: e.target.value })}
@@ -316,7 +316,7 @@ export function CheckoutView() {
                             required
                             id="shipping-city"
                             maxLength={50}
-                            placeholder="Ej. Ciudad Guayana"
+                            placeholder=""
                             type="text"
                             value={shippingAddress.city}
                             onChange={(e) => setShippingAddress({ city: e.target.value })}
@@ -328,7 +328,7 @@ export function CheckoutView() {
                             required
                             id="shipping-state"
                             maxLength={50}
-                            placeholder="Ej. Bolívar"
+                            placeholder=""
                             type="text"
                             value={shippingAddress.state}
                             onChange={(e) => setShippingAddress({ state: e.target.value })}
@@ -434,7 +434,7 @@ export function CheckoutView() {
                             required
                             id="pickup-id"
                             maxLength={20}
-                            placeholder="Ej. V-19745523"
+                            placeholder=""
                             type="text"
                             value={shippingAddress.idNumber}
                             onChange={(e) => setShippingAddress({ idNumber: e.target.value })}
@@ -446,7 +446,7 @@ export function CheckoutView() {
                             required
                             id="pickup-phone"
                             maxLength={30}
-                            placeholder="Ej. 0414-8724205"
+                            placeholder=""
                             type="text"
                             value={shippingAddress.phone}
                             onChange={(e) => setShippingAddress({ phone: e.target.value })}

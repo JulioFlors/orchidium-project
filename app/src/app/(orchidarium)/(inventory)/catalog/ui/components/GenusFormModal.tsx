@@ -3,7 +3,6 @@
 import type { PlantType } from '@package/database'
 
 import { useState, useEffect } from 'react'
-import { MdInfo } from 'react-icons/md'
 
 import { Button, Modal, FormField, Input, SelectDropdown } from '@/components'
 import { useFormDraftStore } from '@/store'
@@ -22,7 +21,6 @@ interface GenusFormModalProps {
   isPending: boolean
   onSave: (name: string, type: PlantType) => void
   plantTypeLabels: Record<PlantType, string>
-  plantTypeSingleLabels: Record<PlantType, string>
   generaList?: Genus[]
 }
 
@@ -33,7 +31,6 @@ export function GenusFormModal({
   isPending,
   onSave,
   plantTypeLabels,
-  plantTypeSingleLabels,
   generaList = [],
 }: GenusFormModalProps) {
   const [genusFormName, setGenusFormName] = useState('')
@@ -88,6 +85,22 @@ export function GenusFormModal({
     const sanitized = val.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]/g, '').replace(/\s{2,}/g, ' ')
 
     setGenusFormName(sanitized)
+    const clean = sanitized.trim()
+
+    if (clean && clean.length >= (VALIDATION_LIMITS.GENUS_NAME_MIN ?? 4) && generaList.length > 0) {
+      const duplicate = generaList.find(
+        (g) =>
+          g.name.trim().toLowerCase() === clean.toLowerCase() &&
+          (!editingGenus || g.id !== editingGenus.id),
+      )
+
+      if (duplicate) {
+        setNameError(`Ya existe un género registrado con el nombre "${duplicate.name}".`)
+
+        return
+      }
+    }
+
     if (nameError) {
       setNameError(null)
     }
@@ -108,14 +121,14 @@ export function GenusFormModal({
       return 'El nombre solo debe contener letras del abecedario.'
     }
 
-    const isDuplicate = generaList.some(
+    const duplicate = generaList.find(
       (g) =>
         g.name.trim().toLowerCase() === clean.toLowerCase() &&
         (!editingGenus || g.id !== editingGenus.id),
     )
 
-    if (isDuplicate) {
-      return `Ya existe un género registrado con el nombre "${clean}".`
+    if (duplicate) {
+      return `Ya existe un género registrado con el nombre "${duplicate.name}".`
     }
 
     return null
@@ -154,19 +167,12 @@ export function GenusFormModal({
                 error={!!nameError}
                 id="edit-genus-name"
                 maxLength={VALIDATION_LIMITS.GENUS_NAME_MAX}
-                placeholder="Ej. Cattleya"
+                placeholder=""
                 type="text"
                 value={genusFormName}
                 onChange={(e) => handleNameChange(e.target.value)}
               />
             </FormField>
-            <div className="text-secondary flex items-center gap-1.5 rounded-lg bg-zinc-50 p-3 text-xs dark:bg-zinc-900/50">
-              <MdInfo className="h-4 w-4 text-purple-500" />
-              <span>
-                Por seguridad, el tipo de planta ({plantTypeSingleLabels[editingGenus.type]}) no
-                puede ser modificado.
-              </span>
-            </div>
             <div className="border-input-outline -mx-6 mt-2 grid grid-cols-2 gap-3 border-t px-6 pt-4">
               <Button variant="ghost" onClick={onClose}>
                 Cancelar
@@ -203,7 +209,7 @@ export function GenusFormModal({
                   error={!!nameError}
                   id="create-genus-name"
                   maxLength={VALIDATION_LIMITS.GENUS_NAME_MAX}
-                  placeholder="Ej. Cattleya"
+                  placeholder=""
                   type="text"
                   value={genusFormName}
                   onChange={(e) => handleNameChange(e.target.value)}

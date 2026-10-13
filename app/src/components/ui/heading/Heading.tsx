@@ -37,11 +37,7 @@ export function Heading({ title, description, action, className }: HeadingProps)
         )}
       </div>
 
-      {action && (
-        <div className="tds-sm:w-auto flex w-full shrink-0 [&>*]:w-full tds-sm:[&>*]:w-auto">
-          {action}
-        </div>
-      )}
+      {action && <div className="tds-sm:w-auto flex w-full shrink-0 justify-end">{action}</div>}
     </div>
   )
 }

@@ -7,3 +7,7 @@ export * from './logger'
 export * from './image-utils'
 
 export * from './currency-formatter'
+
+export * from './botany'
+
+export * from './taxonomy'

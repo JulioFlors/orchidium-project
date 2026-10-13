@@ -414,6 +414,7 @@ export function ControlView() {
             connectionState={connectionState}
             isLoadingStatus={isConnecting}
             selectedZone={ZoneType.ZONA_A}
+            size="compact"
             zoneMapping={{ [ZoneType.ZONA_A]: 'Controlador' }}
             zones={[ZoneType.ZONA_A]}
           />

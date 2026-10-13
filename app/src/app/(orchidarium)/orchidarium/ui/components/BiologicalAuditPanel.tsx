@@ -159,22 +159,18 @@ export function BiologicalAuditPanel({ initialEvents = [] }: BiologicalAuditPane
 
       {/* Modal para Concluir Floración */}
       <FloweringEventModal
-        isOpen={!!eventToClose}
-        isPending={isPending}
-        targetPlant={
+        eventToClose={
           eventToClose
             ? {
-                id: eventToClose.plant.id,
-                FloweringEvent: [
-                  {
-                    id: eventToClose.id,
-                    startDate: eventToClose.startDate,
-                    notes: eventToClose.notes,
-                  },
-                ],
+                id: eventToClose.id,
+                plantId: eventToClose.plant.id,
+                startDate: eventToClose.startDate,
+                notes: eventToClose.notes,
               }
             : null
         }
+        isOpen={!!eventToClose}
+        isPending={isPending}
         onClose={() => setEventToClose(null)}
         onSave={handleSaveFlowering}
       />

@@ -14,11 +14,17 @@ interface Genus {
   type: PlantType
 }
 
+interface SpeciesSummary {
+  id: string
+  name: string
+}
+
 interface SpeciesFormModalProps {
   isOpen: boolean
   onClose: () => void
   isPending: boolean
   generaList: Genus[]
+  speciesList?: SpeciesSummary[]
   plantTypeLabels: Record<PlantType, string>
   onSave: (data: { name: string; genusId: string; description: string; glowColor: string }) => void
 }
@@ -28,6 +34,7 @@ export function SpeciesFormModal({
   onClose,
   isPending,
   generaList,
+  speciesList = [],
   plantTypeLabels,
   onSave,
 }: SpeciesFormModalProps) {
@@ -135,7 +142,22 @@ export function SpeciesFormModal({
     const sanitized = value.replace(/\s{2,}/g, ' ')
 
     setSpeciesFormName(sanitized)
-    if (sanitized.trim()) {
+    const clean = sanitized.trim()
+
+    if (clean && speciesList.length > 0) {
+      const duplicate = speciesList.find((s) => s.name.trim().toLowerCase() === clean.toLowerCase())
+
+      if (duplicate) {
+        setErrors((prev) => ({
+          ...prev,
+          name: `Ya existe la especie "${duplicate.name}" en el catálogo.`,
+        }))
+
+        return
+      }
+    }
+
+    if (clean) {
       setErrors((prev) => ({ ...prev, name: undefined }))
     }
   }
@@ -153,6 +175,14 @@ export function SpeciesFormModal({
 
     if (!cleanName || cleanName.length < 2) {
       newErrors.name = 'El nombre científico es obligatorio (mínimo 2 caracteres)'
+    } else if (speciesList.length > 0) {
+      const duplicate = speciesList.find(
+        (s) => s.name.trim().toLowerCase() === cleanName.toLowerCase(),
+      )
+
+      if (duplicate) {
+        newErrors.name = `Ya existe la especie "${duplicate.name}" en el catálogo.`
+      }
     }
 
     if (Object.keys(newErrors).length > 0) {

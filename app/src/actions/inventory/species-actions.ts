@@ -6,24 +6,9 @@ import type { PlantType, Species } from '@/interfaces'
 import { revalidatePath } from 'next/cache'
 import { prisma } from '@package/database'
 
-import { Logger } from '@/lib'
+import { Logger, normalizeSpeciesName, toTaxonomicSlug } from '@/lib'
 import { sortVariantsByPotSizeAsc } from '@/config'
 import { deleteR2Object } from '@/actions/storage/upload-actions'
-
-// ─────────────────────────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────────────────────────
-
-/** Genera slug kebab-case desde nombre de especie */
-function toSlug(name: string): string {
-  return name
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .trim()
-    .replace(/\s+/g, '-')
-    .replace(/[^\w-]/g, '')
-}
 
 // ─────────────────────────────────────────────────────────────
 // READ
@@ -152,8 +137,46 @@ export async function createSpecies(data: {
   glowColor?: string
 }) {
   try {
-    const cleanName = data.name.trim().replace(/\s+/g, ' ')
-    const slug = toSlug(cleanName)
+    const cleanName = normalizeSpeciesName(data.name)
+
+    if (!cleanName || cleanName.length < 2) {
+      return { ok: false, message: 'El nombre científico es obligatorio (mínimo 2 caracteres).' }
+    }
+
+    // 1. Verificación previa insensible a mayúsculas/minúsculas
+    const existing = await prisma.species.findFirst({
+      where: {
+        name: { equals: cleanName, mode: 'insensitive' },
+      },
+      include: {
+        genus: { select: { name: true } },
+      },
+    })
+
+    if (existing) {
+      return {
+        ok: false,
+        message: `Ya existe una especie registrada con el nombre "${existing.name}" en la sección "${existing.genus.name}".`,
+      }
+    }
+
+    const slug = toTaxonomicSlug(cleanName)
+
+    // 2. Verificación previa de slug
+    const existingSlug = await prisma.species.findFirst({
+      where: { slug },
+      include: {
+        genus: { select: { name: true } },
+      },
+    })
+
+    if (existingSlug) {
+      return {
+        ok: false,
+        message: `El identificador derivado ("${slug}") ya está en uso por la especie "${existingSlug.name}".`,
+      }
+    }
+
     const species = await prisma.species.create({
       data: {
         name: cleanName,
@@ -167,10 +190,23 @@ export async function createSpecies(data: {
     revalidatePath('/catalog')
 
     return { ok: true, species }
-  } catch (err) {
+  } catch (err: unknown) {
     Logger.error('[Species] Error al crear especie:', err)
 
-    return { ok: false, message: 'Error al crear. ¿El nombre ya existe?' }
+    if (
+      typeof err === 'object' &&
+      err !== null &&
+      'code' in err &&
+      (err as { code: string }).code === 'P2002'
+    ) {
+      return {
+        ok: false,
+        message:
+          'Ya existe una especie registrada con este nombre o identificador (no se distingue entre mayúsculas y minúsculas).',
+      }
+    }
+
+    return { ok: false, message: 'Error al crear la especie.' }
   }
 }
 
@@ -183,8 +219,50 @@ export async function updateSpecies(
   data: { name: string; genusId: string; description?: string; glowColor?: string },
 ) {
   try {
-    const cleanName = data.name.trim().replace(/\s+/g, ' ')
-    const slug = toSlug(cleanName)
+    const cleanName = normalizeSpeciesName(data.name)
+
+    if (!cleanName || cleanName.length < 2) {
+      return { ok: false, message: 'El nombre científico es obligatorio (mínimo 2 caracteres).' }
+    }
+
+    // 1. Verificación previa insensible a mayúsculas/minúsculas excluyendo la especie actual
+    const existing = await prisma.species.findFirst({
+      where: {
+        name: { equals: cleanName, mode: 'insensitive' },
+        NOT: { id },
+      },
+      include: {
+        genus: { select: { name: true } },
+      },
+    })
+
+    if (existing) {
+      return {
+        ok: false,
+        message: `Ya existe otra especie registrada con el nombre "${existing.name}" en la sección "${existing.genus.name}".`,
+      }
+    }
+
+    const slug = toTaxonomicSlug(cleanName)
+
+    // 2. Verificación de slug excluyendo el actual
+    const existingSlug = await prisma.species.findFirst({
+      where: {
+        slug,
+        NOT: { id },
+      },
+      include: {
+        genus: { select: { name: true } },
+      },
+    })
+
+    if (existingSlug) {
+      return {
+        ok: false,
+        message: `El identificador derivado ("${slug}") ya está en uso por la especie "${existingSlug.name}".`,
+      }
+    }
+
     const species = await prisma.species.update({
       where: { id },
       data: {
@@ -199,8 +277,21 @@ export async function updateSpecies(
     revalidatePath('/catalog')
 
     return { ok: true, species }
-  } catch (err) {
+  } catch (err: unknown) {
     Logger.error('[Species] Error al actualizar especie:', err)
+
+    if (
+      typeof err === 'object' &&
+      err !== null &&
+      'code' in err &&
+      (err as { code: string }).code === 'P2002'
+    ) {
+      return {
+        ok: false,
+        message:
+          'Ya existe una especie registrada con este nombre o identificador (no se distingue entre mayúsculas y minúsculas).',
+      }
+    }
 
     return { ok: false, message: 'Error al actualizar la especie.' }
   }

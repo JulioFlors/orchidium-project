@@ -1002,6 +1002,7 @@ export function MonitoringView({ initialHeartbeats = {} }: MonitoringViewProps) 
               connectionState={connectionState}
               dropdownTitle="Estación Meteorológica"
               selectedZone={zone}
+              size="wide"
               zones={[ZoneType.EXTERIOR, ZoneType.ZONA_A]}
               onZoneChanged={(newZone) => {
                 setZone(newZone)
