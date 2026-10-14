@@ -209,7 +209,7 @@ export function RegisterForm() {
                   aria-describedby={errors.name ? 'name-error' : undefined}
                   autoComplete="name"
                   id="name"
-                  placeholder="Ej: orquidea_fan"
+                  placeholder=""
                   type="text"
                   {...rest}
                   ref={(e) => {
@@ -252,7 +252,7 @@ export function RegisterForm() {
                     ],
                   )}
                   id="email"
-                  placeholder="ejemplo@correo.com"
+                  placeholder=""
                   type="email"
                   {...register('email', {
                     required: 'El correo es obligatorio',

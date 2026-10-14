@@ -1,11 +1,27 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { MdLocalFlorist, MdEventAvailable, MdHistory, MdOutlineStickyNote2 } from 'react-icons/md'
 
 import { Modal, FormField, Input, Textarea, Button, Badge } from '@/components'
+import { useFormDraftStore } from '@/store'
 import { VALIDATION_LIMITS } from '@/config'
 import { getTodayCalendarString, toCalendarDateString, formatCalendarDate } from '@/utils'
+
+export function getFloweringCloseDraftKey(eventId: string) {
+  return `flowering-close-draft-${eventId}`
+}
+
+export function getFloweringCreateDraftKey(plantId: string) {
+  return `flowering-create-draft-${plantId}`
+}
+
+export interface FloweringDraftData {
+  notes?: string
+  endDate?: string
+  startDate?: string
+  registrationType?: 'in_progress' | 'completed'
+}
 
 export interface FloweringFormValues {
   eventId?: string
@@ -47,6 +63,7 @@ interface FloweringEventFormProps {
   isClosing: boolean
   isPending: boolean
   eventId?: string
+  draftKey: string
   initialStartDate: string
   initialEndDate: string
   initialNotes: string
@@ -61,6 +78,7 @@ function FloweringEventForm({
   isClosing,
   isPending,
   eventId,
+  draftKey,
   initialStartDate,
   initialEndDate,
   initialNotes,
@@ -70,13 +88,70 @@ function FloweringEventForm({
   onClose,
   onSave,
 }: FloweringEventFormProps) {
-  const [startDate, setStartDate] = useState(initialStartDate)
-  const [endDate, setEndDate] = useState(initialEndDate)
-  const [registrationType, setRegistrationType] = useState<'in_progress' | 'completed'>(
-    'in_progress',
-  )
-  const [notes, setNotes] = useState(initialNotes)
+  const { getDraft, setDraft } = useFormDraftStore()
+
+  const [startDate, setStartDate] = useState(() => {
+    const raw = getDraft(draftKey)
+    const draft =
+      typeof raw === 'string'
+        ? { notes: raw }
+        : raw && typeof raw === 'object'
+          ? (raw as FloweringDraftData)
+          : undefined
+
+    return draft?.startDate ?? initialStartDate
+  })
+
+  const [endDate, setEndDate] = useState(() => {
+    const raw = getDraft(draftKey)
+    const draft =
+      typeof raw === 'string'
+        ? { notes: raw }
+        : raw && typeof raw === 'object'
+          ? (raw as FloweringDraftData)
+          : undefined
+
+    return draft?.endDate ?? initialEndDate
+  })
+
+  const [registrationType, setRegistrationType] = useState<'in_progress' | 'completed'>(() => {
+    const raw = getDraft(draftKey)
+    const draft =
+      typeof raw === 'string'
+        ? { notes: raw }
+        : raw && typeof raw === 'object'
+          ? (raw as FloweringDraftData)
+          : undefined
+
+    return draft?.registrationType ?? 'in_progress'
+  })
+
+  const [notes, setNotes] = useState(() => {
+    const raw = getDraft(draftKey)
+    const draft =
+      typeof raw === 'string'
+        ? { notes: raw }
+        : raw && typeof raw === 'object'
+          ? (raw as FloweringDraftData)
+          : undefined
+
+    return draft?.notes ?? initialNotes
+  })
+
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  const isDirtyRef = useRef(false)
+
+  useEffect(() => {
+    if (!isDirtyRef.current) return
+
+    setDraft(draftKey, {
+      notes,
+      endDate,
+      startDate,
+      registrationType,
+    })
+  }, [draftKey, notes, endDate, startDate, registrationType, setDraft])
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -160,7 +235,10 @@ function FloweringEventForm({
               min={startDate}
               type="date"
               value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              onChange={(e) => {
+                isDirtyRef.current = true
+                setEndDate(e.target.value)
+              }}
               onClick={(e) => {
                 try {
                   e.currentTarget.showPicker()
@@ -185,7 +263,10 @@ function FloweringEventForm({
               maxLength={VALIDATION_LIMITS.OBSERVATION_MAX}
               placeholder="Ej. Abundante floración, 5 flores abiertas, fragancia intensa..."
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => {
+                isDirtyRef.current = true
+                setNotes(e.target.value)
+              }}
             />
             {hasPreviousNotes && (
               <span className="text-secondary mt-1 block text-[11px] opacity-60">
@@ -206,7 +287,10 @@ function FloweringEventForm({
                   : 'text-secondary hover:text-primary opacity-70'
               }`}
               type="button"
-              onClick={() => setRegistrationType('in_progress')}
+              onClick={() => {
+                isDirtyRef.current = true
+                setRegistrationType('in_progress')
+              }}
             >
               <MdEventAvailable className="size-4 text-fuchsia-500" />
               En Curso
@@ -218,7 +302,10 @@ function FloweringEventForm({
                   : 'text-secondary hover:text-primary opacity-70'
               }`}
               type="button"
-              onClick={() => setRegistrationType('completed')}
+              onClick={() => {
+                isDirtyRef.current = true
+                setRegistrationType('completed')
+              }}
             >
               <MdHistory className="size-4 text-indigo-500" />
               Completa (Histórico)
@@ -235,7 +322,10 @@ function FloweringEventForm({
                 id="flowering-start-date"
                 type="date"
                 value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
+                onChange={(e) => {
+                  isDirtyRef.current = true
+                  setStartDate(e.target.value)
+                }}
                 onClick={(e) => {
                   try {
                     e.currentTarget.showPicker()
@@ -255,7 +345,10 @@ function FloweringEventForm({
                   min={startDate}
                   type="date"
                   value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
+                  onChange={(e) => {
+                    isDirtyRef.current = true
+                    setEndDate(e.target.value)
+                  }}
                   onClick={(e) => {
                     try {
                       e.currentTarget.showPicker()
@@ -275,7 +368,10 @@ function FloweringEventForm({
               maxLength={VALIDATION_LIMITS.OBSERVATION_MAX}
               placeholder="Ej. Primera floración del ejemplar, botón floral abierto..."
               value={notes}
-              onChange={(e) => setNotes(e.target.value)}
+              onChange={(e) => {
+                isDirtyRef.current = true
+                setNotes(e.target.value)
+              }}
             />
           </FormField>
         </div>
@@ -368,6 +464,13 @@ export function FloweringEventModal({
   }
 
   const formKey = eventToClose ? `event-${eventToClose.id}` : `plant-${plantId}-${mode || 'auto'}`
+  const draftKey = isClosing
+    ? eventId
+      ? getFloweringCloseDraftKey(eventId)
+      : 'flowering-close-draft'
+    : plantId
+      ? getFloweringCreateDraftKey(plantId)
+      : 'flowering-create-draft'
 
   return (
     <Modal
@@ -380,6 +483,7 @@ export function FloweringEventModal({
       <FloweringEventForm
         key={formKey}
         daysElapsed={daysElapsed}
+        draftKey={draftKey}
         eventId={eventId}
         formattedStartDate={formattedStartDate}
         hasPreviousNotes={hasPreviousNotes}

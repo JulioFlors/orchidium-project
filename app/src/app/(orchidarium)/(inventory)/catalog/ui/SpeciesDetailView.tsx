@@ -565,7 +565,7 @@ export function SpeciesDetailView({ initialSpecies, genera }: SpeciesDetailViewP
                 <Input
                   id="species-name"
                   maxLength={VALIDATION_LIMITS.SPECIES_NAME_MAX}
-                  placeholder="Ej: Cattleya trianae"
+                  placeholder=""
                   type="text"
                   value={form.name}
                   onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}

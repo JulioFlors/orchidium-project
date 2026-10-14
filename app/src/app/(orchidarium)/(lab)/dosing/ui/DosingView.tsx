@@ -312,7 +312,7 @@ export function DosingView({ initialTasks, agrochemicals }: DosingViewProps) {
             <textarea
               className="focus-input border-input-outline w-full resize-none border text-sm"
               id="cancel-dosing-reason"
-              placeholder="Ej: Cambio de prioridades, insumo agotado..."
+              placeholder="."
               rows={3}
               value={cancelReason}
               onChange={(e) => setDraft(cancelReasonKey, e.target.value)}

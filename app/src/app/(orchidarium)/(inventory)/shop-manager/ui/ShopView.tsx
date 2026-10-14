@@ -341,7 +341,7 @@ export function ShopView({ initialData, initialLayoutConfig }: ShopViewProps) {
                     <FormField htmlFor={`hero-title-${index}`} label="Título en el Hero">
                       <Input
                         id={`hero-title-${index}`}
-                        placeholder="Ej: Cattleya Maxima"
+                        placeholder=""
                         type="text"
                         value={slide.title}
                         onChange={(e) => {
@@ -566,7 +566,7 @@ export function ShopView({ initialData, initialLayoutConfig }: ShopViewProps) {
               <FormField htmlFor="megamenu-title-input" label="Título del Megamenú">
                 <Input
                   id="megamenu-title-input"
-                  placeholder="Ej: Dendrobium Striata"
+                  placeholder=""
                   type="text"
                   value={config.megamenu.featuredItem.title}
                   onChange={(e) => {

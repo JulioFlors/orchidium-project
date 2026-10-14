@@ -270,7 +270,7 @@ export function QueueView() {
             <textarea
               className="focus-input border-input-outline w-full resize-none border text-sm"
               id="cancel-reason"
-              placeholder="Ej: Cambio de prioridades, clima adverso..."
+              placeholder=""
               rows={3}
               value={cancelReason}
               onChange={(e) => setDraft(cancelReasonKey, e.target.value)}

@@ -6,9 +6,13 @@ import { PiLeafFill } from 'react-icons/pi'
 import { MdOutlineStickyNote2 } from 'react-icons/md'
 import { IoLocationOutline, IoCalendarOutline, IoTimeOutline } from 'react-icons/io5'
 
-import { FloweringEventModal, type FloweringFormValues } from '@/components'
+import {
+  FloweringEventModal,
+  getFloweringCloseDraftKey,
+  type FloweringFormValues,
+} from '@/components'
 import { closeFloweringEvent, type ActiveFloweringEvent } from '@/actions'
-import { useToastStore } from '@/store'
+import { useToastStore, useFormDraftStore } from '@/store'
 import { getImageUrl } from '@/lib'
 import { formatCalendarDate } from '@/utils'
 import { ZoneTypeLabels, type ZoneType } from '@/config'
@@ -39,6 +43,7 @@ export function BiologicalAuditPanel({ initialEvents = [] }: BiologicalAuditPane
       })
 
       if (res.ok) {
+        useFormDraftStore.getState().clearDraft(getFloweringCloseDraftKey(values.eventId!))
         addToast('Floración finalizada correctamente.', 'success')
         setEventToClose(null)
         setFloweringEvents((prev) => prev.filter((e) => e.id !== values.eventId))

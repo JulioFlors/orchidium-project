@@ -23,6 +23,8 @@ import {
   Button,
   Modal,
   FloweringEventModal,
+  getFloweringCloseDraftKey,
+  getFloweringCreateDraftKey,
   type FloweringFormValues,
   type FloweringEventToClose,
 } from '@/components'
@@ -43,7 +45,7 @@ import {
   getSpeciesFloweringAnalytics,
 } from '@/actions'
 import { SpeciesFloweringAnalyticsData } from '@/interfaces'
-import { useToastStore } from '@/store'
+import { useToastStore, useFormDraftStore } from '@/store'
 
 interface Variant {
   id: string
@@ -492,6 +494,8 @@ export function StockDetailView({
           ),
         }))
 
+        useFormDraftStore.getState().clearDraft(getFloweringCloseDraftKey(values.eventId))
+
         addToast('Floración finalizada correctamente.', 'success')
       } else {
         // Registro de Nueva Floración (En Curso o Completa)
@@ -509,6 +513,8 @@ export function StockDetailView({
 
           return
         }
+
+        useFormDraftStore.getState().clearDraft(getFloweringCreateDraftKey(targetPlantId))
 
         const newEvent = res.floweringEvent as {
           id: string
