@@ -7,11 +7,38 @@ import PlantsCategoryClient from './PlantsCategoryClient'
 import { getPaginatedSpeciesWithImages } from '@/actions'
 import { shopRoutes } from '@/config'
 import { PlantType, ShopRoute, Species, ShopCategory } from '@/interfaces'
+import { getImageUrl } from '@/lib'
+
+const catalogImage = getImageUrl('plants/orchids/orchids.webp')
 
 export const metadata: Metadata = {
-  title: 'Plantas',
+  title: 'Catálogo de Plantas',
   description:
-    'Descubre nuestra amplia variedad de plantas, incluyendo Orquídeas, Cactus y Suculentas.',
+    'Descubre nuestra amplia variedad de plantas de colección, incluyendo Orquídeas, Rosas del Desierto, Cactus y Suculentas.',
+  openGraph: {
+    title: 'Catálogo de Plantas | PristinoPlant',
+    description:
+      'Descubre nuestra amplia variedad de plantas de colección, incluyendo Orquídeas, Rosas del Desierto, Cactus y Suculentas.',
+    url: '/category/plants',
+    siteName: 'PristinoPlant',
+    locale: 'es_VE',
+    type: 'website',
+    images: [
+      {
+        url: catalogImage,
+        width: 1200,
+        height: 630,
+        alt: 'Catálogo de Plantas PristinoPlant',
+      },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Catálogo de Plantas | PristinoPlant',
+    description:
+      'Descubre nuestra amplia variedad de plantas de colección, incluyendo Orquídeas, Rosas del Desierto, Cactus y Suculentas.',
+    images: [catalogImage],
+  },
 }
 
 // Re-using the slug to plant type mapping from client component

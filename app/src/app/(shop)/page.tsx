@@ -10,20 +10,21 @@ import {
   HeroSlideshow,
   ProductSlideshow,
 } from '@/components'
+import { getImageUrl } from '@/lib'
 
 export const metadata: Metadata = {
   title: 'Tienda',
   description:
     'Descubre nuestra colección de orquídeas, cactus, suculentas, rosas del desierto y kokedamas para interiores. Envíos garantizados y asesoramiento experto para tus plantas.',
   openGraph: {
-    title: 'Tienda',
+    title: 'Tienda | PristinoPlant',
     description:
       'Descubre nuestra colección de orquídeas, cactus, suculentas, rosas del desierto y kokedamas para interiores. Envíos garantizados y asesoramiento experto para tus plantas.',
     url: 'https://pristinoplant.com/',
     siteName: 'PristinoPlant',
     images: [
       {
-        url: '/imgs/placeholder.jpg',
+        url: getImageUrl('plants/orchids/orchids.webp'),
         width: 1200,
         height: 630,
         alt: 'PristinoPlant | Tienda',
@@ -31,6 +32,13 @@ export const metadata: Metadata = {
     ],
     locale: 'es_VE',
     type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Tienda | PristinoPlant',
+    description:
+      'Descubre nuestra colección de orquídeas, cactus, suculentas, rosas del desierto y kokedamas para interiores. Envíos garantizados y asesoramiento experto para tus plantas.',
+    images: [getImageUrl('plants/orchids/orchids.webp')],
   },
 }
 

@@ -12,8 +12,14 @@ export function getImageUrl(url?: string): string {
   if (!url) return '/imgs/placeholder.jpg'
   if (url.startsWith('http://') || url.startsWith('https://')) return url
 
-  // Limpiar barras iniciales y asegurar prefijo plants/
+  // Si es un recurso estático local de la carpeta public
+  if (url.startsWith('/imgs/') || url.startsWith('/images/')) return url
+
+  // Limpiar barras iniciales y comprobar si es ruta a carpeta local imgs
   const cleanUrl = url.startsWith('/') ? url.slice(1) : url
+
+  if (cleanUrl.startsWith('imgs/') || cleanUrl.startsWith('images/')) return `/${cleanUrl}`
+
   const prefix = cleanUrl.startsWith('plants/') ? '' : 'plants/'
   const r2BaseUrl = process.env.NEXT_PUBLIC_R2_PUBLIC_URL || 'https://storage.sisparrow.com'
 

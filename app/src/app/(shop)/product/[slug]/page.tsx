@@ -7,6 +7,7 @@ import { notFound } from 'next/navigation'
 import { ProductClientWrapper } from './ui/ProductClientWrapper'
 
 import { getSpeciesBySlug } from '@/actions'
+import { getImageUrl } from '@/lib'
 
 type Params = Promise<{ slug: string }>
 
@@ -15,27 +16,38 @@ export async function generateMetadata(props: { params: Params }): Promise<Metad
   const slug = params.slug
   const product = await getSpeciesBySlug(slug)
 
-  // URL de imagen por defecto si el producto no tiene imágenes
-  const productImage = product?.images?.[0] ? `/${product.images[0]}` : '/imgs/placeholder.jpg'
+  const title = product?.name ?? 'Planta no encontrada'
+  const description =
+    product?.description ??
+    'Descubre nuestra colección de plantas y orquídeas en el Orquideario PristinoPlant.'
+  const productImage = getImageUrl(product?.images?.[0])
 
   return {
     title: {
-      absolute: product?.name ?? 'Planta no encontrada',
+      absolute: `${title} | PristinoPlant`,
     },
-    description:
-      product?.description ?? 'No pudimos encontrar esta planta en nuestro Orquideario | 404',
+    description,
     openGraph: {
-      title: product?.name ?? 'Planta no encontrada',
-      description:
-        product?.description ?? 'No pudimos encontrar esta planta en nuestro Orquideario | 404',
+      title: `${title} | PristinoPlant`,
+      description,
+      url: `/product/${slug}`,
+      siteName: 'PristinoPlant',
+      locale: 'es_VE',
+      type: 'website',
       images: [
         {
-          url: productImage, // Next.js usará metadataBase del layout para hacer esto absoluto
-          width: 2000,
-          height: 2000,
-          alt: product?.name ?? 'Imagen de planta',
+          url: productImage,
+          width: 1200,
+          height: 1200,
+          alt: title,
         },
       ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `${title} | PristinoPlant`,
+      description,
+      images: [productImage],
     },
   }
 }
