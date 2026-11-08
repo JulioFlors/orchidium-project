@@ -2493,7 +2493,13 @@ async function fetchAndSaveBcvData(): Promise<boolean> {
   }
 
   // 2. Extraer fecha valor reportada
-  const matchDate = html.match(/class=["']date-display-single["'][^>]*?content=["']([^"']+)["']/i)
+  const matchDate =
+    html.match(
+      /<span[^>]*?content=["']([^"']+)["'][^>]*?class=["'][^"']*date-display-single[^"']*["']/i,
+    ) ||
+    html.match(
+      /<span[^>]*?class=["'][^"']*date-display-single[^"']*["'][^>]*?content=["']([^"']+)["']/i,
+    )
 
   if (!matchDate) {
     throw new Error('No se pudo encontrar la fecha valor en el HTML del BCV.')

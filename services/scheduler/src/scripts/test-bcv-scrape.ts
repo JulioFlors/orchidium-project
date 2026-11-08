@@ -47,7 +47,13 @@ async function runTestScrape() {
     }
 
     // 2. Intentar buscar fecha valor de la tasa
-    const matchDate = html.match(/class=["']date-display-single["'][^>]*?content=["']([^"']+)["']/i)
+    const matchDate =
+      html.match(
+        /<span[^>]*?content=["']([^"']+)["'][^>]*?class=["'][^"']*date-display-single[^"']*["']/i,
+      ) ||
+      html.match(
+        /<span[^>]*?class=["'][^"']*date-display-single[^"']*["'][^>]*?content=["']([^"']+)["']/i,
+      )
     let dateStr: string | null = null
 
     if (matchDate) {
