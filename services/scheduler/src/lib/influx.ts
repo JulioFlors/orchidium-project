@@ -18,8 +18,8 @@ const isInternalHost =
   url.hostname.includes('influxdb') ||
   url.hostname === 'localhost' ||
   url.hostname === '127.0.0.1' ||
-  url.hostname === 'vps.sisparrow.com' ||
-  url.hostname === 'mqtt.sisparrow.com'
+  url.hostname === 'vps.pristinoplant.com' ||
+  url.hostname === 'mqtt.pristinoplant.com'
 
 // ---- Deshabilitamos TLS para entornos locales/Docker ----
 // El SDK v3 usa fetch/gRPC que reaccionan a NODE_TLS_REJECT_UNAUTHORIZED

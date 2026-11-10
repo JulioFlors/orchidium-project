@@ -15,7 +15,7 @@
  *   -v "$(pwd)/../../:/app" \
  *   -w /app/services/scheduler \
  *   --env-file ../../.env \
- *   -e INFLUX_URL="https://vps.sisparrow.com:8181" \
+ *   -e INFLUX_URL="https://vps.pristinoplant.com:8181" \
  *   -e INFLUX_TOKEN="apiv3_kcwBrLenNHizPffsCsEy03KmFeYWpvxkopjhQbCuDUBp2nCWw5ZMB7cSnV27D5OGmjsECS5KN4HzO8oNwE7JcQ" \
  *   -e INFLUX_ORG="PristinoPlant" \
  *   --network host \

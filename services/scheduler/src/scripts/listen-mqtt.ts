@@ -1,6 +1,6 @@
 import mqtt from 'mqtt'
 
-const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || 'mqtt://vps.sisparrow.com:1883'
+const MQTT_BROKER_URL = process.env.MQTT_BROKER_URL || 'mqtt://vps.pristinoplant.com:1883'
 
 async function main() {
   console.log(`Connecting to MQTT broker at: ${MQTT_BROKER_URL}...`)

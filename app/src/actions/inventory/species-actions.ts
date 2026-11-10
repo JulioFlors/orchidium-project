@@ -375,7 +375,7 @@ export async function deleteSpeciesImage(imageId: string) {
     }
 
     // Extraer key de la URL (ej: images/species/slug/123.webp)
-    // Si la URL es https://media.sisparrow.com/species/cattleya/123.webp
+    // Si la URL es https://media.pristinoplant.com/species/cattleya/123.webp
     // La key es species/cattleya/123.webp
     const urlParts = image.url.split('/')
     const r2Key = urlParts.slice(-3).join('/') // species/slug/file.webp

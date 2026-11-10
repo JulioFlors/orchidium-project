@@ -19,9 +19,9 @@ cd "$(dirname "$0")"
 if [ -f .env ]; then
   export $(grep -v '^#' .env | xargs)
 fi
-MQTT_DOMAIN="${MQTT_HOST:-mqtt.sisparrow.com}"
-VPS_DOMAIN="${VPS_HOST:-vps.sisparrow.com}"
-N8N_DOMAIN="${N8N_HOST:-n8n.sisparrow.com}"
+MQTT_DOMAIN="${MQTT_HOST:-mqtt.pristinoplant.com}"
+VPS_DOMAIN="${VPS_HOST:-vps.pristinoplant.com}"
+N8N_DOMAIN="${N8N_HOST:-n8n.pristinoplant.com}"
 
 echo -e "${GREEN}🌵 PristinoPlant | Renovación de Certificados SSL${RESET}"
 echo -e "${CYAN}------------------------------------------------------------${RESET}"

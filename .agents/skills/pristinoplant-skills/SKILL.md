@@ -230,9 +230,9 @@ Como el archivo se genera en formato binario personalizado (`-F c`), no se puede
 Puedes descargar la copia a tu máquina local para almacenamiento secundario de seguridad usando SCP:
 
 ```bash
-scp root@vps.sisparrow.com:/var/lib/docker/volumes/pristinoplant_postgres_data/_data/processed_metrics_backup.dump ./processed_metrics_backup.dump
+scp root@vps.pristinoplant.com:/var/lib/docker/volumes/pristinoplant_postgres_data/_data/processed_metrics_backup.dump ./processed_metrics_backup.dump
 # O usando la ruta física montada donde esté el repositorio en el VPS:
-scp root@vps.sisparrow.com:/ruta-del-proyecto/infrastructure/postgres/data/processed_metrics_backup.dump ./
+scp root@vps.pristinoplant.com:/ruta-del-proyecto/infrastructure/postgres/data/processed_metrics_backup.dump ./
 ```
 
 #### 5. Flujo de Mantenimiento y Restauración Post-Seed (PC Local a VPS)
@@ -492,4 +492,3 @@ Protocolo para garantizar que el servidor de producción (Ubuntu 24.04) opere de
 
 5. **Escape de Comillas en Consultas SQL de n8n**:
    - Al editar flujos o generar nodos de PostgreSQL en JSON, asegurarse de no sobre-escapar comillas dobles (evitar `\\\"` en lugar de comillas simples o dobles válidas `\"`).
-

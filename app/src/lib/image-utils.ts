@@ -21,7 +21,7 @@ export function getImageUrl(url?: string): string {
   if (cleanUrl.startsWith('imgs/') || cleanUrl.startsWith('images/')) return `/${cleanUrl}`
 
   const prefix = cleanUrl.startsWith('plants/') ? '' : 'plants/'
-  const r2BaseUrl = process.env.NEXT_PUBLIC_R2_PUBLIC_URL || 'https://storage.sisparrow.com'
+  const r2BaseUrl = process.env.NEXT_PUBLIC_R2_PUBLIC_URL || 'https://storage.pristinoplant.com'
 
   return `${r2BaseUrl}/${prefix}${cleanUrl}`
 }

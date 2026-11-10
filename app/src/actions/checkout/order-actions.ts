@@ -108,7 +108,7 @@ export async function createOrder(input: CreateOrderInput) {
 
     // Disparar evento de nueva orden a n8n vía Webhook (Push / Reactivo)
     try {
-      const n8nBase = process.env.N8N_WEBHOOK_URL || 'https://n8n.sisparrow.com/'
+      const n8nBase = process.env.N8N_WEBHOOK_URL || 'https://n8n.pristinoplant.com/'
       const webhookUrl = new URL('/webhook/orders/new', n8nBase).toString()
 
       const controller = new AbortController()

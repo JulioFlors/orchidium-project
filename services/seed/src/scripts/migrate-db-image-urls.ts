@@ -16,7 +16,7 @@ async function main() {
   Logger.raw('\x1b[36m│   🔧  Corrección de URLs de Imágenes en DB        │')
   Logger.raw('\x1b[36m└──────────────────────────────────────────────────┘\x1b[0m\n')
 
-  const r2PublicUrl = process.env.R2_PUBLIC_URL || 'https://storage.sisparrow.com'
+  const r2PublicUrl = process.env.R2_PUBLIC_URL || 'https://storage.pristinoplant.com'
   Logger.info(`URL base de R2: ${r2PublicUrl}`)
 
   // Obtener todas las especies con sus imágenes y género
